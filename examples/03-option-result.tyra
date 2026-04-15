@@ -1,0 +1,70 @@
+# 03-option-result.tyra
+# Option<T> and Result<T, E> usage patterns.
+# Validates: Some/None constructors, Ok/Err constructors, or return, ?, nested match
+
+# SPEC_GAP: `Some`, `None`, `Ok`, `Err` — these constructor names are used throughout
+# the spec examples (§10.3, §12.2, §21.2) but are never formally defined.
+# Are they keywords? ADT constructors auto-imported from `option` / `result`?
+# The spec should state: Option<T> is equivalent to `type Option<T> = | Some(T) | None`
+# and Result<T, E> is `type Result<T, E> = | Ok(T) | Err(E)`, both in prelude.
+
+# SPEC_GAP: ADT constructor call syntax — `Some("alice")` uses a positional argument,
+# but the spec says named fields are the default for constructors (§8.5 mentions
+# "named destructuring"). Should this be `Some(_ "alice")` or just `Some("alice")`?
+# Assumption: single-field constructors allow positional form. Needs spec clarification.
+
+# SPEC_GAP: `or return` and non-Option return type — §12.2 says `or return` can be
+# used when the enclosing function returns anything (not just Option). This example
+# in `get_user_result` uses `or return Err(NotFound)` inside a Result-returning
+# function. Per the revised spec this is allowed, but the AGENTS.md still says
+# "`or return` works only with `Option<T>`" (ambiguous wording).
+
+type LookupError =
+  | NotFound
+  | InvalidId
+
+fn find_user(_ id: Int) -> Option<String>
+  if id == 1
+    Some("alice")
+  else if id == 2
+    Some("bob")
+  else
+    None
+  end
+end
+
+# SPEC_GAP: `else if` — the spec §10.2 shows only `if / else / end`. Is `else if`
+# valid syntax, or must it be `else` followed by a nested `if / else / end`?
+# Many languages treat `else if` as sugar. The spec does not mention it.
+
+fn user_greeting(_ id: Int) -> Option<String>
+  let name = find_user(id) or return None
+  Some("hello, #{name}")
+end
+
+fn get_user_result(_ id: Int) -> Result<String, LookupError>
+  if id <= 0
+    Err(InvalidId)
+  else
+    let name = find_user(id) or return Err(NotFound)
+    Ok(name)
+  end
+end
+
+export fn main() -> Unit
+  match user_greeting(1)
+  when Some(msg)
+    print(msg)
+  when None
+    print("not found")
+  end
+
+  match get_user_result(0)
+  when Ok(name)
+    print("found: #{name}")
+  when Err(NotFound)
+    print("user not found")
+  when Err(InvalidId)
+    print("invalid id")
+  end
+end

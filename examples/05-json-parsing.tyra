@@ -1,0 +1,72 @@
+# 05-json-parsing.tyra
+# JSON parsing with custom error types and Into conversion.
+# Validates: ADT construction, impl Into<T>, error propagation across types, nested match
+
+import json
+
+type JsonError =
+  | ParseFailed(message: String)
+  | TypeMismatch(expected: String, got: String)
+  | MissingKey(key: String)
+
+type AppError =
+  | Json(inner: JsonError)
+  | Io(message: String)
+
+# SPEC_GAP: ADT constructor call syntax — `AppError.Json(inner: err)` vs `Json(inner: err)`.
+# The spec §8.5 defines ADT types but never shows how to *construct* a variant.
+# Pattern matching uses unqualified names (`when Json(inner: e)`), so by symmetry
+# construction should also be unqualified. But this creates an ambiguity when two
+# ADTs in scope have the same variant name. The spec must define constructor resolution.
+# Assumption: unqualified constructor names are used, resolved by context type.
+
+impl Into<AppError> for JsonError
+  fn into(self) -> AppError
+    Json(inner: self)
+  end
+end
+
+# SPEC_GAP: `impl Into<AppError> for JsonError` — `self` here is of type `JsonError`.
+# The result `Json(inner: self)` stores the entire `JsonError` as a field.
+# Is this valid? `data` vs `value` matters: if `JsonError` is a `type` (ADT),
+# is it a value type or a reference type? The spec §8.5 defines `type` for ADTs
+# but does not say whether ADT values are value-semantics or reference-semantics.
+# This is a significant gap for the type checker.
+
+fn parse_name(doc: json.Value) -> Result<String, JsonError>
+  let name_val = doc.get(key: "name") or return Err(MissingKey(key: "name"))
+  let name = name_val.as_string() or return Err(TypeMismatch(expected: "string", got: name_val.kind()))
+  Ok(name)
+end
+
+fn load_user_name(_ input: String) -> Result<String, AppError>
+  let doc = json.parse(input)?
+  let name = parse_name(doc)?
+  Ok(name)
+end
+
+# SPEC_GAP: `json.parse(input)?` — `json.parse` returns `Result<json.Value, JsonError>`.
+# For `?` to work here, `JsonError` must implement `Into<AppError>` (which we did above).
+# SPEC_OK: §12.2 requires `E: Into<F>` for `?` to work. This is satisfied.
+
+# SPEC_GAP: `json.Value` type — the `json` stdlib module (§17) is listed but its
+# API (Value type, parse function, get/as_string methods) is entirely unspecified.
+
+export fn main() -> Unit
+  match load_user_name("{\"name\": \"alice\"}")
+  when Ok(name)
+    print("user: #{name}")
+  when Err(Json(inner: MissingKey(key: k)))
+    print("missing key: #{k}")
+  when Err(Json(inner: TypeMismatch(expected: exp, got: got)))
+    print("type error: expected #{exp}, got #{got}")
+  when Err(Json(inner: ParseFailed(message: msg)))
+    print("parse failed: #{msg}")
+  when Err(Io(message: msg))
+    print("io error: #{msg}")
+  end
+
+  # SPEC_GAP: String escape sequences — `"\""` — the spec §7.3 defines string
+  # interpolation `#{...}` but never defines escape sequences (backslash-n,
+  # backslash-t, backslash-quote, etc.). This is needed for any real string usage.
+end

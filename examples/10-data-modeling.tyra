@@ -1,0 +1,112 @@
+# 10-data-modeling.tyra
+# data and value types with trait implementations and ability verification.
+# Validates: value/data distinction, copy(), mut fields, impl Stringable,
+#            Eq/Hash ability derivation, trait dispatch
+
+# SPEC_OK: §8.6 — value types: all fields Eq -> Eq auto-derived.
+# SPEC_OK: §8.7 — Stringable is a user-implemented trait; it IS in prelude (§17)
+#                 but requires explicit `impl` blocks.
+# SPEC_GAP: Should prelude traits like Stringable be redeclared or just implemented?
+#           The spec lists Stringable as "prelude に自動導入される標準 trait" (§17)
+#           but does not say whether the declaration comes with the import or requires
+#           `import core` explicitly. Assumption: no import needed.
+
+value Point
+  x: Float
+  y: Float
+end
+
+# SPEC_OK: Point gets Eq (Float has Eq), Hash (Float has Hash)...
+# SPEC_GAP: Does Float implement Eq? IEEE 754 NaN != NaN, so structural Eq for Float
+# is mathematically incorrect. The spec never addresses NaN semantics for Eq on Float.
+# This is a subtle but important gap: if Float has Eq via `==`, then
+# `Float.nan == Float.nan` would be true under structural Eq but false under IEEE 754.
+
+# SPEC_OK: Point does NOT get Ord (two fields, §8.6 restricts Ord to single-field value)
+# SPEC_OK: §8.6 — single-field value gets Ord only if that field has Ord.
+
+value UserId
+  id: Int
+end
+# SPEC_OK: UserId gets Ord because it has exactly one field (Int has Ord).
+
+data User
+  id: UserId
+  mut name: String
+  mut email: String
+end
+
+# SPEC_OK: User does NOT get Ord (data types never get Ord automatically, §8.6)
+# SPEC_OK: User gets Eq if UserId, String all have Eq (they do)
+
+impl Stringable for Point
+  fn to_string(self) -> String
+    "(#{self.x}, #{self.y})"
+  end
+end
+
+impl Stringable for User
+  fn to_string(self) -> String
+    "User(#{self.id.id}, #{self.name})"
+  end
+
+  # SPEC_GAP: `self.id.id` — chaining field access. `self.id` is a UserId value,
+  # then `.id` accesses UserId's `id: Int` field. The spec does not explicitly
+  # address chained field access, but it should work syntactically.
+end
+
+fn distance(_ a: Point, _ b: Point) -> Float
+  let dx = a.x - b.x
+  let dy = a.y - b.y
+  # SPEC_GAP: `sqrt` — there is no math stdlib listed in §17. How do you compute
+  # square root? Is it `Float.sqrt()`? `math.sqrt()`? Unspecified.
+  # Using a placeholder comment instead of calling sqrt.
+  dx * dx + dy * dy  # returns squared distance to avoid the sqrt gap
+end
+
+fn rename(user: mut User, new_name: String) -> Unit
+  # SPEC_OK: §8.6 — `user.name` is `mut`, and `user` binding is `mut`, so update is allowed.
+  user.name = new_name
+end
+
+# SPEC_GAP: `mut` parameter — the spec §8.6 says "関数引数の束縛はデフォルトで immutable".
+# To make a parameter binding mutable, is it `fn rename(user: mut User, ...)`?
+# Or `fn rename(mut user: User, ...)`? The spec shows `mut count = 0` for variable
+# bindings (§7.1) where `mut` precedes the name, but for function parameters
+# the syntax is unspecified. And since `User` is a `data` type (reference semantics),
+# mutation inside the function affects the caller's object — is an explicit `mut`
+# parameter annotation even needed, or is `data` always mutably accessible through
+# its `mut` fields regardless of binding mutability?
+
+export fn main() -> Unit
+  let origin = Point(x: 0.0, y: 0.0)
+  let p = Point(x: 3.0, y: 4.0)
+  let p2 = p.copy(x: 1.0)
+
+  print(origin.to_string())
+  print(p.to_string())
+  print(p2.to_string())
+
+  let dist_sq = distance(origin, p)
+  print("distance squared: #{dist_sq}")
+
+  # SPEC_OK: Point has Eq, so == is valid.
+  if origin == p
+    print("same point")
+  else
+    print("different points")
+  end
+
+  mut user = User(id: UserId(id: 1), name: "alice", email: "alice@example.com")
+  rename(user, "alice smith")
+  print(user.to_string())
+
+  # SPEC_GAP: UserId Ord — comparing two UserIds with < should work.
+  let id1 = UserId(id: 1)
+  let id2 = UserId(id: 2)
+  if id1 < id2
+    print("id1 is smaller")
+  else
+    print("id2 is smaller or equal")
+  end
+end

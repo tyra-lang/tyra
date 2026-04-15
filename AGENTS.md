@@ -208,11 +208,24 @@ Each phase should have:
 
 ## Code Style for the Compiler (Rust)
 
+The compiler is written in Rust. Rust language features (macros, panics, etc.)
+are unrelated to Tyra language features and should be used freely.
+
 * Use `cargo fmt` and `cargo clippy` before every commit
 * Prefer `Result<T, TyraError>` over panics for any user-facing path
-* Internal invariant violations may use `unreachable!()` or `panic!()`, but document why
+* Internal invariant violations may use `unreachable!()`, `panic!`, or `todo!`,
+  but document why. These are Rust constructs and have no relation to Tyra's
+  `panic` function or its lack of macros.
 * Diagnostic messages must go through `tyra-diagnostics` for i18n
 * Spec references in code: `// spec §8.6: value types are immutable`
+
+## Tyra Language Code (in stdlib, tests, examples)
+
+Tyra code (`.tyra` files) follows the language specification strictly:
+
+* Tyra has no macros (spec §3). Use `panic("msg")` as a regular function call,
+  not `panic!("msg")`.
+* All other rules are defined in the spec.
 
 ## Useful Spec Sections by Task
 

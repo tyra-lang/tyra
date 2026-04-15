@@ -1,0 +1,12 @@
+# 01-hello.tyra
+# The simplest possible Tyra program.
+# Validates: export, fn main, Unit return type, print
+
+# SPEC_GAP: `print` is not defined anywhere in §17 (stdlib list is: core, string,
+# collections, option, result, json, http, fs, time, test, log).
+# Assumption: `print(_ msg: String) -> Unit` is provided by `core` and
+# auto-imported via prelude. The spec should state this explicitly.
+
+export fn main() -> Unit
+  print("hello, tyra")
+end

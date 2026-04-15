@@ -1,0 +1,75 @@
+# 06-cli-args.tyra
+# Command-line argument parsing.
+# Validates: sys.args, List access, for loop, match on String literals, parse turbofish
+
+# SPEC_GAP: Command-line arguments — the spec §17 lists no `sys` or `env` or `os` module.
+# `main` takes no parameters. There is no specified way to access `argv`.
+# Assumption: `sys.args() -> List<String>` exists, but the module name is unspecified.
+# This must be added to the stdlib spec before any real CLI tool can be written.
+
+import sys
+
+type CliError =
+  | MissingCommand
+  | UnknownCommand(name: String)
+  | MissingArg(name: String)
+  | InvalidArg(name: String, value: String)
+
+fn run_serve(_ args: List<String>) -> Result<Unit, CliError>
+  # SPEC_GAP: List indexing — `args[1]` returns `T` per §11 (`index 構文は items[index]`).
+  # But what happens on out-of-bounds? The spec says nothing. Does it panic?
+  # Return Option<T>? Tyra has no exceptions, so panic is the likely answer,
+  # but this must be documented. A `List.get(index:) -> Option<T>` method is safer
+  # and more idiomatic — but its existence is also unspecified.
+
+  # Using a hypothetical safe accessor:
+  let port_str = args.get(index: 2) or return Err(MissingArg(name: "port"))
+
+  # SPEC_GAP: `parse::<Int>` — §8.4 shows turbofish syntax for explicit type application,
+  # but what function/method provides parsing? Is it a free function `parse::<Int>(s)`,
+  # a method `s.parse::<Int>()`, or a function `Int.parse(s)`?
+  # The spec §21.2 uses `parse_int(text)` (a named function). Turbofish is shown as
+  # a syntax example only. The actual stdlib parse API is unspecified.
+
+  let port = parse::<Int>(port_str) or return Err(InvalidArg(name: "port", value: port_str))
+  print("serving on port #{port}")
+  Ok(())
+end
+
+# SPEC_GAP: `Ok(())` — how do you construct `Ok(Unit)`? Is it `Ok(())`, `Ok(Unit)`,
+# or just the unit value written some other way? The spec never defines a unit literal.
+# §7.2 says `Unit` is a type but gives no literal syntax for values of type Unit.
+# Assumption: `()` is the unit literal, but this is not stated in the spec.
+
+fn run_help() -> Result<Unit, CliError>
+  print("usage: myapp <command> [args]")
+  print("commands:")
+  print("  serve <port>  start the server")
+  print("  help          show this message")
+  Ok(())
+end
+
+export fn main() -> Result<Unit, CliError>
+  let args = sys.args()
+  let command = args.get(index: 1) or return Err(MissingCommand)
+
+  match command
+  when "serve"
+    run_serve(args)?
+  when "help"
+    run_help()?
+  when _
+    # SPEC_GAP: Constructing an ADT variant in expression position — `UnknownCommand(name: command)`.
+    # This should be valid since ADT constructors are callable expressions,
+    # but the spec does not formally show construction syntax.
+    Err(UnknownCommand(name: command))
+  end
+
+  # SPEC_GAP: match as a statement vs expression — each `when` arm above returns
+  # `Result<Unit, CliError>`. The `match` here is used as a statement (its value
+  # is discarded). But the spec §10.1 says "`match` は式である". If match is an
+  # expression, its result here is `Result<Unit, CliError>` but discarded.
+  # Should it be `return match ...` or is the implicit discard OK for Unit-returning contexts?
+  # The last expression in the function body is used as return value, but this match
+  # isn't the last expression if we follow a statement model. Needs clarification.
+end

@@ -1,0 +1,65 @@
+# 08-async-tasks.tyra
+# Concurrent task spawning and coordination.
+# Validates: spawn, Task<T>, sequential .await, lack of join-all
+
+import http.client
+
+# SPEC_GAP: `http.client` — §17 lists `http` but not sub-modules `http.client`.
+# Assumption: `http.client.get(_ url: String) -> Task<Result<Response, HttpError>>`.
+
+type FetchError =
+  | NetworkError(message: String)
+  | Timeout
+  | NotFound
+
+async fn fetch(_ url: String) -> Result<String, FetchError>
+  let resp = client.get(url).await?
+  Ok(resp.body)
+end
+
+# SPEC_GAP (CRITICAL): Concurrent waiting — the only way to await multiple tasks
+# is sequential: `task_a.await?` then `task_b.await?`. This does NOT execute them
+# concurrently after the first await blocks. True fan-out requires a `join` or
+# `select` primitive. The spec defines `spawn` (§14.4) but no `Task.join`,
+# `Task.join_all`, or `select` combinator. Without this, spawning multiple tasks
+# and then `.await`-ing them in sequence defeats the purpose of spawn.
+# This is the most significant async API gap in v0.1.
+
+async fn fetch_all(_ urls: List<String>) -> Result<List<String>, FetchError>
+  # Spawn all tasks first (they begin running concurrently on the scheduler)
+  let task_a = spawn fetch(urls[0])
+  let task_b = spawn fetch(urls[1])
+  let task_c = spawn fetch(urls[2])
+
+  # Then await in sequence — results are collected but the awaits are sequential
+  # NOTE: If task_a takes 3s and task_b takes 1s, we still wait 3s before
+  # collecting task_b. The scheduler may overlap the work, but the API provides
+  # no way to "await the first completed task". This is a design gap.
+  let a = task_a.await?
+  let b = task_b.await?
+  let c = task_c.await?
+
+  Ok([a, b, c])
+end
+
+# SPEC_GAP: `urls[0]` — direct List indexing. Per §11, `items[index]` is the index
+# syntax, but the return type is `T` (not `Option<T>`). What happens on out-of-bounds?
+# Panic seems likely but is unspecified. This is the same gap as in 06-cli-args.tyra.
+
+export async fn main() -> Result<Unit, FetchError>
+  let urls = [
+    "https://api.example.com/a",
+    "https://api.example.com/b",
+    "https://api.example.com/c",
+  ]
+
+  # SPEC_GAP: Multi-line list literal — is this valid? The spec §5.4 says newlines
+  # are statement terminators. A list literal spanning multiple lines would need
+  # commas at the end of each line, but newline handling inside brackets is
+  # undefined. Ruby uses newlines freely inside collections; the spec is silent.
+
+  let results = fetch_all(urls).await?
+  for item in results
+    print(item)
+  end
+end

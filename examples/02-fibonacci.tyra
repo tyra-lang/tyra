@@ -1,0 +1,28 @@
+# 02-fibonacci.tyra
+# Recursive Fibonacci.
+# Validates: fn, Int arithmetic, match on integer literals, recursion, wildcard pattern
+
+# SPEC_OK: §10.3 says match works on "ADT / enum / literal" — Int literals are valid patterns.
+# SPEC_OK: §9.5 shows unary minus in `abs` example, so `-x` is valid.
+# SPEC_OK: `when _` is the wildcard per §10.3.
+
+# SPEC_GAP: Negative integer *literals* — is `-1` a literal, or is it the unary
+# minus operator applied to `1`? The spec never defines literal syntax for negative
+# numbers. In practice `-1` should parse as a unary expression, which is fine,
+# but the spec (§5, §7.2) should clarify this to avoid parser ambiguity.
+
+fn fib(_ n: Int) -> Int
+  match n
+  when 0
+    0
+  when 1
+    1
+  when _
+    fib(n - 1) + fib(n - 2)
+  end
+end
+
+export fn main() -> Unit
+  let result = fib(10)
+  print("fib(10) = #{result}")
+end

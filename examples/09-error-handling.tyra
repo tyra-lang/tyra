@@ -1,0 +1,79 @@
+# 09-error-handling.tyra
+# Error handling patterns: defer, multiple error types, conversion chain.
+# Validates: defer LIFO, ?, Into chain, panic, boolean compound conditions
+
+import fs
+
+type ConfigError =
+  | FileNotFound(path: String)
+  | ParseError(message: String)
+  | InvalidValue(key: String, value: String)
+
+type AppError =
+  | Config(inner: ConfigError)
+  | Unexpected(message: String)
+
+impl Into<AppError> for ConfigError
+  fn into(self) -> AppError
+    Config(inner: self)
+  end
+end
+
+fn read_config(_ path: String) -> Result<String, ConfigError>
+  let file = fs.open(path) or return Err(FileNotFound(path: path))
+
+  # SPEC_OK: §12.3 — defer executes in LIFO on scope exit (including early return).
+  defer file.close()
+
+  let content = file.read_all() or return Err(ParseError(message: "read failed"))
+  Ok(content)
+
+  # SPEC_GAP: `fs.open(path)` returns something. What type? If it returns
+  # `Result<File, FsError>`, then `?` would be the natural way to use it.
+  # But to show `or return` for Option, we'd need `Option<File>`.
+  # The spec §21.2 uses `fs.open("app.log")?` suggesting Result<File, E>.
+  # But then the `or return` above would be wrong. The example in §12.3 uses `?`.
+  # Assume `fs.open` returns `Result<File, FsError>` and adjust:
+  # `let file = fs.open(path)?` — but then ConfigError must impl Into<ConfigError> for FsError.
+  # This creates a bootstrap problem: we'd need FsError defined externally.
+  # SPEC_GAP: How do callers handle errors from stdlib whose error types they don't control?
+  # Does the stdlib use a unified error type? Or does each module have its own?
+end
+
+fn parse_port(_ config: String) -> Result<Int, ConfigError>
+  let port = parse::<Int>(config) or return Err(ParseError(message: "port must be an integer"))
+
+  # SPEC_GAP (CRITICAL): Boolean compound conditions — there is no way to write
+  # `port < 1 or port > 65535` because:
+  # 1. The `or` keyword is reserved for `or return` only (§5.2, §12.2)
+  # 2. There are no `&&` / `||` / `and` / `not` boolean operators defined in the spec
+  # 3. The spec says truthy/falsy is forbidden, so implicit bool is out
+  # Without boolean operators, compound conditions require nested `if` statements,
+  # which is extremely verbose. This is a critical usability gap.
+
+  # Workaround: nested if
+  if port < 1
+    Err(InvalidValue(key: "port", value: "#{port}"))
+  else
+    if port > 65535
+      Err(InvalidValue(key: "port", value: "#{port}"))
+    else
+      Ok(port)
+    end
+  end
+end
+
+fn start_server(_ port: Int) -> Result<Unit, AppError>
+  print("starting server on port #{port}")
+  # SPEC_GAP: `panic` — the spec §12.1 mentions "予測不能なバグは panic" but never
+  # defines the syntax. Is it `panic("message")`? `panic!("message")`?
+  # AGENTS.md says "Internal invariant violations may use `unreachable!()` or `panic!()`"
+  # suggesting macro-like syntax, but Tyra has no macros (§3). This is contradictory.
+  Ok(())
+end
+
+export fn main() -> Result<Unit, AppError>
+  let config = read_config("app.conf")?
+  let port = parse_port(config)?
+  start_server(port)?
+end

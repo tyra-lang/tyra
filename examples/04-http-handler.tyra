@@ -1,0 +1,45 @@
+# 04-http-handler.tyra
+# HTTP server with multiple route handlers.
+# Validates: async fn, .await?, spawn, import, Task<T> return type
+
+# SPEC_OK: §21.3 shows this pattern; expanding it with multiple handlers.
+# SPEC_OK: §14.3 — `.await?` parses as `(expr.await)?`
+# SPEC_OK: `async fn f() -> T` call result is `Task<T>` (§14.2)
+
+import http.server
+
+# SPEC_GAP: The `http` stdlib module (§17) has no defined API surface.
+# Assumptions made below:
+#   server.new() -> Server
+#   Server.get(path: String, handler: fn) -> Unit
+#   Server.post(path: String, handler: fn) -> Unit
+#   Server.listen(port: Int) -> Task<Result<Unit, ServerError>>
+# These must be specified in stdlib docs before the compiler can be implemented.
+
+# SPEC_GAP: Request and Response types — their module paths and fields are unspecified.
+# Using `http.server.Request` and `http.server.Response` as a guess.
+
+# SPEC_GAP: Handler function type — what is the expected signature for route handlers?
+# `fn(Request) -> Task<Result<Response, E>>` or `async fn(Request) -> Result<Response, E>`?
+# These are equivalent in terms of `Task<T>` semantics but the handler registration
+# type needs to be defined.
+
+type AppError =
+  | ServerError(message: String)
+  | HandlerError(message: String)
+
+async fn health_handler(_ req: server.Request) -> Result<server.Response, AppError>
+  Ok(server.Response(status: 200, body: "ok"))
+end
+
+async fn greet_handler(_ req: server.Request) -> Result<server.Response, AppError>
+  let name = req.query(key: "name") or return Ok(server.Response(status: 400, body: "missing name"))
+  Ok(server.Response(status: 200, body: "hello, #{name}"))
+end
+
+export async fn main() -> Result<Unit, AppError>
+  let app = server.new()
+  app.get("/health", health_handler)
+  app.get("/greet", greet_handler)
+  app.listen(port: 8080).await?
+end
