@@ -1,0 +1,25 @@
+[workspace]
+members = [
+    "crates/tyra-diagnostics",
+    "crates/tyra-lexer",
+    "crates/tyra-ast",
+    # "crates/tyra-parser",
+    # "crates/tyra-resolve",
+    # "crates/tyra-types",
+    # "crates/tyra-mir",
+    # "crates/tyra-codegen-llvm",
+    # "crates/tyra-driver",
+    # "crates/tyra-cli",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/tyra-lang/tyra"
+
+[workspace.dependencies]
+tyra-diagnostics = { path = "crates/tyra-diagnostics" }
+tyra-lexer = { path = "crates/tyra-lexer" }
+tyra-ast = { path = "crates/tyra-ast" }
