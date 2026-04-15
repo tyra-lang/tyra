@@ -137,6 +137,32 @@ mod tests {
     }
 
     #[test]
+    fn match_int_pattern_lowers() {
+        let source = "fn f(_ n: Int) -> Int\n  match n\n  when 0\n    10\n  when 1\n    20\n  when _\n    30\n  end\nend\n";
+        let prog = lower_str(source);
+        let f = &prog.functions[0];
+        // Should have BranchIf for Int literal patterns
+        let has_branch = f
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::BranchIf { .. }));
+        assert!(has_branch, "expected BranchIf in match lowering");
+        // Should have Alloca + Store + Load for match result
+        let has_alloca = f
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::Alloca { .. }));
+        let has_store = f
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::Store { .. }));
+        let has_load = f.body.iter().any(|i| matches!(i, Instruction::Load { .. }));
+        assert!(has_alloca, "expected Alloca for match result");
+        assert!(has_store, "expected Store for match result");
+        assert!(has_load, "expected Load for match result");
+    }
+
+    #[test]
     fn full_program_lowers() {
         let source = r#"fn fib(_ n: Int) -> Int
   match n

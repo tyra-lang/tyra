@@ -35,10 +35,20 @@ pub fn emit_llvm_ir(program: &Program) -> String {
         writeln!(out).unwrap();
     }
 
-    // Format string for print (no newline)
+    // Format strings for print
     writeln!(
         out,
         "@.fmt.str = private unnamed_addr constant [3 x i8] c\"%s\\00\""
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "@.fmt.int = private unnamed_addr constant [4 x i8] c\"%ld\\00\""
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "@.fmt.int_ln = private unnamed_addr constant [5 x i8] c\"%ld\\0A\\00\""
     )
     .unwrap();
     writeln!(out).unwrap();
@@ -59,6 +69,19 @@ pub fn emit_llvm_ir(program: &Program) -> String {
 }
 
 fn emit_function(out: &mut String, func: &Function, strings: &[String]) {
+    // Pre-scan: collect temps that hold string values (from StringRef constants)
+    let string_temps: std::collections::HashSet<String> = func
+        .body
+        .iter()
+        .filter_map(|inst| match inst {
+            Instruction::Const {
+                dest,
+                value: Constant::StringRef(_),
+            } => Some(dest.clone()),
+            _ => None,
+        })
+        .collect();
+
     let ret_ty = llvm_type(&func.return_type, func.is_main);
 
     // Function signature
@@ -91,13 +114,19 @@ fn emit_function(out: &mut String, func: &Function, strings: &[String]) {
 
     // Emit instructions
     for inst in &func.body {
-        emit_instruction(out, inst, func, strings);
+        emit_instruction(out, inst, func, strings, &string_temps);
     }
 
     writeln!(out, "}}").unwrap();
 }
 
-fn emit_instruction(out: &mut String, inst: &Instruction, func: &Function, strings: &[String]) {
+fn emit_instruction(
+    out: &mut String,
+    inst: &Instruction,
+    func: &Function,
+    strings: &[String],
+    string_temps: &std::collections::HashSet<String>,
+) {
     match inst {
         Instruction::Const { dest, value } => match value {
             Constant::Int(n) => {
@@ -129,40 +158,19 @@ fn emit_instruction(out: &mut String, inst: &Instruction, func: &Function, strin
             func: fname,
             args,
         } => {
-            let args_str = emit_call_args(args, func, strings);
-
             // Map Tyra builtins to C functions
             match fname.as_str() {
-                "print" | "eprint" => {
-                    // print: no trailing newline — use printf("%s", value)
-                    if let Some(d) = dest {
-                        writeln!(
-                            out,
-                            "  %{d} = call i32 (ptr, ...) @printf(ptr @.fmt.str, {args_str})"
-                        )
-                        .unwrap();
-                    } else {
-                        writeln!(
-                            out,
-                            "  call i32 (ptr, ...) @printf(ptr @.fmt.str, {args_str})"
-                        )
-                        .unwrap();
-                    }
-                }
-                "println" | "eprintln" => {
-                    // println: adds trailing newline — use puts()
-                    if let Some(d) = dest {
-                        writeln!(out, "  %{d} = call i32 @puts({args_str})").unwrap();
-                    } else {
-                        writeln!(out, "  call i32 @puts({args_str})").unwrap();
-                    }
+                "print" | "eprint" | "println" | "eprintln" => {
+                    let is_println = fname == "println" || fname == "eprintln";
+                    emit_print_call(out, dest.as_deref(), args, func, is_println, string_temps);
                 }
                 _ => {
                     // User-defined function call
+                    let user_args = emit_call_args(args, func, strings);
                     if let Some(d) = dest {
-                        writeln!(out, "  %{d} = call i64 @{fname}({args_str})").unwrap();
+                        writeln!(out, "  %{d} = call i64 @{fname}({user_args})").unwrap();
                     } else {
-                        writeln!(out, "  call i64 @{fname}({args_str})").unwrap();
+                        writeln!(out, "  call i64 @{fname}({user_args})").unwrap();
                     }
                 }
             }
@@ -207,12 +215,12 @@ fn emit_instruction(out: &mut String, inst: &Instruction, func: &Function, strin
         }
 
         Instruction::Copy { dest, source } => {
-            // In LLVM IR, we just alias the value
             if is_param(source, func) {
-                let lt = "i64"; // simplified
+                let lt = "i64"; // simplified: all params as i64 for now
                 writeln!(out, "  %{dest} = load {lt}, ptr %{source}.addr").unwrap();
             } else {
-                writeln!(out, "  ; copy {dest} = {source}").unwrap();
+                // SSA alias: create a new SSA value identical to the source
+                writeln!(out, "  %{dest} = add i64 %{source}, 0").unwrap();
             }
         }
 
@@ -261,6 +269,83 @@ fn emit_instruction(out: &mut String, inst: &Instruction, func: &Function, strin
                 .collect();
             writeln!(out, "  %{dest} = phi i64 {}", entries.join(", ")).unwrap();
         }
+
+        Instruction::Alloca { dest } => {
+            writeln!(out, "  %{dest} = alloca i64").unwrap();
+        }
+
+        Instruction::Store { dest, value } => {
+            let val = operand_ref(value, func);
+            writeln!(out, "  store i64 {val}, ptr %{dest}").unwrap();
+        }
+
+        Instruction::Load { dest, source } => {
+            writeln!(out, "  %{dest} = load i64, ptr %{source}").unwrap();
+        }
+    }
+}
+
+/// Emit a print/println call, auto-detecting argument type.
+/// String args use %s format, Int args use %ld format.
+fn emit_print_call(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+    is_println: bool,
+    string_temps: &std::collections::HashSet<String>,
+) {
+    if args.is_empty() {
+        if is_println {
+            let call = "call i32 @puts(ptr @.fmt.str)";
+            if let Some(d) = dest {
+                writeln!(out, "  %{d} = {call}").unwrap();
+            } else {
+                writeln!(out, "  {call}").unwrap();
+            }
+        }
+        return;
+    }
+
+    let arg = &args[0];
+    let val = operand_ref(arg, func);
+
+    // Detect string vs integer using pre-scanned string_temps set
+    let is_string = match arg {
+        Operand::Const(Constant::StringRef(_)) => true,
+        Operand::Var(name) => string_temps.contains(name),
+        _ => false,
+    };
+
+    // For println with string, use puts (adds newline); for print with string, use printf %s
+    // For integers, always use printf with %ld or %ld\n
+    if is_string && is_println {
+        let call = format!("call i32 @puts(ptr {val})");
+        if let Some(d) = dest {
+            writeln!(out, "  %{d} = {call}").unwrap();
+        } else {
+            writeln!(out, "  {call}").unwrap();
+        }
+    } else if is_string {
+        let call = format!("call i32 (ptr, ...) @printf(ptr @.fmt.str, ptr {val})");
+        if let Some(d) = dest {
+            writeln!(out, "  %{d} = {call}").unwrap();
+        } else {
+            writeln!(out, "  {call}").unwrap();
+        }
+    } else {
+        // Assume integer — use %ld format
+        let fmt = if is_println {
+            "@.fmt.int_ln"
+        } else {
+            "@.fmt.int"
+        };
+        let call = format!("call i32 (ptr, ...) @printf(ptr {fmt}, i64 {val})");
+        if let Some(d) = dest {
+            writeln!(out, "  %{d} = {call}").unwrap();
+        } else {
+            writeln!(out, "  {call}").unwrap();
+        }
     }
 }
 
@@ -268,7 +353,8 @@ fn emit_call_args(args: &[Operand], func: &Function, _strings: &[String]) -> Str
     args.iter()
         .map(|a| {
             let val = operand_ref(a, func);
-            format!("ptr {val}")
+            // Default to i64 for user function args (simplified)
+            format!("i64 {val}")
         })
         .collect::<Vec<_>>()
         .join(", ")

@@ -297,24 +297,7 @@ impl LowerCtx {
 
             ExprKind::If(if_expr) => self.lower_if(if_expr, body),
 
-            ExprKind::Match(m) => {
-                // TODO: Proper match lowering with pattern dispatch.
-                // Current implementation only lowers the subject and first arm body.
-                // Full pattern matching requires: condition generation per pattern,
-                // branch dispatch, and exhaustiveness is already checked by tyra-types.
-                self.lower_expr(&m.subject, body);
-                let result = self.fresh_temp();
-                if let Some(first_arm) = m.arms.first() {
-                    for stmt in &first_arm.body {
-                        self.lower_stmt(stmt, body);
-                    }
-                }
-                body.push(Instruction::Const {
-                    dest: result.clone(),
-                    value: Constant::Unit,
-                });
-                result
-            }
+            ExprKind::Match(m) => self.lower_match(m, body),
 
             ExprKind::For(f) => {
                 let iter_val = self.lower_expr(&f.iter, body);
@@ -501,6 +484,158 @@ impl LowerCtx {
         dest
     }
 
+    /// Lower a match expression into a chain of conditional branches.
+    /// Uses alloca + store + load pattern for the result to avoid SSA dominance issues.
+    fn lower_match(&mut self, m: &MatchExpr, body: &mut Vec<Instruction>) -> String {
+        let subject = self.lower_expr(&m.subject, body);
+        let end_label = self.fresh_label("match_end");
+
+        // Allocate stack slot for match result
+        let result_slot = self.fresh_temp();
+        body.push(Instruction::Alloca {
+            dest: result_slot.clone(),
+        });
+
+        // Pre-generate all labels
+        let arm_labels: Vec<String> = (0..m.arms.len())
+            .map(|i| self.fresh_label(&format!("arm_{i}")))
+            .collect();
+        let next_labels: Vec<String> = (0..m.arms.len())
+            .map(|i| {
+                if i + 1 < m.arms.len() {
+                    self.fresh_label(&format!("next_{i}"))
+                } else {
+                    end_label.clone()
+                }
+            })
+            .collect();
+
+        for (i, arm) in m.arms.iter().enumerate() {
+            let arm_label = &arm_labels[i];
+            let next_label = &next_labels[i];
+
+            // Generate pattern test
+            match &arm.pattern.kind {
+                PatternKind::Wildcard | PatternKind::Ident(_) => {
+                    body.push(Instruction::Jump {
+                        label: arm_label.clone(),
+                    });
+                }
+                PatternKind::IntLit(n) => {
+                    let lit = self.fresh_temp();
+                    body.push(Instruction::Const {
+                        dest: lit.clone(),
+                        value: Constant::Int(*n),
+                    });
+                    let cond = self.fresh_temp();
+                    body.push(Instruction::BinOp {
+                        dest: cond.clone(),
+                        op: MirBinOp::EqInt,
+                        lhs: Operand::Var(subject.clone()),
+                        rhs: Operand::Var(lit),
+                    });
+                    body.push(Instruction::BranchIf {
+                        cond: Operand::Var(cond),
+                        true_label: arm_label.clone(),
+                        false_label: next_label.clone(),
+                    });
+                }
+                PatternKind::BoolLit(b) => {
+                    let lit = self.fresh_temp();
+                    body.push(Instruction::Const {
+                        dest: lit.clone(),
+                        value: Constant::Bool(*b),
+                    });
+                    let cond = self.fresh_temp();
+                    body.push(Instruction::BinOp {
+                        dest: cond.clone(),
+                        op: MirBinOp::EqInt,
+                        lhs: Operand::Var(subject.clone()),
+                        rhs: Operand::Var(lit),
+                    });
+                    body.push(Instruction::BranchIf {
+                        cond: Operand::Var(cond),
+                        true_label: arm_label.clone(),
+                        false_label: next_label.clone(),
+                    });
+                }
+                PatternKind::StringLit(_) | PatternKind::FloatLit(_) => {
+                    body.push(Instruction::Jump {
+                        label: arm_label.clone(),
+                    });
+                }
+                PatternKind::Constructor(_, _) => {
+                    body.push(Instruction::Jump {
+                        label: arm_label.clone(),
+                    });
+                }
+            }
+
+            // Arm body
+            body.push(Instruction::Label(arm_label.clone()));
+
+            if let PatternKind::Ident(name) = &arm.pattern.kind {
+                body.push(Instruction::Copy {
+                    dest: name.clone(),
+                    source: subject.clone(),
+                });
+            }
+
+            // Track arm body start to find the last temp from THIS arm only
+            let arm_body_start = body.len();
+            for stmt in &arm.body {
+                self.lower_stmt(stmt, body);
+            }
+
+            // Store arm result into the alloca'd slot (scan only this arm's instructions)
+            if let Some(last) = self.last_temp_in_range(body, arm_body_start) {
+                body.push(Instruction::Store {
+                    dest: result_slot.clone(),
+                    value: Operand::Var(last),
+                });
+            }
+
+            body.push(Instruction::Jump {
+                label: end_label.clone(),
+            });
+
+            // Next arm label
+            if i + 1 < m.arms.len() {
+                body.push(Instruction::Label(next_label.clone()));
+            }
+        }
+
+        body.push(Instruction::Label(end_label));
+
+        // Load the result from the alloca'd slot
+        let result = self.fresh_temp();
+        body.push(Instruction::Load {
+            dest: result.clone(),
+            source: result_slot,
+        });
+        result
+    }
+
+    /// Find the last temp-producing instruction in body[start..].
+    fn last_temp_in_range(&self, body: &[Instruction], start: usize) -> Option<String> {
+        for inst in body[start..].iter().rev() {
+            match inst {
+                Instruction::Const { dest, .. }
+                | Instruction::Call {
+                    dest: Some(dest), ..
+                }
+                | Instruction::BinOp { dest, .. }
+                | Instruction::Neg { dest, .. }
+                | Instruction::Not { dest, .. }
+                | Instruction::Copy { dest, .. }
+                | Instruction::Load { dest, .. }
+                | Instruction::Phi { dest, .. } => return Some(dest.clone()),
+                _ => continue,
+            }
+        }
+        None
+    }
+
     fn last_temp_name(&self, body: &[Instruction]) -> Option<String> {
         for inst in body.iter().rev() {
             match inst {
@@ -511,7 +646,9 @@ impl LowerCtx {
                 | Instruction::BinOp { dest, .. }
                 | Instruction::Neg { dest, .. }
                 | Instruction::Not { dest, .. }
-                | Instruction::Copy { dest, .. } => return Some(dest.clone()),
+                | Instruction::Copy { dest, .. }
+                | Instruction::Load { dest, .. }
+                | Instruction::Phi { dest, .. } => return Some(dest.clone()),
                 _ => continue,
             }
         }

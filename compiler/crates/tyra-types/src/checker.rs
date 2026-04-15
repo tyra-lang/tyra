@@ -78,12 +78,14 @@ pub fn check(file: &SourceFile, report: &mut Report) {
 
 /// Register prelude function types.
 fn register_prelude(env: &mut TypeEnv) {
-    // print and println accept any Debug type — for now, model as fn(String) -> Unit
-    // This is a simplification; the real signature is fn<T: Debug>(T) -> Unit
+    // print/println accept any Debug type: fn<T: Debug>(T) -> Unit
+    // Since generics are not yet implemented, we use Ty::Error as the parameter
+    // type to accept any argument without type mismatch errors.
+    // TODO: Replace with proper generic constraint checking when generics are implemented.
     for name in &["print", "println", "eprint", "eprintln"] {
         env.define(
             name.to_string(),
-            Ty::Fn(vec![Ty::String], Box::new(Ty::Unit)),
+            Ty::Fn(vec![Ty::Error], Box::new(Ty::Unit)),
         );
     }
     env.define(

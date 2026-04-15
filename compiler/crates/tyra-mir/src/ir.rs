@@ -83,6 +83,15 @@ pub enum Instruction {
         dest: String,
         branches: Vec<(Operand, String)>,
     },
+
+    /// `dest = alloca` — allocate stack slot for a mutable local
+    Alloca { dest: String },
+
+    /// `store value -> dest_ptr` — write to an alloca'd slot
+    Store { dest: String, value: Operand },
+
+    /// `dest = load source_ptr` — read from an alloca'd slot
+    Load { dest: String, source: String },
 }
 
 /// A constant value.
