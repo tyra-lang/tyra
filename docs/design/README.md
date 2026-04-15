@@ -64,3 +64,4 @@ ADRs are numbered sequentially: `0001`, `0002`, etc. Numbers are never reused. I
 | [0003](0003-stdlib-minimal-scope.md) | Standard library minimal scope for v0.1 | Accepted | 2026-04-15 |
 | [0004](0004-unify-propagation-operator.md) | Remove `or return` and extend `?` to Option | Accepted | 2026-04-15 |
 | [0005](0005-multi-constraint-generics.md) | Allow up to two constraints per type parameter | Accepted | 2026-04-15 |
+| [0006](0006-top-level-expressions.md) | Allow top-level expressions as implicit main | Accepted | 2026-04-15 |

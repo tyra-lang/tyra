@@ -1,21 +1,12 @@
 # 07-state-machine.tyra
 # Traffic-light state machine using ADT and value types.
-# Validates: ADT with unit variants, value type, copy(), match exhaustiveness
+# Validates: ADT with unit variants (qualified construction), value type,
+#            copy(), match exhaustiveness, Eq on unit-variant ADT, top-level (§6.1)
 
-# SPEC_OK: §8.5 — ADT with no-argument variants (e.g., `| Cash` in Payment example).
-# SPEC_OK: §8.6 — `value` type, `copy()` builtin.
-# SPEC_OK: §10.3 — exhaustive match on ADT.
-
-# SPEC_GAP: ADT constructor as expression — `Red`, `Green`, `Yellow` below are used
-# as plain identifiers in expression position. The spec §8.5 shows them only in
-# *patterns* (`when Red`). Are bare variant names valid expressions?
-# Assumption: yes — the constructor of a unit variant is just the name itself.
-# But the spec should state this explicitly to remove ambiguity for the parser.
-
-# SPEC_GAP: Constructing a `value` type — `TrafficLight(color: Red)` calls the
-# constructor with a labeled argument. The spec §8.6 shows `Point(x: 1.0, y: 2.0)`
-# so this pattern is confirmed.
-# SPEC_OK: constructor call uses named arguments matching field names.
+# SPEC_REF: §8.5 — ADT constructors use qualified form: Color.Red, Color.Green
+# SPEC_REF: §8.5 — ADT with all-Eq variants auto-derives Eq (vacuously for unit variants)
+# SPEC_REF: §8.6 — value type, copy() builtin
+# SPEC_REF: §10.3 — exhaustive match on ADT; patterns are unqualified
 
 type Color =
   | Red
@@ -29,11 +20,11 @@ end
 fn next(_ light: TrafficLight) -> TrafficLight
   match light.color
   when Red
-    light.copy(color: Green)
+    light.copy(color: Color.Green)
   when Green
-    light.copy(color: Yellow)
+    light.copy(color: Color.Yellow)
   when Yellow
-    light.copy(color: Red)
+    light.copy(color: Color.Red)
   end
 end
 
@@ -48,28 +39,18 @@ fn label(_ color: Color) -> String
   end
 end
 
+# Color has Eq (unit variants vacuously satisfy the requirement)
 fn color_eq(_ a: Color, _ b: Color) -> Bool
-  # SPEC_OK: `Color` ADT — all fields (none) satisfy Eq trivially,
-  # but unit variants have no fields. Does the Eq ability apply to unit variants?
-  # §8.6 says "全フィールドが Eq を満たす場合 Eq ability を自動で持つ".
-  # A variant with zero fields: vacuously true, so Color has Eq.
-  # SPEC_OK: `==` is valid between Color values.
   a == b
 end
 
-export fn main() -> Unit
-  let light = TrafficLight(color: Red)
-  let light2 = next(light)
-  let light3 = next(light2)
-  let light4 = next(light3)
+# Top-level executable statements
+let light = TrafficLight(color: Color.Red)
+let light2 = next(light)
+let light3 = next(light2)
+let light4 = next(light3)
 
-  print(label(light.color))    # stop
-  print(label(light2.color))   # go
-  print(label(light3.color))   # caution
-  print(label(light4.color))   # stop
-
-  # SPEC_GAP: Comments at end of line — the spec §5.3 defines `# line comment`.
-  # Are inline comments (code followed by #) valid? Ruby-style inline comments
-  # should be fine, but the spec's grammar does not explicitly permit them on the
-  # same line as code. Needs a grammar rule clarification.
-end
+print(label(light.color))
+print(label(light2.color))
+print(label(light3.color))
+print(label(light4.color))

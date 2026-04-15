@@ -135,6 +135,58 @@ Reasons:
 - Indentation alone does not carry meaning
 - Block boundaries are clear for AI
 
+### 6.1 Top-level executable statements
+
+In an entry-point file, statements other than declarations may be written at the top level. These are treated as the body of an implicit `fn main() -> Unit` (see ADR-0006 for the rationale).
+
+An **expression statement** is an expression placed in statement position. Its value is discarded. The executable statements permitted at the top level are: expression statements, `let`/`mut` bindings, `if`, `match`, `for`, `while`, and `defer`.
+
+```tyra
+# Entry-point file: no fn main needed
+print("hello, tyra")
+```
+
+The above is equivalent to:
+
+```tyra
+fn main() -> Unit
+  print("hello, tyra")
+end
+```
+
+Declarations (`fn`, `type`, `value`, `data`, `trait`, `impl`, `import`) are not executable statements. `export` is a modifier on declarations, not an executable statement. Declarations remain outside the implicit main; only executable statements become its body. Mixing declarations and executable statements is permitted. However, `fn main` is an exception and cannot coexist with top-level executable statements (see the rules below).
+
+Forward references apply only to top-level declaration names (function names, type names, trait names, etc.). `let`/`mut` bindings in top-level executable statements are local variables of the implicit main and are not eligible for forward reference.
+
+```tyra
+# Mixing declarations and executable statements:
+# fib is defined after the print but can still be referenced
+print("fib(10) = #{fib(10)}")
+
+fn fib(_ n: Int) -> Int
+  match n
+  when 0
+    0
+  when 1
+    1
+  when _
+    fib(n - 1) + fib(n - 2)
+  end
+end
+```
+
+Rules:
+
+- `fn main` may only be defined in the entry-point file. A `fn main` in an imported module file is a compile error
+- `fn main` may not have `export`. `main` is reserved for the entry point and is not intended for external visibility
+- `fn main` and top-level executable statements may not coexist in the same file (compile error)
+- Top-level executable statements are type-checked as the body of an implicit `fn main() -> Unit`; therefore `?`, `.await`, and `return` are not usable
+- Imported module files may not contain top-level executable statements (§13.1)
+- Top-level `let`/`mut` bindings in an entry-point file are local variables of the implicit main, not module-scope bindings. Evaluated bindings exist only inside the implicit main of the entry-point file
+- Module files may not contain any top-level executable statements, including `let`/`mut` bindings
+- `defer` is usable at the top level. It executes in LIFO order on exit from the implicit main's scope (which typically corresponds to just before program termination)
+- The entry-point file is designated by the toolchain. Application packages require exactly one entry point. Library packages do not require an entry point
+
 ---
 
 ## 7. Values and variables
@@ -518,6 +570,22 @@ fn add(_ x: Int, _ y: Int) -> Int
 end
 ```
 
+`fn main` is the entry point of the program. `main` may only be defined in the entry-point file and may not have `export` (§6.1). When the entry-point file contains top-level executable statements, `fn main` may be omitted. In that case the statements are normalized to an implicit `fn main() -> Unit`. When `Result` return or `async` is needed, define `fn main` explicitly.
+
+```tyra
+# Explicit main: can return Result
+fn main() -> Result<Unit, AppError>
+  let config = read_config("app.conf")?
+  start_server(config)?
+end
+
+# Explicit async main
+async fn main() -> Result<Unit, AppError>
+  let app = server.new()
+  app.listen(port: 8080).await?
+end
+```
+
 ### 9.2 Calls
 
 ```tyra
@@ -740,6 +808,7 @@ end
 
 - C-style `for (;;)` is not adopted
 - The value is `Unit`
+- `break` and `continue` are not adopted in v0.1
 
 ---
 
@@ -880,6 +949,9 @@ Rules:
 
 - One file = one module
 - The file name matches the module name
+- Module files (those that are `import`-ed) may only contain declarations (`fn`, `type`, `value`, `data`, `trait`, `impl`)
+- Module files may not contain top-level executable statements or `let`/`mut` bindings
+- v0.1 does not define module-level initialization semantics
 
 ### 13.2 import
 
@@ -1157,7 +1229,16 @@ tyra mod
 
 ## 19. Execution model
 
-Compilation pipeline:
+### 19.1 Entry point
+
+Program execution starts from `fn main`. The entry-point file takes one of the following forms:
+
+1. Explicit `fn main` — one of `fn main() -> Unit`, `fn main() -> Result<Unit, E>`, or `async fn main() -> Result<Unit, E>`
+2. Top-level executable statements — normalized to an implicit `fn main() -> Unit` (§6.1)
+
+`fn main` may only be defined in the entry-point file and may not have `export`. Application packages require exactly one entry point. Library packages do not require an entry point. A compile error occurs if multiple entry points are detected.
+
+### 19.2 Compilation pipeline
 
 ```text
 source -> lexer -> parser -> typed AST -> mid-level IR -> backend IR -> native binary
@@ -1169,7 +1250,9 @@ Reference implementation:
 source -> lexer -> parser -> typed AST -> mid-level IR -> LLVM IR -> native binary
 ```
 
-### 19.1 Implementation policy
+For files with top-level executable statements, the frontend classifies declarations and executable statements, then normalizes the executable statements into an implicit `fn main() -> Unit`. The normalized AST is identical to an explicit main, and subsequent phases are unaffected.
+
+### 19.3 Implementation policy
 
 - The parser is simplified by assuming syntax with little ambiguity
 - The IR after type checking has a stable shape for AI and tooling
@@ -1192,6 +1275,40 @@ Free style choices are not allowed.
 ---
 
 ## 21. Examples
+
+### 21.0 Minimal program
+
+With top-level executable statements (§6.1), the minimal program is a single line:
+
+```tyra
+print("hello, tyra")
+```
+
+Function definitions and top-level executable statements can be mixed. Top-level declarations support forward references, so a function defined after an executable statement can still be called:
+
+```tyra
+print("fib(10) = #{fib(10)}")
+
+fn fib(_ n: Int) -> Int
+  match n
+  when 0
+    0
+  when 1
+    1
+  when _
+    fib(n - 1) + fib(n - 2)
+  end
+end
+```
+
+When error propagation or async is needed, use an explicit `fn main`:
+
+```tyra
+fn main() -> Result<Unit, AppError>
+  let config = read_config("app.conf")?
+  start_server(config)?
+end
+```
 
 ### 21.1 ADT and match
 
@@ -1227,7 +1344,7 @@ end
 ```tyra
 import http.server
 
-export async fn main() -> Result<Unit, AppError>
+async fn main() -> Result<Unit, AppError>
   let app = server.new()
   app.get("/health", health_handler)
   app.listen(port: 8080).await?
@@ -1251,6 +1368,8 @@ The following are postponed for later specification:
 - guard clauses (`when pattern if condition`)
 - tuple types
 - structured concurrency
+- `break` / `continue`
+- Module-level initialization semantics (`let`/`mut` at module scope)
 - Detailed APIs for Tier 2 standard library modules (http, fs, json, string, collections, time, test, log, float)
 
 ---

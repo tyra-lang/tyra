@@ -132,6 +132,57 @@ end
 - インデントだけに意味を持たせない
 - AI にとって境界が明確
 
+### 6.1 トップレベル実行文
+
+エントリポイントファイルでは、宣言以外の文をトップレベルに記述できる。これらは暗黙の `fn main() -> Unit` の本体として扱われる (設計根拠は ADR-0006 を参照)。
+
+式を文位置に置いたものを**式文**と呼ぶ。式文の値は破棄される。トップレベルで許可される実行文は、式文、`let`/`mut` 束縛、`if`、`match`、`for`、`while`、`defer` である。
+
+```tyra
+# エントリポイントファイル: fn main は不要
+print("hello, tyra")
+```
+
+上記は以下と等価である:
+
+```tyra
+fn main() -> Unit
+  print("hello, tyra")
+end
+```
+
+宣言 (`fn`, `type`, `value`, `data`, `trait`, `impl`, `import`) はトップレベル実行文ではない。`export` は宣言に付く修飾子であり、実行文ではない。宣言は暗黙 main の外側に残り、実行文のみが暗黙 main の本体に入る。宣言と実行文の混在は許可される。ただし `fn main` は例外であり、トップレベル実行文と共存できない (後述の規則を参照)。
+
+前方参照可能なのはトップレベル宣言名 (関数名、型名、trait 名など) に限る。トップレベル実行文に置かれた `let`/`mut` 束縛は暗黙 main のローカル変数であり、前方参照の対象ではない。
+
+```tyra
+# 宣言と実行文の混在: fib は print より後に定義されているが参照できる
+print("fib(10) = #{fib(10)}")
+
+fn fib(_ n: Int) -> Int
+  match n
+  when 0
+    0
+  when 1
+    1
+  when _
+    fib(n - 1) + fib(n - 2)
+  end
+end
+```
+
+規則:
+
+- `fn main` はエントリポイントファイルにのみ定義できる。`import` されるモジュールファイルに `fn main` が存在した場合はコンパイルエラーとする
+- `fn main` に `export` を付けることはできない。`main` はエントリポイント専用の関数名であり、外部公開の対象ではない
+- `fn main` とトップレベル実行文は同一ファイルに共存できない (コンパイルエラー)
+- トップレベル実行文は暗黙の `fn main() -> Unit` として型検査されるため、`?`、`.await`、`return` は使用できない
+- `import` されるモジュールファイルにはトップレベル実行文を記述できない (§13.1)
+- トップレベル `let`/`mut` はエントリポイントファイルでは暗黙 main のローカル変数であり、モジュールスコープ束縛ではない。実行により評価される束縛はエントリポイントの暗黙 main 内にのみ存在する
+- モジュールファイルでは `let`/`mut` を含むトップレベル実行文は一切禁止する
+- `defer` はトップレベルで使用可能だが、暗黙 main のスコープ脱出時に LIFO 順で実行される (通常はプログラム終了直前に相当する)
+- エントリポイントファイルはツールチェーンが指定する。アプリケーションパッケージではエントリポイントをちょうど1つ要求する。ライブラリパッケージではエントリポイントは不要である
+
 ---
 
 ## 7. 値と変数
@@ -515,6 +566,22 @@ fn add(_ x: Int, _ y: Int) -> Int
 end
 ```
 
+`fn main` はプログラムのエントリポイントである。`main` はエントリポイントファイルにのみ定義でき、`export` は付けられない (§6.1)。エントリポイントファイルにトップレベル実行文がある場合は `fn main` の記述を省略できる。省略時は暗黙の `fn main() -> Unit` に正規化される。`Result` 返却や `async` が必要な場合は明示的に `fn main` を定義する。
+
+```tyra
+# 明示 main: Result 返却が可能
+fn main() -> Result<Unit, AppError>
+  let config = read_config("app.conf")?
+  start_server(config)?
+end
+
+# 明示 async main
+async fn main() -> Result<Unit, AppError>
+  let app = server.new()
+  app.listen(port: 8080).await?
+end
+```
+
 ### 9.2 呼び出し
 
 ```tyra
@@ -737,6 +804,7 @@ end
 
 - C 風 `for (;;)` は採用しない
 - 戻り値は `Unit` である
+- `break` と `continue` は v0.1 では採用しない
 
 ---
 
@@ -877,6 +945,9 @@ end
 
 - 1 ファイル = 1 モジュール
 - ファイル名はモジュール名と一致
+- モジュールファイル (`import` される側) には宣言 (`fn`, `type`, `value`, `data`, `trait`, `impl`) のみ記述できる
+- モジュールファイルにトップレベル実行文や `let`/`mut` 束縛を記述することはできない
+- v0.1 ではモジュールレベルの初期化セマンティクスを定義しない
 
 ### 13.2 import
 
@@ -1154,7 +1225,16 @@ tyra mod
 
 ## 19. 実行モデル
 
-コンパイルフロー:
+### 19.1 エントリポイント
+
+プログラムの実行は `fn main` から開始する。エントリポイントファイルは以下のいずれかの形式を取る:
+
+1. 明示的 `fn main` — `fn main() -> Unit`、`fn main() -> Result<Unit, E>`、`async fn main() -> Result<Unit, E>` のいずれか
+2. トップレベル実行文 — 暗黙の `fn main() -> Unit` に正規化される (§6.1)
+
+`fn main` はエントリポイントファイルにのみ定義でき、`export` は付けられない。アプリケーションパッケージではエントリポイントをちょうど1つ要求する。ライブラリパッケージではエントリポイントは不要である。複数のエントリポイントが検出された場合はコンパイルエラーとする。
+
+### 19.2 コンパイルフロー
 
 ```text
 source -> lexer -> parser -> typed AST -> mid-level IR -> backend IR -> native binary
@@ -1166,7 +1246,9 @@ source -> lexer -> parser -> typed AST -> mid-level IR -> backend IR -> native b
 source -> lexer -> parser -> typed AST -> mid-level IR -> LLVM IR -> native binary
 ```
 
-### 19.1 実装方針
+トップレベル実行文を持つファイルは、フロントエンドが宣言と実行文を分類し、実行文を暗黙の `fn main() -> Unit` に正規化する。正規化後の AST は明示 main と同一であり、以降のフェーズに影響しない。
+
+### 19.3 実装方針
 
 - パーサは曖昧性の少ない構文を前提に単純化する
 - 型検査後の IR は AI とツールのために安定した形を持つ
@@ -1189,6 +1271,40 @@ formatter は次を強制する。
 ---
 
 ## 21. 例
+
+### 21.0 最小プログラム
+
+トップレベル実行文 (§6.1) により、最小のプログラムは1行で書ける:
+
+```tyra
+print("hello, tyra")
+```
+
+関数定義とトップレベル実行文を混在させることもできる。トップレベル宣言は前方参照可能なので、実行文より後に定義された関数も呼び出せる:
+
+```tyra
+print("fib(10) = #{fib(10)}")
+
+fn fib(_ n: Int) -> Int
+  match n
+  when 0
+    0
+  when 1
+    1
+  when _
+    fib(n - 1) + fib(n - 2)
+  end
+end
+```
+
+エラー伝播や非同期処理が必要な場合は明示的 `fn main` を使う:
+
+```tyra
+fn main() -> Result<Unit, AppError>
+  let config = read_config("app.conf")?
+  start_server(config)?
+end
+```
 
 ### 21.1 ADT と match
 
@@ -1224,7 +1340,7 @@ end
 ```tyra
 import http.server
 
-export async fn main() -> Result<Unit, AppError>
+async fn main() -> Result<Unit, AppError>
   let app = server.new()
   app.get("/health", health_handler)
   app.listen(port: 8080).await?
@@ -1248,6 +1364,8 @@ end
 - guard clause (`when pattern if condition`)
 - tuple 型
 - structured concurrency
+- `break` / `continue`
+- モジュールレベルの初期化セマンティクス (`let`/`mut` のモジュールスコープ)
 - Tier 2 標準ライブラリ API の詳細 (http, fs, json, string, collections, time, test, log, float)
 
 ---

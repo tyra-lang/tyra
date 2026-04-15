@@ -309,6 +309,25 @@ Read these when working on the corresponding areas:
 | [0003](../docs/design/0003-stdlib-minimal-scope.md) | Stdlib Tier 1/2 split | standard library, prelude |
 | [0004](../docs/design/0004-unify-propagation-operator.md) | `?` for both Result and Option | error handling, parser |
 | [0005](../docs/design/0005-multi-constraint-generics.md) | Up to 2 constraints | generics, type checker |
+| [0006](../docs/design/0006-top-level-expressions.md) | Top-level expressions as implicit main | parser, driver, entry point |
+
+### Entry-point style guidance (ADR-0006)
+
+Tyra allows two styles for entry-point files. Use the right one for the task:
+
+- **Top-level style** — use for hello world, simple scripts, and examples that don't need error propagation or async
+- **Explicit `fn main`** — use for production apps, error-propagating entry points (`?`), async entry points (`.await`)
+- **Never mix both** in one file (compile error)
+- **When in doubt, use explicit `fn main`** — it is always valid
+
+Top-level executable statements are desugared to `fn main() -> Unit`. The following are **not allowed** at the top level: `?`, `.await`, `return`. If any of these are needed, use explicit `fn main`.
+
+Declarations (`fn`, `type`, `value`, `data`, `trait`, `impl`) may coexist with top-level executable statements — they remain outside the implicit main. Forward references to declarations are allowed.
+
+When generating Tyra code:
+
+- Simple prompt ("write hello world") → top-level style
+- Anything involving `Result`, `async`, or production use → explicit `fn main`
 
 ## Out of Scope (Do Not Implement)
 
