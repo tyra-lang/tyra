@@ -121,6 +121,22 @@ mod tests {
     }
 
     #[test]
+    fn float_binop_uses_float_variant() {
+        let prog = lower_str("let x = 1.0 + 2.0\n");
+        let main = &prog.functions[0];
+        let has_float_add = main.body.iter().any(|i| {
+            matches!(
+                i,
+                Instruction::BinOp {
+                    op: MirBinOp::AddFloat,
+                    ..
+                }
+            )
+        });
+        assert!(has_float_add, "expected AddFloat, got: {:?}", main.body);
+    }
+
+    #[test]
     fn full_program_lowers() {
         let source = r#"fn fib(_ n: Int) -> Int
   match n

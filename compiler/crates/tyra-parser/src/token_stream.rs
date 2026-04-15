@@ -213,6 +213,7 @@ pub fn kind_name(kind: &TokenKind) -> &'static str {
         TokenKind::Int(_) => "integer literal",
         TokenKind::Float(_) => "float literal",
         TokenKind::String(_) => "string literal",
+        TokenKind::InterpString(_) => "interpolated string",
         TokenKind::RawString(_) => "raw string literal",
         TokenKind::True => "`true`",
         TokenKind::False => "`false`",

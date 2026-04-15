@@ -371,6 +371,17 @@ mod tests {
     }
 
     #[test]
+    fn parse_turbofish() {
+        let (ast, report) = parse_str("parse::<Int>(text)\n");
+        assert!(!report.has_errors(), "errors: {:?}", report.diagnostics());
+        if let Item::Stmt(Stmt::Expr(ExprStmt { expr, .. })) = &ast.items[0] {
+            assert!(matches!(expr.kind, ExprKind::TurbofishCall(_, _, _)));
+        } else {
+            panic!("expected TurbofishCall");
+        }
+    }
+
+    #[test]
     fn parse_binary_ops_precedence() {
         // 1 + 2 * 3 should parse as 1 + (2 * 3)
         let (ast, report) = parse_str("1 + 2 * 3\n");

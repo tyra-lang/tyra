@@ -158,6 +158,23 @@ fn parse_postfix(ts: &mut TokenStream, report: &mut Report, mut expr: Expr) -> E
                     span,
                 };
             }
+            // Turbofish: expr::<Type>(args) (§8.4)
+            TokenKind::ColonColon => {
+                ts.advance(); // consume '::'
+                ts.expect(&TokenKind::Lt, report);
+                let mut type_args = vec![crate::type_expr::parse_type(ts, report)];
+                while ts.eat(&TokenKind::Comma) {
+                    type_args.push(crate::type_expr::parse_type(ts, report));
+                }
+                ts.expect(&TokenKind::Gt, report);
+                let args = parse_call_args(ts, report);
+                let end = ts.peek_span();
+                let span = expr.span.merge(end);
+                expr = Expr {
+                    kind: ExprKind::TurbofishCall(Box::new(expr), type_args, args),
+                    span,
+                };
+            }
             // Index: expr[index]
             TokenKind::LBracket => {
                 ts.advance();
@@ -201,6 +218,30 @@ fn parse_prefix(ts: &mut TokenStream, report: &mut Report) -> Expr {
             ts.advance();
             Expr {
                 kind: ExprKind::StringLit(s),
+                span: start,
+            }
+        }
+        TokenKind::InterpString(parts) => {
+            ts.advance();
+            let ast_parts: Vec<tyra_ast::StringPart> = parts
+                .into_iter()
+                .map(|part| match part {
+                    tyra_lexer::InterpPart::Lit(s) => tyra_ast::StringPart::Lit(s),
+                    tyra_lexer::InterpPart::Expr(expr_text) => {
+                        // Re-lex and parse the expression text
+                        let mut sources = tyra_diagnostics::SourceMap::new();
+                        let id = sources.add("<interp>".into(), expr_text);
+                        let mut inner_report = tyra_diagnostics::Report::new();
+                        let tokens = tyra_lexer::tokenize(id, &sources, &mut inner_report);
+                        let mut inner_ts = crate::token_stream::TokenStream::new(tokens);
+                        let expr = parse_expr(&mut inner_ts, &mut inner_report);
+                        // TODO: propagate inner_report errors to outer report
+                        tyra_ast::StringPart::Expr(expr)
+                    }
+                })
+                .collect();
+            Expr {
+                kind: ExprKind::StringInterp(ast_parts),
                 span: start,
             }
         }

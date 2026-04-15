@@ -262,14 +262,14 @@ fn scan_number(cursor: &mut Cursor, source_id: SourceId, report: &mut Report) ->
 
 /// Scan a regular string literal with escape sequences.
 ///
-/// TODO: String interpolation `#{...}` (spec §7.3) is currently lexed as plain
-/// string content. When the parser needs interpolation support, this should be
-/// refactored to emit segmented tokens (StringStart/StringPart/InterpolationStart/
-/// InterpolationEnd/StringEnd) so the parser doesn't need to re-lex string content.
-/// See: https://github.com/tyra-lang/tyra/issues/TBD
+/// Scan a string literal with escape sequences and interpolation (§7.3).
+/// If the string contains `#{...}`, produces InterpString with parts.
+/// Otherwise produces a plain String token.
 fn scan_string(cursor: &mut Cursor, source_id: SourceId, report: &mut Report) -> TokenKind {
     cursor.advance(); // consume opening '"'
-    let mut value = String::new();
+    let mut current_lit = String::new();
+    let mut parts: Vec<crate::token::InterpPart> = Vec::new();
+    let mut has_interp = false;
 
     loop {
         match cursor.peek() {
@@ -287,38 +287,95 @@ fn scan_string(cursor: &mut Cursor, source_id: SourceId, report: &mut Report) ->
             }
             Some('"') => {
                 cursor.advance(); // consume closing '"'
-                return TokenKind::String(value);
+                if has_interp {
+                    if !current_lit.is_empty() {
+                        parts.push(crate::token::InterpPart::Lit(current_lit));
+                    }
+                    return TokenKind::InterpString(parts);
+                }
+                return TokenKind::String(current_lit);
+            }
+            Some('#') if cursor.peek_next() == Some('{') => {
+                // String interpolation: #{expr}
+                has_interp = true;
+                cursor.advance(); // consume '#'
+                cursor.advance(); // consume '{'
+
+                // Save literal part so far
+                if !current_lit.is_empty() {
+                    parts.push(crate::token::InterpPart::Lit(std::mem::take(
+                        &mut current_lit,
+                    )));
+                }
+
+                // Scan expression text with brace counting
+                let mut expr_text = String::new();
+                let mut brace_depth: u32 = 1;
+                loop {
+                    match cursor.peek() {
+                        None | Some('\n') => {
+                            let pos = cursor.pos();
+                            report.add(
+                                Diagnostic::error("unterminated string interpolation")
+                                    .with_code("E0003")
+                                    .with_label(Label::new(
+                                        Span::new(source_id, pos, pos),
+                                        "missing closing `}`",
+                                    )),
+                            );
+                            return TokenKind::Error;
+                        }
+                        Some('{') => {
+                            cursor.advance();
+                            brace_depth += 1;
+                            expr_text.push('{');
+                        }
+                        Some('}') => {
+                            cursor.advance();
+                            brace_depth -= 1;
+                            if brace_depth == 0 {
+                                break;
+                            }
+                            expr_text.push('}');
+                        }
+                        Some(c) => {
+                            cursor.advance();
+                            expr_text.push(c);
+                        }
+                    }
+                }
+                parts.push(crate::token::InterpPart::Expr(expr_text));
             }
             Some('\\') => {
                 cursor.advance(); // consume '\'
                 match cursor.peek() {
                     Some('n') => {
                         cursor.advance();
-                        value.push('\n');
+                        current_lit.push('\n');
                     }
                     Some('t') => {
                         cursor.advance();
-                        value.push('\t');
+                        current_lit.push('\t');
                     }
                     Some('r') => {
                         cursor.advance();
-                        value.push('\r');
+                        current_lit.push('\r');
                     }
                     Some('\\') => {
                         cursor.advance();
-                        value.push('\\');
+                        current_lit.push('\\');
                     }
                     Some('"') => {
                         cursor.advance();
-                        value.push('"');
+                        current_lit.push('"');
                     }
                     Some('0') => {
                         cursor.advance();
-                        value.push('\0');
+                        current_lit.push('\0');
                     }
                     Some('u') => {
-                        cursor.advance(); // consume 'u'
-                        scan_unicode_escape(cursor, source_id, report, &mut value);
+                        cursor.advance();
+                        scan_unicode_escape(cursor, source_id, report, &mut current_lit);
                     }
                     Some(c) => {
                         let pos = cursor.pos() - 1;
@@ -331,16 +388,14 @@ fn scan_string(cursor: &mut Cursor, source_id: SourceId, report: &mut Report) ->
                                     "invalid escape",
                                 )),
                         );
-                        value.push(c);
+                        current_lit.push(c);
                     }
-                    None => {
-                        // Backslash at EOF — will be caught by the unterminated check
-                    }
+                    None => {}
                 }
             }
             Some(c) => {
                 cursor.advance();
-                value.push(c);
+                current_lit.push(c);
             }
         }
     }
@@ -536,6 +591,30 @@ mod tests {
 
     #[test]
     fn string_literal() {
+        assert_eq!(
+            kinds(r#""hello""#),
+            vec![TokenKind::String("hello".into()), TokenKind::Eof]
+        );
+    }
+
+    #[test]
+    fn string_interpolation() {
+        let (tokens, report) = lex(r#""hello, #{name}!""#);
+        assert!(!report.has_errors(), "errors: {:?}", report.diagnostics());
+        let tok = &tokens[0];
+        if let TokenKind::InterpString(parts) = &tok.kind {
+            assert_eq!(parts.len(), 3);
+            assert_eq!(parts[0], crate::token::InterpPart::Lit("hello, ".into()));
+            assert_eq!(parts[1], crate::token::InterpPart::Expr("name".into()));
+            assert_eq!(parts[2], crate::token::InterpPart::Lit("!".into()));
+        } else {
+            panic!("expected InterpString, got {:?}", tok.kind);
+        }
+    }
+
+    #[test]
+    fn string_no_interp_is_plain() {
+        // String without #{} should be plain String, not InterpString
         assert_eq!(
             kinds(r#""hello""#),
             vec![TokenKind::String("hello".into()), TokenKind::Eof]

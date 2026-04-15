@@ -3,6 +3,15 @@
 
 use tyra_diagnostics::Span;
 
+/// A segment of a string with interpolation (used in InterpString token).
+#[derive(Debug, Clone, PartialEq)]
+pub enum InterpPart {
+    /// Literal text segment.
+    Lit(String),
+    /// Expression text from `#{...}` (to be parsed by the parser).
+    Expr(String),
+}
+
 /// A token produced by the lexer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
@@ -24,9 +33,12 @@ pub enum TokenKind {
     Int(i64),
     /// Float literal: `3.14`, `0.0`
     Float(f64),
-    /// String literal (after interpolation expansion): `"hello"`
+    /// String literal (no interpolation): `"hello"`
     /// Contains the parsed string content with escapes resolved.
     String(String),
+    /// String with interpolation: `"hello, #{name}!"`
+    /// Contains alternating literal and expression-text segments.
+    InterpString(Vec<InterpPart>),
     /// Raw string literal: `r"..."`
     /// Contains the raw content verbatim.
     RawString(String),

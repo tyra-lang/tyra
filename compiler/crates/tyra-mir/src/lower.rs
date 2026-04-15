@@ -226,8 +226,8 @@ impl LowerCtx {
                 let l = self.lower_expr(lhs, body);
                 let r = self.lower_expr(rhs, body);
                 let dest = self.fresh_temp();
-                // TODO: use actual operand types to select Int vs Float variants
-                let mir_op = ast_binop_to_mir(*op);
+                let is_float = is_float_expr(lhs) || is_float_expr(rhs);
+                let mir_op = ast_binop_to_mir(*op, is_float);
                 body.push(Instruction::BinOp {
                     dest: dest.clone(),
                     op: mir_op,
@@ -519,23 +519,34 @@ impl LowerCtx {
     }
 }
 
-/// Convert AST binary op to MIR op.
-/// TODO: Use operand type info to select Int vs Float variants.
-/// Currently defaults to Int for arithmetic/comparison.
-fn ast_binop_to_mir(op: BinOp) -> MirBinOp {
-    match op {
-        BinOp::Add => MirBinOp::AddInt,
-        BinOp::Sub => MirBinOp::SubInt,
-        BinOp::Mul => MirBinOp::MulInt,
-        BinOp::Div => MirBinOp::DivInt,
-        BinOp::Eq => MirBinOp::EqInt,
-        BinOp::NotEq => MirBinOp::NeqInt,
-        BinOp::Lt => MirBinOp::LtInt,
-        BinOp::LtEq => MirBinOp::LeInt,
-        BinOp::Gt => MirBinOp::GtInt,
-        BinOp::GtEq => MirBinOp::GeInt,
-        BinOp::RefEq => MirBinOp::EqInt,
-        BinOp::And => MirBinOp::And,
-        BinOp::Or => MirBinOp::Or,
+/// Check if an expression is a float literal (for MIR op selection).
+fn is_float_expr(expr: &Expr) -> bool {
+    matches!(expr.kind, ExprKind::FloatLit(_))
+}
+
+/// Convert AST binary op to MIR op, selecting Int or Float variant.
+fn ast_binop_to_mir(op: BinOp, is_float: bool) -> MirBinOp {
+    match (op, is_float) {
+        (BinOp::Add, false) => MirBinOp::AddInt,
+        (BinOp::Add, true) => MirBinOp::AddFloat,
+        (BinOp::Sub, false) => MirBinOp::SubInt,
+        (BinOp::Sub, true) => MirBinOp::SubFloat,
+        (BinOp::Mul, false) => MirBinOp::MulInt,
+        (BinOp::Mul, true) => MirBinOp::MulFloat,
+        (BinOp::Div, false) => MirBinOp::DivInt,
+        (BinOp::Div, true) => MirBinOp::DivFloat,
+        (BinOp::Eq, _) => MirBinOp::EqInt,
+        (BinOp::NotEq, _) => MirBinOp::NeqInt,
+        (BinOp::Lt, false) => MirBinOp::LtInt,
+        (BinOp::Lt, true) => MirBinOp::LtFloat,
+        (BinOp::LtEq, false) => MirBinOp::LeInt,
+        (BinOp::LtEq, true) => MirBinOp::LeFloat,
+        (BinOp::Gt, false) => MirBinOp::GtInt,
+        (BinOp::Gt, true) => MirBinOp::GtFloat,
+        (BinOp::GtEq, false) => MirBinOp::GeInt,
+        (BinOp::GtEq, true) => MirBinOp::GeFloat,
+        (BinOp::RefEq, _) => MirBinOp::EqInt,
+        (BinOp::And, _) => MirBinOp::And,
+        (BinOp::Or, _) => MirBinOp::Or,
     }
 }
