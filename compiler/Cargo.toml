@@ -7,9 +7,9 @@ members = [
     "crates/tyra-resolve",
     "crates/tyra-types",
     "crates/tyra-mir",
-    # "crates/tyra-codegen-llvm",
-    # "crates/tyra-driver",
-    # "crates/tyra-cli",
+    "crates/tyra-codegen-llvm",
+    "crates/tyra-driver",
+    "crates/tyra-cli",
 ]
 resolver = "2"
 
@@ -27,3 +27,5 @@ tyra-parser = { path = "crates/tyra-parser" }
 tyra-resolve = { path = "crates/tyra-resolve" }
 tyra-types = { path = "crates/tyra-types" }
 tyra-mir = { path = "crates/tyra-mir" }
+tyra-codegen-llvm = { path = "crates/tyra-codegen-llvm" }
+tyra-driver = { path = "crates/tyra-driver" }

@@ -10,8 +10,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "tyra-cli"
+version = "0.1.0"
+dependencies = [
+ "tyra-diagnostics",
+ "tyra-driver",
+]
+
+[[package]]
+name = "tyra-codegen-llvm"
+version = "0.1.0"
+dependencies = [
+ "tyra-mir",
+ "tyra-types",
+]
+
+[[package]]
 name = "tyra-diagnostics"
 version = "0.1.0"
+
+[[package]]
+name = "tyra-driver"
+version = "0.1.0"
+dependencies = [
+ "tyra-codegen-llvm",
+ "tyra-diagnostics",
+ "tyra-mir",
+ "tyra-parser",
+ "tyra-resolve",
+ "tyra-types",
+]
 
 [[package]]
 name = "tyra-lexer"

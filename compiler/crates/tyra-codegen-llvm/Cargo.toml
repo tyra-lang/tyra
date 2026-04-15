@@ -1,0 +1,10 @@
+[package]
+name = "tyra-codegen-llvm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "LLVM IR code generation for the Tyra language"
+
+[dependencies]
+tyra-mir.workspace = true
+tyra-types.workspace = true
