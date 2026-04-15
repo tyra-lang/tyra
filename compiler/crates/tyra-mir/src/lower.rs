@@ -318,6 +318,61 @@ impl LowerCtx {
                     // Not a value type — fall through to regular method call
                 }
 
+                // Special case: print/println/eprint/eprintln with StringInterp argument.
+                // Emit separate print calls for each segment.
+                if let ExprKind::Ident(fname) = &callee.kind
+                    && matches!(fname.as_str(), "print" | "println" | "eprint" | "eprintln")
+                    && args.len() == 1
+                    && let ExprKind::StringInterp(parts) = &args[0].value.kind
+                {
+                    let is_println = fname == "println" || fname == "eprintln";
+                    for part in parts {
+                        match part {
+                            StringPart::Lit(s) => {
+                                let idx = self.intern_string(s);
+                                let str_temp = self.fresh_temp();
+                                body.push(Instruction::Const {
+                                    dest: str_temp.clone(),
+                                    value: Constant::StringRef(idx),
+                                });
+                                body.push(Instruction::Call {
+                                    dest: None,
+                                    func: "print".into(),
+                                    args: vec![Operand::Var(str_temp)],
+                                });
+                            }
+                            StringPart::Expr(e) => {
+                                let val = self.lower_expr(e, body);
+                                body.push(Instruction::Call {
+                                    dest: None,
+                                    func: "print".into(),
+                                    args: vec![Operand::Var(val)],
+                                });
+                            }
+                        }
+                    }
+                    // Add newline for println/eprintln
+                    if is_println {
+                        let nl_idx = self.intern_string("\n");
+                        let nl_temp = self.fresh_temp();
+                        body.push(Instruction::Const {
+                            dest: nl_temp.clone(),
+                            value: Constant::StringRef(nl_idx),
+                        });
+                        body.push(Instruction::Call {
+                            dest: None,
+                            func: "print".into(),
+                            args: vec![Operand::Var(nl_temp)],
+                        });
+                    }
+                    let dest = self.fresh_temp();
+                    body.push(Instruction::Const {
+                        dest: dest.clone(),
+                        value: Constant::Unit,
+                    });
+                    return dest;
+                }
+
                 let func_name = match &callee.kind {
                     ExprKind::Ident(name) => name.clone(),
                     ExprKind::FieldAccess(obj, method) => {

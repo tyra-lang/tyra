@@ -7,7 +7,7 @@
 # SPEC_REF: §10.3 — match works on "ADT / enum / literal"; Int literals are valid patterns
 
 let result = fib(10)
-print("fib(10) = #{result}")
+println("fib(10) = #{result}")
 
 fn fib(_ n: Int) -> Int
   match n

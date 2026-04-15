@@ -193,6 +193,46 @@ mod tests {
     }
 
     #[test]
+    fn string_interp_in_print() {
+        let source = r#"let x = 42
+print("value = #{x}")
+"#;
+        let prog = lower_str(source);
+        let main = &prog.functions[0];
+        // Should have multiple Call("print") instructions for each segment
+        let print_calls = main
+            .body
+            .iter()
+            .filter(|i| matches!(i, Instruction::Call { func, .. } if func == "print"))
+            .count();
+        assert!(
+            print_calls >= 2,
+            "expected at least 2 print calls for interpolation, got {print_calls}"
+        );
+    }
+
+    #[test]
+    fn println_interp_adds_newline() {
+        let source = r#"let x = 1
+println("n=#{x}")
+"#;
+        let prog = lower_str(source);
+        let main = &prog.functions[0];
+        // Should have 3 print calls: literal "n=", expr x, newline "\n"
+        let print_calls = main
+            .body
+            .iter()
+            .filter(|i| matches!(i, Instruction::Call { func, .. } if func == "print"))
+            .count();
+        assert!(
+            print_calls >= 3,
+            "expected at least 3 print calls for println interp, got {print_calls}"
+        );
+        // Newline should be interned
+        assert!(prog.string_constants.contains(&"\n".to_string()));
+    }
+
+    #[test]
     fn full_program_lowers() {
         let source = r#"fn fib(_ n: Int) -> Int
   match n
