@@ -1,0 +1,13 @@
+[package]
+name = "tyra-resolve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Name resolution for the Tyra language (spec §13, §17)"
+
+[dependencies]
+tyra-diagnostics.workspace = true
+tyra-ast.workspace = true
+
+[dev-dependencies]
+tyra-parser.workspace = true

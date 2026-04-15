@@ -28,3 +28,12 @@ dependencies = [
  "tyra-diagnostics",
  "tyra-lexer",
 ]
+
+[[package]]
+name = "tyra-resolve"
+version = "0.1.0"
+dependencies = [
+ "tyra-ast",
+ "tyra-diagnostics",
+ "tyra-parser",
+]
