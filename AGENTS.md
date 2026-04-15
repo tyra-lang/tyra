@@ -16,16 +16,120 @@ Tyra is a statically-typed, AI-friendly programming language designed for backen
 4. Practical static typing — Option/Result are first-class
 5. Simple operations — unified toolchain, single binary output
 
-When in doubt about any design decision, **refer to `docs/spec/ja/language-spec.md`**. The specification is the source of truth.
+When in doubt:
+
+- For **what Tyra is** (positioning, roadmap, "should we add this feature?"), refer to **`docs/strategy.md`**
+- For **how Tyra works** (syntax, types, semantics), refer to **`docs/spec/ja/language-spec.md`**
+- For **why a past decision was made**, refer to **`docs/design/`** (ADRs)
+
+The specification is the source of truth for language semantics. The strategy document is the source of truth for project direction.
+
+## Project Positioning
+
+Tyra exists in a 5-layer competitive landscape. Understanding this landscape is essential for evaluating proposed features, framing documentation, and avoiding off-mission contributions.
+
+This section is a **summary**. For the complete strategic analysis (acquisition strategy, success modes, risk analysis, decision framework, roadmap), see **`docs/strategy.md`**. AI assistants making non-trivial decisions should consult that document.
+
+### Layer 1: Direct design competitor — Crystal
+
+Crystal occupies the same surface position as Tyra: Ruby-like syntax, static typing with inference, LLVM-native compilation, GC. **This is the closest existing language to Tyra.**
+
+Tyra differentiates from Crystal by:
+
+- **Result/Option + `?`** instead of exceptions (Crystal kept Ruby's exception model)
+- **No macros** (Crystal has powerful compile-time macros)
+- **No operator overloading** (Crystal allows it)
+- **No runtime reflection** (Crystal has duck typing via `responds_to?`)
+- **Stricter `value`/`data` distinction** (Crystal's `struct` permits mutable `property`)
+- **Float has no Eq** (Crystal allows `Float == Float`, NaN bugs slip through)
+- **Ability auto-derivation with semantic rules** (Crystal requires manual `==`, `hash`)
+
+The selling line: "What Crystal would look like if designed after Rust and Go proved that explicit error handling is better than exceptions, and after the LLM era proved that constrained syntax is better than expressive freedom."
+
+### Layer 2: Strategic benchmark — Go
+
+Go is the gold standard for **operational simplicity**: `gofmt`, `go test`, `go mod`, single binary output, fast compilation, unified toolchain. The Tyra spec explicitly targets Go-style operations (§2.4, §18).
+
+**Go is not a market to displace.** Go users are largely satisfied with Go's tradeoffs (including `if err != nil` chains and `nil` semantics). Attempting to "convert Go users" is not a viable initial strategy.
+
+Instead, Tyra **borrows Go as a quality benchmark**:
+
+- "Can Tyra build/test/format/deploy as simply as Go?"
+- "Can Tyra produce a single static binary as easily as Go?"
+- "Is Tyra's standard toolchain as integrated as Go's?"
+
+When in doubt about toolchain or operational design, ask: "What would Go do?" Then meet or exceed that bar.
+
+### Layer 3: Philosophical competitor — Gleam
+
+Gleam shares Tyra's commitment to **type safety, Result-based error handling, no null, AI-friendly determinism**. Despite running on different platforms (BEAM/JS for Gleam, LLVM-native for Tyra), the **message space overlaps significantly**: developers seeking "a modern, type-safe, predictable language" will compare both.
+
+Tyra differentiates from Gleam by:
+
+- **Imperative style** with `mut`, `value`/`data`, explicit binding semantics (Gleam is functional)
+- **Native single-binary deployment** (Gleam targets BEAM/JS runtimes)
+- **Ruby/Swift/Go-influenced surface syntax** (Gleam is more ML-influenced)
+
+Do not dismiss Gleam as "different domain." A developer choosing between Tyra and Gleam will weigh philosophy alongside platform.
+
+### Layer 4: Message-space competitor — V
+
+V markets itself with: "simple, fast, safe, compiled, no null, Option/Result, immutable by default, native binary." **This phrasing overlaps almost completely with Tyra's elevator pitch.**
+
+Tyra differentiates from V by:
+
+- **Narrower semantics** — fewer escape hatches (no `unsafe`, no `autofree`, no compile-time reflection of V's flexibility)
+- **Stricter convention fixity** — formatter-enforced layout, fixed import form, no shadowing
+- **Argument labels** (Swift-style) for API self-documentation
+- **Stricter error handling** (Result + `?` + `Into` vs V's `or { }` blocks)
+- **Stricter `value`/`data` semantics** (V has no equivalent enforcement)
+
+Do not compete with V on "simpler" or "faster" — those are V's selling points and V has years of head start. Compete on **predictability and team-deployable convention fixity**.
+
+### Layer 5: Syntactic ancestor — Ruby
+
+Tyra borrows surface syntax from Ruby (`end` blocks, `#{}` interpolation, `match/when`). **This creates expectation risk.** Ruby developers approaching Tyra may expect:
+
+- Dynamic dispatch and duck typing
+- Metaprogramming (`method_missing`, `define_method`, `instance_eval`)
+- Implicit receivers and `foo bar` call style
+- DSL-friendliness (Rails-style)
+- Rapid prototyping with minimal ceremony
+
+**Tyra rejects all of these.** Ruby readability is borrowed; Ruby flexibility is not.
+
+When writing documentation that mentions Ruby influence, **always clarify what is NOT inherited** to manage expectations. Ruby users who try Tyra expecting "compiled Ruby" will be disappointed; users who understand "Ruby-readable but stricter" will not.
+
+### Tyra in one sentence
+
+Tyra is a Ruby-readable native language that strips Crystal's metaprogramming, mirrors Go's operational simplicity, and constrains itself more strictly than Gleam or V — designed to be auditable by both humans and AI.
+
+### Implications for design decisions
+
+When evaluating a proposed feature, ask:
+
+1. **Does Crystal have it?** If yes, does Tyra's reason for excluding/changing it follow from "fewer escape hatches" or "Result over exceptions"?
+2. **Would Go reject it as too clever?** If yes, Tyra should probably also reject it.
+3. **Does Gleam have a competing approach?** If yes, why is Tyra's better in the imperative/native context?
+4. **Does V have it as a selling point?** If yes, Tyra needs a different story (not "simpler" or "faster" — V already owns those).
+5. **Would Ruby users assume it works like Ruby?** If yes, document the difference loudly.
+
+When in doubt, prefer **less power, more determinism**. Tyra wins by being more predictable, not by being more powerful.
+
+For larger architectural decisions (new language features, major API changes, deprecating existing functionality), apply the full 5-step decision framework in `docs/strategy.md` §9, which adds checks against the spec, ADRs, the three axes of victory (AI auditability, Crystal's structural weaknesses, Go-level operational simplicity), and the explicit "battles to avoid" list.
 
 ## Repository Structure
 
 ```text
 tyra/
+├── docs/strategy.md               # Strategic positioning, roadmap, decision framework
 ├── docs/spec/ja/language-spec.md  # Language specification (Japanese, authoritative)
 ├── docs/spec/en/                  # English translation (may lag)
 ├── docs/design/                   # ADRs (Architecture Decision Records)
 ├── docs/rfcs/                     # Future change proposals
+├── examples/comparisons/           # Phase 0b: same programs in Gleam/V/Ruby/Crystal
+│   ├── ANALYSIS.md                # Cross-language comparative analysis
+│   ├── gleam/, v/, ruby/, crystal/
 ├── compiler/                      # Rust workspace for the compiler
 │   └── crates/
 │       ├── tyra-diagnostics/      # Error reporting (foundational)
@@ -42,8 +146,7 @@ tyra/
 ├── runtime/                       # GC and async scheduler (Rust/C)
 ├── tools/                         # tyra-fmt, tyra-lsp, tyra-mod
 ├── tests/conformance/             # Spec compliance tests
-├── tests/corpus/                  # Spec by example (real programs)
-└── examples/                      # User-facing sample programs
+└── examples/                      # User-facing sample programs and spec-by-example
 ```
 
 ## Critical Reading Order
@@ -51,9 +154,11 @@ tyra/
 Before making any non-trivial change, AI assistants should read these in order:
 
 1. `docs/spec/ja/language-spec.md` — entire spec, especially §8 (type system) and §12 (error handling)
-2. `docs/design/` — past design decisions and their rationale (ADRs 0001-0005)
+2. `docs/design/` — past design decisions and their rationale (ADRs 0001-0006)
 3. The relevant crate's `README.md` if present
 4. Existing tests in `tests/conformance/` for the area being modified
+
+For strategic decisions (new features, competitive positioning, roadmap changes), start with **`docs/strategy.md`** and the "Project Positioning" section above (in this file) before reading the spec.
 
 ## Language and Communication
 
@@ -224,13 +329,25 @@ These are common mistakes that contradict Tyra's design:
 - **Don't pass arbitrary expressions to `spawn`.** `spawn` accepts function calls only.
 - **Don't bypass spec for "ease of implementation".** If the spec is hard to implement, fix the implementation, not the spec.
 
+### Don't (positioning and messaging)
+
+These are mistakes in how Tyra is described or compared to other languages:
+
+- **Don't market Tyra as "simpler than V" or "faster than Crystal."** V already owns "simple"; Crystal already owns "fast Ruby." Compete on predictability and AI-auditability instead.
+- **Don't pitch Tyra as a "Ruby successor" or "compiled Ruby."** Ruby developers will expect dynamic flexibility, metaprogramming, and DSL-friendliness — none of which Tyra provides. Always clarify "Ruby-readable but stricter."
+- **Don't claim Tyra "displaces Go."** Go is a strategic benchmark, not a market to capture. Borrow Go's operational standards as a quality bar, not as a competitive target.
+- **Don't ignore Crystal in comparisons.** Crystal is the closest existing language to Tyra. Any comparison that omits Crystal is incomplete and will be seen as evasive by informed readers.
+- **Don't add "AI-friendly" as a standalone selling point.** Many languages (Gleam, V) are also "AI-friendly" in some sense. Tyra's distinction is specifically AI-auditability via fixed conventions and removed escape hatches.
+- **Don't add features that Crystal has just because Crystal has them** (e.g., macros, operator overloading, `responds_to?`). The point of Tyra is to remove these.
+
 ## When the Spec Is Ambiguous
 
 If you encounter a situation where the spec doesn't clearly answer the question:
 
 1. **Stop and ask the maintainer** — do not guess
-2. Document the ambiguity as a GitHub issue with the `spec-clarification` label
-3. The resolution may become a spec patch (v0.1.x) or an RFC for v0.2
+2. If the ambiguity is about whether a feature belongs in Tyra (rather than how it should work), consult `docs/strategy.md` §9 (Decision Framework)
+3. Document the ambiguity as a GitHub issue with the `spec-clarification` label
+4. The resolution may become a spec patch (v0.1.x) or an RFC for v0.2
 
 Never silently make a design choice that the spec doesn't endorse. The point of Tyra is predictability.
 
@@ -293,7 +410,7 @@ Each phase should have:
 When implementing parser or codegen, refer to canonical examples:
 
 - `docs/spec/ja/language-spec.md` §21 (worked examples in the spec)
-- `tests/corpus/` (spec by example)
+- `examples/` (spec by example programs)
 - `examples/hello/main.tyra` (minimal program)
 
 These are the ground truth for what Tyra code looks like.
