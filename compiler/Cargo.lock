@@ -19,3 +19,12 @@ version = "0.1.0"
 dependencies = [
  "tyra-diagnostics",
 ]
+
+[[package]]
+name = "tyra-parser"
+version = "0.1.0"
+dependencies = [
+ "tyra-ast",
+ "tyra-diagnostics",
+ "tyra-lexer",
+]

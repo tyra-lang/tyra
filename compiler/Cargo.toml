@@ -3,7 +3,7 @@ members = [
     "crates/tyra-diagnostics",
     "crates/tyra-lexer",
     "crates/tyra-ast",
-    # "crates/tyra-parser",
+    "crates/tyra-parser",
     # "crates/tyra-resolve",
     # "crates/tyra-types",
     # "crates/tyra-mir",
@@ -23,3 +23,4 @@ repository = "https://github.com/tyra-lang/tyra"
 tyra-diagnostics = { path = "crates/tyra-diagnostics" }
 tyra-lexer = { path = "crates/tyra-lexer" }
 tyra-ast = { path = "crates/tyra-ast" }
+tyra-parser = { path = "crates/tyra-parser" }
