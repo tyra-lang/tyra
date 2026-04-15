@@ -1,0 +1,66 @@
+# Design Decisions
+
+This directory contains **Architecture Decision Records (ADRs)** for the Tyra language project.
+
+## What is an ADR?
+
+An ADR is a short document that captures a significant design decision along with its context, rationale, and consequences. The goal is to preserve **why** a decision was made, not just **what** was decided.
+
+The language specification (`docs/spec/`) defines what Tyra is. ADRs explain why it is that way.
+
+## When to write an ADR
+
+Write an ADR when:
+
+- A design choice has meaningful alternatives that were considered and rejected
+- The decision affects multiple sections of the specification or multiple compiler crates
+- Someone is likely to ask "why not do it the other way?" in the future
+- The decision is non-obvious or counterintuitive
+
+Do not write an ADR for:
+
+- Trivial choices with no realistic alternatives
+- Implementation details that don't affect the language semantics
+- Temporary decisions that will be revisited in the next spec version
+
+## Format
+
+Each ADR follows this template:
+
+```markdown
+# ADR NNNN: Short title
+
+- **Status**: Proposed | Accepted | Superseded by ADR-NNNN
+- **Date**: YYYY-MM-DD
+- **Spec sections affected**: §X.Y, §Z.W
+
+## Context
+
+What problem are we solving? What constraints exist?
+
+## Decision
+
+What did we decide?
+
+## Consequences
+
+What are the tradeoffs? What becomes easier? What becomes harder?
+
+## Alternatives considered
+
+What did we reject and why?
+```
+
+## Numbering
+
+ADRs are numbered sequentially: `0001`, `0002`, etc. Numbers are never reused. If a decision is reversed, the original ADR is marked `Superseded by ADR-NNNN` and a new ADR is created.
+
+## Index
+
+| ADR | Title | Status | Date |
+| -- | -- | -- | -- |
+| [0001](0001-adt-data-semantics.md) | ADT uses data (reference) semantics | Accepted | 2026-04-15 |
+| [0002](0002-float-no-eq.md) | Float does not have the Eq ability | Accepted | 2026-04-15 |
+| [0003](0003-stdlib-minimal-scope.md) | Standard library minimal scope for v0.1 | Accepted | 2026-04-15 |
+| [0004](0004-unify-propagation-operator.md) | Remove `or return` and extend `?` to Option | Accepted | 2026-04-15 |
+| [0005](0005-multi-constraint-generics.md) | Allow up to two constraints per type parameter | Accepted | 2026-04-15 |

@@ -97,7 +97,7 @@ The primary targets for Tyra are:
 
 ### 5.2 Reserved words
 
-`fn`, `data`, `value`, `type`, `trait`, `impl`, `let`, `mut`, `if`, `else`, `match`, `when`, `for`, `in`, `while`, `return`, `defer`, `async`, `await`, `spawn`, `import`, `export`, `or`, `true`, `false`, `end`
+`fn`, `data`, `value`, `type`, `trait`, `impl`, `let`, `mut`, `if`, `else`, `match`, `when`, `for`, `in`, `while`, `return`, `defer`, `async`, `await`, `spawn`, `import`, `export`, `and`, `or`, `not`, `true`, `false`, `end`
 
 ### 5.3 Comments
 
@@ -112,6 +112,8 @@ Multi-line comments are not adopted in v0.1.
 - Statements are separated by newlines
 - `,` is used only when necessary
 - `;` is not adopted
+- Newlines are not statement separators inside `(` `)`, `[` `]`, or `{` `}`
+- Trailing commas are allowed
 
 ---
 
@@ -157,10 +159,33 @@ mut count = 0
 - `Rune`
 - `Bytes`
 - `Unit`
+- `Never`
 
 `Int` is a 64-bit signed integer; `Float` is IEEE 754 double precision.
 Integer literals default to `Int` and floating-point literals default to `Float` when no contextual type is available.
 `Rune` is a 32-bit value representing a Unicode scalar value. Grapheme clusters are the responsibility of `String`.
+
+`Float` does not have the `Eq` ability. This avoids the contradiction between IEEE 754's `NaN != NaN` and structural equality. For Float comparison, use functions in the standard library `float` module (see ADR-0002 for the rationale).
+
+`Unit` is written with the literal `()`.
+
+```tyra
+let result: Result<Unit, Error> = Ok(())
+```
+
+`Never` is a type with no values, indicating that a function does not return. `Never` is a subtype of every type.
+
+```tyra
+fn panic(_ message: String) -> Never
+  ...
+end
+
+let x: Int = if condition
+  42
+else
+  panic("unreachable")  # Never coerces to Int
+end
+```
 
 ### 7.3 Strings
 
@@ -170,7 +195,33 @@ Regular strings support interpolation.
 let msg = "hello, #{user.name}"
 ```
 
-Raw strings and multi-line strings are not standardized in v0.1. Multi-line text should be expressed by concatenating regular strings.
+Escape sequences:
+
+- `\n` — newline
+- `\t` — tab
+- `\r` — carriage return
+- `\\` — backslash
+- `\"` — double quote
+- `\0` — null byte
+- `\u{XXXX}` — Unicode code point (1-6 hex digits)
+
+#### Raw strings
+
+Raw strings are written as `r"..."`. Escape sequences and string interpolation are not processed.
+
+```tyra
+let pattern = r"\d{3}-\d{4}"
+let path = r"C:\Users\mika\docs"
+let query = r"SELECT * FROM users WHERE name = '#{not_interpolated}'"
+```
+
+Rules:
+
+- Inside `r"..."`, backslashes and `#{}` are treated as literal characters
+- The `"` character cannot be included (no escape mechanism is provided)
+- The type of a raw string is `String` (the same as a regular string)
+
+Multi-line strings are not adopted in v0.1.
 
 ---
 
@@ -231,12 +282,20 @@ fn contains<T: Eq>(_ items: List<T>, _ target: T) -> Bool
 end
 ```
 
+When multiple constraints are required, combine them with `+`.
+
+```tyra
+fn deduplicate<T: Eq + Hash>(_ items: List<T>) -> List<T>
+  ...
+end
+```
+
 Rules:
 
-- Each type parameter may have 0 or 1 constraints
-- v0.1 allows only the simple form `<T: Constraint>`
+- Each type parameter may have 0, 1, or 2 constraints
+- Constraint syntax is `<T: Constraint>` or `<T: A + B>`
 - `Constraint` may be either a trait or an ability
-- `where` clauses, multiple constraints, associated types, and higher-kinded types are not adopted
+- 3 or more constraints, `where` clauses, associated types, and higher-kinded types are not adopted
 - Type application: `List<Int>`
 - Indexing: `items[0]`
 - List literals: `[1, 2, 3]`
@@ -263,10 +322,45 @@ type Payment =
   | Cash
 ```
 
+- ADTs use data semantics (reference type, GC-managed) (see ADR-0001 for the rationale)
+- Recursive self-references are allowed
 - `match` must be exhaustive
 - Tagged unions are the standard
 - Constructor patterns with named fields use named destructuring by default
 - `when Card(last4)` is shorthand for `when Card(last4: last4)`
+- An ADT composed only of variants whose fields all satisfy `Eq` automatically gains the `Eq` ability
+- The `Ord` ability is not automatically derived (same rule as `data`)
+
+#### Constructor calls
+
+ADT variant constructors are called with the qualified form `TypeName.VariantName`.
+
+```tyra
+let c = Color.Red
+let p = Payment.Card(last4: "1234")
+let e = AppError.NotFound
+```
+
+Exception: the variants of `Option` and `Result` (`Some`, `None`, `Ok`, `Err`) are included in the prelude and may be used unqualified.
+
+```tyra
+let user: Option<User> = Some(find_user())
+let result: Result<Int, Error> = Ok(42)
+let empty: Option<Int> = None
+```
+
+In `match` patterns, variants are written unqualified because the variant can be uniquely identified from the match target's type.
+
+```tyra
+let p = Payment.Card(last4: "1234")   # construction: qualified
+
+match p
+when Card(last4: last4)               # pattern: unqualified
+  "card: #{last4}"
+when Cash
+  "cash"
+end
+```
 
 ### 8.6 value and data
 
@@ -339,8 +433,9 @@ let p4 = p1.copy()               # Point(x: 1.0, y: 2.0)
 - Fields are immutable by default; mutable fields are marked with `mut`
 - `===` compares reference identity
 - Automatically gains the `Eq` ability if all fields satisfy `Eq`
-- Automatically gains the `Hash` ability if all fields satisfy `Hash`
-- The `Ord` ability is **not** automatically derived
+- Automatically gains the `Hash` ability **only when all fields are immutable AND all fields satisfy `Hash`**
+- A `data` type with any `mut` field cannot have the `Hash` ability
+- The `Ord` ability is not automatically derived
 - Automatically gains the `Debug` ability if all fields satisfy `Debug`
 - A type with the `Hash` ability necessarily has the `Eq` ability
 - `==` is available when the type has the `Eq` ability
@@ -351,6 +446,15 @@ data User
   id: Int
   mut name: String
 end
+# User has a mut field, so it cannot have the Hash ability
+# Set<User> and Map<User, V> are compile errors
+
+data Config
+  host: String
+  port: Int
+end
+# Config has all immutable fields satisfying Hash, so it gains Hash automatically
+# Set<Config> is usable
 ```
 
 #### Field update rules
@@ -454,6 +558,16 @@ set_position(to: point)
 add(1, 2)
 ```
 
+Function parameters are always immutable bindings. When mutability is needed, rebind with `mut` inside the function body.
+
+```tyra
+fn process(_ x: Int) -> Int
+  mut count = x
+  count = count + 1
+  count
+end
+```
+
 ### 9.4 Function types and anonymous functions
 
 `fn` uniformly represents function definitions, function types, and anonymous functions.
@@ -510,6 +624,32 @@ Tyra is expression-oriented.
 - `while` and `for` are statements with value `Unit`
 - The value of a block is the value of its last expression
 
+#### Logical operators
+
+Logical operators use the keywords `and`, `or`, and `not`.
+
+```tyra
+if age >= 18 and country == "JP"
+  grant_access()
+end
+
+if not user.is_banned
+  allow_login()
+end
+
+if score < 60 or has_warnings
+  request_review()
+end
+```
+
+- `and` — logical AND (short-circuit evaluation)
+- `or` — logical OR (short-circuit evaluation)
+- `not` — logical NOT (prefix)
+- Both operands must be `Bool`
+- Precedence: `not` > `and` > `or`
+
+`or` is used only as the logical OR operator.
+
 ### 10.2 if
 
 ```tyra
@@ -544,6 +684,22 @@ end
 
 A position is considered an "expression position" when the value of the `if` is bound, used as a function argument, used as a return value, or otherwise used as an expression. Otherwise it is a "statement position".
 
+#### else if
+
+`if` may be placed immediately after `else`. In this case only one `end` is written for the entire chain.
+
+```tyra
+if x > 0
+  "positive"
+else if x < 0
+  "negative"
+else
+  "zero"
+end
+```
+
+This differs from nesting an `if` inside an `else` block, which would require two `end` keywords.
+
 ### 10.3 match
 
 ```tyra
@@ -559,7 +715,9 @@ end
 - Usable on ADTs, enums, and literals
 - Use the wildcard `_` for types where exhaustiveness is impossible
 - Patterns may be nested
-- The value type of every `when` arm must match
+- Like `if`, `match` is treated differently in expression position and statement position
+- In expression position, the value types of all `when` arms must match
+- In statement position, the value of each `when` arm is discarded and the overall value is `Unit`
 - v0.1 has no guard clauses; use `if / else` for conditional branching
 
 ### 10.4 while
@@ -603,6 +761,14 @@ let user_by_id = {1: "mika", 2: "jun"}
 - Map literal keys may be arbitrary expressions
 - The key type `K` of `Map<K, V>` must satisfy `Hash`
 - Indexing uses `items[index]`
+- `items[index]` panics on out-of-bounds access
+- For safe access, use `items.get(index)`, which returns `Option<T>`
+
+```tyra
+let x = items[0]           # panics if out of bounds
+let y = items.get(0)       # returns Option<T>
+let z = items.get(0)?      # Option early return (when the enclosing function returns Option)
+```
 
 ---
 
@@ -613,11 +779,34 @@ let user_by_id = {1: "mika", 2: "jun"}
 - Predictable failures use `Result`
 - Unpredictable bugs cause panic
 - Exception mechanisms are not adopted in v0.1
-- `Option` represents absence and is separated from error-propagation syntax
+- `Option` represents absence; `Result` represents an error. `?` works on both
+
+#### panic
+
+`panic` is a function that terminates the program abnormally. It is not a macro.
+
+```tyra
+fn panic(_ message: String) -> Never
+```
+
+```tyra
+fn divide(_ a: Int, _ b: Int) -> Int
+  if b == 0
+    panic("division by zero")
+  end
+  a / b
+end
+```
+
+- `panic` is included in the `core` module and is always available via the prelude
+- Its return type is `Never`, so it can be used in any position where any type is expected
+- `panic` indicates an unrecoverable state. Use `Result` for recoverable failures.
 
 ### 12.2 Propagation operator
 
-`?` is exclusive to `Result`.
+`?` works on both `Result` and `Option`.
+
+#### ? on Result
 
 ```tyra
 fn load_user(_ id: Int) -> Result<User, AppError>
@@ -628,10 +817,29 @@ end
 
 Rules:
 
-- `expr?` is usable only when `expr` has type `Result<T, E>`
+- `expr?` is usable when `expr` has type `Result<T, E>`
 - The enclosing function's return type must be `Result<U, F>`
 - `E` must implement `Into<F>`
-- `?` cannot be applied to `Option<T>`
+- Evaluates to `value` when the result is `Ok(value)`
+- Returns `Err(e.into())` early when the result is `Err(e)`
+
+#### ? on Option
+
+```tyra
+fn user_name(_ id: Int) -> Option<String>
+  let user = repo.find(id)?
+  Some(user.name)
+end
+```
+
+Rules:
+
+- `expr?` is also usable when `expr` has type `Option<T>`
+- The enclosing function's return type must be `Option<U>`
+- Evaluates to `value` when the option is `Some(value)`
+- Returns `None` early when the option is `None`
+
+#### Into
 
 `Into<T>` is a standard trait included in the `core` prelude.
 
@@ -646,46 +854,6 @@ Rules:
 - `Into<T> for T` is automatically provided by the compiler
 - In v0.1 the `?` operator may treat `Into` specially
 - `From` is not adopted in v0.1
-
-For early return on `Option`, use `or return`.
-
-```tyra
-fn user_name(_ id: Int) -> Option<String>
-  let user = repo.find(id) or return None
-  Some(user.name)
-end
-```
-
-Rules:
-
-- The left-hand side of `or return` must have type `Option<T>`
-- `expr or return e` evaluates to `value` when `expr` is `Some(value)`
-- When `expr` is `None`, the function returns `e` and exits
-- The type of `e` must match the enclosing function's return type
-- The enclosing function's return type is unconstrained (may be `Option`, `Result`, or anything else)
-- `Bool`, `Result`, and other types cannot be placed on the left-hand side
-
-Examples:
-
-```tyra
-# Return type Option<T>
-fn lookup_name(_ id: Int) -> Option<String>
-  let user = repo.find(id) or return None
-  Some(user.name)
-end
-
-# Return type Result<T, E>
-fn require_user(_ id: Int) -> Result<User, AppError>
-  let user = repo.find(id) or return Err(AppError.NotFound)
-  Ok(user)
-end
-
-# Return type Bool
-fn user_exists(_ id: Int) -> Bool
-  let _user = repo.find(id) or return false
-  true
-end
-```
 
 ### 12.3 defer
 
@@ -794,14 +962,16 @@ Rules:
 v0.1 provides `spawn`.
 
 ```tyra
-let task = spawn sync_cache()
-let result = task.await
+let task = spawn fetch_user(id)
+let result = task.await?
 ```
 
 Rules:
 
-- `spawn expr` runs the arbitrary expression `expr` concurrently and returns `Task<T>`
-- If `expr` is an async function call, the runtime performs the equivalent of `.await` internally and wraps the final result in `Task<T>`
+- `spawn` only accepts a function call (arbitrary expressions are not allowed)
+- `spawn f(args)` runs the function `f` concurrently and returns `Task<T>`
+- If `f` is a sync function, its execution is performed on a separate task and the result is wrapped in `Task<T>`
+- If `f` is an async function, the runtime performs the equivalent of `.await` internally and wraps the final result in `Task<T>`
 - Task cancellation is not a language feature in v0.1
 - Cancellation is left to a future library API
 
@@ -857,21 +1027,59 @@ Tyra includes "easy for AI to handle" as a design requirement, not just for huma
 
 ## 17. Standard library
 
-Included in v0.1:
+The standard library is split into two tiers (see ADR-0003 for the rationale).
 
-- `core`
-- `string`
-- `collections`
-- `option`
-- `result`
-- `json`
-- `http`
-- `fs`
-- `time`
-- `test`
-- `log`
+### 17.1 Tier 1: included in the language specification
 
-Standard traits auto-imported in the prelude:
+These are required by the compiler or type checker and are defined as part of the language specification.
+
+#### core
+
+```tyra
+# I/O
+export fn print<T: Debug>(_ value: T) -> Unit
+export fn println<T: Debug>(_ value: T) -> Unit
+export fn eprint<T: Debug>(_ value: T) -> Unit
+export fn eprintln<T: Debug>(_ value: T) -> Unit
+
+# Program control
+export fn panic(_ message: String) -> Never
+```
+
+`()` is the literal of the `Unit` type.
+
+#### core.sys
+
+```tyra
+export fn args() -> List<String>
+export fn env(_ key: String) -> Option<String>
+export fn exit(_ code: Int) -> Never
+```
+
+#### core.tasks
+
+```tyra
+export fn join_all<T>(_ tasks: List<Task<T>>) -> Task<List<T>>
+export fn select<T>(_ tasks: List<Task<T>>) -> Task<T>
+```
+
+#### Option and Result
+
+```tyra
+type Option<T> =
+  | Some(value: T)
+  | None
+
+type Result<T, E> =
+  | Ok(value: T)
+  | Err(error: E)
+```
+
+#### prelude
+
+The following are auto-imported into every module. No `import` is needed.
+
+Standard traits:
 
 - `Into<T>`
 - `Stringable`
@@ -883,17 +1091,36 @@ Compiler-known standard abilities:
 - `Ord`
 - `Debug`
 
+ADT variants:
+
+- `Some`, `None` (variants of `Option`)
+- `Ok`, `Err` (variants of `Result`)
+
+Functions:
+
+- `print`, `println`, `eprint`, `eprintln`
+- `panic`
+
 Operator correspondences:
 
 - `==`, `!=` -> `Eq`
 - `<`, `<=`, `>`, `>=` -> `Ord`
 - `+`, `-`, `*`, `/` -> built-in numeric operations only; no operator overloading
+- `and`, `or`, `not` -> built-in logical operations on `Bool` only
 
-Standard APIs related to collections and ordering:
+### 17.2 Tier 2: defined in separate documents
 
-- `List.sort_by(fn(T) -> K)`
-- `List.min_by(fn(T) -> K)`
-- `List.max_by(fn(T) -> K)`
+These modules are practically important but do not affect language semantics. Their APIs are defined separately in `docs/stdlib/`.
+
+- `string` — string operations (split, trim, contains, replace, etc.)
+- `collections` — methods on `List`, `Map`, `Set` (sort_by, min_by, max_by, map, filter, etc.)
+- `float` — Float comparison functions (eq, approx_eq, is_nan, etc.; see ADR-0002)
+- `json` — JSON parsing and serialization
+- `http` — HTTP server and client
+- `fs` — file system operations
+- `time` — time and duration
+- `test` — testing framework
+- `log` — logging
 
 Principles:
 
@@ -1019,8 +1246,12 @@ The following are postponed for later specification:
 - centralized vs distributed package registry policy
 - foreign function interface (FFI) details
 - task cancellation
-- raw strings / multi-line strings
-- multiple constraints, `where` clauses, associated types
+- multi-line string
+- 3 or more constraints, `where` clauses, associated types
+- guard clauses (`when pattern if condition`)
+- tuple types
+- structured concurrency
+- Detailed APIs for Tier 2 standard library modules (http, fs, json, string, collections, time, test, log, float)
 
 ---
 
