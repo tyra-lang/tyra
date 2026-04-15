@@ -1,0 +1,253 @@
+# =============================================================================
+# Rust / Cargo
+# =============================================================================
+
+# Build artifacts
+target/
+**/target/
+**/*.rs.bk
+
+# Cargo lock files
+# Note: Cargo.lock IS committed for the compiler binary (recommended for apps).
+# It is NOT committed for libraries. Tyra's compiler is a binary, so we keep it.
+# If you have library crates that should not commit Cargo.lock, add them below.
+
+# Rust analyzer
+.rust-analyzer/
+
+# Cargo registry cache (in case of local registry)
+.cargo/registry/
+.cargo/git/
+
+# =============================================================================
+# LLVM
+# =============================================================================
+
+# LLVM IR dumps from debugging
+*.ll
+*.bc
+
+# LLVM optimization reports
+*.opt.yaml
+
+# Object files and binaries from compilation tests
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.pdb
+
+# Profiling data
+*.profraw
+*.profdata
+
+# Coverage data
+*.gcov
+*.gcda
+*.gcno
+coverage/
+lcov.info
+
+# =============================================================================
+# Tyra-specific
+# =============================================================================
+
+# Tyra build outputs (when the compiler runs)
+*.tyra.out
+*.tyrac
+.tyra-cache/
+
+# User project artifacts (when running examples)
+examples/**/target/
+examples/**/.tyra-cache/
+
+# Generated AST/MIR dumps for debugging
+*.ast.json
+*.mir.txt
+*.tyra.dump
+
+# Test snapshot temporaries
+tests/**/*.snap.new
+tests/**/*.actual
+
+# Conformance test scratch
+tests/conformance/**/*.tmp
+
+# =============================================================================
+# Editors / IDEs
+# =============================================================================
+
+# VSCode
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# JetBrains (RustRover, IntelliJ, CLion)
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Vim / Neovim
+*.swp
+*.swo
+*.swn
+Session.vim
+.netrwhist
+tags
+.tags
+
+# Emacs
+*~
+\#*\#
+.\#*
+.dir-locals.el
+.projectile
+TAGS
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Helix
+.helix/
+
+# Zed
+.zed/
+
+# =============================================================================
+# AI assistant local files
+# =============================================================================
+
+# Local Claude Code state (per-machine, not for sharing)
+.claude/
+!.claude/settings.json
+
+# Cursor local rules (project-shared rules go in .cursor/rules/, but local overrides exist)
+.cursor/local/
+
+# Aider chat history and sessions
+.aider*
+!.aider.conf.yml
+
+# Continue local state
+.continue/local/
+
+# Cline / Roo Code local state
+.cline/
+.roo/
+
+# Generic AI session caches
+.ai-cache/
+.llm-cache/
+
+# =============================================================================
+# OS-specific
+# =============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+# =============================================================================
+# Logs and temporary files
+# =============================================================================
+
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+.cache/
+
+# =============================================================================
+# Documentation builds
+# =============================================================================
+
+# mdBook output (if used for guides)
+docs/guide/**/book/
+docs/guide/**/.mdbook-cache/
+
+# Generated API docs
+docs/api/
+
+# =============================================================================
+# CI / local development
+# =============================================================================
+
+# Local environment overrides
+.env
+.env.local
+.env.*.local
+
+# Local CI artifacts
+.github/local/
+
+# Benchmark results
+benchmarks/results/
+*.bench.json
+criterion/
+
+# Flamegraph outputs
+flamegraph.svg
+perf.data
+perf.data.old
+
+# =============================================================================
+# Package managers (in case other tools are used)
+# =============================================================================
+
+# Node.js (for editor extensions, tree-sitter grammar)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Python (for build scripts or tooling)
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+
+# =============================================================================
+# Security
+# =============================================================================
+
+# Never commit secrets, keys, or credentials
+*.pem
+*.key
+*.crt
+*.p12
+secrets/
+credentials/
+.secrets
