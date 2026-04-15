@@ -103,7 +103,10 @@ mod tests {
     fn build_error_diagnostic() {
         let diag = Diagnostic::error("unexpected token")
             .with_code("E0001")
-            .with_label(Label::new(Span::new(SourceId::test(0), 10, 15), "expected `end`"))
+            .with_label(Label::new(
+                Span::new(SourceId::test(0), 10, 15),
+                "expected `end`",
+            ))
             .with_note("blocks must be closed with `end`");
 
         assert_eq!(diag.level, Level::Error);
