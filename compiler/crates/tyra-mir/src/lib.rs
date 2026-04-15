@@ -163,6 +163,36 @@ mod tests {
     }
 
     #[test]
+    fn adt_constructor_lowers_to_tag() {
+        let source = "type Color =\n  | Red\n  | Green\n  | Blue\nlet c = Color.Red\n";
+        let prog = lower_str(source);
+        let main = &prog.functions[0];
+        // Color.Red should be Const(Int(0))
+        let has_red_tag = main.body.iter().any(|i| {
+            matches!(
+                i,
+                Instruction::Const {
+                    value: Constant::Int(0),
+                    ..
+                }
+            )
+        });
+        assert!(has_red_tag, "expected Color.Red = 0, got: {:?}", main.body);
+    }
+
+    #[test]
+    fn constructor_pattern_dispatch() {
+        let source = "type Color =\n  | Red\n  | Green\nfn f(_ c: Int) -> Int\n  match c\n  when Red\n    10\n  when Green\n    20\n  when _\n    0\n  end\nend\n";
+        let prog = lower_str(source);
+        let f = &prog.functions[0];
+        let has_branch = f
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::BranchIf { .. }));
+        assert!(has_branch, "expected BranchIf for constructor pattern");
+    }
+
+    #[test]
     fn full_program_lowers() {
         let source = r#"fn fib(_ n: Int) -> Int
   match n

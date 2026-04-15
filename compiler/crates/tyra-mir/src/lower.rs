@@ -28,6 +28,25 @@ pub fn lower(file: &SourceFile) -> Program {
         "BUG: fn main and top-level statements both present (ADR-0006 Rule 2 violation)"
     );
 
+    // Collect type definitions for ADT tag assignment and value field info
+    for item in &file.items {
+        match item {
+            Item::TypeDef(t) => {
+                if let TypeDefKind::Adt(variants) = &t.kind {
+                    for (i, variant) in variants.iter().enumerate() {
+                        ctx.variant_tags
+                            .insert((t.name.clone(), variant.name.clone()), i as i64);
+                    }
+                }
+            }
+            Item::ValueDef(v) => {
+                let fields: Vec<String> = v.fields.iter().map(|f| f.name.clone()).collect();
+                ctx.value_fields.insert(v.name.clone(), fields);
+            }
+            _ => {}
+        }
+    }
+
     // Lower function definitions
     for item in &file.items {
         if let Item::FnDef(f) = item {
@@ -69,6 +88,10 @@ struct LowerCtx {
     string_constants: Vec<String>,
     temp_counter: u32,
     label_counter: u32,
+    /// ADT variant tag map: (type_name, variant_name) -> tag index
+    variant_tags: std::collections::HashMap<(String, String), i64>,
+    /// Value type field info: type_name -> list of field names
+    value_fields: std::collections::HashMap<String, Vec<String>>,
 }
 
 impl LowerCtx {
@@ -78,6 +101,8 @@ impl LowerCtx {
             string_constants: Vec::new(),
             temp_counter: 0,
             label_counter: 0,
+            variant_tags: std::collections::HashMap::new(),
+            value_fields: std::collections::HashMap::new(),
         }
     }
 
@@ -258,6 +283,41 @@ impl LowerCtx {
             }
 
             ExprKind::Call(callee, args) => {
+                // Check for value type constructor: TrafficLight(color: val)
+                if let ExprKind::Ident(name) = &callee.kind
+                    && self.value_fields.contains_key(name)
+                {
+                    let fields = &self.value_fields[name];
+                    if fields.len() == 1 {
+                        // Single-field value: represented as the field's type directly
+                        if let Some(first_arg) = args.first() {
+                            return self.lower_expr(&first_arg.value, body);
+                        }
+                    }
+                    // Multi-field value types or zero args: not yet supported.
+                    // TODO: Implement LLVM struct representation for multi-field values.
+                    // For now, fall through to regular call lowering.
+                }
+
+                // Check for .copy() on known value types only (§8.6)
+                if let ExprKind::FieldAccess(obj, method) = &callee.kind
+                    && method == "copy"
+                {
+                    // Verify receiver is a value type by checking if it's a known
+                    // value type name or a binding. For simplicity, check if any
+                    // value type exists (copy() is auto-provided for value types only).
+                    let is_value_type = !self.value_fields.is_empty();
+                    if is_value_type {
+                        // Single-field value.copy(field: newval) → return new value
+                        if let Some(first_arg) = args.first() {
+                            return self.lower_expr(&first_arg.value, body);
+                        }
+                        // copy() with no args → return original
+                        return self.lower_expr(obj, body);
+                    }
+                    // Not a value type — fall through to regular method call
+                }
+
                 let func_name = match &callee.kind {
                     ExprKind::Ident(name) => name.clone(),
                     ExprKind::FieldAccess(obj, method) => {
@@ -356,7 +416,34 @@ impl LowerCtx {
             ExprKind::Spawn(inner) => self.lower_expr(inner, body),
 
             ExprKind::FieldAccess(obj, field) => {
+                // Check if this is an ADT constructor: Color.Red → tag constant
+                if let ExprKind::Ident(type_name) = &obj.kind
+                    && let Some(&tag) = self.variant_tags.get(&(type_name.clone(), field.clone()))
+                {
+                    let dest = self.fresh_temp();
+                    body.push(Instruction::Const {
+                        dest: dest.clone(),
+                        value: Constant::Int(tag),
+                    });
+                    return dest;
+                }
+
                 let obj_val = self.lower_expr(obj, body);
+
+                // Single-field value type field access: just return the object value
+                // (single-field values are represented as their field's type directly)
+                if let ExprKind::Ident(_obj_name) = &obj.kind {
+                    // Check if any value type has this field as its single field
+                    for (type_name, fields) in &self.value_fields {
+                        if fields.len() == 1 && fields[0] == *field {
+                            let _ = type_name; // matches
+                            return obj_val;
+                        }
+                    }
+                }
+
+                // General field access (data types, multi-field values)
+                // TODO: emit proper GEP instruction for struct field access
                 let dest = self.fresh_temp();
                 body.push(Instruction::Copy {
                     dest: dest.clone(),
@@ -564,10 +651,43 @@ impl LowerCtx {
                         label: arm_label.clone(),
                     });
                 }
-                PatternKind::Constructor(_, _) => {
-                    body.push(Instruction::Jump {
-                        label: arm_label.clone(),
-                    });
+                PatternKind::Constructor(variant_name, _) => {
+                    // Look up tag for this variant across all ADT types.
+                    // KNOWN LIMITATION: If two ADTs share a variant name, this
+                    // picks the first match non-deterministically. The spec (§8.5)
+                    // says the correct variant is determined by the match subject's
+                    // type, but type info is not yet threaded through MIR lowering.
+                    // TODO: Thread subject type info for correct ADT disambiguation.
+                    let tag = self
+                        .variant_tags
+                        .iter()
+                        .find(|((_, vn), _)| vn == variant_name)
+                        .map(|(_, &t)| t);
+
+                    if let Some(tag) = tag {
+                        let lit = self.fresh_temp();
+                        body.push(Instruction::Const {
+                            dest: lit.clone(),
+                            value: Constant::Int(tag),
+                        });
+                        let cond = self.fresh_temp();
+                        body.push(Instruction::BinOp {
+                            dest: cond.clone(),
+                            op: MirBinOp::EqInt,
+                            lhs: Operand::Var(subject.clone()),
+                            rhs: Operand::Var(lit),
+                        });
+                        body.push(Instruction::BranchIf {
+                            cond: Operand::Var(cond),
+                            true_label: arm_label.clone(),
+                            false_label: next_label.clone(),
+                        });
+                    } else {
+                        // Unknown constructor — fall through (treat as wildcard)
+                        body.push(Instruction::Jump {
+                            label: arm_label.clone(),
+                        });
+                    }
                 }
             }
 
