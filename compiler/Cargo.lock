@@ -37,3 +37,13 @@ dependencies = [
  "tyra-diagnostics",
  "tyra-parser",
 ]
+
+[[package]]
+name = "tyra-types"
+version = "0.1.0"
+dependencies = [
+ "tyra-ast",
+ "tyra-diagnostics",
+ "tyra-parser",
+ "tyra-resolve",
+]
