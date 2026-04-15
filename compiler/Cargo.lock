@@ -21,6 +21,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tyra-mir"
+version = "0.1.0"
+dependencies = [
+ "tyra-ast",
+ "tyra-diagnostics",
+ "tyra-parser",
+ "tyra-resolve",
+ "tyra-types",
+]
+
+[[package]]
 name = "tyra-parser"
 version = "0.1.0"
 dependencies = [

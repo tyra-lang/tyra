@@ -6,7 +6,7 @@ members = [
     "crates/tyra-parser",
     "crates/tyra-resolve",
     "crates/tyra-types",
-    # "crates/tyra-mir",
+    "crates/tyra-mir",
     # "crates/tyra-codegen-llvm",
     # "crates/tyra-driver",
     # "crates/tyra-cli",
@@ -26,3 +26,4 @@ tyra-ast = { path = "crates/tyra-ast" }
 tyra-parser = { path = "crates/tyra-parser" }
 tyra-resolve = { path = "crates/tyra-resolve" }
 tyra-types = { path = "crates/tyra-types" }
+tyra-mir = { path = "crates/tyra-mir" }

@@ -1,0 +1,15 @@
+[package]
+name = "tyra-mir"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Mid-level IR for the Tyra language"
+
+[dependencies]
+tyra-diagnostics.workspace = true
+tyra-ast.workspace = true
+tyra-types.workspace = true
+
+[dev-dependencies]
+tyra-parser.workspace = true
+tyra-resolve.workspace = true
