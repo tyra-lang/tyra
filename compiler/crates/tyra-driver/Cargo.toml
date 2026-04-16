@@ -6,6 +6,7 @@ license.workspace = true
 description = "Compilation pipeline driver for the Tyra language"
 
 [dependencies]
+tyra-ast.workspace = true
 tyra-diagnostics.workspace = true
 tyra-parser.workspace = true
 tyra-resolve.workspace = true

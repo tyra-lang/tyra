@@ -33,6 +33,7 @@ version = "0.1.0"
 name = "tyra-driver"
 version = "0.1.0"
 dependencies = [
+ "tyra-ast",
  "tyra-codegen-llvm",
  "tyra-diagnostics",
  "tyra-mir",

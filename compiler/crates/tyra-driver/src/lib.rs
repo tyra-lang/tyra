@@ -52,7 +52,19 @@ pub fn compile_to_ir(source_path: &Path) -> CompileResult {
     );
 
     // Parse
-    let ast = tyra_parser::parse(source_id, &sources, &mut report);
+    let mut ast = tyra_parser::parse(source_id, &sources, &mut report);
+    if report.has_errors() {
+        return CompileResult {
+            success: false,
+            report,
+            sources,
+            llvm_ir: None,
+        };
+    }
+
+    // Resolve imports: parse module files and merge exported items (§13)
+    let main_dir = source_path.parent().unwrap_or(Path::new("."));
+    resolve_imports(&mut ast, main_dir, &mut sources, &mut report);
     if report.has_errors() {
         return CompileResult {
             success: false,
@@ -96,6 +108,105 @@ pub fn compile_to_ir(source_path: &Path) -> CompileResult {
         sources,
         llvm_ir: Some(llvm_ir),
     }
+}
+
+/// Resolve import declarations by parsing module files and merging exported items.
+/// `import math` → parse `<main_dir>/math.tyra`, merge exported fns as `math__fn_name`.
+fn resolve_imports(
+    ast: &mut tyra_ast::SourceFile,
+    main_dir: &Path,
+    sources: &mut SourceMap,
+    report: &mut Report,
+) {
+    use tyra_ast::Item;
+
+    // Collect imports first (to avoid borrowing ast while mutating)
+    let imports: Vec<_> = ast
+        .items
+        .iter()
+        .filter_map(|item| {
+            if let Item::Import(imp) = item {
+                Some(imp.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let mut merged_items = Vec::new();
+
+    for imp in &imports {
+        let local_name = imp
+            .alias
+            .as_deref()
+            .or_else(|| imp.path.last().map(String::as_str))
+            .unwrap_or("_unknown");
+
+        // Resolve file path: import a.b.c → <main_dir>/a/b/c.tyra
+        let mut module_path = main_dir.to_path_buf();
+        for segment in &imp.path {
+            module_path.push(segment);
+        }
+        module_path.set_extension("tyra");
+
+        let module_source = match std::fs::read_to_string(&module_path) {
+            Ok(s) => s,
+            Err(e) => {
+                report.add(
+                    tyra_diagnostics::Diagnostic::error(format!(
+                        "cannot import `{}`: cannot read `{}`: {e}",
+                        imp.path.join("."),
+                        module_path.display()
+                    ))
+                    .with_code("E0200"),
+                );
+                continue;
+            }
+        };
+
+        let module_id = sources.add(
+            module_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into(),
+            module_source,
+        );
+
+        let module_ast = tyra_parser::parse(module_id, sources, report);
+        if report.has_errors() {
+            return;
+        }
+
+        // Merge exported items with mangled names
+        for item in module_ast.items {
+            match item {
+                Item::FnDef(mut f) if f.is_export => {
+                    f.name = format!("{local_name}__{}", f.name);
+                    merged_items.push(Item::FnDef(f));
+                }
+                Item::ValueDef(v) if v.is_export => {
+                    merged_items.push(Item::ValueDef(v));
+                }
+                Item::DataDef(d) if d.is_export => {
+                    merged_items.push(Item::DataDef(d));
+                }
+                Item::TypeDef(t) if t.is_export => {
+                    merged_items.push(Item::TypeDef(t));
+                }
+                Item::ImplDef(impl_def) => {
+                    // impl blocks are always included (no export on impl)
+                    merged_items.push(Item::ImplDef(impl_def));
+                }
+                _ => {
+                    // Non-exported items and statements are skipped
+                }
+            }
+        }
+    }
+
+    // Append merged items to the main AST
+    ast.items.extend(merged_items);
 }
 
 /// Compile a Tyra source file to a native binary.

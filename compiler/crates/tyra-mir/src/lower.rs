@@ -62,6 +62,18 @@ pub fn lower(file: &SourceFile) -> Program {
         }
     }
 
+    // Collect imported module names for module-qualified call resolution (§13)
+    for item in &file.items {
+        if let Item::Import(imp) = item {
+            let local_name = imp
+                .alias
+                .as_deref()
+                .or_else(|| imp.path.last().map(String::as_str))
+                .unwrap_or("_unknown");
+            ctx.imported_modules.insert(local_name.to_string());
+        }
+    }
+
     // Collect function return types for type inference in interpolation
     for item in &file.items {
         if let Item::FnDef(f) = item {
@@ -177,6 +189,8 @@ struct LowerCtx {
     fn_return_types: std::collections::HashMap<String, Ty>,
     /// Impl method registry: (target_type_name, method_name) → mangled_fn_name
     impl_methods: std::collections::HashMap<(String, String), String>,
+    /// Imported module names for module-qualified call resolution (§13)
+    imported_modules: std::collections::HashSet<String>,
     /// Current self type when lowering impl method bodies (None outside impl methods)
     self_type: Option<String>,
 }
@@ -206,6 +220,7 @@ impl LowerCtx {
             string_vars: std::collections::HashSet::new(),
             mut_vars: std::collections::HashSet::new(),
             fn_return_types: std::collections::HashMap::new(),
+            imported_modules: std::collections::HashSet::new(),
             impl_methods: std::collections::HashMap::new(),
             self_type: None,
         }
@@ -569,7 +584,30 @@ impl LowerCtx {
                             return dest;
                         }
                         ImplMethodResult::NotFound => {
-                            // Not an impl method — fall through to generic call
+                            // Not an impl method — fall through
+                        }
+                    }
+                }
+
+                // Check for module-qualified call: math.square() → math__square() (§13)
+                if let ExprKind::FieldAccess(obj, fn_name) = &callee.kind {
+                    if let ExprKind::Ident(module_name) = &obj.kind {
+                        if self.imported_modules.contains(module_name.as_str()) {
+                            let qualified_name = format!("{module_name}__{fn_name}");
+                            let arg_operands: Vec<Operand> = args
+                                .iter()
+                                .map(|a| {
+                                    let t = self.lower_expr(&a.value, body);
+                                    Operand::Var(t)
+                                })
+                                .collect();
+                            let dest = self.fresh_temp();
+                            body.push(Instruction::Call {
+                                dest: Some(dest.clone()),
+                                func: qualified_name,
+                                args: arg_operands,
+                            });
+                            return dest;
                         }
                     }
                 }
