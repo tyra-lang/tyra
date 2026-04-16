@@ -1104,6 +1104,11 @@ impl LowerCtx {
         body: &mut Vec<Instruction>,
     ) {
         if let Some((type_name, field_defs)) = self.resolve_struct_type(obj_expr) {
+            // Field mutation is only allowed on data types (§8.6).
+            // Value types are immutable — use copy() instead.
+            if !self.data_types.contains(&type_name) {
+                return;
+            }
             if let Some(field_idx) = field_defs.iter().position(|(n, _)| n == field) {
                 // Load current struct value
                 let current = self.fresh_temp();
