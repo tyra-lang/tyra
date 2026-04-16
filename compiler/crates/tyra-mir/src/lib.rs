@@ -442,4 +442,241 @@ print("done")
             "print+interp should NOT use StringFormat (segment optimization)"
         );
     }
+
+    #[test]
+    fn ok_or_converts_option_to_result() {
+        // spec §12.2: Option<T>.ok_or(err) → Result<T, E>
+        let source = "\
+type LookupError = | NotFound\n\
+fn find(_ id: Int) -> Option<String>\n\
+  if id == 1\n\
+    Some(\"alice\")\n\
+  else\n\
+    None\n\
+  end\n\
+end\n\
+fn get(_ id: Int) -> Result<String, LookupError>\n\
+  let name = find(id).ok_or(LookupError.NotFound)?\n\
+  Ok(name)\n\
+end\n";
+        let prog = lower_str(source);
+        let get_fn = prog.functions.iter().find(|f| f.name == "get").unwrap();
+        // Should have AdtTag (for ok_or tag check)
+        let has_adt_tag = get_fn.body.iter().any(|i| {
+            matches!(i, Instruction::AdtTag { .. })
+        });
+        assert!(has_adt_tag, "expected AdtTag for ok_or() Option tag check");
+        // Should have branching for Some/None paths
+        let has_branch = get_fn.body.iter().any(|i| {
+            matches!(i, Instruction::BranchIf { .. })
+        });
+        assert!(has_branch, "expected BranchIf for ok_or() Some/None dispatch");
+        // Should construct Result ADT (AdtInit with Result type)
+        let result_inits = get_fn.body.iter().filter(|i| {
+            matches!(i, Instruction::AdtInit { type_name, .. }
+                if type_name.starts_with("Result__"))
+        }).count();
+        assert!(
+            result_inits >= 2,
+            "expected at least 2 Result AdtInit (Ok + Err paths), got {result_inits}"
+        );
+    }
+
+    #[test]
+    fn ok_or_result_type_registered() {
+        // ok_or should register the Result<T, E> ADT struct def
+        let source = "\
+type MyErr = | Fail\n\
+fn find(_ id: Int) -> Option<Int>\n\
+  Some(42)\n\
+end\n\
+fn get() -> Result<Int, MyErr>\n\
+  let x = find(1).ok_or(MyErr.Fail)?\n\
+  Ok(x)\n\
+end\n";
+        let prog = lower_str(source);
+        // The program should have a Result__Int__MyErr struct def
+        let has_result_struct = prog.struct_defs.iter().any(|sd| {
+            sd.name == "Result__Int__MyErr"
+        });
+        assert!(
+            has_result_struct,
+            "expected Result__Int__MyErr struct def, got: {:?}",
+            prog.struct_defs.iter().map(|sd| &sd.name).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn defer_emits_before_implicit_return() {
+        // spec §12.3: defer expressions execute LIFO before function return
+        let source = "\
+fn cleanup() -> Unit\n\
+  print(\"done\")\n\
+end\n\
+fn work() -> Unit\n\
+  defer cleanup()\n\
+  print(\"working\")\n\
+end\n";
+        let prog = lower_str(source);
+        let work_fn = prog.functions.iter().find(|f| f.name == "work").unwrap();
+        // Find positions of print("working") and cleanup() calls
+        let working_pos = work_fn.body.iter().position(|i| {
+            matches!(i, Instruction::Call { func, .. } if func == "print")
+        });
+        let cleanup_pos = work_fn.body.iter().rposition(|i| {
+            matches!(i, Instruction::Call { func, .. } if func == "cleanup")
+        });
+        assert!(
+            working_pos.is_some() && cleanup_pos.is_some(),
+            "expected both print and cleanup calls"
+        );
+        assert!(
+            cleanup_pos.unwrap() > working_pos.unwrap(),
+            "deferred cleanup() should come after print(\"working\")"
+        );
+        // cleanup should be before the Return
+        let return_pos = work_fn.body.iter().rposition(|i| {
+            matches!(i, Instruction::Return { .. })
+        }).unwrap();
+        assert!(
+            cleanup_pos.unwrap() < return_pos,
+            "deferred cleanup() should come before Return"
+        );
+    }
+
+    #[test]
+    fn defer_lifo_order() {
+        // spec §12.3: multiple defers execute in reverse (LIFO) order
+        let source = "\
+fn first() -> Unit\n\
+  print(\"1\")\n\
+end\n\
+fn second() -> Unit\n\
+  print(\"2\")\n\
+end\n\
+fn work() -> Unit\n\
+  defer first()\n\
+  defer second()\n\
+  print(\"work\")\n\
+end\n";
+        let prog = lower_str(source);
+        let work_fn = prog.functions.iter().find(|f| f.name == "work").unwrap();
+        // Collect all Call instructions after the print("work") call
+        let calls: Vec<&str> = work_fn
+            .body
+            .iter()
+            .filter_map(|i| match i {
+                Instruction::Call { func, .. } if func != "print" => Some(func.as_str()),
+                _ => None,
+            })
+            .collect();
+        // LIFO: second() should be emitted before first()
+        let second_pos = calls.iter().position(|&f| f == "second");
+        let first_pos = calls.iter().position(|&f| f == "first");
+        assert!(
+            second_pos.is_some() && first_pos.is_some(),
+            "expected both first and second calls, got: {:?}",
+            calls
+        );
+        assert!(
+            second_pos.unwrap() < first_pos.unwrap(),
+            "LIFO: second() should come before first() in deferred execution"
+        );
+    }
+
+    #[test]
+    fn defer_emits_before_early_return() {
+        // spec §12.3: defer must execute before ? operator early return
+        let source = "\
+fn cleanup() -> Unit\n\
+  print(\"cleanup\")\n\
+end\n\
+fn inner() -> Option<Int>\n\
+  None\n\
+end\n\
+fn work() -> Option<Int>\n\
+  defer cleanup()\n\
+  let x = inner()?\n\
+  Some(x)\n\
+end\n";
+        let prog = lower_str(source);
+        let work_fn = prog.functions.iter().find(|f| f.name == "work").unwrap();
+        // In the ? failure path, cleanup should be called before Return
+        // Find the propagate_fail label and check that cleanup comes before Return
+        let fail_label_pos = work_fn.body.iter().position(|i| {
+            matches!(i, Instruction::Label(l) if l.starts_with("propagate_fail"))
+        });
+        assert!(fail_label_pos.is_some(), "expected propagate_fail label");
+        let after_fail: Vec<_> = work_fn.body[fail_label_pos.unwrap()..].to_vec();
+        let cleanup_pos = after_fail.iter().position(|i| {
+            matches!(i, Instruction::Call { func, .. } if func == "cleanup")
+        });
+        let return_pos = after_fail.iter().position(|i| {
+            matches!(i, Instruction::Return { .. })
+        });
+        assert!(
+            cleanup_pos.is_some() && return_pos.is_some(),
+            "expected cleanup and return after propagate_fail label"
+        );
+        assert!(
+            cleanup_pos.unwrap() < return_pos.unwrap(),
+            "deferred cleanup() should come before early Return in ? path"
+        );
+    }
+
+    #[test]
+    fn propagate_result_with_into_conversion() {
+        // spec §12.2: ? on Result<T, E> in fn returning Result<U, F>
+        // where E != F calls E__into(err) to convert.
+        let source = "\
+type InnerErr = | Bad\n\
+type OuterErr = | Wrapped(msg: String)\n\
+impl Into<OuterErr> for InnerErr\n\
+  fn into(self) -> OuterErr\n\
+    OuterErr.Wrapped(msg: \"converted\")\n\
+  end\n\
+end\n\
+fn inner() -> Result<Int, InnerErr>\n\
+  Err(InnerErr.Bad)\n\
+end\n\
+fn outer() -> Result<Int, OuterErr>\n\
+  let x = inner()?\n\
+  Ok(x)\n\
+end\n";
+        let prog = lower_str(source);
+        let outer_fn = prog.functions.iter().find(|f| f.name == "outer").unwrap();
+        // The ? operator failure path should call InnerErr__into
+        let has_into_call = outer_fn.body.iter().any(|i| {
+            matches!(i, Instruction::Call { func, .. } if func == "InnerErr__into")
+        });
+        assert!(
+            has_into_call,
+            "expected Call to InnerErr__into in ? failure path, got: {:?}",
+            outer_fn.body
+        );
+    }
+
+    #[test]
+    fn propagate_result_same_error_no_conversion() {
+        // When inner and outer error types match, no Into conversion needed.
+        let source = "\
+type MyErr = | Fail\n\
+fn inner() -> Result<Int, MyErr>\n\
+  Err(MyErr.Fail)\n\
+end\n\
+fn outer() -> Result<Int, MyErr>\n\
+  let x = inner()?\n\
+  Ok(x)\n\
+end\n";
+        let prog = lower_str(source);
+        let outer_fn = prog.functions.iter().find(|f| f.name == "outer").unwrap();
+        // No Into conversion call when error types are the same
+        let has_into_call = outer_fn.body.iter().any(|i| {
+            matches!(i, Instruction::Call { func, .. } if func.contains("__into"))
+        });
+        assert!(
+            !has_into_call,
+            "should NOT call __into when error types match"
+        );
+    }
 }

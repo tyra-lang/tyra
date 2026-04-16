@@ -168,12 +168,15 @@ pub fn lower(file: &SourceFile) -> Program {
 
     // Lower top-level statements into an implicit main (§6.1)
     if has_top_level_stmts {
+        ctx.deferred_exprs.clear();
         let mut body = Vec::new();
         for item in &file.items {
             if let Item::Stmt(s) = item {
                 ctx.lower_stmt(s, &mut body);
             }
         }
+        // spec §12.3: emit deferred expressions before implicit main return
+        ctx.emit_deferred(&mut body);
         body.push(Instruction::Return { value: None });
 
         ctx.functions.push(Function {
@@ -245,6 +248,8 @@ struct LowerCtx {
     current_fn_return_type: Ty,
     /// Collected ADT struct defs (monomorphized Option/Result types)
     adt_struct_defs: std::collections::HashMap<String, Vec<(String, Ty)>>,
+    /// Deferred expressions for the current function (spec §12.3, LIFO execution)
+    deferred_exprs: Vec<Expr>,
 }
 
 /// Result of resolving an impl method call.
@@ -279,6 +284,7 @@ impl LowerCtx {
             adt_variant_fields: std::collections::HashMap::new(),
             current_fn_return_type: Ty::Unit,
             adt_struct_defs: std::collections::HashMap::new(),
+            deferred_exprs: Vec::new(),
         }
     }
 
@@ -330,6 +336,7 @@ impl LowerCtx {
         self.string_vars.clear();
         self.mut_vars.clear();
         self.generic_var_types.clear();
+        self.deferred_exprs.clear();
 
         let params: Vec<(String, Ty)> = f
             .params
@@ -379,6 +386,8 @@ impl LowerCtx {
 
         // If last instruction isn't a return, add implicit return
         if !matches!(body.last(), Some(Instruction::Return { .. })) {
+            // spec §12.3: emit deferred expressions before implicit return
+            self.emit_deferred(&mut body);
             if return_type == Ty::Unit {
                 body.push(Instruction::Return { value: None });
             } else if let Some(last_temp) = self.last_temp_name(&body) {
@@ -406,14 +415,18 @@ impl LowerCtx {
                 let is_string = self.is_string_expr(&s.value);
                 let struct_type = self.expr_struct_type(&s.value);
                 let val = self.lower_expr(&s.value, body);
-                if is_float {
+                // Track types from AST analysis
+                if is_float || self.float_vars.contains(&val) {
                     self.float_vars.insert(s.name.clone());
                 }
-                if is_string {
+                if is_string || self.string_vars.contains(&val) {
                     self.string_vars.insert(s.name.clone());
                 }
                 if let Some(stype) = struct_type {
                     self.var_types.insert(s.name.clone(), stype);
+                } else if let Some(vtype) = self.var_types.get(&val).cloned() {
+                    // Propagate struct type from the lowered temp
+                    self.var_types.insert(s.name.clone(), vtype);
                 }
                 // Track generic types (Option/Result) from the value temp
                 if let Some(gt) = self.generic_var_types.get(&val).cloned() {
@@ -454,11 +467,14 @@ impl LowerCtx {
                     let t = self.lower_expr(v, body);
                     Operand::Var(t)
                 });
+                // spec §12.3: emit deferred expressions before return
+                self.emit_deferred(body);
                 body.push(Instruction::Return { value });
             }
-            Stmt::Defer(_) => {
-                // defer lowering: deferred to later milestone
-                // For now, the deferred expression is simply ignored in MIR
+            Stmt::Defer(d) => {
+                // spec §12.3: collect deferred expressions; they are emitted
+                // in LIFO order before every return path.
+                self.deferred_exprs.push(d.expr.clone());
             }
             Stmt::Expr(s) => {
                 self.lower_expr(&s.expr, body);
@@ -733,6 +749,147 @@ impl LowerCtx {
                         fields: field_operands,
                     });
                     return dest;
+                }
+
+                // Check for .ok_or() on Option<T> (spec §12.2):
+                // Converts Option<T> to Result<T, E> where E is the type of the argument.
+                if let ExprKind::FieldAccess(obj, method) = &callee.kind
+                    && method == "ok_or"
+                    && args.len() == 1
+                {
+                    // Determine if receiver is Option<T>
+                    let opt_type = self.infer_expr_type(obj)
+                        .or_else(|| {
+                            if let ExprKind::Ident(name) = &obj.kind {
+                                self.generic_var_types.get(name).cloned()
+                            } else {
+                                None
+                            }
+                        });
+                    if let Some(ref oty) = opt_type
+                        && oty.is_option()
+                    {
+                        let obj_val = self.lower_expr(obj, body);
+                        let err_arg = self.lower_expr(&args[0].value, body);
+
+                        // Infer err type from the argument expression, variable
+                        // tracking, or the enclosing function's return type
+                        let err_type = self.infer_expr_type(&args[0].value)
+                            .or_else(|| {
+                                self.var_types.get(&err_arg).map(|n| Ty::Named(n.clone()))
+                            })
+                            .or_else(|| {
+                                self.current_fn_return_type.result_err_type().cloned()
+                            })
+                            .unwrap_or(Ty::Named("Error".into()));
+
+                        let inner_t = oty.option_inner().cloned().unwrap_or(Ty::Int);
+                        let result_type = Ty::Generic(
+                            "Result".into(),
+                            vec![inner_t, err_type],
+                        );
+                        self.register_adt_type(&result_type);
+                        let result_type_name = result_type.monomorphized_name();
+                        let opt_type_name = oty.monomorphized_name();
+
+                        // Extract tag from Option
+                        let tag = self.fresh_temp();
+                        body.push(Instruction::AdtTag {
+                            dest: tag.clone(),
+                            obj: Operand::Var(obj_val.clone()),
+                            type_name: opt_type_name.clone(),
+                        });
+
+                        // Check: tag == 0 means Some
+                        let zero = self.fresh_temp();
+                        body.push(Instruction::Const {
+                            dest: zero.clone(),
+                            value: Constant::Int(0),
+                        });
+                        let is_some = self.fresh_temp();
+                        body.push(Instruction::BinOp {
+                            dest: is_some.clone(),
+                            op: MirBinOp::EqInt,
+                            lhs: Operand::Var(tag),
+                            rhs: Operand::Var(zero),
+                        });
+
+                        let some_label = self.fresh_label("ok_or_some");
+                        let none_label = self.fresh_label("ok_or_none");
+                        let end_label = self.fresh_label("ok_or_end");
+
+                        // Allocate result slot
+                        let result_slot = self.fresh_temp();
+                        body.push(Instruction::Alloca {
+                            dest: result_slot.clone(),
+                        });
+
+                        body.push(Instruction::BranchIf {
+                            cond: Operand::Var(is_some),
+                            true_label: some_label.clone(),
+                            false_label: none_label.clone(),
+                        });
+
+                        // Some path: Ok(payload)
+                        body.push(Instruction::Label(some_label));
+                        let payload = self.fresh_temp();
+                        body.push(Instruction::AdtPayload {
+                            dest: payload.clone(),
+                            obj: Operand::Var(obj_val),
+                            type_name: opt_type_name,
+                            field_index: 1,
+                        });
+                        let ok_val = self.fresh_temp();
+                        body.push(Instruction::AdtInit {
+                            dest: ok_val.clone(),
+                            type_name: result_type_name.clone(),
+                            tag: 0,
+                            fields: vec![
+                                Operand::Var(payload),
+                                Operand::Const(Constant::Int(0)),
+                            ],
+                        });
+                        body.push(Instruction::Store {
+                            dest: result_slot.clone(),
+                            value: Operand::Var(ok_val),
+                        });
+                        body.push(Instruction::Jump {
+                            label: end_label.clone(),
+                        });
+
+                        // None path: Err(err_arg)
+                        body.push(Instruction::Label(none_label));
+                        let err_val = self.fresh_temp();
+                        body.push(Instruction::AdtInit {
+                            dest: err_val.clone(),
+                            type_name: result_type_name,
+                            tag: 1,
+                            fields: vec![
+                                Operand::Const(Constant::Int(0)),
+                                Operand::Var(err_arg),
+                            ],
+                        });
+                        body.push(Instruction::Store {
+                            dest: result_slot.clone(),
+                            value: Operand::Var(err_val),
+                        });
+                        body.push(Instruction::Jump {
+                            label: end_label.clone(),
+                        });
+
+                        body.push(Instruction::Label(end_label));
+                        let result_val = self.fresh_temp();
+                        body.push(Instruction::Load {
+                            dest: result_val.clone(),
+                            source: result_slot,
+                        });
+                        // Track the result as a generic type for downstream ? operator
+                        self.generic_var_types
+                            .insert(result_val.clone(), result_type.clone());
+                        self.var_types
+                            .insert(result_val.clone(), result_type.monomorphized_name());
+                        return result_val;
+                    }
                 }
 
                 // Check for .copy() on value types only (§8.6)
@@ -1032,26 +1189,9 @@ impl LowerCtx {
                 body.push(Instruction::Label(fail_label));
                 if inner_type.is_result() {
                     // For Result: extract err_value and re-wrap as Err.
-                    // TODO(spec §12.2): Into<F> error conversion not yet implemented.
-                    // Currently requires inner error type E == enclosing error type F.
-                    // If E != F, the generated code will silently reinterpret the error
-                    // payload. Implementing Into<F> will fix this properly.
+                    // spec §12.2: If inner error type E != enclosing error type F,
+                    // convert via Into<F>: `return Err(e.into())`.
                     let ret_type = &self.current_fn_return_type.clone();
-                    if let (Some(inner_err), Some(ret_err)) =
-                        (inner_type.result_err_type(), ret_type.result_err_type())
-                    {
-                        if inner_err != ret_err {
-                            // Mismatch: emit a comment in the MIR noting the gap.
-                            // A proper diagnostic should be emitted here once
-                            // tyra-diagnostics is integrated into lowering.
-                            eprintln!(
-                                "warning: ? operator on Result<_, {}> in function returning Result<_, {}> — Into<{}> not yet implemented",
-                                inner_err.display_name(),
-                                ret_err.display_name(),
-                                ret_err.display_name(),
-                            );
-                        }
-                    }
                     self.register_adt_type(ret_type);
                     let ret_type_name = ret_type.monomorphized_name();
                     let err_val = self.fresh_temp();
@@ -1061,6 +1201,43 @@ impl LowerCtx {
                         type_name: type_name.clone(),
                         field_index: 2, // err_value field for Result
                     });
+
+                    // Apply Into<F> conversion if error types differ (spec §12.2)
+                    let final_err_val =
+                        if let (Some(inner_err), Some(ret_err)) =
+                            (inner_type.result_err_type(), ret_type.result_err_type())
+                        {
+                            if inner_err != ret_err {
+                                let inner_err_name = inner_err.monomorphized_name();
+                                let into_key =
+                                    (inner_err_name.clone(), "into".to_string());
+                                if let Some(mangled) = self.impl_methods.get(&into_key).cloned() {
+                                    // Call E__into(err_val) to convert error type
+                                    let converted = self.fresh_temp();
+                                    body.push(Instruction::Call {
+                                        dest: Some(converted.clone()),
+                                        func: mangled,
+                                        args: vec![Operand::Var(err_val.clone())],
+                                    });
+                                    converted
+                                } else {
+                                    eprintln!(
+                                        "warning: ? operator on Result<_, {}> in function returning Result<_, {}> — no Into<{}> impl found for {}",
+                                        inner_err.display_name(),
+                                        ret_err.display_name(),
+                                        ret_err.display_name(),
+                                        inner_err.display_name(),
+                                    );
+                                    err_val.clone()
+                                }
+                            } else {
+                                // Into<T> for T: identity, no conversion needed
+                                err_val.clone()
+                            }
+                        } else {
+                            err_val.clone()
+                        };
+
                     let ret_err = self.fresh_temp();
                     body.push(Instruction::AdtInit {
                         dest: ret_err.clone(),
@@ -1068,9 +1245,11 @@ impl LowerCtx {
                         tag: 1,
                         fields: vec![
                             Operand::Const(Constant::Int(0)),
-                            Operand::Var(err_val),
+                            Operand::Var(final_err_val),
                         ],
                     });
+                    // spec §12.3: emit deferred expressions before early return
+                    self.emit_deferred(body);
                     body.push(Instruction::Return {
                         value: Some(Operand::Var(ret_err)),
                     });
@@ -1086,6 +1265,8 @@ impl LowerCtx {
                         tag: 1,
                         fields: vec![],
                     });
+                    // spec §12.3: emit deferred expressions before early return
+                    self.emit_deferred(body);
                     body.push(Instruction::Return {
                         value: Some(Operand::Var(none_val)),
                     });
@@ -1100,6 +1281,24 @@ impl LowerCtx {
                     type_name,
                     field_index: 1,
                 });
+                // Track the extracted payload type for downstream type inference
+                let payload_type = if inner_type.is_option() {
+                    inner_type.option_inner().cloned()
+                } else {
+                    inner_type.result_ok_type().cloned()
+                };
+                if let Some(ref pt) = payload_type {
+                    match pt {
+                        Ty::String => { self.string_vars.insert(payload.clone()); }
+                        Ty::Float => { self.float_vars.insert(payload.clone()); }
+                        Ty::Named(n) => { self.var_types.insert(payload.clone(), n.clone()); }
+                        Ty::Generic(_, _) => {
+                            self.generic_var_types.insert(payload.clone(), pt.clone());
+                            self.var_types.insert(payload.clone(), pt.monomorphized_name());
+                        }
+                        _ => {}
+                    }
+                }
                 payload
             }
 
@@ -1563,7 +1762,9 @@ impl LowerCtx {
             // Bind constructor payload variables: when Some(x) → x = payload
             if let PatternKind::Constructor(variant_name, fields) = &arm.pattern.kind {
                 let is_prelude = matches!(variant_name.as_str(), "Some" | "Ok" | "Err");
-                if is_prelude && !fields.is_empty() {
+                if is_prelude && !fields.is_empty()
+                    && fields[0].field_name != "_"
+                {
                     let subject_type_name = self
                         .generic_var_types
                         .get(&subject)
@@ -1637,6 +1838,10 @@ impl LowerCtx {
 
                         if let Some(vfields) = vfields {
                             for (fi, pf) in fields.iter().enumerate() {
+                                // Skip wildcard bindings
+                                if pf.field_name == "_" {
+                                    continue;
+                                }
                                 let field_index = (fi + 1) as u32; // +1 for tag at field 0
                                 let payload = self.fresh_temp();
                                 body.push(Instruction::AdtPayload {
@@ -2074,14 +2279,58 @@ impl LowerCtx {
                     Some(Ty::Int)
                 }
             }
-            ExprKind::Call(callee, _) => {
+            ExprKind::Call(callee, args) => {
                 if let ExprKind::Ident(fname) = &callee.kind {
+                    // Check if it's a prelude ADT constructor: Some(x), Ok(x), Err(e)
+                    if let Some(first_arg) = args.first() {
+                        if let Some(adt_ty) = self.infer_expr_type(&first_arg.value)
+                            .and_then(|arg_ty| self.infer_adt_call_type(fname, &arg_ty))
+                        {
+                            return Some(adt_ty);
+                        }
+                    }
+                    // ADT constructor with args: TypeName(field: val)
+                    if self.struct_fields.contains_key(fname.as_str())
+                        || self.adt_struct_defs.contains_key(fname.as_str())
+                    {
+                        return Some(Ty::Named(fname.clone()));
+                    }
                     self.fn_return_types.get(fname).cloned()
+                } else if let ExprKind::FieldAccess(obj, variant) = &callee.kind {
+                    // ADT payload constructor: TypeName.Variant(args)
+                    if let ExprKind::Ident(type_name) = &obj.kind {
+                        if self.variant_tags.contains_key(&(type_name.clone(), variant.clone())) {
+                            return Some(Ty::Named(type_name.clone()));
+                        }
+                    }
+                    None
                 } else {
                     None
                 }
             }
+            ExprKind::FieldAccess(obj, field) => {
+                // ADT unit variant constructor: TypeName.Variant
+                if let ExprKind::Ident(type_name) = &obj.kind {
+                    if self.variant_tags.contains_key(&(type_name.clone(), field.clone())) {
+                        return Some(Ty::Named(type_name.clone()));
+                    }
+                }
+                None
+            }
             _ => None,
+        }
+    }
+
+    /// Emit all deferred expressions in LIFO order (spec §12.3).
+    /// Called before every return path (explicit return, ? early return, implicit return).
+    /// Note: this deliberately does NOT clear deferred_exprs — every return path
+    /// (including multiple ? early returns within a single function) must emit the
+    /// full set of deferred expressions. The list is cleared at lower_fn entry.
+    fn emit_deferred(&mut self, body: &mut Vec<Instruction>) {
+        // Clone to avoid borrow conflict (deferred_exprs is on self)
+        let exprs: Vec<Expr> = self.deferred_exprs.iter().rev().cloned().collect();
+        for expr in &exprs {
+            self.lower_expr(expr, body);
         }
     }
 

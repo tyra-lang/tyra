@@ -949,6 +949,11 @@ fn emit_instruction(
                         Operand::Const(Constant::Int(0)) if field_ty_str == "double" => {
                             "0.0".to_string()
                         }
+                        Operand::Const(Constant::Int(0))
+                            if field_ty_str.starts_with("%struct.") =>
+                        {
+                            "zeroinitializer".to_string()
+                        }
                         _ => operand_ref(field_op, func),
                     };
                     writeln!(
@@ -958,10 +963,14 @@ fn emit_instruction(
                     .unwrap();
                 } else {
                     // No field provided: insert zero
-                    let zero = match field_ty_str.as_str() {
-                        "ptr" => "null",
-                        "double" => "0.0",
-                        _ => "0",
+                    let zero = if field_ty_str == "ptr" {
+                        "null"
+                    } else if field_ty_str == "double" {
+                        "0.0"
+                    } else if field_ty_str.starts_with("%struct.") {
+                        "zeroinitializer"
+                    } else {
+                        "0"
                     };
                     writeln!(
                         out,
