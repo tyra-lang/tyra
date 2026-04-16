@@ -679,4 +679,70 @@ end\n";
             "should NOT call __into when error types match"
         );
     }
+
+    #[test]
+    fn turbofish_monomorphizes_generic_function() {
+        // spec §8.4: turbofish call generates monomorphized function
+        let source = "\
+fn identity<T>(_ x: T) -> T\n\
+  x\n\
+end\n\
+let a = identity::<Int>(42)\n\
+let b = identity::<String>(\"hello\")\n";
+        let prog = lower_str(source);
+        // Should generate identity__Int and identity__String functions
+        let has_int = prog.functions.iter().any(|f| f.name == "identity__Int");
+        let has_str = prog.functions.iter().any(|f| f.name == "identity__String");
+        assert!(
+            has_int,
+            "expected monomorphized function identity__Int, got: {:?}",
+            prog.functions.iter().map(|f| &f.name).collect::<Vec<_>>()
+        );
+        assert!(
+            has_str,
+            "expected monomorphized function identity__String, got: {:?}",
+            prog.functions.iter().map(|f| &f.name).collect::<Vec<_>>()
+        );
+        // Main should call both monomorphized functions
+        let main = prog.functions.iter().find(|f| f.name == "main").unwrap();
+        let calls_int = main.body.iter().any(|i| {
+            matches!(i, Instruction::Call { func, .. } if func == "identity__Int")
+        });
+        let calls_str = main.body.iter().any(|i| {
+            matches!(i, Instruction::Call { func, .. } if func == "identity__String")
+        });
+        assert!(calls_int, "expected call to identity__Int");
+        assert!(calls_str, "expected call to identity__String");
+    }
+
+    #[test]
+    fn turbofish_monomorphized_params_have_concrete_types() {
+        // The monomorphized function should have concrete parameter types
+        let source = "\
+fn wrap<T>(_ x: T) -> T\n\
+  x\n\
+end\n\
+let a = wrap::<Int>(42)\n";
+        let prog = lower_str(source);
+        let wrap_int = prog.functions.iter().find(|f| f.name == "wrap__Int").unwrap();
+        // Parameter should be Int, not a type variable
+        assert_eq!(wrap_int.params.len(), 1);
+        assert_eq!(wrap_int.params[0].1, tyra_types::Ty::Int);
+        // Return type should be Int
+        assert_eq!(wrap_int.return_type, tyra_types::Ty::Int);
+    }
+
+    #[test]
+    fn turbofish_dedup_same_instantiation() {
+        // Calling same turbofish twice should only generate one function
+        let source = "\
+fn id<T>(_ x: T) -> T\n\
+  x\n\
+end\n\
+let a = id::<Int>(1)\n\
+let b = id::<Int>(2)\n";
+        let prog = lower_str(source);
+        let count = prog.functions.iter().filter(|f| f.name == "id__Int").count();
+        assert_eq!(count, 1, "expected exactly 1 id__Int function, got {count}");
+    }
 }

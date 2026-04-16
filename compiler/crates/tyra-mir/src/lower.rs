@@ -110,7 +110,7 @@ pub fn lower(file: &SourceFile) -> Program {
         }
     }
 
-    // Collect function return types for type inference in interpolation
+    // Collect function return types and store definitions for monomorphization
     for item in &file.items {
         if let Item::FnDef(f) = item {
             let ret_ty = f
@@ -119,6 +119,10 @@ pub fn lower(file: &SourceFile) -> Program {
                 .map(Ty::from_type_expr)
                 .unwrap_or(Ty::Unit);
             ctx.fn_return_types.insert(f.name.clone(), ret_ty);
+            // Store generic function definitions for turbofish monomorphization (§8.4)
+            if !f.type_params.is_empty() {
+                ctx.fn_defs.insert(f.name.clone(), f.clone());
+            }
         }
     }
 
@@ -250,6 +254,12 @@ struct LowerCtx {
     adt_struct_defs: std::collections::HashMap<String, Vec<(String, Ty)>>,
     /// Deferred expressions for the current function (spec §12.3, LIFO execution)
     deferred_exprs: Vec<Expr>,
+    /// Generic function definitions for monomorphization (§8.4).
+    /// Maps fn_name → FnDef AST node for turbofish lookup.
+    fn_defs: std::collections::HashMap<String, FnDef>,
+    /// Monomorphization cache: mangled_name → true.
+    /// Prevents duplicate generation of the same specialization.
+    mono_cache: std::collections::HashSet<String>,
 }
 
 /// Result of resolving an impl method call.
@@ -285,6 +295,8 @@ impl LowerCtx {
             current_fn_return_type: Ty::Unit,
             adt_struct_defs: std::collections::HashMap::new(),
             deferred_exprs: Vec::new(),
+            fn_defs: std::collections::HashMap::new(),
+            mono_cache: std::collections::HashSet::new(),
         }
     }
 
@@ -380,8 +392,15 @@ impl LowerCtx {
         }
 
         let mut body = Vec::new();
+        let mut last_expr_result = None;
         for stmt in &f.body {
-            self.lower_stmt(stmt, &mut body);
+            // Track the result of expression statements for implicit return
+            if let Stmt::Expr(s) = stmt {
+                last_expr_result = Some(self.lower_expr(&s.expr, &mut body));
+            } else {
+                last_expr_result = None;
+                self.lower_stmt(stmt, &mut body);
+            }
         }
 
         // If last instruction isn't a return, add implicit return
@@ -393,6 +412,11 @@ impl LowerCtx {
             } else if let Some(last_temp) = self.last_temp_name(&body) {
                 body.push(Instruction::Return {
                     value: Some(Operand::Var(last_temp)),
+                });
+            } else if let Some(expr_val) = last_expr_result {
+                // Last expression was a simple variable reference (no instruction generated)
+                body.push(Instruction::Return {
+                    value: Some(Operand::Var(expr_val)),
                 });
             } else {
                 body.push(Instruction::Return { value: None });
@@ -1374,7 +1398,62 @@ impl LowerCtx {
                 dest
             }
 
-            ExprKind::Lambda(_) | ExprKind::TurbofishCall(_, _, _) => {
+            ExprKind::Lambda(_) => {
+                let dest = self.fresh_temp();
+                body.push(Instruction::Const {
+                    dest: dest.clone(),
+                    value: Constant::Unit,
+                });
+                dest
+            }
+
+            ExprKind::TurbofishCall(callee, type_args, args) => {
+                // spec §8.4: turbofish call — monomorphize generic function
+                if let ExprKind::Ident(fn_name) = &callee.kind {
+                    let concrete_types: Vec<Ty> = type_args
+                        .iter()
+                        .map(Ty::from_type_expr)
+                        .collect();
+
+                    // Monomorphize and get mangled name
+                    let mangled = self.monomorphize(fn_name, &concrete_types);
+
+                    if let Some(func_name) = mangled {
+                        // Lower arguments
+                        let arg_operands: Vec<Operand> = args
+                            .iter()
+                            .map(|a| {
+                                let t = self.lower_expr(&a.value, body);
+                                Operand::Var(t)
+                            })
+                            .collect();
+
+                        let dest = self.fresh_temp();
+                        // Infer return type for type tracking
+                        let ret_ty = self.fn_return_types.get(&func_name).cloned();
+                        body.push(Instruction::Call {
+                            dest: Some(dest.clone()),
+                            func: func_name,
+                            args: arg_operands,
+                        });
+                        // Track result type
+                        if let Some(ref ty) = ret_ty {
+                            match ty {
+                                Ty::String => { self.string_vars.insert(dest.clone()); }
+                                Ty::Float => { self.float_vars.insert(dest.clone()); }
+                                Ty::Named(n) => { self.var_types.insert(dest.clone(), n.clone()); }
+                                Ty::Generic(_, _) => {
+                                    self.generic_var_types.insert(dest.clone(), ty.clone());
+                                    self.var_types.insert(dest.clone(), ty.monomorphized_name());
+                                }
+                                _ => {}
+                            }
+                        }
+                        return dest;
+                    }
+                }
+                // Fallback: unresolved turbofish — no generic function found
+                eprintln!("warning: unresolved turbofish call (no matching generic function)");
                 let dest = self.fresh_temp();
                 body.push(Instruction::Const {
                     dest: dest.clone(),
@@ -2358,6 +2437,84 @@ impl LowerCtx {
         None
     }
 
+    /// Monomorphize a generic function with concrete type arguments (§8.4).
+    /// Returns the mangled function name. If not yet monomorphized, creates and
+    /// lowers a specialized copy of the function with type parameters substituted.
+    fn monomorphize(
+        &mut self,
+        fn_name: &str,
+        type_args: &[Ty],
+    ) -> Option<String> {
+        // Generate mangled name: fn_name__Type1__Type2
+        let type_suffix: Vec<String> = type_args
+            .iter()
+            .map(|t| t.monomorphized_name())
+            .collect();
+        let mangled = format!("{}__{}", fn_name, type_suffix.join("__"));
+
+        // Check cache
+        if self.mono_cache.contains(&mangled) {
+            return Some(mangled);
+        }
+
+        let fn_def = self.fn_defs.get(fn_name)?.clone();
+        if fn_def.type_params.len() != type_args.len() {
+            eprintln!(
+                "warning: turbofish on '{}' expects {} type args, got {}",
+                fn_name,
+                fn_def.type_params.len(),
+                type_args.len()
+            );
+            return None;
+        }
+
+        // Build substitution map: type_param_name → concrete Ty
+        let subst: std::collections::HashMap<String, Ty> = fn_def
+            .type_params
+            .iter()
+            .zip(type_args.iter())
+            .map(|(tp, ty)| (tp.name.clone(), ty.clone()))
+            .collect();
+
+        // Cache before lowering (prevents infinite recursion)
+        self.mono_cache.insert(mangled.clone());
+
+        // Create substituted FnDef
+        let mono_def = substitute_fn_def(&fn_def, &subst, &mangled);
+
+        // Register return type
+        let ret_ty = mono_def
+            .return_type
+            .as_ref()
+            .map(Ty::from_type_expr)
+            .unwrap_or(Ty::Unit);
+        self.fn_return_types.insert(mangled.clone(), ret_ty);
+
+        // Save per-function state before re-entrant lower_fn call.
+        // lower_fn clears these fields, which would corrupt the caller's state.
+        let saved_var_types = self.var_types.clone();
+        let saved_float_vars = self.float_vars.clone();
+        let saved_string_vars = self.string_vars.clone();
+        let saved_mut_vars = self.mut_vars.clone();
+        let saved_generic_var_types = self.generic_var_types.clone();
+        let saved_deferred_exprs = self.deferred_exprs.clone();
+        let saved_return_type = self.current_fn_return_type.clone();
+
+        let func = self.lower_fn(&mono_def);
+        self.functions.push(func);
+
+        // Restore caller's per-function state
+        self.var_types = saved_var_types;
+        self.float_vars = saved_float_vars;
+        self.string_vars = saved_string_vars;
+        self.mut_vars = saved_mut_vars;
+        self.generic_var_types = saved_generic_var_types;
+        self.deferred_exprs = saved_deferred_exprs;
+        self.current_fn_return_type = saved_return_type;
+
+        Some(mangled)
+    }
+
     fn last_temp_name(&self, body: &[Instruction]) -> Option<String> {
         for inst in body.iter().rev() {
             match inst {
@@ -2380,6 +2537,299 @@ impl LowerCtx {
             }
         }
         None
+    }
+}
+
+/// Create a monomorphized copy of a FnDef with type parameters substituted (§8.4).
+/// Replaces all occurrences of type parameter names with their concrete types.
+fn substitute_fn_def(
+    f: &FnDef,
+    subst: &std::collections::HashMap<String, Ty>,
+    mangled_name: &str,
+) -> FnDef {
+    let params = f
+        .params
+        .iter()
+        .map(|p| Param {
+            label: p.label.clone(),
+            name: p.name.clone(),
+            type_annotation: substitute_type_expr(&p.type_annotation, subst),
+            span: p.span,
+        })
+        .collect();
+
+    let return_type = f.return_type.as_ref().map(|rt| substitute_type_expr(rt, subst));
+
+    let body = f
+        .body
+        .iter()
+        .map(|s| substitute_stmt(s, subst))
+        .collect();
+
+    FnDef {
+        name: mangled_name.to_string(),
+        type_params: vec![], // concrete, no longer generic
+        self_param: f.self_param.clone(),
+        params,
+        return_type,
+        body,
+        is_async: f.is_async,
+        is_export: f.is_export,
+        span: f.span,
+    }
+}
+
+/// Substitute type parameter names in a TypeExpr.
+fn substitute_type_expr(
+    te: &TypeExpr,
+    subst: &std::collections::HashMap<String, Ty>,
+) -> TypeExpr {
+    let kind = match &te.kind {
+        TypeExprKind::Named(name) => {
+            if let Some(concrete) = subst.get(name) {
+                ty_to_type_expr_kind(concrete, te.span)
+            } else {
+                TypeExprKind::Named(name.clone())
+            }
+        }
+        TypeExprKind::Generic(name, args) => {
+            let new_args = args.iter().map(|a| substitute_type_expr(a, subst)).collect();
+            TypeExprKind::Generic(name.clone(), new_args)
+        }
+        TypeExprKind::Fn(params, ret) => {
+            let new_params = params.iter().map(|p| substitute_type_expr(p, subst)).collect();
+            let new_ret = Box::new(substitute_type_expr(ret, subst));
+            TypeExprKind::Fn(new_params, new_ret)
+        }
+    };
+    TypeExpr { kind, span: te.span }
+}
+
+/// Convert an internal Ty back to an AST TypeExprKind for substitution.
+/// Uses the provided span for any synthetic TypeExpr nodes needed.
+fn ty_to_type_expr_kind(ty: &Ty, span: Span) -> TypeExprKind {
+    match ty {
+        Ty::Int => TypeExprKind::Named("Int".into()),
+        Ty::Float => TypeExprKind::Named("Float".into()),
+        Ty::Bool => TypeExprKind::Named("Bool".into()),
+        Ty::String => TypeExprKind::Named("String".into()),
+        Ty::Unit => TypeExprKind::Named("Unit".into()),
+        Ty::Never => TypeExprKind::Named("Never".into()),
+        Ty::Rune => TypeExprKind::Named("Rune".into()),
+        Ty::Bytes => TypeExprKind::Named("Bytes".into()),
+        Ty::Named(name) => TypeExprKind::Named(name.clone()),
+        Ty::Generic(name, args) => {
+            let te_args: Vec<TypeExpr> = args
+                .iter()
+                .map(|a| TypeExpr {
+                    kind: ty_to_type_expr_kind(a, span),
+                    span,
+                })
+                .collect();
+            TypeExprKind::Generic(name.clone(), te_args)
+        }
+        _ => TypeExprKind::Named("Unknown".into()),
+    }
+}
+
+/// Substitute type parameters in a statement.
+fn substitute_stmt(
+    stmt: &Stmt,
+    subst: &std::collections::HashMap<String, Ty>,
+) -> Stmt {
+    match stmt {
+        Stmt::Let(s) => Stmt::Let(LetStmt {
+            name: s.name.clone(),
+            type_annotation: s.type_annotation.as_ref().map(|t| substitute_type_expr(t, subst)),
+            value: substitute_expr(&s.value, subst),
+            span: s.span,
+        }),
+        Stmt::Mut(s) => Stmt::Mut(MutStmt {
+            name: s.name.clone(),
+            type_annotation: s.type_annotation.as_ref().map(|t| substitute_type_expr(t, subst)),
+            value: substitute_expr(&s.value, subst),
+            span: s.span,
+        }),
+        Stmt::Return(s) => Stmt::Return(ReturnStmt {
+            value: s.value.as_ref().map(|v| substitute_expr(v, subst)),
+            span: s.span,
+        }),
+        Stmt::Defer(s) => Stmt::Defer(DeferStmt {
+            expr: substitute_expr(&s.expr, subst),
+            span: s.span,
+        }),
+        Stmt::Expr(s) => Stmt::Expr(ExprStmt {
+            expr: substitute_expr(&s.expr, subst),
+            span: s.span,
+        }),
+    }
+}
+
+/// Substitute type parameters in an expression (deep walk).
+fn substitute_expr(
+    expr: &Expr,
+    subst: &std::collections::HashMap<String, Ty>,
+) -> Expr {
+    let kind = match &expr.kind {
+        // Leaves — no substitution needed
+        ExprKind::IntLit(_)
+        | ExprKind::FloatLit(_)
+        | ExprKind::StringLit(_)
+        | ExprKind::BoolLit(_)
+        | ExprKind::UnitLit
+        | ExprKind::Ident(_) => expr.kind.clone(),
+
+        // Recursive variants
+        ExprKind::StringInterp(parts) => {
+            let new_parts = parts
+                .iter()
+                .map(|p| match p {
+                    StringPart::Lit(s) => StringPart::Lit(s.clone()),
+                    StringPart::Expr(e) => StringPart::Expr(substitute_expr(e, subst)),
+                })
+                .collect();
+            ExprKind::StringInterp(new_parts)
+        }
+        ExprKind::ListLit(items) => {
+            ExprKind::ListLit(items.iter().map(|e| substitute_expr(e, subst)).collect())
+        }
+        ExprKind::MapLit(entries) => {
+            let new_entries = entries
+                .iter()
+                .map(|(k, v)| (substitute_expr(k, subst), substitute_expr(v, subst)))
+                .collect();
+            ExprKind::MapLit(new_entries)
+        }
+        ExprKind::FieldAccess(obj, field) => {
+            ExprKind::FieldAccess(Box::new(substitute_expr(obj, subst)), field.clone())
+        }
+        ExprKind::BinaryOp(lhs, op, rhs) => ExprKind::BinaryOp(
+            Box::new(substitute_expr(lhs, subst)),
+            *op,
+            Box::new(substitute_expr(rhs, subst)),
+        ),
+        ExprKind::UnaryOp(op, operand) => {
+            ExprKind::UnaryOp(*op, Box::new(substitute_expr(operand, subst)))
+        }
+        ExprKind::Assign(lhs, rhs) => ExprKind::Assign(
+            Box::new(substitute_expr(lhs, subst)),
+            Box::new(substitute_expr(rhs, subst)),
+        ),
+        ExprKind::Call(callee, args) => ExprKind::Call(
+            Box::new(substitute_expr(callee, subst)),
+            substitute_args(args, subst),
+        ),
+        ExprKind::TurbofishCall(callee, type_args, args) => {
+            let new_type_args = type_args
+                .iter()
+                .map(|t| substitute_type_expr(t, subst))
+                .collect();
+            ExprKind::TurbofishCall(
+                Box::new(substitute_expr(callee, subst)),
+                new_type_args,
+                substitute_args(args, subst),
+            )
+        }
+        ExprKind::Index(obj, idx) => ExprKind::Index(
+            Box::new(substitute_expr(obj, subst)),
+            Box::new(substitute_expr(idx, subst)),
+        ),
+        ExprKind::Propagate(inner) => {
+            ExprKind::Propagate(Box::new(substitute_expr(inner, subst)))
+        }
+        ExprKind::Await(inner) => {
+            ExprKind::Await(Box::new(substitute_expr(inner, subst)))
+        }
+        ExprKind::Spawn(inner) => {
+            ExprKind::Spawn(Box::new(substitute_expr(inner, subst)))
+        }
+        ExprKind::If(if_expr) => {
+            ExprKind::If(Box::new(substitute_if_expr(if_expr, subst)))
+        }
+        ExprKind::Match(m) => {
+            ExprKind::Match(Box::new(substitute_match_expr(m, subst)))
+        }
+        ExprKind::For(f) => ExprKind::For(Box::new(ForExpr {
+            binding: f.binding.clone(),
+            iter: substitute_expr(&f.iter, subst),
+            body: f.body.iter().map(|s| substitute_stmt(s, subst)).collect(),
+            span: f.span,
+        })),
+        ExprKind::While(w) => ExprKind::While(Box::new(WhileExpr {
+            condition: substitute_expr(&w.condition, subst),
+            body: w.body.iter().map(|s| substitute_stmt(s, subst)).collect(),
+            span: w.span,
+        })),
+        ExprKind::Lambda(l) => {
+            let new_params = l
+                .params
+                .iter()
+                .map(|p| Param {
+                    label: p.label.clone(),
+                    name: p.name.clone(),
+                    type_annotation: substitute_type_expr(&p.type_annotation, subst),
+                    span: p.span,
+                })
+                .collect();
+            ExprKind::Lambda(Box::new(LambdaExpr {
+                params: new_params,
+                return_type: l.return_type.as_ref().map(|rt| substitute_type_expr(rt, subst)),
+                body: l.body.iter().map(|s| substitute_stmt(s, subst)).collect(),
+                span: l.span,
+            }))
+        }
+    };
+    Expr { kind, span: expr.span }
+}
+
+fn substitute_args(
+    args: &[Arg],
+    subst: &std::collections::HashMap<String, Ty>,
+) -> Vec<Arg> {
+    args.iter()
+        .map(|a| Arg {
+            label: a.label.clone(),
+            value: substitute_expr(&a.value, subst),
+            span: a.span,
+        })
+        .collect()
+}
+
+fn substitute_if_expr(
+    ie: &IfExpr,
+    subst: &std::collections::HashMap<String, Ty>,
+) -> IfExpr {
+    IfExpr {
+        condition: substitute_expr(&ie.condition, subst),
+        then_body: ie.then_body.iter().map(|s| substitute_stmt(s, subst)).collect(),
+        else_body: ie.else_body.as_ref().map(|eb| match eb {
+            ElseBranch::Else(stmts) => {
+                ElseBranch::Else(stmts.iter().map(|s| substitute_stmt(s, subst)).collect())
+            }
+            ElseBranch::ElseIf(inner) => {
+                ElseBranch::ElseIf(Box::new(substitute_if_expr(inner, subst)))
+            }
+        }),
+        span: ie.span,
+    }
+}
+
+fn substitute_match_expr(
+    m: &MatchExpr,
+    subst: &std::collections::HashMap<String, Ty>,
+) -> MatchExpr {
+    MatchExpr {
+        subject: substitute_expr(&m.subject, subst),
+        arms: m
+            .arms
+            .iter()
+            .map(|arm| MatchArm {
+                pattern: arm.pattern.clone(), // patterns don't contain type expressions
+                body: arm.body.iter().map(|s| substitute_stmt(s, subst)).collect(),
+                span: arm.span,
+            })
+            .collect(),
+        span: m.span,
     }
 }
 
