@@ -40,7 +40,11 @@ pub fn lower(file: &SourceFile) -> Program {
                 }
             }
             Item::ValueDef(v) => {
-                let fields: Vec<String> = v.fields.iter().map(|f| f.name.clone()).collect();
+                let fields: Vec<(String, Ty)> = v
+                    .fields
+                    .iter()
+                    .map(|f| (f.name.clone(), Ty::from_type_expr(&f.type_annotation)))
+                    .collect();
                 ctx.value_fields.insert(v.name.clone(), fields);
             }
             _ => {}
@@ -77,9 +81,19 @@ pub fn lower(file: &SourceFile) -> Program {
         });
     }
 
+    let struct_defs = ctx
+        .value_fields
+        .iter()
+        .map(|(name, fields)| crate::ir::StructDef {
+            name: name.clone(),
+            fields: fields.clone(),
+        })
+        .collect();
+
     Program {
         functions: ctx.functions,
         string_constants: ctx.string_constants,
+        struct_defs,
     }
 }
 
@@ -90,8 +104,10 @@ struct LowerCtx {
     label_counter: u32,
     /// ADT variant tag map: (type_name, variant_name) -> tag index
     variant_tags: std::collections::HashMap<(String, String), i64>,
-    /// Value type field info: type_name -> list of field names
-    value_fields: std::collections::HashMap<String, Vec<String>>,
+    /// Value type field info: type_name -> list of (field_name, field_type)
+    value_fields: std::collections::HashMap<String, Vec<(String, Ty)>>,
+    /// Tracks variables/temps known to hold Float values (for correct binop selection)
+    float_vars: std::collections::HashSet<String>,
 }
 
 impl LowerCtx {
@@ -103,6 +119,7 @@ impl LowerCtx {
             label_counter: 0,
             variant_tags: std::collections::HashMap::new(),
             value_fields: std::collections::HashMap::new(),
+            float_vars: std::collections::HashSet::new(),
         }
     }
 
@@ -129,6 +146,9 @@ impl LowerCtx {
     }
 
     fn lower_fn(&mut self, f: &FnDef) -> Function {
+        // Clear per-function state
+        self.float_vars.clear();
+
         let params: Vec<(String, Ty)> = f
             .params
             .iter()
@@ -170,14 +190,22 @@ impl LowerCtx {
     fn lower_stmt(&mut self, stmt: &Stmt, body: &mut Vec<Instruction>) {
         match stmt {
             Stmt::Let(s) => {
+                let is_float = self.is_float_expr(&s.value);
                 let val = self.lower_expr(&s.value, body);
+                if is_float {
+                    self.float_vars.insert(s.name.clone());
+                }
                 body.push(Instruction::Copy {
                     dest: s.name.clone(),
                     source: val,
                 });
             }
             Stmt::Mut(s) => {
+                let is_float = self.is_float_expr(&s.value);
                 let val = self.lower_expr(&s.value, body);
+                if is_float {
+                    self.float_vars.insert(s.name.clone());
+                }
                 body.push(Instruction::Copy {
                     dest: s.name.clone(),
                     source: val,
@@ -251,7 +279,7 @@ impl LowerCtx {
                 let l = self.lower_expr(lhs, body);
                 let r = self.lower_expr(rhs, body);
                 let dest = self.fresh_temp();
-                let is_float = is_float_expr(lhs) || is_float_expr(rhs);
+                let is_float = self.is_float_expr(lhs) || self.is_float_expr(rhs);
                 let mir_op = ast_binop_to_mir(*op, is_float);
                 body.push(Instruction::BinOp {
                     dest: dest.clone(),
@@ -283,37 +311,63 @@ impl LowerCtx {
             }
 
             ExprKind::Call(callee, args) => {
-                // Check for value type constructor: TrafficLight(color: val)
+                // Check for value type constructor: Point(x: 3.0, y: 4.0)
                 if let ExprKind::Ident(name) = &callee.kind
                     && self.value_fields.contains_key(name)
                 {
-                    let fields = &self.value_fields[name];
-                    if fields.len() == 1 {
-                        // Single-field value: represented as the field's type directly
-                        if let Some(first_arg) = args.first() {
-                            return self.lower_expr(&first_arg.value, body);
+                    let field_defs = self.value_fields[name].clone();
+                    // Map labeled args to declaration order.
+                    // If args have labels, match by label name.
+                    // If no labels, assume positional order.
+                    let mut field_operands = Vec::with_capacity(field_defs.len());
+                    let mut used_args: std::collections::HashSet<usize> = std::collections::HashSet::new();
+                    for (fname, _fty) in &field_defs {
+                        // First try label match
+                        let labeled = args.iter().enumerate().find(|(idx, a)| {
+                            !used_args.contains(idx) && a.label.as_deref() == Some(fname)
+                        });
+                        let resolved = if let Some((idx, a)) = labeled {
+                            used_args.insert(idx);
+                            Some(a)
+                        } else {
+                            // Positional fallback: next unused arg
+                            let positional = args.iter().enumerate().find(|(idx, _)| {
+                                !used_args.contains(idx)
+                            });
+                            if let Some((idx, a)) = positional {
+                                used_args.insert(idx);
+                                Some(a)
+                            } else {
+                                None
+                            }
+                        };
+                        if let Some(a) = resolved {
+                            let val = self.lower_expr(&a.value, body);
+                            field_operands.push(Operand::Var(val));
+                        } else {
+                            // Missing field — emit unit as placeholder
+                            field_operands.push(Operand::Const(Constant::Unit));
                         }
                     }
-                    // Multi-field value types or zero args: not yet supported.
-                    // TODO: Implement LLVM struct representation for multi-field values.
-                    // For now, fall through to regular call lowering.
+                    let dest = self.fresh_temp();
+                    body.push(Instruction::StructInit {
+                        dest: dest.clone(),
+                        type_name: name.clone(),
+                        fields: field_operands,
+                    });
+                    return dest;
                 }
 
-                // Check for .copy() on known value types only (§8.6)
+                // Check for .copy() on value types (§8.6)
                 if let ExprKind::FieldAccess(obj, method) = &callee.kind
                     && method == "copy"
                 {
-                    // Verify receiver is a value type by checking if it's a known
-                    // value type name or a binding. For simplicity, check if any
-                    // value type exists (copy() is auto-provided for value types only).
-                    let is_value_type = !self.value_fields.is_empty();
-                    if is_value_type {
-                        // Single-field value.copy(field: newval) → return new value
-                        if let Some(first_arg) = args.first() {
-                            return self.lower_expr(&first_arg.value, body);
-                        }
-                        // copy() with no args → return original
-                        return self.lower_expr(obj, body);
+                    // Lower the receiver and look up its value type
+                    if let Some((type_name, field_defs)) = self.resolve_value_type(obj) {
+                        let obj_val = self.lower_expr(obj, body);
+                        return self.lower_copy(
+                            &obj_val, &type_name, &field_defs, args, body,
+                        );
                     }
                     // Not a value type — fall through to regular method call
                 }
@@ -485,20 +539,22 @@ impl LowerCtx {
 
                 let obj_val = self.lower_expr(obj, body);
 
-                // Single-field value type field access: just return the object value
-                // (single-field values are represented as their field's type directly)
-                if let ExprKind::Ident(_obj_name) = &obj.kind {
-                    // Check if any value type has this field as its single field
-                    for (type_name, fields) in &self.value_fields {
-                        if fields.len() == 1 && fields[0] == *field {
-                            let _ = type_name; // matches
-                            return obj_val;
-                        }
+                // Value type field access: emit FieldGet instruction
+                if let Some((type_name, field_defs)) = self.resolve_value_type(obj) {
+                    if let Some(idx) = field_defs.iter().position(|(n, _)| n == field) {
+                        let dest = self.fresh_temp();
+                        body.push(Instruction::FieldGet {
+                            dest: dest.clone(),
+                            obj: Operand::Var(obj_val),
+                            type_name,
+                            field_index: idx as u32,
+                        });
+                        return dest;
                     }
                 }
 
-                // General field access (data types, multi-field values)
-                // TODO: emit proper GEP instruction for struct field access
+                // General field access (data types, methods)
+                // TODO: emit proper GEP instruction for data type struct field access
                 let dest = self.fresh_temp();
                 body.push(Instruction::Copy {
                     dest: dest.clone(),
@@ -791,6 +847,111 @@ impl LowerCtx {
         result
     }
 
+    /// Check if an expression produces a Float value.
+    /// Used to select between Int and Float MIR binary operations.
+    fn is_float_expr(&self, expr: &Expr) -> bool {
+        match &expr.kind {
+            ExprKind::FloatLit(_) => true,
+            ExprKind::Ident(name) => self.float_vars.contains(name),
+            ExprKind::FieldAccess(obj, field) => {
+                // Check if field access on a value type yields Float
+                if let Some((_type_name, field_defs)) = self.resolve_value_type(obj) {
+                    if let Some((_, ty)) = field_defs.iter().find(|(n, _)| n == field) {
+                        return *ty == Ty::Float;
+                    }
+                }
+                false
+            }
+            ExprKind::BinaryOp(lhs, _op, rhs) => {
+                self.is_float_expr(lhs) || self.is_float_expr(rhs)
+            }
+            ExprKind::UnaryOp(_, inner) => self.is_float_expr(inner),
+            _ => false,
+        }
+    }
+
+    /// Resolve the value type of an expression, if it's a known value type.
+    /// Returns (type_name, field_defs) if the expression is a value type binding.
+    fn resolve_value_type(&self, expr: &Expr) -> Option<(String, Vec<(String, Ty)>)> {
+        // For identifiers, check if any value type has matching fields.
+        // In the absence of full type tracking, we check all value types.
+        // TODO: Thread proper type information from the type checker.
+        match &expr.kind {
+            ExprKind::Ident(_name) => {
+                // Heuristic: if there's exactly one value type with >0 fields, use it.
+                // With multiple value types, we can't disambiguate without type info.
+                // For now, return the first multi-field type, or the only type available.
+                let value_types: Vec<_> = self.value_fields.iter().collect();
+                if value_types.len() == 1 {
+                    let (tn, fields) = value_types[0];
+                    return Some((tn.clone(), fields.clone()));
+                }
+                // Multiple value types: try to match by checking downstream usage.
+                // For now, return None and let the caller handle it.
+                // TODO: Proper type tracking would solve this.
+                if value_types.len() > 1 {
+                    // Return the first one as a best-effort heuristic
+                    // This is known imprecise — see known limitations in CLAUDE.md
+                    let (tn, fields) = value_types[0];
+                    return Some((tn.clone(), fields.clone()));
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// Lower a .copy() call on a value type.
+    /// Extracts all fields from the original, overrides specified fields, builds new struct.
+    fn lower_copy(
+        &mut self,
+        obj_val: &str,
+        type_name: &str,
+        field_defs: &[(String, Ty)],
+        args: &[Arg],
+        body: &mut Vec<Instruction>,
+    ) -> String {
+        // If no args, return the original (value types are immutable, copy is identity)
+        if args.is_empty() {
+            return obj_val.to_string();
+        }
+
+        // Build override map: field_name → lowered operand
+        let mut overrides: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        for arg in args {
+            if let Some(label) = &arg.label {
+                let val = self.lower_expr(&arg.value, body);
+                overrides.insert(label.clone(), val);
+            }
+        }
+
+        // For each field: use override if present, otherwise extract from original
+        let mut field_operands = Vec::with_capacity(field_defs.len());
+        for (i, (fname, _fty)) in field_defs.iter().enumerate() {
+            if let Some(override_val) = overrides.get(fname) {
+                field_operands.push(Operand::Var(override_val.clone()));
+            } else {
+                // Extract original field value
+                let extracted = self.fresh_temp();
+                body.push(Instruction::FieldGet {
+                    dest: extracted.clone(),
+                    obj: Operand::Var(obj_val.to_string()),
+                    type_name: type_name.to_string(),
+                    field_index: i as u32,
+                });
+                field_operands.push(Operand::Var(extracted));
+            }
+        }
+
+        let dest = self.fresh_temp();
+        body.push(Instruction::StructInit {
+            dest: dest.clone(),
+            type_name: type_name.to_string(),
+            fields: field_operands,
+        });
+        dest
+    }
+
     /// Find the last temp-producing instruction in body[start..].
     fn last_temp_in_range(&self, body: &[Instruction], start: usize) -> Option<String> {
         for inst in body[start..].iter().rev() {
@@ -804,7 +965,9 @@ impl LowerCtx {
                 | Instruction::Not { dest, .. }
                 | Instruction::Copy { dest, .. }
                 | Instruction::Load { dest, .. }
-                | Instruction::Phi { dest, .. } => return Some(dest.clone()),
+                | Instruction::Phi { dest, .. }
+                | Instruction::StructInit { dest, .. }
+                | Instruction::FieldGet { dest, .. } => return Some(dest.clone()),
                 _ => continue,
             }
         }
@@ -823,17 +986,14 @@ impl LowerCtx {
                 | Instruction::Not { dest, .. }
                 | Instruction::Copy { dest, .. }
                 | Instruction::Load { dest, .. }
-                | Instruction::Phi { dest, .. } => return Some(dest.clone()),
+                | Instruction::Phi { dest, .. }
+                | Instruction::StructInit { dest, .. }
+                | Instruction::FieldGet { dest, .. } => return Some(dest.clone()),
                 _ => continue,
             }
         }
         None
     }
-}
-
-/// Check if an expression is a float literal (for MIR op selection).
-fn is_float_expr(expr: &Expr) -> bool {
-    matches!(expr.kind, ExprKind::FloatLit(_))
 }
 
 /// Convert AST binary op to MIR op, selecting Int or Float variant.

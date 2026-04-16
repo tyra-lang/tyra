@@ -11,14 +11,54 @@ use std::fmt::Write;
 use tyra_mir::*;
 use tyra_types::Ty;
 
+/// Struct type metadata for codegen.
+struct StructInfo {
+    /// LLVM type name: "%struct.Point"
+    llvm_name: String,
+    /// Field types in declaration order
+    field_types: Vec<Ty>,
+}
+
 /// Generate LLVM IR text from a MIR program.
 pub fn emit_llvm_ir(program: &Program) -> String {
     let mut out = String::new();
+
+    // Build struct info map
+    let struct_map: std::collections::HashMap<String, StructInfo> = program
+        .struct_defs
+        .iter()
+        .map(|sd| {
+            let info = StructInfo {
+                llvm_name: format!("%struct.{}", sd.name),
+                field_types: sd.fields.iter().map(|(_, ty)| ty.clone()).collect(),
+            };
+            (sd.name.clone(), info)
+        })
+        .collect();
 
     // Module header
     writeln!(out, "; Tyra compiler output").unwrap();
     writeln!(out, "target triple = \"{}\"", target_triple()).unwrap();
     writeln!(out).unwrap();
+
+    // Struct type declarations
+    for sd in &program.struct_defs {
+        let field_tys: Vec<String> = sd
+            .fields
+            .iter()
+            .map(|(_, ty)| llvm_type_str(ty, &struct_map))
+            .collect();
+        writeln!(
+            out,
+            "%struct.{} = type {{ {} }}",
+            sd.name,
+            field_tys.join(", ")
+        )
+        .unwrap();
+    }
+    if !program.struct_defs.is_empty() {
+        writeln!(out).unwrap();
+    }
 
     // String constants
     for (idx, s) in program.string_constants.iter().enumerate() {
@@ -51,6 +91,16 @@ pub fn emit_llvm_ir(program: &Program) -> String {
         "@.fmt.int_ln = private unnamed_addr constant [5 x i8] c\"%ld\\0A\\00\""
     )
     .unwrap();
+    writeln!(
+        out,
+        "@.fmt.float = private unnamed_addr constant [3 x i8] c\"%g\\00\""
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "@.fmt.float_ln = private unnamed_addr constant [4 x i8] c\"%g\\0A\\00\""
+    )
+    .unwrap();
     writeln!(out).unwrap();
 
     // External declarations
@@ -59,36 +109,161 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare i32 @printf(ptr, ...)").unwrap();
     writeln!(out).unwrap();
 
+    // Build function signature map for cross-function type resolution
+    let fn_sigs: std::collections::HashMap<String, FnSig> = program
+        .functions
+        .iter()
+        .map(|f| {
+            let sig = FnSig {
+                param_types: f.params.iter().map(|(_, ty)| ty.clone()).collect(),
+                return_type: f.return_type.clone(),
+            };
+            (f.name.clone(), sig)
+        })
+        .collect();
+
     // Functions
     for func in &program.functions {
-        emit_function(&mut out, func, &program.string_constants);
+        emit_function(
+            &mut out,
+            func,
+            &program.string_constants,
+            &struct_map,
+            &fn_sigs,
+        );
         writeln!(out).unwrap();
     }
 
     out
 }
 
-fn emit_function(out: &mut String, func: &Function, strings: &[String]) {
-    // Pre-scan: collect temps that hold string values (from StringRef constants)
-    let string_temps: std::collections::HashSet<String> = func
-        .body
-        .iter()
-        .filter_map(|inst| match inst {
-            Instruction::Const {
-                dest,
-                value: Constant::StringRef(_),
-            } => Some(dest.clone()),
-            _ => None,
-        })
-        .collect();
+/// Function signature for cross-function type resolution.
+struct FnSig {
+    param_types: Vec<Ty>,
+    return_type: Ty,
+}
 
-    let ret_ty = llvm_type(&func.return_type, func.is_main);
+fn emit_function(
+    out: &mut String,
+    func: &Function,
+    strings: &[String],
+    struct_map: &std::collections::HashMap<String, StructInfo>,
+    fn_sigs: &std::collections::HashMap<String, FnSig>,
+) {
+    // Pre-scan: collect temps that hold string values
+    let mut string_temps: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // Pre-scan: collect temps that hold float values
+    let mut float_temps: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for inst in &func.body {
+        match inst {
+            Instruction::Const { dest, value } => match value {
+                Constant::StringRef(_) => {
+                    string_temps.insert(dest.clone());
+                }
+                Constant::Float(_) => {
+                    float_temps.insert(dest.clone());
+                }
+                _ => {}
+            },
+            Instruction::BinOp { dest, op, .. } => {
+                if matches!(
+                    op,
+                    MirBinOp::AddFloat
+                        | MirBinOp::SubFloat
+                        | MirBinOp::MulFloat
+                        | MirBinOp::DivFloat
+                ) {
+                    float_temps.insert(dest.clone());
+                }
+            }
+            Instruction::FieldGet {
+                dest,
+                type_name,
+                field_index,
+                ..
+            } => {
+                if let Some(info) = struct_map.get(type_name.as_str()) {
+                    if let Some(field_ty) = info.field_types.get(*field_index as usize) {
+                        if *field_ty == Ty::Float {
+                            float_temps.insert(dest.clone());
+                        } else if *field_ty == Ty::String {
+                            string_temps.insert(dest.clone());
+                        }
+                    }
+                }
+            }
+            Instruction::Call {
+                dest: Some(dest),
+                func: fname,
+                ..
+            } => {
+                // Track return type from function signatures
+                if let Some(sig) = fn_sigs.get(fname.as_str()) {
+                    match &sig.return_type {
+                        Ty::String => {
+                            string_temps.insert(dest.clone());
+                        }
+                        Ty::Float => {
+                            float_temps.insert(dest.clone());
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Instruction::Copy { dest, source } => {
+                if float_temps.contains(source.as_str()) {
+                    float_temps.insert(dest.clone());
+                }
+                if string_temps.contains(source.as_str()) {
+                    string_temps.insert(dest.clone());
+                }
+            }
+            Instruction::Load { dest, source } => {
+                // Propagate string/float type from alloca
+                // (will be resolved after alloca_llvm_types is computed)
+                let _ = (dest, source);
+            }
+            _ => {}
+        }
+    }
+
+    // Pre-scan: track struct-typed temps and alloca types
+    let (struct_temps, alloca_types) = pre_scan_struct_types(func, struct_map, fn_sigs);
+
+    // Pre-scan: determine LLVM types for alloca slots (match results, etc.)
+    let alloca_llvm_types = pre_scan_alloca_llvm_types(
+        func,
+        &string_temps,
+        &float_temps,
+        &struct_temps,
+        struct_map,
+    );
+
+    // Propagate alloca types to Load destinations
+    for inst in &func.body {
+        if let Instruction::Load { dest, source } = inst {
+            if let Some(ty) = alloca_llvm_types.get(source.as_str()) {
+                match ty.as_str() {
+                    "ptr" => {
+                        string_temps.insert(dest.clone());
+                    }
+                    "double" => {
+                        float_temps.insert(dest.clone());
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    let ret_ty = llvm_type_str(&func.return_type, struct_map);
 
     // Function signature
     let params: Vec<String> = func
         .params
         .iter()
-        .map(|(name, ty)| format!("{} %{name}", llvm_type(ty, false)))
+        .map(|(name, ty)| format!("{} %{name}", llvm_type_str(ty, struct_map)))
         .collect();
 
     if func.is_main {
@@ -107,17 +282,160 @@ fn emit_function(out: &mut String, func: &Function, strings: &[String]) {
 
     // Allocate parameter copies for mutation support
     for (name, ty) in &func.params {
-        let lt = llvm_type(ty, false);
+        let lt = llvm_type_str(ty, struct_map);
         writeln!(out, "  %{name}.addr = alloca {lt}").unwrap();
         writeln!(out, "  store {lt} %{name}, ptr %{name}.addr").unwrap();
     }
 
+    let ctx = EmitCtx {
+        struct_map,
+        fn_sigs,
+        string_temps: &string_temps,
+        float_temps: &float_temps,
+        struct_temps: &struct_temps,
+        alloca_llvm_types: &alloca_llvm_types,
+    };
+    let _ = &alloca_types; // Used by alloca_llvm_types computation
+
     // Emit instructions
     for inst in &func.body {
-        emit_instruction(out, inst, func, strings, &string_temps);
+        emit_instruction(out, inst, func, strings, &ctx);
     }
 
     writeln!(out, "}}").unwrap();
+}
+
+/// Pre-scan function body to track which temps hold struct-typed values.
+fn pre_scan_struct_types(
+    func: &Function,
+    struct_map: &std::collections::HashMap<String, StructInfo>,
+    fn_sigs: &std::collections::HashMap<String, FnSig>,
+) -> (
+    std::collections::HashMap<String, String>,
+    std::collections::HashMap<String, String>,
+) {
+    let mut struct_temps: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    let mut alloca_types: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+
+    // Function params that are struct-typed
+    for (name, ty) in &func.params {
+        if let Ty::Named(type_name) = ty {
+            if struct_map.contains_key(type_name.as_str()) {
+                struct_temps.insert(name.clone(), type_name.clone());
+            }
+        }
+    }
+
+    // Scan instructions
+    for inst in &func.body {
+        match inst {
+            Instruction::StructInit {
+                dest, type_name, ..
+            } => {
+                struct_temps.insert(dest.clone(), type_name.clone());
+            }
+            Instruction::FieldGet {
+                dest,
+                type_name,
+                field_index,
+                ..
+            } => {
+                // Check if the extracted field is itself a struct type
+                if let Some(info) = struct_map.get(type_name.as_str()) {
+                    if let Some(field_ty) = info.field_types.get(*field_index as usize) {
+                        if let Ty::Named(ft_name) = field_ty {
+                            if struct_map.contains_key(ft_name.as_str()) {
+                                struct_temps.insert(dest.clone(), ft_name.clone());
+                            }
+                        }
+                    }
+                }
+            }
+            Instruction::Call {
+                dest: Some(dest),
+                func: fname,
+                ..
+            } => {
+                // Check if the called function returns a struct type
+                if let Some(sig) = fn_sigs.get(fname.as_str()) {
+                    if let Ty::Named(type_name) = &sig.return_type {
+                        if struct_map.contains_key(type_name.as_str()) {
+                            struct_temps.insert(dest.clone(), type_name.clone());
+                        }
+                    }
+                }
+            }
+            Instruction::Copy { dest, source } => {
+                if let Some(stype) = struct_temps.get(source).cloned() {
+                    struct_temps.insert(dest.clone(), stype);
+                }
+            }
+            Instruction::Store { dest, value } => {
+                if let Operand::Var(name) = value {
+                    if let Some(stype) = struct_temps.get(name).cloned() {
+                        alloca_types.insert(dest.clone(), stype);
+                    }
+                }
+            }
+            Instruction::Load { dest, source } => {
+                if let Some(stype) = alloca_types.get(source).cloned() {
+                    struct_temps.insert(dest.clone(), stype);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    (struct_temps, alloca_types)
+}
+
+/// Pre-scan function body to determine the LLVM type for each alloca slot.
+/// This handles match result allocas that may store strings, floats, or structs.
+fn pre_scan_alloca_llvm_types(
+    func: &Function,
+    string_temps: &std::collections::HashSet<String>,
+    float_temps: &std::collections::HashSet<String>,
+    struct_temps: &std::collections::HashMap<String, String>,
+    struct_map: &std::collections::HashMap<String, StructInfo>,
+) -> std::collections::HashMap<String, String> {
+    let mut alloca_llvm_types: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+
+    for inst in &func.body {
+        if let Instruction::Store { dest, value } = inst {
+            if alloca_llvm_types.contains_key(dest) {
+                continue; // First store determines type
+            }
+            if let Operand::Var(name) = value {
+                if string_temps.contains(name) {
+                    alloca_llvm_types.insert(dest.clone(), "ptr".into());
+                } else if float_temps.contains(name) {
+                    alloca_llvm_types.insert(dest.clone(), "double".into());
+                } else if let Some(stype) = struct_temps.get(name.as_str()) {
+                    alloca_llvm_types.insert(
+                        dest.clone(),
+                        struct_map[stype.as_str()].llvm_name.clone(),
+                    );
+                }
+                // Otherwise default to i64 (handled in emit)
+            }
+        }
+    }
+
+    alloca_llvm_types
+}
+
+/// Context passed to instruction emitters.
+struct EmitCtx<'a> {
+    struct_map: &'a std::collections::HashMap<String, StructInfo>,
+    fn_sigs: &'a std::collections::HashMap<String, FnSig>,
+    string_temps: &'a std::collections::HashSet<String>,
+    float_temps: &'a std::collections::HashSet<String>,
+    struct_temps: &'a std::collections::HashMap<String, String>,
+    /// Resolved LLVM type for alloca slots (from Store analysis).
+    alloca_llvm_types: &'a std::collections::HashMap<String, String>,
 }
 
 fn emit_instruction(
@@ -125,7 +443,7 @@ fn emit_instruction(
     inst: &Instruction,
     func: &Function,
     strings: &[String],
-    string_temps: &std::collections::HashSet<String>,
+    ctx: &EmitCtx,
 ) {
     match inst {
         Instruction::Const { dest, value } => match value {
@@ -133,7 +451,8 @@ fn emit_instruction(
                 writeln!(out, "  %{dest} = add i64 {n}, 0").unwrap();
             }
             Constant::Float(f) => {
-                writeln!(out, "  %{dest} = fadd double {f:e}, 0.0").unwrap();
+                let lit = llvm_float_literal(*f);
+                writeln!(out, "  %{dest} = fadd double {lit}, 0.0").unwrap();
             }
             Constant::Bool(b) => {
                 let val = if *b { 1 } else { 0 };
@@ -162,15 +481,23 @@ fn emit_instruction(
             match fname.as_str() {
                 "print" | "eprint" | "println" | "eprintln" => {
                     let is_println = fname == "println" || fname == "eprintln";
-                    emit_print_call(out, dest.as_deref(), args, func, is_println, string_temps);
+                    emit_print_call(out, dest.as_deref(), args, func, is_println, ctx);
                 }
                 _ => {
-                    // User-defined function call
-                    let user_args = emit_call_args(args, func, strings);
-                    if let Some(d) = dest {
-                        writeln!(out, "  %{d} = call i64 @{fname}({user_args})").unwrap();
+                    // User-defined function call — look up signature for types
+                    let ret_ty = if let Some(sig) = ctx.fn_sigs.get(fname.as_str()) {
+                        llvm_type_str(&sig.return_type, ctx.struct_map)
                     } else {
-                        writeln!(out, "  call i64 @{fname}({user_args})").unwrap();
+                        "i64".into()
+                    };
+                    let user_args = emit_call_args_typed(args, fname, func, ctx);
+                    if ret_ty == "void" {
+                        writeln!(out, "  call void @{fname}({user_args})").unwrap();
+                    } else if let Some(d) = dest {
+                        writeln!(out, "  %{d} = call {ret_ty} @{fname}({user_args})")
+                            .unwrap();
+                    } else {
+                        writeln!(out, "  call {ret_ty} @{fname}({user_args})").unwrap();
                     }
                 }
             }
@@ -216,8 +543,25 @@ fn emit_instruction(
 
         Instruction::Copy { dest, source } => {
             if is_param(source, func) {
-                let lt = "i64"; // simplified: all params as i64 for now
+                let lt = param_llvm_type(source, func, ctx.struct_map);
                 writeln!(out, "  %{dest} = load {lt}, ptr %{source}.addr").unwrap();
+            } else if ctx.struct_temps.contains_key(source.as_str()) {
+                // Struct SSA copy: use alloca+store+load to create a new SSA name
+                let stype = &ctx.struct_temps[source.as_str()];
+                let llvm_ty = &ctx.struct_map[stype.as_str()].llvm_name;
+                writeln!(out, "  %{dest}.copy.addr = alloca {llvm_ty}").unwrap();
+                writeln!(out, "  store {llvm_ty} %{source}, ptr %{dest}.copy.addr")
+                    .unwrap();
+                writeln!(out, "  %{dest} = load {llvm_ty}, ptr %{dest}.copy.addr")
+                    .unwrap();
+            } else if ctx.string_temps.contains(source.as_str()) {
+                // String (ptr) SSA copy via inttoptr/ptrtoint round-trip
+                writeln!(out, "  %{dest}.ptr.int = ptrtoint ptr %{source} to i64")
+                    .unwrap();
+                writeln!(out, "  %{dest} = inttoptr i64 %{dest}.ptr.int to ptr")
+                    .unwrap();
+            } else if ctx.float_temps.contains(source.as_str()) {
+                writeln!(out, "  %{dest} = fadd double %{source}, 0.0").unwrap();
             } else {
                 // SSA alias: create a new SSA value identical to the source
                 writeln!(out, "  %{dest} = add i64 %{source}, 0").unwrap();
@@ -230,7 +574,7 @@ fn emit_instruction(
             } else {
                 match value {
                     Some(v) => {
-                        let ret_ty = llvm_type(&func.return_type, false);
+                        let ret_ty = llvm_type_str(&func.return_type, ctx.struct_map);
                         let val = operand_ref(v, func);
                         writeln!(out, "  ret {ret_ty} {val}").unwrap();
                     }
@@ -271,29 +615,92 @@ fn emit_instruction(
         }
 
         Instruction::Alloca { dest } => {
-            writeln!(out, "  %{dest} = alloca i64").unwrap();
+            let llvm_ty = ctx
+                .alloca_llvm_types
+                .get(dest.as_str())
+                .map(String::as_str)
+                .unwrap_or("i64");
+            writeln!(out, "  %{dest} = alloca {llvm_ty}").unwrap();
         }
 
         Instruction::Store { dest, value } => {
             let val = operand_ref(value, func);
-            writeln!(out, "  store i64 {val}, ptr %{dest}").unwrap();
+            let llvm_ty = ctx
+                .alloca_llvm_types
+                .get(dest.as_str())
+                .map(String::as_str)
+                .unwrap_or("i64");
+            writeln!(out, "  store {llvm_ty} {val}, ptr %{dest}").unwrap();
         }
 
         Instruction::Load { dest, source } => {
-            writeln!(out, "  %{dest} = load i64, ptr %{source}").unwrap();
+            let llvm_ty = ctx
+                .alloca_llvm_types
+                .get(source.as_str())
+                .map(String::as_str)
+                .unwrap_or("i64");
+            writeln!(out, "  %{dest} = load {llvm_ty}, ptr %{source}").unwrap();
+        }
+
+        Instruction::StructInit {
+            dest,
+            type_name,
+            fields,
+        } => {
+            let info = &ctx.struct_map[type_name.as_str()];
+            let llvm_ty = &info.llvm_name;
+            if fields.is_empty() {
+                // Zero-field struct: just produce undef
+                writeln!(out, "  ; %{dest} = {llvm_ty} undef (zero-field struct)")
+                    .unwrap();
+            } else {
+                // Build struct value via insertvalue chain starting from undef
+                let mut current = "undef".to_string();
+                for (i, field_op) in fields.iter().enumerate() {
+                    let val = operand_ref(field_op, func);
+                    let field_ty = llvm_type_str(&info.field_types[i], ctx.struct_map);
+                    let step_dest = if i + 1 == fields.len() {
+                        dest.clone()
+                    } else {
+                        format!("{dest}.s{i}")
+                    };
+                    writeln!(
+                        out,
+                        "  %{step_dest} = insertvalue {llvm_ty} {current}, {field_ty} {val}, {i}"
+                    )
+                    .unwrap();
+                    current = format!("%{step_dest}");
+                }
+            }
+        }
+
+        Instruction::FieldGet {
+            dest,
+            obj,
+            type_name,
+            field_index,
+        } => {
+            let info = &ctx.struct_map[type_name.as_str()];
+            let llvm_ty = &info.llvm_name;
+            let val = operand_ref(obj, func);
+            writeln!(
+                out,
+                "  %{dest} = extractvalue {llvm_ty} {val}, {field_index}"
+            )
+            .unwrap();
         }
     }
 }
 
 /// Emit a print/println call, auto-detecting argument type.
-/// String args use %s format, Int args use %ld format.
+/// String args use %s format, Int args use %ld format, Float args use %g format.
 fn emit_print_call(
     out: &mut String,
     dest: Option<&str>,
     args: &[Operand],
     func: &Function,
     is_println: bool,
-    string_temps: &std::collections::HashSet<String>,
+    ctx: &EmitCtx,
 ) {
     if args.is_empty() {
         if is_println {
@@ -310,15 +717,18 @@ fn emit_print_call(
     let arg = &args[0];
     let val = operand_ref(arg, func);
 
-    // Detect string vs integer using pre-scanned string_temps set
+    // Detect type using pre-scanned temp sets
     let is_string = match arg {
         Operand::Const(Constant::StringRef(_)) => true,
-        Operand::Var(name) => string_temps.contains(name),
+        Operand::Var(name) => ctx.string_temps.contains(name),
+        _ => false,
+    };
+    let is_float = match arg {
+        Operand::Const(Constant::Float(_)) => true,
+        Operand::Var(name) => ctx.float_temps.contains(name),
         _ => false,
     };
 
-    // For println with string, use puts (adds newline); for print with string, use printf %s
-    // For integers, always use printf with %ld or %ld\n
     if is_string && is_println {
         let call = format!("call i32 @puts(ptr {val})");
         if let Some(d) = dest {
@@ -333,8 +743,20 @@ fn emit_print_call(
         } else {
             writeln!(out, "  {call}").unwrap();
         }
+    } else if is_float {
+        let fmt = if is_println {
+            "@.fmt.float_ln"
+        } else {
+            "@.fmt.float"
+        };
+        let call = format!("call i32 (ptr, ...) @printf(ptr {fmt}, double {val})");
+        if let Some(d) = dest {
+            writeln!(out, "  %{d} = {call}").unwrap();
+        } else {
+            writeln!(out, "  {call}").unwrap();
+        }
     } else {
-        // Assume integer — use %ld format
+        // Default: integer — use %ld format
         let fmt = if is_println {
             "@.fmt.int_ln"
         } else {
@@ -349,15 +771,55 @@ fn emit_print_call(
     }
 }
 
-fn emit_call_args(args: &[Operand], func: &Function, _strings: &[String]) -> String {
+/// Emit call arguments using the callee's function signature for type info.
+fn emit_call_args_typed(
+    args: &[Operand],
+    callee_name: &str,
+    func: &Function,
+    ctx: &EmitCtx,
+) -> String {
+    let sig = ctx.fn_sigs.get(callee_name);
     args.iter()
-        .map(|a| {
+        .enumerate()
+        .map(|(i, a)| {
             let val = operand_ref(a, func);
-            // Default to i64 for user function args (simplified)
-            format!("i64 {val}")
+            // Use callee's param type if available, otherwise infer
+            let ty = if let Some(sig) = sig {
+                if let Some(param_ty) = sig.param_types.get(i) {
+                    llvm_type_str(param_ty, ctx.struct_map)
+                } else {
+                    infer_operand_type(a, ctx)
+                }
+            } else {
+                infer_operand_type(a, ctx)
+            };
+            format!("{ty} {val}")
         })
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// Infer the LLVM type of an operand from pre-scanned temp sets.
+fn infer_operand_type(op: &Operand, ctx: &EmitCtx) -> String {
+    match op {
+        Operand::Var(name) => {
+            if ctx.string_temps.contains(name) {
+                "ptr".into()
+            } else if ctx.float_temps.contains(name) {
+                "double".into()
+            } else if let Some(stype) = ctx.struct_temps.get(name.as_str()) {
+                ctx.struct_map[stype.as_str()].llvm_name.clone()
+            } else {
+                "i64".into()
+            }
+        }
+        Operand::Const(c) => match c {
+            Constant::Float(_) => "double".into(),
+            Constant::Bool(_) => "i1".into(),
+            Constant::StringRef(_) => "ptr".into(),
+            _ => "i64".into(),
+        },
+    }
 }
 
 fn operand_ref(op: &Operand, func: &Function) -> String {
@@ -372,7 +834,7 @@ fn operand_ref(op: &Operand, func: &Function) -> String {
         }
         Operand::Const(c) => match c {
             Constant::Int(n) => n.to_string(),
-            Constant::Float(f) => format!("{f:e}"),
+            Constant::Float(f) => llvm_float_literal(*f),
             Constant::Bool(b) => {
                 if *b {
                     "1".into()
@@ -390,19 +852,54 @@ fn is_param(name: &str, func: &Function) -> bool {
     func.params.iter().any(|(n, _)| n == name)
 }
 
-fn llvm_type(ty: &Ty, is_main: bool) -> &'static str {
-    if is_main {
-        return "i32";
-    }
+fn llvm_type_str(
+    ty: &Ty,
+    struct_map: &std::collections::HashMap<String, StructInfo>,
+) -> String {
     match ty {
-        Ty::Int => "i64",
-        Ty::Float => "double",
-        Ty::Bool => "i1",
-        Ty::String => "ptr",
-        Ty::Unit => "void",
-        Ty::Never => "void",
-        _ => "i64", // fallback for unresolved types
+        Ty::Int => "i64".into(),
+        Ty::Float => "double".into(),
+        Ty::Bool => "i1".into(),
+        Ty::String => "ptr".into(),
+        Ty::Unit => "void".into(),
+        Ty::Never => "void".into(),
+        Ty::Named(name) => {
+            if let Some(info) = struct_map.get(name.as_str()) {
+                info.llvm_name.clone()
+            } else {
+                "i64".into() // fallback for ADTs, etc.
+            }
+        }
+        _ => "i64".into(), // fallback for unresolved types
     }
+}
+
+/// Get the LLVM type for a function parameter by name.
+fn param_llvm_type(
+    name: &str,
+    func: &Function,
+    struct_map: &std::collections::HashMap<String, StructInfo>,
+) -> String {
+    func.params
+        .iter()
+        .find(|(n, _)| n == name)
+        .map(|(_, ty)| llvm_type_str(ty, struct_map))
+        .unwrap_or_else(|| "i64".into())
+}
+
+/// Format a float literal for LLVM IR.
+/// LLVM requires a decimal point to distinguish floats from integers in
+/// scientific notation (e.g., `3.0e0` is valid, `3e0` is not).
+fn llvm_float_literal(f: f64) -> String {
+    let s = format!("{f:e}");
+    // Ensure there's a decimal point before the 'e'
+    if let Some(e_idx) = s.find('e') {
+        let mantissa = &s[..e_idx];
+        if !mantissa.contains('.') {
+            return format!("{mantissa}.0{}", &s[e_idx..]);
+        }
+    }
+    s
 }
 
 fn llvm_escape_string(s: &str) -> String {

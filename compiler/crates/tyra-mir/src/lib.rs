@@ -253,4 +253,70 @@ print("done")
         assert!(prog.functions.iter().any(|f| f.name == "fib"));
         assert!(prog.functions.iter().any(|f| f.name == "main" && f.is_main));
     }
+
+    #[test]
+    fn multi_field_value_type_constructor() {
+        let source = "value Pair\n  first: Int\n  second: Int\nend\nlet p = Pair(first: 10, second: 20)\n";
+        let prog = lower_str(source);
+        let main = &prog.functions[0];
+        let has_struct_init = main
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::StructInit { type_name, .. } if type_name == "Pair"));
+        assert!(
+            has_struct_init,
+            "expected StructInit for Pair, got: {:?}",
+            main.body
+        );
+        // Should have struct_defs for Pair
+        assert_eq!(prog.struct_defs.len(), 1);
+        assert_eq!(prog.struct_defs[0].name, "Pair");
+        assert_eq!(prog.struct_defs[0].fields.len(), 2);
+    }
+
+    #[test]
+    fn multi_field_value_type_field_access() {
+        let source = "value Pair\n  first: Int\n  second: Int\nend\nlet p = Pair(first: 10, second: 20)\nlet a = p.first\nlet b = p.second\n";
+        let prog = lower_str(source);
+        let main = &prog.functions[0];
+        let field_gets: Vec<_> = main
+            .body
+            .iter()
+            .filter(|i| matches!(i, Instruction::FieldGet { .. }))
+            .collect();
+        assert_eq!(
+            field_gets.len(),
+            2,
+            "expected 2 FieldGet instructions, got: {:?}",
+            field_gets
+        );
+    }
+
+    #[test]
+    fn multi_field_value_copy() {
+        let source = "value Pair\n  first: Int\n  second: Int\nend\nlet p = Pair(first: 10, second: 20)\nlet p2 = p.copy(first: 99)\n";
+        let prog = lower_str(source);
+        let main = &prog.functions[0];
+        // copy(first: 99) should: FieldGet second from p, then StructInit with 99 and extracted second
+        let struct_inits: Vec<_> = main
+            .body
+            .iter()
+            .filter(|i| matches!(i, Instruction::StructInit { .. }))
+            .collect();
+        assert_eq!(
+            struct_inits.len(),
+            2,
+            "expected 2 StructInit (constructor + copy), got: {:?}",
+            struct_inits
+        );
+        // Should have a FieldGet for the non-overridden field (second)
+        let has_field_get = main
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::FieldGet { field_index: 1, .. }));
+        assert!(
+            has_field_get,
+            "expected FieldGet for second field in copy()"
+        );
+    }
 }

@@ -12,12 +12,21 @@
 
 use tyra_types::Ty;
 
+/// A struct type definition (from value/data types).
+#[derive(Debug, Clone)]
+pub struct StructDef {
+    pub name: String,
+    pub fields: Vec<(String, Ty)>,
+}
+
 /// A complete MIR program.
 #[derive(Debug, Clone)]
 pub struct Program {
     pub functions: Vec<Function>,
     /// String constants used in the program.
     pub string_constants: Vec<String>,
+    /// Struct type definitions for value/data types.
+    pub struct_defs: Vec<StructDef>,
 }
 
 /// A MIR function.
@@ -92,6 +101,23 @@ pub enum Instruction {
 
     /// `dest = load source_ptr` — read from an alloca'd slot
     Load { dest: String, source: String },
+
+    /// `dest = struct_init type_name { val0, val1, ... }`
+    /// Constructs a struct value from field values in declaration order.
+    StructInit {
+        dest: String,
+        type_name: String,
+        fields: Vec<Operand>,
+    },
+
+    /// `dest = extractfield obj.field_index` (from struct type_name)
+    /// Extracts a field from a struct value.
+    FieldGet {
+        dest: String,
+        obj: Operand,
+        type_name: String,
+        field_index: u32,
+    },
 }
 
 /// A constant value.
