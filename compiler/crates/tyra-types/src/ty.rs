@@ -57,6 +57,61 @@ impl Ty {
         matches!(self, Ty::Error)
     }
 
+    /// Check if this is an Option<T> type.
+    pub fn is_option(&self) -> bool {
+        matches!(self, Ty::Generic(name, args) if name == "Option" && args.len() == 1)
+    }
+
+    /// Check if this is a Result<T, E> type.
+    pub fn is_result(&self) -> bool {
+        matches!(self, Ty::Generic(name, args) if name == "Result" && args.len() == 2)
+    }
+
+    /// Extract the inner type T from Option<T>.
+    pub fn option_inner(&self) -> Option<&Ty> {
+        match self {
+            Ty::Generic(name, args) if name == "Option" && args.len() == 1 => Some(&args[0]),
+            _ => None,
+        }
+    }
+
+    /// Extract the Ok type T from Result<T, E>.
+    pub fn result_ok_type(&self) -> Option<&Ty> {
+        match self {
+            Ty::Generic(name, args) if name == "Result" && args.len() == 2 => Some(&args[0]),
+            _ => None,
+        }
+    }
+
+    /// Extract the Err type E from Result<T, E>.
+    pub fn result_err_type(&self) -> Option<&Ty> {
+        match self {
+            Ty::Generic(name, args) if name == "Result" && args.len() == 2 => Some(&args[1]),
+            _ => None,
+        }
+    }
+
+    /// Generate a monomorphized name for codegen.
+    /// e.g., Option<Int> → "Option__Int", Result<String, AppError> → "Result__String__AppError"
+    pub fn monomorphized_name(&self) -> String {
+        match self {
+            Ty::Generic(name, args) => {
+                let arg_names: Vec<String> = args.iter().map(|a| a.monomorphized_name()).collect();
+                format!("{}__{}", name, arg_names.join("__"))
+            }
+            Ty::Int => "Int".into(),
+            Ty::Float => "Float".into(),
+            Ty::Bool => "Bool".into(),
+            Ty::String => "String".into(),
+            Ty::Rune => "Rune".into(),
+            Ty::Bytes => "Bytes".into(),
+            Ty::Unit => "Unit".into(),
+            Ty::Never => "Never".into(),
+            Ty::Named(name) => name.clone(),
+            _ => "Unknown".into(),
+        }
+    }
+
     /// Human-readable type name for diagnostics.
     pub fn display_name(&self) -> String {
         match self {
@@ -170,5 +225,57 @@ mod tests {
     fn different_types_not_compatible() {
         assert!(!types_compatible(&Ty::Int, &Ty::String));
         assert!(!types_compatible(&Ty::Bool, &Ty::Float));
+    }
+
+    #[test]
+    fn is_option() {
+        let opt = Ty::Generic("Option".into(), vec![Ty::Int]);
+        assert!(opt.is_option());
+        assert!(!opt.is_result());
+        assert!(!Ty::Int.is_option());
+    }
+
+    #[test]
+    fn is_result() {
+        let res = Ty::Generic("Result".into(), vec![Ty::String, Ty::Named("AppError".into())]);
+        assert!(res.is_result());
+        assert!(!res.is_option());
+    }
+
+    #[test]
+    fn option_inner_type() {
+        let opt = Ty::Generic("Option".into(), vec![Ty::Int]);
+        assert_eq!(opt.option_inner(), Some(&Ty::Int));
+        assert_eq!(Ty::Int.option_inner(), None);
+    }
+
+    #[test]
+    fn result_types() {
+        let res = Ty::Generic("Result".into(), vec![Ty::String, Ty::Named("Err".into())]);
+        assert_eq!(res.result_ok_type(), Some(&Ty::String));
+        assert_eq!(res.result_err_type(), Some(&Ty::Named("Err".into())));
+        assert_eq!(Ty::Int.result_ok_type(), None);
+    }
+
+    #[test]
+    fn monomorphized_name() {
+        let opt = Ty::Generic("Option".into(), vec![Ty::Int]);
+        assert_eq!(opt.monomorphized_name(), "Option__Int");
+
+        let res = Ty::Generic(
+            "Result".into(),
+            vec![Ty::String, Ty::Named("AppError".into())],
+        );
+        assert_eq!(res.monomorphized_name(), "Result__String__AppError");
+
+        assert_eq!(Ty::Int.monomorphized_name(), "Int");
+        assert_eq!(Ty::Named("User".into()).monomorphized_name(), "User");
+
+        // Nested generics
+        let nested = Ty::Generic(
+            "Option".into(),
+            vec![Ty::Generic("List".into(), vec![Ty::Int])],
+        );
+        assert_eq!(nested.monomorphized_name(), "Option__List__Int");
     }
 }

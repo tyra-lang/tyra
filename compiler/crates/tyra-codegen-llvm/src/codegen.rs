@@ -15,8 +15,13 @@ use tyra_types::Ty;
 struct StructInfo {
     /// LLVM type name: "%struct.Point"
     llvm_name: String,
-    /// Field types in declaration order
+    /// Field types in declaration order.
+    /// For ADTs: field_types[0] is the tag type, stored as Ty::Int in MIR
+    /// but emitted as i8 in LLVM.
     field_types: Vec<Ty>,
+    /// Whether this is an ADT tagged struct (Option/Result).
+    /// When true, field 0 is the i8 tag regardless of field_types[0].
+    is_adt: bool,
 }
 
 /// Generate LLVM IR text from a MIR program.
@@ -28,9 +33,12 @@ pub fn emit_llvm_ir(program: &Program) -> String {
         .struct_defs
         .iter()
         .map(|sd| {
+            let is_adt =
+                sd.name.starts_with("Option__") || sd.name.starts_with("Result__");
             let info = StructInfo {
                 llvm_name: format!("%struct.{}", sd.name),
                 field_types: sd.fields.iter().map(|(_, ty)| ty.clone()).collect(),
+                is_adt,
             };
             (sd.name.clone(), info)
         })
@@ -43,10 +51,19 @@ pub fn emit_llvm_ir(program: &Program) -> String {
 
     // Struct type declarations
     for sd in &program.struct_defs {
+        let info = &struct_map[sd.name.as_str()];
         let field_tys: Vec<String> = sd
             .fields
             .iter()
-            .map(|(_, ty)| llvm_type_str(ty, &struct_map))
+            .enumerate()
+            .map(|(i, (_, ty))| {
+                // ADT tag field (field 0) is i8 in LLVM regardless of MIR type
+                if info.is_adt && i == 0 {
+                    "i8".into()
+                } else {
+                    llvm_type_str(ty, &struct_map)
+                }
+            })
             .collect();
         writeln!(
             out,
@@ -238,6 +255,23 @@ fn emit_function(
             Instruction::StringFormat { dest, .. } => {
                 string_temps.insert(dest.clone());
             }
+            Instruction::AdtPayload {
+                dest,
+                type_name,
+                field_index,
+                ..
+            } => {
+                // Track payload type from the specified field of the ADT struct
+                if let Some(info) = struct_map.get(type_name.as_str()) {
+                    if let Some(field_ty) = info.field_types.get(*field_index as usize) {
+                        if *field_ty == Ty::String {
+                            string_temps.insert(dest.clone());
+                        } else if *field_ty == Ty::Float {
+                            float_temps.insert(dest.clone());
+                        }
+                    }
+                }
+            }
             Instruction::Load { dest, source } => {
                 // Propagate string/float type from alloca
                 // (will be resolved after alloca_llvm_types is computed)
@@ -355,6 +389,11 @@ fn pre_scan_struct_types(
             } => {
                 struct_temps.insert(dest.clone(), type_name.clone());
             }
+            Instruction::AdtInit {
+                dest, type_name, ..
+            } => {
+                struct_temps.insert(dest.clone(), type_name.clone());
+            }
             Instruction::FieldGet {
                 dest,
                 type_name,
@@ -382,6 +421,13 @@ fn pre_scan_struct_types(
                     if let Ty::Named(type_name) = &sig.return_type {
                         if struct_map.contains_key(type_name.as_str()) {
                             struct_temps.insert(dest.clone(), type_name.clone());
+                        }
+                    }
+                    // Also check for generic return types (Option/Result)
+                    if sig.return_type.is_option() || sig.return_type.is_result() {
+                        let mono_name = sig.return_type.monomorphized_name();
+                        if struct_map.contains_key(mono_name.as_str()) {
+                            struct_temps.insert(dest.clone(), mono_name);
                         }
                     }
                 }
@@ -771,6 +817,109 @@ fn emit_instruction(
             )
             .unwrap();
         }
+
+        Instruction::AdtInit {
+            dest,
+            type_name,
+            tag,
+            payload,
+            payload_field_index,
+        } => {
+            let info = &ctx.struct_map[type_name.as_str()];
+            let llvm_ty = &info.llvm_name;
+            let num_fields = info.field_types.len();
+
+            // Field 0: tag (i8)
+            let mut current = format!("%{dest}.s0");
+            writeln!(
+                out,
+                "  {current} = insertvalue {llvm_ty} undef, i8 {tag}, 0"
+            )
+            .unwrap();
+
+            // Fill remaining fields: payload goes to payload_field_index, others get zero
+            for fi in 1..num_fields {
+                let field_ty_str = llvm_type_str(&info.field_types[fi], ctx.struct_map);
+                let is_last = fi + 1 == num_fields;
+                let step_dest = if is_last {
+                    format!("%{dest}")
+                } else {
+                    format!("%{dest}.s{fi}")
+                };
+
+                if fi as u32 == *payload_field_index {
+                    if let Some(payload_op) = payload {
+                        let val = operand_ref(payload_op, func);
+                        writeln!(
+                            out,
+                            "  {step_dest} = insertvalue {llvm_ty} {current}, {field_ty_str} {val}, {fi}"
+                        )
+                        .unwrap();
+                    } else {
+                        let zero = match field_ty_str.as_str() {
+                            "ptr" => "null",
+                            "double" => "0.0",
+                            _ => "0",
+                        };
+                        writeln!(
+                            out,
+                            "  {step_dest} = insertvalue {llvm_ty} {current}, {field_ty_str} {zero}, {fi}"
+                        )
+                        .unwrap();
+                    }
+                } else {
+                    // Non-payload field: insert zero
+                    let zero = match field_ty_str.as_str() {
+                        "ptr" => "null",
+                        "double" => "0.0",
+                        _ => "0",
+                    };
+                    writeln!(
+                        out,
+                        "  {step_dest} = insertvalue {llvm_ty} {current}, {field_ty_str} {zero}, {fi}"
+                    )
+                    .unwrap();
+                }
+                current = step_dest;
+            }
+        }
+
+        Instruction::AdtTag {
+            dest,
+            obj,
+            type_name,
+        } => {
+            let info = &ctx.struct_map[type_name.as_str()];
+            let llvm_ty = &info.llvm_name;
+            let val = operand_ref(obj, func);
+            // Extract tag (field 0, i8) and extend to i64 for comparison
+            writeln!(
+                out,
+                "  %{dest}.i8 = extractvalue {llvm_ty} {val}, 0"
+            )
+            .unwrap();
+            writeln!(
+                out,
+                "  %{dest} = zext i8 %{dest}.i8 to i64"
+            )
+            .unwrap();
+        }
+
+        Instruction::AdtPayload {
+            dest,
+            obj,
+            type_name,
+            field_index,
+        } => {
+            let info = &ctx.struct_map[type_name.as_str()];
+            let llvm_ty = &info.llvm_name;
+            let val = operand_ref(obj, func);
+            writeln!(
+                out,
+                "  %{dest} = extractvalue {llvm_ty} {val}, {field_index}"
+            )
+            .unwrap();
+        }
     }
 }
 
@@ -811,45 +960,32 @@ fn emit_print_call(
         _ => false,
     };
 
-    if is_string && is_println {
-        let call = format!("call i32 @puts(ptr {val})");
-        if let Some(d) = dest {
-            writeln!(out, "  %{d} = {call}").unwrap();
-        } else {
-            writeln!(out, "  {call}").unwrap();
-        }
+    let call_str = if is_string && is_println {
+        format!("call i32 @puts(ptr {val})")
     } else if is_string {
-        let call = format!("call i32 (ptr, ...) @printf(ptr @.fmt.str, ptr {val})");
-        if let Some(d) = dest {
-            writeln!(out, "  %{d} = {call}").unwrap();
-        } else {
-            writeln!(out, "  {call}").unwrap();
-        }
+        format!("call i32 (ptr, ...) @printf(ptr @.fmt.str, ptr {val})")
     } else if is_float {
         let fmt = if is_println {
             "@.fmt.float_ln"
         } else {
             "@.fmt.float"
         };
-        let call = format!("call i32 (ptr, ...) @printf(ptr {fmt}, double {val})");
-        if let Some(d) = dest {
-            writeln!(out, "  %{d} = {call}").unwrap();
-        } else {
-            writeln!(out, "  {call}").unwrap();
-        }
+        format!("call i32 (ptr, ...) @printf(ptr {fmt}, double {val})")
     } else {
-        // Default: integer — use %ld format
         let fmt = if is_println {
             "@.fmt.int_ln"
         } else {
             "@.fmt.int"
         };
-        let call = format!("call i32 (ptr, ...) @printf(ptr {fmt}, i64 {val})");
-        if let Some(d) = dest {
-            writeln!(out, "  %{d} = {call}").unwrap();
-        } else {
-            writeln!(out, "  {call}").unwrap();
-        }
+        format!("call i32 (ptr, ...) @printf(ptr {fmt}, i64 {val})")
+    };
+
+    if let Some(d) = dest {
+        // printf/puts return i32; widen to i64 so the dest can be used as i64 elsewhere
+        writeln!(out, "  %{d}.i32 = {call_str}").unwrap();
+        writeln!(out, "  %{d} = sext i32 %{d}.i32 to i64").unwrap();
+    } else {
+        writeln!(out, "  {call_str}").unwrap();
     }
 }
 
@@ -950,6 +1086,15 @@ fn llvm_type_str(
                 info.llvm_name.clone()
             } else {
                 "i64".into() // fallback for ADTs, etc.
+            }
+        }
+        Ty::Generic(..) => {
+            // Monomorphized generic type: look up by monomorphized name
+            let mono_name = ty.monomorphized_name();
+            if let Some(info) = struct_map.get(mono_name.as_str()) {
+                info.llvm_name.clone()
+            } else {
+                "i64".into() // fallback
             }
         }
         _ => "i64".into(), // fallback for unresolved types

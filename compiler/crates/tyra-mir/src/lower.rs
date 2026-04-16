@@ -149,7 +149,7 @@ pub fn lower(file: &SourceFile) -> Program {
         });
     }
 
-    let struct_defs = ctx
+    let mut struct_defs: Vec<crate::ir::StructDef> = ctx
         .struct_fields
         .iter()
         .map(|(name, fields)| crate::ir::StructDef {
@@ -157,6 +157,14 @@ pub fn lower(file: &SourceFile) -> Program {
             fields: fields.clone(),
         })
         .collect();
+
+    // Add ADT struct defs (monomorphized Option/Result types)
+    for (name, fields) in &ctx.adt_struct_defs {
+        struct_defs.push(crate::ir::StructDef {
+            name: name.clone(),
+            fields: fields.clone(),
+        });
+    }
 
     Program {
         functions: ctx.functions,
@@ -193,6 +201,12 @@ struct LowerCtx {
     imported_modules: std::collections::HashSet<String>,
     /// Current self type when lowering impl method bodies (None outside impl methods)
     self_type: Option<String>,
+    /// Tracks variables/temps with generic types (Option<T>, Result<T, E>) for ADT lowering
+    generic_var_types: std::collections::HashMap<String, Ty>,
+    /// Return type of the function currently being lowered (for ? operator)
+    current_fn_return_type: Ty,
+    /// Collected ADT struct defs (monomorphized Option/Result types)
+    adt_struct_defs: std::collections::HashMap<String, Vec<(String, Ty)>>,
 }
 
 /// Result of resolving an impl method call.
@@ -223,6 +237,9 @@ impl LowerCtx {
             imported_modules: std::collections::HashSet::new(),
             impl_methods: std::collections::HashMap::new(),
             self_type: None,
+            generic_var_types: std::collections::HashMap::new(),
+            current_fn_return_type: Ty::Unit,
+            adt_struct_defs: std::collections::HashMap::new(),
         }
     }
 
@@ -273,6 +290,7 @@ impl LowerCtx {
         self.float_vars.clear();
         self.string_vars.clear();
         self.mut_vars.clear();
+        self.generic_var_types.clear();
 
         let params: Vec<(String, Ty)> = f
             .params
@@ -280,8 +298,23 @@ impl LowerCtx {
             .map(|p| (p.name.clone(), Ty::from_type_expr(&p.type_annotation)))
             .collect();
 
+        let return_type = f
+            .return_type
+            .as_ref()
+            .map(Ty::from_type_expr)
+            .unwrap_or(Ty::Unit);
+        self.current_fn_return_type = return_type.clone();
+
+        // Ensure ADT struct defs are registered for the return type
+        self.register_adt_type(&return_type);
+
         // Register parameter types for correct type resolution
         for (name, ty) in &params {
+            // Register ADT struct defs for generic parameter types
+            self.register_adt_type(ty);
+            if ty.is_option() || ty.is_result() {
+                self.generic_var_types.insert(name.clone(), ty.clone());
+            }
             match ty {
                 Ty::Float => {
                     self.float_vars.insert(name.clone());
@@ -297,11 +330,6 @@ impl LowerCtx {
                 _ => {}
             }
         }
-        let return_type = f
-            .return_type
-            .as_ref()
-            .map(Ty::from_type_expr)
-            .unwrap_or(Ty::Unit);
 
         let mut body = Vec::new();
         for stmt in &f.body {
@@ -345,6 +373,11 @@ impl LowerCtx {
                 }
                 if let Some(stype) = struct_type {
                     self.var_types.insert(s.name.clone(), stype);
+                }
+                // Track generic types (Option/Result) from the value temp
+                if let Some(gt) = self.generic_var_types.get(&val).cloned() {
+                    self.generic_var_types.insert(s.name.clone(), gt.clone());
+                    self.var_types.insert(s.name.clone(), gt.monomorphized_name());
                 }
                 body.push(Instruction::Copy {
                     dest: s.name.clone(),
@@ -438,6 +471,31 @@ impl LowerCtx {
             }
 
             ExprKind::Ident(name) => {
+                // Check for None constructor
+                if name == "None" {
+                    // Infer the Option<T> type from context (function return type or let binding)
+                    let full_type = if self.current_fn_return_type.is_option() {
+                        self.current_fn_return_type.clone()
+                    } else {
+                        // Fallback: Option<Int>
+                        Ty::Generic("Option".into(), vec![Ty::Int])
+                    };
+                    self.register_adt_type(&full_type);
+                    let type_name = full_type.monomorphized_name();
+
+                    let dest = self.fresh_temp();
+                    body.push(Instruction::AdtInit {
+                        dest: dest.clone(),
+                        type_name: type_name.clone(),
+                        tag: 1,
+                        payload: None,
+                        payload_field_index: 1,
+                    });
+                    self.generic_var_types.insert(dest.clone(), full_type);
+                    self.var_types.insert(dest.clone(), type_name);
+                    return dest;
+                }
+
                 if self.mut_vars.contains(name.as_str()) {
                     // Mutable local: load from alloca
                     let temp = self.fresh_temp();
@@ -487,6 +545,37 @@ impl LowerCtx {
             }
 
             ExprKind::Call(callee, args) => {
+                // Check for Option/Result constructors: Some(x), Ok(x), Err(e)
+                if let ExprKind::Ident(ctor_name) = &callee.kind
+                    && matches!(ctor_name.as_str(), "Some" | "Ok" | "Err")
+                    && args.len() == 1
+                {
+                    let arg_val = self.lower_expr(&args[0].value, body);
+                    let arg_type = self.infer_expr_type(&args[0].value).unwrap_or(Ty::Int);
+                    let tag = if ctor_name == "Err" { 1i64 } else { 0i64 };
+
+                    let full_type = self
+                        .infer_adt_call_type(ctor_name, &arg_type)
+                        .unwrap_or_else(|| Ty::Generic("Option".into(), vec![arg_type]));
+                    self.register_adt_type(&full_type);
+                    let type_name = full_type.monomorphized_name();
+
+                    // payload_field_index: 1 for Some/Ok, 2 for Err
+                    let payload_field_index = if ctor_name == "Err" { 2u32 } else { 1u32 };
+
+                    let dest = self.fresh_temp();
+                    body.push(Instruction::AdtInit {
+                        dest: dest.clone(),
+                        type_name: type_name.clone(),
+                        tag,
+                        payload: Some(Operand::Var(arg_val)),
+                        payload_field_index,
+                    });
+                    self.generic_var_types.insert(dest.clone(), full_type);
+                    self.var_types.insert(dest.clone(), type_name);
+                    return dest;
+                }
+
                 // Check for value type constructor: Point(x: 3.0, y: 4.0)
                 if let ExprKind::Ident(name) = &callee.kind
                     && self.struct_fields.contains_key(name)
@@ -687,9 +776,20 @@ impl LowerCtx {
                 let dest = self.fresh_temp();
                 body.push(Instruction::Call {
                     dest: Some(dest.clone()),
-                    func: func_name,
+                    func: func_name.clone(),
                     args: arg_operands,
                 });
+
+                // Track generic return types from function signatures
+                if let Some(ret_ty) = self.fn_return_types.get(&func_name).cloned() {
+                    if ret_ty.is_option() || ret_ty.is_result() {
+                        self.register_adt_type(&ret_ty);
+                        let mono = ret_ty.monomorphized_name();
+                        self.generic_var_types.insert(dest.clone(), ret_ty);
+                        self.var_types.insert(dest.clone(), mono);
+                    }
+                }
+
                 dest
             }
 
@@ -774,8 +874,120 @@ impl LowerCtx {
             }
 
             ExprKind::Propagate(inner) => {
-                // ? operator: simplified, just lower the inner expression
-                self.lower_expr(inner, body)
+                // ? operator: extract value on success, early-return on failure
+                let inner_val = self.lower_expr(inner, body);
+
+                // Determine the ADT type of the inner expression
+                let inner_type = self
+                    .generic_var_types
+                    .get(&inner_val)
+                    .cloned()
+                    .unwrap_or(self.current_fn_return_type.clone());
+                let type_name = inner_type.monomorphized_name();
+
+                // Extract tag
+                let tag = self.fresh_temp();
+                body.push(Instruction::AdtTag {
+                    dest: tag.clone(),
+                    obj: Operand::Var(inner_val.clone()),
+                    type_name: type_name.clone(),
+                });
+
+                // Check if failure (tag != 0 means None/Err)
+                let zero = self.fresh_temp();
+                body.push(Instruction::Const {
+                    dest: zero.clone(),
+                    value: Constant::Int(0),
+                });
+                let is_ok = self.fresh_temp();
+                body.push(Instruction::BinOp {
+                    dest: is_ok.clone(),
+                    op: MirBinOp::EqInt,
+                    lhs: Operand::Var(tag),
+                    rhs: Operand::Var(zero),
+                });
+
+                let ok_label = self.fresh_label("propagate_ok");
+                let fail_label = self.fresh_label("propagate_fail");
+
+                body.push(Instruction::BranchIf {
+                    cond: Operand::Var(is_ok),
+                    true_label: ok_label.clone(),
+                    false_label: fail_label.clone(),
+                });
+
+                // Failure path: return None/Err from current function
+                body.push(Instruction::Label(fail_label));
+                if inner_type.is_result() {
+                    // For Result: extract err_value and re-wrap as Err.
+                    // TODO(spec §12.2): Into<F> error conversion not yet implemented.
+                    // Currently requires inner error type E == enclosing error type F.
+                    // If E != F, the generated code will silently reinterpret the error
+                    // payload. Implementing Into<F> will fix this properly.
+                    let ret_type = &self.current_fn_return_type.clone();
+                    if let (Some(inner_err), Some(ret_err)) =
+                        (inner_type.result_err_type(), ret_type.result_err_type())
+                    {
+                        if inner_err != ret_err {
+                            // Mismatch: emit a comment in the MIR noting the gap.
+                            // A proper diagnostic should be emitted here once
+                            // tyra-diagnostics is integrated into lowering.
+                            eprintln!(
+                                "warning: ? operator on Result<_, {}> in function returning Result<_, {}> — Into<{}> not yet implemented",
+                                inner_err.display_name(),
+                                ret_err.display_name(),
+                                ret_err.display_name(),
+                            );
+                        }
+                    }
+                    self.register_adt_type(ret_type);
+                    let ret_type_name = ret_type.monomorphized_name();
+                    let err_val = self.fresh_temp();
+                    body.push(Instruction::AdtPayload {
+                        dest: err_val.clone(),
+                        obj: Operand::Var(inner_val.clone()),
+                        type_name: type_name.clone(),
+                        field_index: 2, // err_value field for Result
+                    });
+                    let ret_err = self.fresh_temp();
+                    body.push(Instruction::AdtInit {
+                        dest: ret_err.clone(),
+                        type_name: ret_type_name,
+                        tag: 1,
+                        payload: Some(Operand::Var(err_val)),
+                        payload_field_index: 2, // err_value field
+                    });
+                    body.push(Instruction::Return {
+                        value: Some(Operand::Var(ret_err)),
+                    });
+                } else {
+                    // For Option: return None
+                    let ret_type = &self.current_fn_return_type.clone();
+                    self.register_adt_type(ret_type);
+                    let ret_type_name = ret_type.monomorphized_name();
+                    let none_val = self.fresh_temp();
+                    body.push(Instruction::AdtInit {
+                        dest: none_val.clone(),
+                        type_name: ret_type_name,
+                        tag: 1,
+                        payload: None,
+                        payload_field_index: 1,
+                    });
+                    body.push(Instruction::Return {
+                        value: Some(Operand::Var(none_val)),
+                    });
+                }
+
+                // Success path: extract ok/some payload (field 1)
+                body.push(Instruction::Label(ok_label));
+                let payload = self.fresh_temp();
+                body.push(Instruction::AdtPayload {
+                    dest: payload.clone(),
+                    obj: Operand::Var(inner_val),
+                    type_name,
+                    field_index: 1,
+                });
+                payload
             }
 
             ExprKind::Await(inner) => {
@@ -916,6 +1128,12 @@ impl LowerCtx {
         let else_label = self.fresh_label("else");
         let end_label = self.fresh_label("if_end");
 
+        // Allocate result slot (like match)
+        let result_slot = self.fresh_temp();
+        body.push(Instruction::Alloca {
+            dest: result_slot.clone(),
+        });
+
         body.push(Instruction::BranchIf {
             cond: Operand::Var(cond),
             true_label: then_label.clone(),
@@ -924,8 +1142,15 @@ impl LowerCtx {
 
         // Then branch
         body.push(Instruction::Label(then_label));
+        let then_start = body.len();
         for stmt in &if_expr.then_body {
             self.lower_stmt(stmt, body);
+        }
+        if let Some(last) = self.last_temp_in_range(body, then_start) {
+            body.push(Instruction::Store {
+                dest: result_slot.clone(),
+                value: Operand::Var(last),
+            });
         }
         body.push(Instruction::Jump {
             label: end_label.clone(),
@@ -933,6 +1158,7 @@ impl LowerCtx {
 
         // Else branch
         body.push(Instruction::Label(else_label));
+        let else_start = body.len();
         match &if_expr.else_body {
             Some(ElseBranch::Else(stmts)) => {
                 for stmt in stmts {
@@ -944,18 +1170,24 @@ impl LowerCtx {
             }
             None => {}
         }
+        if let Some(last) = self.last_temp_in_range(body, else_start) {
+            body.push(Instruction::Store {
+                dest: result_slot.clone(),
+                value: Operand::Var(last),
+            });
+        }
         body.push(Instruction::Jump {
             label: end_label.clone(),
         });
 
         body.push(Instruction::Label(end_label));
 
-        let dest = self.fresh_temp();
-        body.push(Instruction::Const {
-            dest: dest.clone(),
-            value: Constant::Unit,
+        let result = self.fresh_temp();
+        body.push(Instruction::Load {
+            dest: result.clone(),
+            source: result_slot,
         });
-        dest
+        result
     }
 
     /// Lower a match expression into a chain of conditional branches.
@@ -1039,19 +1271,41 @@ impl LowerCtx {
                     });
                 }
                 PatternKind::Constructor(variant_name, _) => {
-                    // Look up tag for this variant across all ADT types.
-                    // KNOWN LIMITATION: If two ADTs share a variant name, this
-                    // picks the first match non-deterministically. The spec (§8.5)
-                    // says the correct variant is determined by the match subject's
-                    // type, but type info is not yet threaded through MIR lowering.
-                    // TODO: Thread subject type info for correct ADT disambiguation.
-                    let tag = self
-                        .variant_tags
-                        .iter()
-                        .find(|((_, vn), _)| vn == variant_name)
-                        .map(|(_, &t)| t);
+                    // Check if this is an Option/Result variant (Some/None/Ok/Err)
+                    let prelude_tag = match variant_name.as_str() {
+                        "Some" | "Ok" => Some(0i64),
+                        "None" | "Err" => Some(1i64),
+                        _ => None,
+                    };
 
-                    if let Some(tag) = tag {
+                    if let Some(tag) = prelude_tag {
+                        // Option/Result ADT: extract tag from tagged struct
+                        let subject_type_name = self
+                            .generic_var_types
+                            .get(&subject)
+                            .map(|t| t.monomorphized_name())
+                            .or_else(|| self.var_types.get(&subject).cloned())
+                            .unwrap_or_else(|| {
+                                // BUG: subject type not tracked. This indicates a gap in
+                                // generic_var_types / var_types tracking. Fall back to
+                                // the function return type if it's an Option/Result.
+                                if self.current_fn_return_type.is_option()
+                                    || self.current_fn_return_type.is_result()
+                                {
+                                    self.current_fn_return_type.monomorphized_name()
+                                } else {
+                                    panic!(
+                                        "BUG: cannot determine ADT type for match subject '{subject}'"
+                                    )
+                                }
+                            });
+
+                        let tag_val = self.fresh_temp();
+                        body.push(Instruction::AdtTag {
+                            dest: tag_val.clone(),
+                            obj: Operand::Var(subject.clone()),
+                            type_name: subject_type_name,
+                        });
                         let lit = self.fresh_temp();
                         body.push(Instruction::Const {
                             dest: lit.clone(),
@@ -1061,7 +1315,7 @@ impl LowerCtx {
                         body.push(Instruction::BinOp {
                             dest: cond.clone(),
                             op: MirBinOp::EqInt,
-                            lhs: Operand::Var(subject.clone()),
+                            lhs: Operand::Var(tag_val),
                             rhs: Operand::Var(lit),
                         });
                         body.push(Instruction::BranchIf {
@@ -1070,10 +1324,37 @@ impl LowerCtx {
                             false_label: next_label.clone(),
                         });
                     } else {
-                        // Unknown constructor — fall through (treat as wildcard)
-                        body.push(Instruction::Jump {
-                            label: arm_label.clone(),
-                        });
+                        // User-defined ADT: look up tag from variant_tags
+                        let tag = self
+                            .variant_tags
+                            .iter()
+                            .find(|((_, vn), _)| vn == variant_name)
+                            .map(|(_, &t)| t);
+
+                        if let Some(tag) = tag {
+                            let lit = self.fresh_temp();
+                            body.push(Instruction::Const {
+                                dest: lit.clone(),
+                                value: Constant::Int(tag),
+                            });
+                            let cond = self.fresh_temp();
+                            body.push(Instruction::BinOp {
+                                dest: cond.clone(),
+                                op: MirBinOp::EqInt,
+                                lhs: Operand::Var(subject.clone()),
+                                rhs: Operand::Var(lit),
+                            });
+                            body.push(Instruction::BranchIf {
+                                cond: Operand::Var(cond),
+                                true_label: arm_label.clone(),
+                                false_label: next_label.clone(),
+                            });
+                        } else {
+                            // Unknown constructor — fall through (treat as wildcard)
+                            body.push(Instruction::Jump {
+                                label: arm_label.clone(),
+                            });
+                        }
                     }
                 }
             }
@@ -1086,6 +1367,74 @@ impl LowerCtx {
                     dest: name.clone(),
                     source: subject.clone(),
                 });
+            }
+
+            // Bind constructor payload variables: when Some(x) → x = payload
+            if let PatternKind::Constructor(variant_name, fields) = &arm.pattern.kind {
+                let is_prelude = matches!(variant_name.as_str(), "Some" | "Ok" | "Err");
+                if is_prelude && !fields.is_empty() {
+                    let subject_type_name = self
+                        .generic_var_types
+                        .get(&subject)
+                        .map(|t| t.monomorphized_name())
+                        .or_else(|| self.var_types.get(&subject).cloned())
+                        .unwrap_or_else(|| {
+                            if self.current_fn_return_type.is_option()
+                                || self.current_fn_return_type.is_result()
+                            {
+                                self.current_fn_return_type.monomorphized_name()
+                            } else {
+                                panic!(
+                                    "BUG: cannot determine ADT type for match subject '{subject}'"
+                                )
+                            }
+                        });
+
+                    // Extract payload from ADT and bind to the first field variable
+                    // For Option: Some=field 1. For Result: Ok=field 1, Err=field 2.
+                    let field_index = if variant_name == "Err" { 2 } else { 1 };
+                    let payload = self.fresh_temp();
+                    body.push(Instruction::AdtPayload {
+                        dest: payload.clone(),
+                        obj: Operand::Var(subject.clone()),
+                        type_name: subject_type_name.clone(),
+                        field_index,
+                    });
+
+                    // Bind the field name from the pattern
+                    let bind_name = &fields[0].field_name;
+                    body.push(Instruction::Copy {
+                        dest: bind_name.clone(),
+                        source: payload,
+                    });
+
+                    // Track the type of the bound variable
+                    if let Some(subject_ty) = self.generic_var_types.get(&subject) {
+                        if let Some(inner) = subject_ty.option_inner() {
+                            match inner {
+                                Ty::String => { self.string_vars.insert(bind_name.clone()); }
+                                Ty::Float => { self.float_vars.insert(bind_name.clone()); }
+                                _ => {}
+                            }
+                        } else if variant_name == "Ok" {
+                            if let Some(ok_ty) = subject_ty.result_ok_type() {
+                                match ok_ty {
+                                    Ty::String => { self.string_vars.insert(bind_name.clone()); }
+                                    Ty::Float => { self.float_vars.insert(bind_name.clone()); }
+                                    _ => {}
+                                }
+                            }
+                        } else if variant_name == "Err" {
+                            if let Some(err_ty) = subject_ty.result_err_type() {
+                                match err_ty {
+                                    Ty::String => { self.string_vars.insert(bind_name.clone()); }
+                                    Ty::Float => { self.float_vars.insert(bind_name.clone()); }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // Track arm body start to find the last temp from THIS arm only
@@ -1405,7 +1754,108 @@ impl LowerCtx {
         dest
     }
 
-    /// Find the last temp-producing instruction in body[start..].
+    /// Register an ADT struct def for a generic type (Option<T>, Result<T, E>).
+    /// Creates a monomorphized StructDef if not already registered.
+    fn register_adt_type(&mut self, ty: &Ty) {
+        let mono_name = ty.monomorphized_name();
+        if self.adt_struct_defs.contains_key(&mono_name) {
+            return;
+        }
+        if let Some(inner) = ty.option_inner() {
+            // Option<T> = { tag: Int, value: T }
+            self.adt_struct_defs.insert(
+                mono_name,
+                vec![("tag".into(), Ty::Int), ("value".into(), inner.clone())],
+            );
+        } else if let (Some(ok_ty), Some(err_ty)) = (ty.result_ok_type(), ty.result_err_type()) {
+            // Result<T, E> = { tag: Int, ok_value: T, err_value: E }
+            // For v0.1, we store both ok and err payloads separately.
+            self.adt_struct_defs.insert(
+                mono_name,
+                vec![
+                    ("tag".into(), Ty::Int),
+                    ("ok_value".into(), ok_ty.clone()),
+                    ("err_value".into(), err_ty.clone()),
+                ],
+            );
+        }
+    }
+
+    /// Infer the full generic type of a call expression like Some(x), Ok(x), Err(e).
+    /// Returns None if not a prelude constructor.
+    fn infer_adt_call_type(&self, func_name: &str, arg_type: &Ty) -> Option<Ty> {
+        match func_name {
+            "Some" => Some(Ty::Generic("Option".into(), vec![arg_type.clone()])),
+            "Ok" => {
+                // Infer from current function return type
+                if let Some(err_ty) = self.current_fn_return_type.result_err_type() {
+                    Some(Ty::Generic(
+                        "Result".into(),
+                        vec![arg_type.clone(), err_ty.clone()],
+                    ))
+                } else {
+                    Some(Ty::Generic(
+                        "Result".into(),
+                        vec![arg_type.clone(), Ty::Named("Error".into())],
+                    ))
+                }
+            }
+            "Err" => {
+                // Infer from current function return type
+                if let Some(ok_ty) = self.current_fn_return_type.result_ok_type() {
+                    Some(Ty::Generic(
+                        "Result".into(),
+                        vec![ok_ty.clone(), arg_type.clone()],
+                    ))
+                } else {
+                    Some(Ty::Generic(
+                        "Result".into(),
+                        vec![Ty::Named("Value".into()), arg_type.clone()],
+                    ))
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Infer the type of an expression for ADT type tracking.
+    fn infer_expr_type(&self, expr: &Expr) -> Option<Ty> {
+        match &expr.kind {
+            ExprKind::IntLit(_) => Some(Ty::Int),
+            ExprKind::FloatLit(_) => Some(Ty::Float),
+            ExprKind::StringLit(_) | ExprKind::StringInterp(_) => Some(Ty::String),
+            ExprKind::BoolLit(_) => Some(Ty::Bool),
+            ExprKind::Ident(name) => {
+                if self.float_vars.contains(name) {
+                    Some(Ty::Float)
+                } else if self.string_vars.contains(name) {
+                    Some(Ty::String)
+                } else if self.generic_var_types.contains_key(name) {
+                    self.generic_var_types.get(name).cloned()
+                } else {
+                    // Cannot determine type from tracking alone; caller should
+                    // handle None (e.g., by falling back to function return type).
+                    None
+                }
+            }
+            ExprKind::BinaryOp(lhs, _, _) => {
+                if self.is_float_expr(lhs) {
+                    Some(Ty::Float)
+                } else {
+                    Some(Ty::Int)
+                }
+            }
+            ExprKind::Call(callee, _) => {
+                if let ExprKind::Ident(fname) = &callee.kind {
+                    self.fn_return_types.get(fname).cloned()
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
     fn last_temp_in_range(&self, body: &[Instruction], start: usize) -> Option<String> {
         for inst in body[start..].iter().rev() {
             match inst {
@@ -1421,6 +1871,8 @@ impl LowerCtx {
                 | Instruction::Phi { dest, .. }
                 | Instruction::StructInit { dest, .. }
                 | Instruction::FieldGet { dest, .. }
+                | Instruction::AdtInit { dest, .. }
+                | Instruction::AdtPayload { dest, .. }
                 | Instruction::StringFormat { dest, .. } => return Some(dest.clone()),
                 _ => continue,
             }
@@ -1443,6 +1895,8 @@ impl LowerCtx {
                 | Instruction::Phi { dest, .. }
                 | Instruction::StructInit { dest, .. }
                 | Instruction::FieldGet { dest, .. }
+                | Instruction::AdtInit { dest, .. }
+                | Instruction::AdtPayload { dest, .. }
                 | Instruction::StringFormat { dest, .. } => return Some(dest.clone()),
                 _ => continue,
             }

@@ -119,6 +119,36 @@ pub enum Instruction {
         field_index: u32,
     },
 
+    /// `dest = adt_init type_name { tag, payload }`
+    /// Constructs an ADT variant (Option/Result) as a tagged struct.
+    /// tag: 0 = Some/Ok, 1 = None/Err
+    /// payload_field_index: which field to place the payload in (1 for Option/Ok, 2 for Err)
+    AdtInit {
+        dest: String,
+        type_name: String,
+        tag: i64,
+        payload: Option<Operand>,
+        payload_field_index: u32,
+    },
+
+    /// `dest = adt_tag obj`
+    /// Extracts the tag (field 0) from an ADT tagged struct.
+    AdtTag {
+        dest: String,
+        obj: Operand,
+        type_name: String,
+    },
+
+    /// `dest = adt_payload obj[field_index]`
+    /// Extracts a payload field from an ADT tagged struct.
+    /// For Option: field_index=1 (value). For Result: field_index=1 (ok) or 2 (err).
+    AdtPayload {
+        dest: String,
+        obj: Operand,
+        type_name: String,
+        field_index: u32,
+    },
+
     /// `dest = string_format(format_ref, args...)`
     /// Formats a string using a printf-style format string and arguments.
     /// Used for string interpolation outside print() calls.
