@@ -45,7 +45,7 @@ pub fn lower(file: &SourceFile) -> Program {
                     .iter()
                     .map(|f| (f.name.clone(), Ty::from_type_expr(&f.type_annotation)))
                     .collect();
-                ctx.value_fields.insert(v.name.clone(), fields);
+                ctx.struct_fields.insert(v.name.clone(), fields);
             }
             Item::DataDef(d) => {
                 // Data types use the same struct representation as value types.
@@ -55,7 +55,8 @@ pub fn lower(file: &SourceFile) -> Program {
                     .iter()
                     .map(|f| (f.name.clone(), Ty::from_type_expr(&f.type_annotation)))
                     .collect();
-                ctx.value_fields.insert(d.name.clone(), fields);
+                ctx.struct_fields.insert(d.name.clone(), fields);
+                ctx.data_types.insert(d.name.clone());
             }
             _ => {}
         }
@@ -119,7 +120,7 @@ pub fn lower(file: &SourceFile) -> Program {
     }
 
     let struct_defs = ctx
-        .value_fields
+        .struct_fields
         .iter()
         .map(|(name, fields)| crate::ir::StructDef {
             name: name.clone(),
@@ -141,14 +142,27 @@ struct LowerCtx {
     label_counter: u32,
     /// ADT variant tag map: (type_name, variant_name) -> tag index
     variant_tags: std::collections::HashMap<(String, String), i64>,
-    /// Value type field info: type_name -> list of (field_name, field_type)
-    value_fields: std::collections::HashMap<String, Vec<(String, Ty)>>,
+    /// Struct field info for value and data types: type_name -> list of (field_name, field_type)
+    struct_fields: std::collections::HashMap<String, Vec<(String, Ty)>>,
+    /// Set of type names that are data types (reference semantics, §8.6).
+    /// Used to prevent copy() on data types and for future mut field handling.
+    data_types: std::collections::HashSet<String>,
     /// Tracks variables/temps known to hold Float values (for correct binop selection)
     float_vars: std::collections::HashSet<String>,
     /// Impl method registry: (target_type_name, method_name) → mangled_fn_name
     impl_methods: std::collections::HashMap<(String, String), String>,
     /// Current self type when lowering impl method bodies (None outside impl methods)
     self_type: Option<String>,
+}
+
+/// Result of resolving an impl method call.
+enum ImplMethodResult {
+    /// Resolved to a mangled function name.
+    Resolved(String),
+    /// Multiple impls define this method; can't disambiguate without type info.
+    Ambiguous,
+    /// No impl found for this method name.
+    NotFound,
 }
 
 impl LowerCtx {
@@ -159,7 +173,8 @@ impl LowerCtx {
             temp_counter: 0,
             label_counter: 0,
             variant_tags: std::collections::HashMap::new(),
-            value_fields: std::collections::HashMap::new(),
+            struct_fields: std::collections::HashMap::new(),
+            data_types: std::collections::HashSet::new(),
             float_vars: std::collections::HashSet::new(),
             impl_methods: std::collections::HashMap::new(),
             self_type: None,
@@ -375,9 +390,9 @@ impl LowerCtx {
             ExprKind::Call(callee, args) => {
                 // Check for value type constructor: Point(x: 3.0, y: 4.0)
                 if let ExprKind::Ident(name) = &callee.kind
-                    && self.value_fields.contains_key(name)
+                    && self.struct_fields.contains_key(name)
                 {
-                    let field_defs = self.value_fields[name].clone();
+                    let field_defs = self.struct_fields[name].clone();
                     // Map labeled args to declaration order.
                     // If args have labels, match by label name.
                     // If no labels, assume positional order.
@@ -420,37 +435,58 @@ impl LowerCtx {
                     return dest;
                 }
 
-                // Check for .copy() on value types (§8.6)
+                // Check for .copy() on value types only (§8.6)
+                // copy() is NOT available on data types.
                 if let ExprKind::FieldAccess(obj, method) = &callee.kind
                     && method == "copy"
                 {
-                    // Lower the receiver and look up its value type
-                    if let Some((type_name, field_defs)) = self.resolve_value_type(obj) {
-                        let obj_val = self.lower_expr(obj, body);
-                        return self.lower_copy(
-                            &obj_val, &type_name, &field_defs, args, body,
-                        );
+                    if let Some((type_name, field_defs)) = self.resolve_struct_type(obj) {
+                        if !self.data_types.contains(&type_name) {
+                            let obj_val = self.lower_expr(obj, body);
+                            return self.lower_copy(
+                                &obj_val, &type_name, &field_defs, args, body,
+                            );
+                        }
                     }
-                    // Not a value type — fall through to regular method call
+                    // Not a value type — fall through to method call or generic call
                 }
 
                 // Check for impl trait method call: p.method() → Type__method(p)
                 // (§8.7 static dispatch)
                 if let ExprKind::FieldAccess(obj, method) = &callee.kind {
-                    if let Some(mangled_name) = self.resolve_impl_method(obj, method) {
-                        let self_val = self.lower_expr(obj, body);
-                        let mut arg_operands = vec![Operand::Var(self_val)];
-                        for a in args {
-                            let t = self.lower_expr(&a.value, body);
-                            arg_operands.push(Operand::Var(t));
+                    match self.resolve_impl_method(obj, method) {
+                        ImplMethodResult::Resolved(mangled_name) => {
+                            let self_val = self.lower_expr(obj, body);
+                            let mut arg_operands = vec![Operand::Var(self_val)];
+                            for a in args {
+                                let t = self.lower_expr(&a.value, body);
+                                arg_operands.push(Operand::Var(t));
+                            }
+                            let dest = self.fresh_temp();
+                            body.push(Instruction::Call {
+                                dest: Some(dest.clone()),
+                                func: mangled_name,
+                                args: arg_operands,
+                            });
+                            return dest;
                         }
-                        let dest = self.fresh_temp();
-                        body.push(Instruction::Call {
-                            dest: Some(dest.clone()),
-                            func: mangled_name,
-                            args: arg_operands,
-                        });
-                        return dest;
+                        ImplMethodResult::Ambiguous => {
+                            // Multiple impls define this method but type can't be resolved.
+                            // Emit a call to a clearly-invalid name to produce a linker error
+                            // rather than silently generating broken IR.
+                            // TODO: Emit proper diagnostic via tyra-diagnostics.
+                            let self_val = self.lower_expr(obj, body);
+                            let dest = self.fresh_temp();
+                            body.push(Instruction::Call {
+                                dest: Some(dest.clone()),
+                                func: format!("__unresolved_method_{method}"),
+                                args: vec![Operand::Var(self_val)],
+                            });
+                            return dest;
+                        }
+                        ImplMethodResult::NotFound => {
+                            // Not an impl method — fall through to generic call
+                        }
                     }
                 }
 
@@ -622,7 +658,7 @@ impl LowerCtx {
                 let obj_val = self.lower_expr(obj, body);
 
                 // Value type field access: emit FieldGet instruction
-                if let Some((type_name, field_defs)) = self.resolve_value_type(obj) {
+                if let Some((type_name, field_defs)) = self.resolve_struct_type(obj) {
                     if let Some(idx) = field_defs.iter().position(|(n, _)| n == field) {
                         let dest = self.fresh_temp();
                         body.push(Instruction::FieldGet {
@@ -937,7 +973,7 @@ impl LowerCtx {
             ExprKind::Ident(name) => self.float_vars.contains(name),
             ExprKind::FieldAccess(obj, field) => {
                 // Check if field access on a value type yields Float
-                if let Some((_type_name, field_defs)) = self.resolve_value_type(obj) {
+                if let Some((_type_name, field_defs)) = self.resolve_struct_type(obj) {
                     if let Some((_, ty)) = field_defs.iter().find(|(n, _)| n == field) {
                         return *ty == Ty::Float;
                     }
@@ -952,9 +988,9 @@ impl LowerCtx {
         }
     }
 
-    /// Resolve the value type of an expression, if it's a known value type.
-    /// Returns (type_name, field_defs) if the expression is a value type binding.
-    fn resolve_value_type(&self, expr: &Expr) -> Option<(String, Vec<(String, Ty)>)> {
+    /// Resolve the struct type (value or data) of an expression.
+    /// Returns (type_name, field_defs) if the expression is a known struct-typed binding.
+    fn resolve_struct_type(&self, expr: &Expr) -> Option<(String, Vec<(String, Ty)>)> {
         // For identifiers, check if any value type has matching fields.
         // In the absence of full type tracking, we check all value types.
         // TODO: Thread proper type information from the type checker.
@@ -963,7 +999,7 @@ impl LowerCtx {
                 // If this is `self` in an impl method, return the known self type
                 if name == "self" {
                     if let Some(type_name) = &self.self_type {
-                        if let Some(fields) = self.value_fields.get(type_name) {
+                        if let Some(fields) = self.struct_fields.get(type_name) {
                             return Some((type_name.clone(), fields.clone()));
                         }
                     }
@@ -971,7 +1007,7 @@ impl LowerCtx {
 
                 // Heuristic: if there's exactly one value type with >0 fields, use it.
                 // With multiple value types, we can't disambiguate without type info.
-                let value_types: Vec<_> = self.value_fields.iter().collect();
+                let value_types: Vec<_> = self.struct_fields.iter().collect();
                 if value_types.len() == 1 {
                     let (tn, fields) = value_types[0];
                     return Some((tn.clone(), fields.clone()));
@@ -990,12 +1026,12 @@ impl LowerCtx {
 
     /// Resolve a method call to a mangled impl function name.
     /// Tries type-specific lookup first, falls back to method-name-only if unambiguous.
-    fn resolve_impl_method(&self, obj: &Expr, method: &str) -> Option<String> {
+    fn resolve_impl_method(&self, obj: &Expr, method: &str) -> ImplMethodResult {
         // Try type-specific lookup
-        if let Some((type_name, _)) = self.resolve_value_type(obj) {
+        if let Some((type_name, _)) = self.resolve_struct_type(obj) {
             let key = (type_name, method.to_string());
             if let Some(mangled) = self.impl_methods.get(&key) {
-                return Some(mangled.clone());
+                return ImplMethodResult::Resolved(mangled.clone());
             }
         }
 
@@ -1006,10 +1042,13 @@ impl LowerCtx {
             .filter(|((_, mn), _)| mn == method)
             .collect();
         if matches.len() == 1 {
-            return Some(matches[0].1.clone());
+            return ImplMethodResult::Resolved(matches[0].1.clone());
+        }
+        if matches.len() > 1 {
+            return ImplMethodResult::Ambiguous;
         }
 
-        None
+        ImplMethodResult::NotFound
     }
 
     /// Lower a .copy() call on a value type.

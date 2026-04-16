@@ -10,12 +10,19 @@ use crate::token_stream::TokenStream;
 use crate::type_expr::{parse_type, parse_type_params};
 
 /// Parse a function definition (§9.1, §9.3, §14.2).
-pub fn parse_fn_def(
-    ts: &mut TokenStream,
-    report: &mut Report,
-    is_async: bool,
-    is_export: bool,
-) -> FnDef {
+/// Parsed function header (name, type params, self, params, return type).
+struct FnHeader {
+    start: Span,
+    name: String,
+    type_params: Vec<TypeParam>,
+    self_param: Option<SelfParam>,
+    params: Vec<Param>,
+    return_type: Option<TypeExpr>,
+}
+
+/// Parse the common parts of a function: name, type params, self, params, return type.
+/// Consumes `fn`, name, `(params...)`, and optional `-> ReturnType`.
+fn parse_fn_header(ts: &mut TokenStream, report: &mut Report) -> FnHeader {
     let start = ts.advance().span; // consume 'fn'
     let name = ts.expect_ident(report).unwrap_or_default();
     let type_params = parse_type_params(ts, report);
@@ -43,21 +50,39 @@ pub fn parse_fn_def(
         None
     };
 
+    FnHeader {
+        start,
+        name,
+        type_params,
+        self_param,
+        params,
+        return_type,
+    }
+}
+
+pub fn parse_fn_def(
+    ts: &mut TokenStream,
+    report: &mut Report,
+    is_async: bool,
+    is_export: bool,
+) -> FnDef {
+    let header = parse_fn_header(ts, report);
+
     ts.expect_newline_or_eof(report);
     let body = parse_body(ts, report);
     ts.expect(&TokenKind::End, report);
     let end = ts.peek_span();
 
     FnDef {
-        name,
-        type_params,
-        self_param,
-        params,
-        return_type,
+        name: header.name,
+        type_params: header.type_params,
+        self_param: header.self_param,
+        params: header.params,
+        return_type: header.return_type,
         body,
         is_async,
         is_export,
-        span: start.merge(end),
+        span: header.start.merge(end),
     }
 }
 
@@ -184,46 +209,22 @@ pub fn parse_trait_def(ts: &mut TokenStream, report: &mut Report, is_export: boo
 /// Parse a function signature without body (for trait method declarations).
 /// `fn name(self, params...) -> ReturnType`
 fn parse_fn_signature(ts: &mut TokenStream, report: &mut Report) -> FnDef {
-    let start = ts.advance().span; // consume 'fn'
-    let name = ts.expect_ident(report).unwrap_or_default();
-    let type_params = parse_type_params(ts, report);
-
-    ts.expect(&TokenKind::LParen, report);
-
-    let self_param = if matches!(ts.peek(), TokenKind::Ident(s) if s == "self") {
-        let sp = ts.advance().span;
-        if ts.check(&TokenKind::Comma) {
-            ts.advance();
-        }
-        Some(SelfParam { span: sp })
-    } else {
-        None
-    };
-
-    let params = parse_params(ts, report);
-    ts.expect(&TokenKind::RParen, report);
-
-    let return_type = if ts.check(&TokenKind::Arrow) {
-        ts.advance();
-        Some(parse_type(ts, report))
-    } else {
-        None
-    };
+    let header = parse_fn_header(ts, report);
 
     // Signature only — no body, no end keyword
     ts.expect_newline_or_eof(report);
     let end = ts.peek_span();
 
     FnDef {
-        name,
-        type_params,
-        self_param,
-        params,
-        return_type,
+        name: header.name,
+        type_params: header.type_params,
+        self_param: header.self_param,
+        params: header.params,
+        return_type: header.return_type,
         body: vec![],
         is_async: false,
         is_export: false,
-        span: start.merge(end),
+        span: header.start.merge(end),
     }
 }
 
