@@ -149,6 +149,8 @@ struct LowerCtx {
     data_types: std::collections::HashSet<String>,
     /// Tracks variables/temps known to hold Float values (for correct binop selection)
     float_vars: std::collections::HashSet<String>,
+    /// Tracks mutable local variables (use alloca/store/load instead of SSA copy)
+    mut_vars: std::collections::HashSet<String>,
     /// Impl method registry: (target_type_name, method_name) → mangled_fn_name
     impl_methods: std::collections::HashMap<(String, String), String>,
     /// Current self type when lowering impl method bodies (None outside impl methods)
@@ -176,6 +178,7 @@ impl LowerCtx {
             struct_fields: std::collections::HashMap::new(),
             data_types: std::collections::HashSet::new(),
             float_vars: std::collections::HashSet::new(),
+            mut_vars: std::collections::HashSet::new(),
             impl_methods: std::collections::HashMap::new(),
             self_type: None,
         }
@@ -225,6 +228,7 @@ impl LowerCtx {
     fn lower_fn(&mut self, f: &FnDef) -> Function {
         // Clear per-function state
         self.float_vars.clear();
+        self.mut_vars.clear();
 
         let params: Vec<(String, Ty)> = f
             .params
@@ -283,10 +287,15 @@ impl LowerCtx {
                 if is_float {
                     self.float_vars.insert(s.name.clone());
                 }
-                body.push(Instruction::Copy {
+                // Mutable locals use alloca+store for SSA-compatible mutation
+                body.push(Instruction::Alloca {
                     dest: s.name.clone(),
-                    source: val,
                 });
+                body.push(Instruction::Store {
+                    dest: s.name.clone(),
+                    value: Operand::Var(val),
+                });
+                self.mut_vars.insert(s.name.clone());
             }
             Stmt::Return(s) => {
                 let value = s.value.as_ref().map(|v| {
@@ -350,7 +359,19 @@ impl LowerCtx {
                 dest
             }
 
-            ExprKind::Ident(name) => name.clone(),
+            ExprKind::Ident(name) => {
+                if self.mut_vars.contains(name.as_str()) {
+                    // Mutable local: load from alloca
+                    let temp = self.fresh_temp();
+                    body.push(Instruction::Load {
+                        dest: temp.clone(),
+                        source: name.clone(),
+                    });
+                    temp
+                } else {
+                    name.clone()
+                }
+            }
 
             ExprKind::BinaryOp(lhs, op, rhs) => {
                 let l = self.lower_expr(lhs, body);
@@ -573,11 +594,32 @@ impl LowerCtx {
 
             ExprKind::Assign(lhs, rhs) => {
                 let val = self.lower_expr(rhs, body);
-                if let ExprKind::Ident(name) = &lhs.kind {
-                    body.push(Instruction::Copy {
-                        dest: name.clone(),
-                        source: val.clone(),
-                    });
+                match &lhs.kind {
+                    ExprKind::Ident(name) => {
+                        if self.mut_vars.contains(name.as_str()) {
+                            // Mutable local: store to alloca
+                            body.push(Instruction::Store {
+                                dest: name.clone(),
+                                value: Operand::Var(val.clone()),
+                            });
+                        } else {
+                            body.push(Instruction::Copy {
+                                dest: name.clone(),
+                                source: val.clone(),
+                            });
+                        }
+                    }
+                    ExprKind::FieldAccess(obj, field) => {
+                        // Field mutation: obj.field = val
+                        if let ExprKind::Ident(obj_name) = &obj.kind {
+                            if self.mut_vars.contains(obj_name.as_str()) {
+                                self.lower_field_assign(
+                                    obj_name, obj, field, &val, body,
+                                );
+                            }
+                        }
+                    }
+                    _ => {}
                 }
                 val
             }
@@ -1049,6 +1091,58 @@ impl LowerCtx {
         }
 
         ImplMethodResult::NotFound
+    }
+
+    /// Lower a field assignment: `obj.field = val`.
+    /// Loads the struct, replaces the target field, stores back.
+    fn lower_field_assign(
+        &mut self,
+        obj_name: &str,
+        obj_expr: &Expr,
+        field: &str,
+        val: &str,
+        body: &mut Vec<Instruction>,
+    ) {
+        if let Some((type_name, field_defs)) = self.resolve_struct_type(obj_expr) {
+            if let Some(field_idx) = field_defs.iter().position(|(n, _)| n == field) {
+                // Load current struct value
+                let current = self.fresh_temp();
+                body.push(Instruction::Load {
+                    dest: current.clone(),
+                    source: obj_name.to_string(),
+                });
+
+                // Build new struct: extract all fields, replace the target
+                let mut field_operands = Vec::with_capacity(field_defs.len());
+                for (i, _) in field_defs.iter().enumerate() {
+                    if i == field_idx {
+                        field_operands.push(Operand::Var(val.to_string()));
+                    } else {
+                        let extracted = self.fresh_temp();
+                        body.push(Instruction::FieldGet {
+                            dest: extracted.clone(),
+                            obj: Operand::Var(current.clone()),
+                            type_name: type_name.clone(),
+                            field_index: i as u32,
+                        });
+                        field_operands.push(Operand::Var(extracted));
+                    }
+                }
+
+                let new_struct = self.fresh_temp();
+                body.push(Instruction::StructInit {
+                    dest: new_struct.clone(),
+                    type_name: type_name.clone(),
+                    fields: field_operands,
+                });
+
+                // Store back to the mutable variable
+                body.push(Instruction::Store {
+                    dest: obj_name.to_string(),
+                    value: Operand::Var(new_struct),
+                });
+            }
+        }
     }
 
     /// Lower a .copy() call on a value type.

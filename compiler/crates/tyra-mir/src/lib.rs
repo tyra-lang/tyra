@@ -355,4 +355,50 @@ print("done")
             main.body
         );
     }
+
+    #[test]
+    fn mut_local_uses_alloca_store_load() {
+        let source = "mut x = 10\nx = 20\nprintln(x)\n";
+        let prog = lower_str(source);
+        let main = &prog.functions[0];
+        let has_alloca = main
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::Alloca { dest } if dest == "x"));
+        let store_count = main
+            .body
+            .iter()
+            .filter(|i| matches!(i, Instruction::Store { dest, .. } if dest == "x"))
+            .count();
+        let has_load = main
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::Load { source, .. } if source == "x"));
+        assert!(has_alloca, "expected Alloca for mut x");
+        assert!(store_count >= 2, "expected at least 2 Stores to x (init + reassign), got {store_count}");
+        assert!(has_load, "expected Load from x for println");
+    }
+
+    #[test]
+    fn data_field_mutation() {
+        let source = "data User\n  id: Int\n  mut name: String\nend\nmut user = User(id: 1, name: \"alice\")\nuser.name = \"bob\"\n";
+        let prog = lower_str(source);
+        let main = &prog.functions[0];
+        // Should have Alloca for user
+        let has_alloca = main
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::Alloca { dest } if dest == "user"));
+        assert!(has_alloca, "expected Alloca for mut user");
+        // Should have at least 2 StructInit (constructor + field mutation rebuild)
+        let struct_inits = main
+            .body
+            .iter()
+            .filter(|i| matches!(i, Instruction::StructInit { .. }))
+            .count();
+        assert!(
+            struct_inits >= 2,
+            "expected >= 2 StructInit (init + field mutation), got {struct_inits}"
+        );
+    }
 }
