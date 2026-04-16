@@ -33,8 +33,7 @@ pub fn emit_llvm_ir(program: &Program) -> String {
         .struct_defs
         .iter()
         .map(|sd| {
-            let is_adt =
-                sd.name.starts_with("Option__") || sd.name.starts_with("Result__");
+            let is_adt = sd.fields.first().map(|(n, _)| n == "tag").unwrap_or(false);
             let info = StructInfo {
                 llvm_name: format!("%struct.{}", sd.name),
                 field_types: sd.fields.iter().map(|(_, ty)| ty.clone()).collect(),
@@ -911,22 +910,26 @@ fn emit_instruction(
             dest,
             type_name,
             tag,
-            payload,
-            payload_field_index,
+            fields,
         } => {
             let info = &ctx.struct_map[type_name.as_str()];
             let llvm_ty = &info.llvm_name;
             let num_fields = info.field_types.len();
 
             // Field 0: tag (i8)
-            let mut current = format!("%{dest}.s0");
+            let mut current = if num_fields <= 1 && fields.is_empty() {
+                // Tag-only struct (unit variant with no payload fields in struct)
+                format!("%{dest}")
+            } else {
+                format!("%{dest}.s0")
+            };
             writeln!(
                 out,
                 "  {current} = insertvalue {llvm_ty} undef, i8 {tag}, 0"
             )
             .unwrap();
 
-            // Fill remaining fields: payload goes to payload_field_index, others get zero
+            // Fill remaining fields from the fields vector, zero-filling extras
             for fi in 1..num_fields {
                 let field_ty_str = llvm_type_str(&info.field_types[fi], ctx.struct_map);
                 let is_last = fi + 1 == num_fields;
@@ -936,28 +939,25 @@ fn emit_instruction(
                     format!("%{dest}.s{fi}")
                 };
 
-                if fi as u32 == *payload_field_index {
-                    if let Some(payload_op) = payload {
-                        let val = operand_ref(payload_op, func);
-                        writeln!(
-                            out,
-                            "  {step_dest} = insertvalue {llvm_ty} {current}, {field_ty_str} {val}, {fi}"
-                        )
-                        .unwrap();
-                    } else {
-                        let zero = match field_ty_str.as_str() {
-                            "ptr" => "null",
-                            "double" => "0.0",
-                            _ => "0",
-                        };
-                        writeln!(
-                            out,
-                            "  {step_dest} = insertvalue {llvm_ty} {current}, {field_ty_str} {zero}, {fi}"
-                        )
-                        .unwrap();
-                    }
+                let field_idx = fi - 1; // fields[0] → struct field 1, etc.
+                if let Some(field_op) = fields.get(field_idx) {
+                    // Check for zero placeholder on non-integer fields
+                    let val = match field_op {
+                        Operand::Const(Constant::Int(0)) if field_ty_str == "ptr" => {
+                            "null".to_string()
+                        }
+                        Operand::Const(Constant::Int(0)) if field_ty_str == "double" => {
+                            "0.0".to_string()
+                        }
+                        _ => operand_ref(field_op, func),
+                    };
+                    writeln!(
+                        out,
+                        "  {step_dest} = insertvalue {llvm_ty} {current}, {field_ty_str} {val}, {fi}"
+                    )
+                    .unwrap();
                 } else {
-                    // Non-payload field: insert zero
+                    // No field provided: insert zero
                     let zero = match field_ty_str.as_str() {
                         "ptr" => "null",
                         "double" => "0.0",

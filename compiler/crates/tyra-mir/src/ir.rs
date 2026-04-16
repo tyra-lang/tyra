@@ -119,16 +119,15 @@ pub enum Instruction {
         field_index: u32,
     },
 
-    /// `dest = adt_init type_name { tag, payload }`
-    /// Constructs an ADT variant (Option/Result) as a tagged struct.
-    /// tag: 0 = Some/Ok, 1 = None/Err
-    /// payload_field_index: which field to place the payload in (1 for Option/Ok, 2 for Err)
+    /// `dest = adt_init type_name { tag, fields... }`
+    /// Constructs an ADT variant as a tagged struct.
+    /// fields: payload values in struct field order (excluding the tag at field 0).
+    /// Empty for unit variants (e.g., None, Cash).
     AdtInit {
         dest: String,
         type_name: String,
         tag: i64,
-        payload: Option<Operand>,
-        payload_field_index: u32,
+        fields: Vec<Operand>,
     },
 
     /// `dest = adt_tag obj`

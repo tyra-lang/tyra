@@ -33,9 +33,45 @@ pub fn lower(file: &SourceFile) -> Program {
         match item {
             Item::TypeDef(t) => {
                 if let TypeDefKind::Adt(variants) = &t.kind {
+                    // Track max field count across all variants for struct layout
+                    let mut max_fields: Vec<(String, Ty)> = Vec::new();
+
                     for (i, variant) in variants.iter().enumerate() {
                         ctx.variant_tags
                             .insert((t.name.clone(), variant.name.clone()), i as i64);
+
+                        // Collect variant field definitions for payload lowering
+                        let vfields: Vec<(String, Ty)> = variant
+                            .fields
+                            .iter()
+                            .map(|f| (f.name.clone(), Ty::from_type_expr(&f.type_annotation)))
+                            .collect();
+                        ctx.adt_variant_fields.insert(
+                            (t.name.clone(), variant.name.clone()),
+                            vfields.clone(),
+                        );
+
+                        // Extend max_fields to cover all variant fields.
+                        // When variants have different types at the same position,
+                        // use the "widest" type to avoid LLVM type mismatches.
+                        for (j, (fname, fty)) in vfields.iter().enumerate() {
+                            if j >= max_fields.len() {
+                                max_fields.push((fname.clone(), fty.clone()));
+                            } else if max_fields[j].1 != *fty {
+                                // Type conflict at this position: use the wider type.
+                                // On 64-bit: ptr and i64 are both 8 bytes; String (ptr)
+                                // is the safest common representation.
+                                max_fields[j] = (fname.clone(), wider_type(&max_fields[j].1, fty));
+                            }
+                        }
+                    }
+
+                    // Register struct def for ADTs with payload fields
+                    if !max_fields.is_empty() {
+                        let mut struct_fields = vec![("tag".into(), Ty::Int)];
+                        struct_fields.extend(max_fields);
+                        ctx.adt_struct_defs
+                            .insert(t.name.clone(), struct_fields);
                     }
                 }
             }
@@ -203,6 +239,8 @@ struct LowerCtx {
     self_type: Option<String>,
     /// Tracks variables/temps with generic types (Option<T>, Result<T, E>) for ADT lowering
     generic_var_types: std::collections::HashMap<String, Ty>,
+    /// ADT variant field definitions: (type_name, variant_name) → [(field_name, field_type)]
+    adt_variant_fields: std::collections::HashMap<(String, String), Vec<(String, Ty)>>,
     /// Return type of the function currently being lowered (for ? operator)
     current_fn_return_type: Ty,
     /// Collected ADT struct defs (monomorphized Option/Result types)
@@ -238,6 +276,7 @@ impl LowerCtx {
             impl_methods: std::collections::HashMap::new(),
             self_type: None,
             generic_var_types: std::collections::HashMap::new(),
+            adt_variant_fields: std::collections::HashMap::new(),
             current_fn_return_type: Ty::Unit,
             adt_struct_defs: std::collections::HashMap::new(),
         }
@@ -323,7 +362,9 @@ impl LowerCtx {
                     self.string_vars.insert(name.clone());
                 }
                 Ty::Named(type_name) => {
-                    if self.struct_fields.contains_key(type_name) {
+                    if self.struct_fields.contains_key(type_name)
+                        || self.adt_struct_defs.contains_key(type_name)
+                    {
                         self.var_types.insert(name.clone(), type_name.clone());
                     }
                 }
@@ -488,8 +529,7 @@ impl LowerCtx {
                         dest: dest.clone(),
                         type_name: type_name.clone(),
                         tag: 1,
-                        payload: None,
-                        payload_field_index: 1,
+                        fields: vec![],
                     });
                     self.generic_var_types.insert(dest.clone(), full_type);
                     self.var_types.insert(dest.clone(), type_name);
@@ -560,19 +600,91 @@ impl LowerCtx {
                     self.register_adt_type(&full_type);
                     let type_name = full_type.monomorphized_name();
 
-                    // payload_field_index: 1 for Some/Ok, 2 for Err
-                    let payload_field_index = if ctor_name == "Err" { 2u32 } else { 1u32 };
+                    // Build fields vector based on constructor type
+                    let fields = match ctor_name.as_str() {
+                        "Some" => vec![Operand::Var(arg_val)],
+                        "Ok" => vec![Operand::Var(arg_val), Operand::Const(Constant::Int(0))],
+                        "Err" => vec![Operand::Const(Constant::Int(0)), Operand::Var(arg_val)],
+                        _ => vec![Operand::Var(arg_val)],
+                    };
 
                     let dest = self.fresh_temp();
                     body.push(Instruction::AdtInit {
                         dest: dest.clone(),
                         type_name: type_name.clone(),
                         tag,
-                        payload: Some(Operand::Var(arg_val)),
-                        payload_field_index,
+                        fields,
                     });
                     self.generic_var_types.insert(dest.clone(), full_type);
                     self.var_types.insert(dest.clone(), type_name);
+                    return dest;
+                }
+
+                // Check for qualified ADT constructor: Payment.Card(last4: "1234")
+                if let ExprKind::FieldAccess(obj, variant_name) = &callee.kind
+                    && let ExprKind::Ident(type_name) = &obj.kind
+                    && self.adt_variant_fields.contains_key(&(type_name.clone(), variant_name.clone()))
+                {
+                    let vfields = self
+                        .adt_variant_fields
+                        .get(&(type_name.clone(), variant_name.clone()))
+                        .cloned()
+                        .unwrap_or_default();
+                    let tag = self
+                        .variant_tags
+                        .get(&(type_name.clone(), variant_name.clone()))
+                        .copied()
+                        .unwrap_or(0);
+
+                    // Map labeled args to field order (same logic as value constructors)
+                    let max_field_count = self
+                        .adt_struct_defs
+                        .get(type_name)
+                        .map(|f| f.len() - 1) // subtract tag field
+                        .unwrap_or(vfields.len());
+
+                    let mut field_operands = Vec::with_capacity(max_field_count);
+                    let mut used_args: std::collections::HashSet<usize> =
+                        std::collections::HashSet::new();
+
+                    for (_fi, (fname, _fty)) in vfields.iter().enumerate() {
+                        let labeled = args.iter().enumerate().find(|(idx, a)| {
+                            !used_args.contains(idx) && a.label.as_deref() == Some(fname)
+                        });
+                        let resolved = if let Some((idx, a)) = labeled {
+                            used_args.insert(idx);
+                            Some(a)
+                        } else {
+                            let positional =
+                                args.iter().enumerate().find(|(idx, _)| !used_args.contains(idx));
+                            if let Some((idx, a)) = positional {
+                                used_args.insert(idx);
+                                Some(a)
+                            } else {
+                                None
+                            }
+                        };
+                        if let Some(a) = resolved {
+                            let val = self.lower_expr(&a.value, body);
+                            field_operands.push(Operand::Var(val));
+                        } else {
+                            field_operands.push(Operand::Const(Constant::Int(0)));
+                        }
+                    }
+
+                    // Pad with zeros for fields beyond this variant's count
+                    while field_operands.len() < max_field_count {
+                        field_operands.push(Operand::Const(Constant::Int(0)));
+                    }
+
+                    let dest = self.fresh_temp();
+                    body.push(Instruction::AdtInit {
+                        dest: dest.clone(),
+                        type_name: type_name.clone(),
+                        tag,
+                        fields: field_operands,
+                    });
+                    self.var_types.insert(dest.clone(), type_name.clone());
                     return dest;
                 }
 
@@ -954,8 +1066,10 @@ impl LowerCtx {
                         dest: ret_err.clone(),
                         type_name: ret_type_name,
                         tag: 1,
-                        payload: Some(Operand::Var(err_val)),
-                        payload_field_index: 2, // err_value field
+                        fields: vec![
+                            Operand::Const(Constant::Int(0)),
+                            Operand::Var(err_val),
+                        ],
                     });
                     body.push(Instruction::Return {
                         value: Some(Operand::Var(ret_err)),
@@ -970,8 +1084,7 @@ impl LowerCtx {
                         dest: none_val.clone(),
                         type_name: ret_type_name,
                         tag: 1,
-                        payload: None,
-                        payload_field_index: 1,
+                        fields: vec![],
                     });
                     body.push(Instruction::Return {
                         value: Some(Operand::Var(none_val)),
@@ -998,10 +1111,25 @@ impl LowerCtx {
             ExprKind::Spawn(inner) => self.lower_expr(inner, body),
 
             ExprKind::FieldAccess(obj, field) => {
-                // Check if this is an ADT constructor: Color.Red → tag constant
+                // Check if this is an ADT constructor: Color.Red or Payment.Cash
                 if let ExprKind::Ident(type_name) = &obj.kind
                     && let Some(&tag) = self.variant_tags.get(&(type_name.clone(), field.clone()))
                 {
+                    // If this ADT has a struct def (has payload variants), emit AdtInit
+                    if self.adt_struct_defs.contains_key(type_name) {
+                        let max_field_count = self.adt_struct_defs[type_name].len() - 1;
+                        let fields = vec![Operand::Const(Constant::Int(0)); max_field_count];
+                        let dest = self.fresh_temp();
+                        body.push(Instruction::AdtInit {
+                            dest: dest.clone(),
+                            type_name: type_name.clone(),
+                            tag,
+                            fields,
+                        });
+                        self.var_types.insert(dest.clone(), type_name.clone());
+                        return dest;
+                    }
+                    // Pure unit-only ADT: emit tag constant directly
                     let dest = self.fresh_temp();
                     body.push(Instruction::Const {
                         dest: dest.clone(),
@@ -1202,6 +1330,22 @@ impl LowerCtx {
             dest: result_slot.clone(),
         });
 
+        // Pre-allocate pattern-bound variables to avoid SSA dominance issues.
+        // When multiple arms bind the same name (e.g., Dog(name) + Cat(name)),
+        // the alloca must dominate all uses across all arms.
+        for arm in &m.arms {
+            if let PatternKind::Constructor(_, fields) = &arm.pattern.kind {
+                for pf in fields {
+                    if !self.mut_vars.contains(&pf.field_name) {
+                        body.push(Instruction::Alloca {
+                            dest: pf.field_name.clone(),
+                        });
+                        self.mut_vars.insert(pf.field_name.clone());
+                    }
+                }
+            }
+        }
+
         // Pre-generate all labels
         let arm_labels: Vec<String> = (0..m.arms.len())
             .map(|i| self.fresh_label(&format!("arm_{i}")))
@@ -1324,31 +1468,73 @@ impl LowerCtx {
                             false_label: next_label.clone(),
                         });
                     } else {
-                        // User-defined ADT: look up tag from variant_tags
-                        let tag = self
-                            .variant_tags
-                            .iter()
-                            .find(|((_, vn), _)| vn == variant_name)
-                            .map(|(_, &t)| t);
+                        // User-defined ADT: look up tag from variant_tags.
+                        // Use subject type name for disambiguation when available.
+                        let subject_type_name = self.var_types.get(&subject).cloned();
+                        let tag = if let Some(ref stn) = subject_type_name {
+                            self.variant_tags
+                                .get(&(stn.clone(), variant_name.clone()))
+                                .copied()
+                        } else {
+                            // Fallback: search by variant name only (ambiguous)
+                            self.variant_tags
+                                .iter()
+                                .find(|((_, vn), _)| vn == variant_name)
+                                .map(|(_, &t)| t)
+                        };
 
                         if let Some(tag) = tag {
-                            let lit = self.fresh_temp();
-                            body.push(Instruction::Const {
-                                dest: lit.clone(),
-                                value: Constant::Int(tag),
-                            });
-                            let cond = self.fresh_temp();
-                            body.push(Instruction::BinOp {
-                                dest: cond.clone(),
-                                op: MirBinOp::EqInt,
-                                lhs: Operand::Var(subject.clone()),
-                                rhs: Operand::Var(lit),
-                            });
-                            body.push(Instruction::BranchIf {
-                                cond: Operand::Var(cond),
-                                true_label: arm_label.clone(),
-                                false_label: next_label.clone(),
-                            });
+                            let has_struct = subject_type_name
+                                .as_ref()
+                                .map(|n| self.adt_struct_defs.contains_key(n))
+                                .unwrap_or(false);
+
+                            if has_struct {
+                                // Struct-based ADT: extract tag via AdtTag
+                                let stn = subject_type_name.unwrap();
+                                let tag_val = self.fresh_temp();
+                                body.push(Instruction::AdtTag {
+                                    dest: tag_val.clone(),
+                                    obj: Operand::Var(subject.clone()),
+                                    type_name: stn,
+                                });
+                                let lit = self.fresh_temp();
+                                body.push(Instruction::Const {
+                                    dest: lit.clone(),
+                                    value: Constant::Int(tag),
+                                });
+                                let cond = self.fresh_temp();
+                                body.push(Instruction::BinOp {
+                                    dest: cond.clone(),
+                                    op: MirBinOp::EqInt,
+                                    lhs: Operand::Var(tag_val),
+                                    rhs: Operand::Var(lit),
+                                });
+                                body.push(Instruction::BranchIf {
+                                    cond: Operand::Var(cond),
+                                    true_label: arm_label.clone(),
+                                    false_label: next_label.clone(),
+                                });
+                            } else {
+                                // Unit-only ADT: subject is plain integer tag
+                                let lit = self.fresh_temp();
+                                body.push(Instruction::Const {
+                                    dest: lit.clone(),
+                                    value: Constant::Int(tag),
+                                });
+                                let cond = self.fresh_temp();
+                                body.push(Instruction::BinOp {
+                                    dest: cond.clone(),
+                                    op: MirBinOp::EqInt,
+                                    lhs: Operand::Var(subject.clone()),
+                                    rhs: Operand::Var(lit),
+                                });
+                                body.push(Instruction::BranchIf {
+                                    cond: Operand::Var(cond),
+                                    true_label: arm_label.clone(),
+                                    false_label: next_label.clone(),
+                                });
+                            }
                         } else {
                             // Unknown constructor — fall through (treat as wildcard)
                             body.push(Instruction::Jump {
@@ -1368,6 +1554,11 @@ impl LowerCtx {
                     source: subject.clone(),
                 });
             }
+
+            // Track arm body start BEFORE pattern bindings so that
+            // pattern-bound variables (Copy instructions) are included in
+            // last_temp_in_range when the arm body just references the bound variable.
+            let arm_body_start = body.len();
 
             // Bind constructor payload variables: when Some(x) → x = payload
             if let PatternKind::Constructor(variant_name, fields) = &arm.pattern.kind {
@@ -1401,11 +1592,11 @@ impl LowerCtx {
                         field_index,
                     });
 
-                    // Bind the field name from the pattern
+                    // Store into the pre-allocated alloca for this variable
                     let bind_name = &fields[0].field_name;
-                    body.push(Instruction::Copy {
+                    body.push(Instruction::Store {
                         dest: bind_name.clone(),
-                        source: payload,
+                        value: Operand::Var(payload),
                     });
 
                     // Track the type of the bound variable
@@ -1434,11 +1625,49 @@ impl LowerCtx {
                             }
                         }
                     }
+                } else if !fields.is_empty() {
+                    // User-defined ADT: extract payload fields by position
+                    let subject_type_name = self.var_types.get(&subject).cloned();
+                    if let Some(stn) = subject_type_name {
+                        // Look up variant field definitions using subject type name
+                        let vfields: Option<Vec<(String, Ty)>> = self
+                            .adt_variant_fields
+                            .get(&(stn.clone(), variant_name.clone()))
+                            .cloned();
+
+                        if let Some(vfields) = vfields {
+                            for (fi, pf) in fields.iter().enumerate() {
+                                let field_index = (fi + 1) as u32; // +1 for tag at field 0
+                                let payload = self.fresh_temp();
+                                body.push(Instruction::AdtPayload {
+                                    dest: payload.clone(),
+                                    obj: Operand::Var(subject.clone()),
+                                    type_name: stn.clone(),
+                                    field_index,
+                                });
+                                // Store into the pre-allocated alloca for this variable
+                                body.push(Instruction::Store {
+                                    dest: pf.field_name.clone(),
+                                    value: Operand::Var(payload.clone()),
+                                });
+                                // Track field type
+                                if let Some((_, fty)) = vfields.get(fi) {
+                                    match fty {
+                                        Ty::String => {
+                                            self.string_vars.insert(pf.field_name.clone());
+                                        }
+                                        Ty::Float => {
+                                            self.float_vars.insert(pf.field_name.clone());
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            // Track arm body start to find the last temp from THIS arm only
-            let arm_body_start = body.len();
             for stmt in &arm.body {
                 self.lower_stmt(stmt, body);
             }
@@ -1930,4 +2159,24 @@ fn ast_binop_to_mir(op: BinOp, is_float: bool) -> MirBinOp {
         (BinOp::And, _) => MirBinOp::And,
         (BinOp::Or, _) => MirBinOp::Or,
     }
+}
+
+/// Choose the wider type when two ADT variants have different types at the same
+/// field position. On 64-bit platforms, String (ptr) and Int (i64) are both 8 bytes.
+/// When types differ, prefer String (ptr) as the safe common representation.
+fn wider_type(a: &Ty, b: &Ty) -> Ty {
+    // Same type: no conflict
+    if a == b {
+        return a.clone();
+    }
+    // String (ptr) is the safest fallback for mixed types
+    if matches!(a, Ty::String) || matches!(b, Ty::String) {
+        return Ty::String;
+    }
+    // Float (double) vs Int: use Float (8 bytes, superset representation)
+    if matches!(a, Ty::Float) || matches!(b, Ty::Float) {
+        return Ty::Float;
+    }
+    // Default: keep the first type (both i64-compatible)
+    a.clone()
 }
