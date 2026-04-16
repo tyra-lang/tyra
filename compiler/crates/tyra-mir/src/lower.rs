@@ -149,6 +149,8 @@ struct LowerCtx {
     data_types: std::collections::HashSet<String>,
     /// Tracks variables/temps known to hold Float values (for correct binop selection)
     float_vars: std::collections::HashSet<String>,
+    /// Tracks variables/temps known to hold String values (for interpolation type detection)
+    string_vars: std::collections::HashSet<String>,
     /// Tracks mutable local variables (use alloca/store/load instead of SSA copy)
     mut_vars: std::collections::HashSet<String>,
     /// Impl method registry: (target_type_name, method_name) → mangled_fn_name
@@ -178,6 +180,7 @@ impl LowerCtx {
             struct_fields: std::collections::HashMap::new(),
             data_types: std::collections::HashSet::new(),
             float_vars: std::collections::HashSet::new(),
+            string_vars: std::collections::HashSet::new(),
             mut_vars: std::collections::HashSet::new(),
             impl_methods: std::collections::HashMap::new(),
             self_type: None,
@@ -228,6 +231,7 @@ impl LowerCtx {
     fn lower_fn(&mut self, f: &FnDef) -> Function {
         // Clear per-function state
         self.float_vars.clear();
+        self.string_vars.clear();
         self.mut_vars.clear();
 
         let params: Vec<(String, Ty)> = f
@@ -272,9 +276,13 @@ impl LowerCtx {
         match stmt {
             Stmt::Let(s) => {
                 let is_float = self.is_float_expr(&s.value);
+                let is_string = self.is_string_expr(&s.value);
                 let val = self.lower_expr(&s.value, body);
                 if is_float {
                     self.float_vars.insert(s.name.clone());
+                }
+                if is_string {
+                    self.string_vars.insert(s.name.clone());
                 }
                 body.push(Instruction::Copy {
                     dest: s.name.clone(),
@@ -283,9 +291,13 @@ impl LowerCtx {
             }
             Stmt::Mut(s) => {
                 let is_float = self.is_float_expr(&s.value);
+                let is_string = self.is_string_expr(&s.value);
                 let val = self.lower_expr(&s.value, body);
                 if is_float {
                     self.float_vars.insert(s.name.clone());
+                }
+                if is_string {
+                    self.string_vars.insert(s.name.clone());
                 }
                 // Mutable locals use alloca+store for SSA-compatible mutation
                 body.push(Instruction::Alloca {
@@ -769,25 +781,40 @@ impl LowerCtx {
             }
 
             ExprKind::StringInterp(parts) => {
-                // TODO: String interpolation requires runtime string concatenation.
-                // Current implementation only includes literal parts and evaluates
-                // (but discards) interpolated expressions. Full implementation needs
-                // a runtime concat/format function.
-                let mut combined = String::new();
+                // Build a printf-style format string and collect args.
+                // Type detection determines the format specifier per expression.
+                let mut format_str = String::new();
+                let mut format_args: Vec<Operand> = Vec::new();
+
                 for part in parts {
                     match part {
-                        StringPart::Lit(s) => combined.push_str(s),
+                        StringPart::Lit(s) => {
+                            // Escape '%' for printf format strings
+                            format_str.push_str(&s.replace('%', "%%"));
+                        }
                         StringPart::Expr(e) => {
-                            // Evaluate for side effects, but result is discarded
-                            self.lower_expr(e, body);
+                            let is_float = self.is_float_expr(e);
+                            let is_string = self.is_string_expr(e);
+                            let val = self.lower_expr(e, body);
+
+                            if is_string {
+                                format_str.push_str("%s");
+                            } else if is_float {
+                                format_str.push_str("%g");
+                            } else {
+                                format_str.push_str("%ld");
+                            }
+                            format_args.push(Operand::Var(val));
                         }
                     }
                 }
-                let idx = self.intern_string(&combined);
+
+                let format_ref = self.intern_string(&format_str);
                 let dest = self.fresh_temp();
-                body.push(Instruction::Const {
+                body.push(Instruction::StringFormat {
                     dest: dest.clone(),
-                    value: Constant::StringRef(idx),
+                    format_ref,
+                    args: format_args,
                 });
                 dest
             }
@@ -1030,6 +1057,25 @@ impl LowerCtx {
         }
     }
 
+    /// Check if an expression produces a String value.
+    /// Used to select format specifiers in string interpolation.
+    fn is_string_expr(&self, expr: &Expr) -> bool {
+        match &expr.kind {
+            ExprKind::StringLit(_) => true,
+            ExprKind::StringInterp(_) => true,
+            ExprKind::Ident(name) => self.string_vars.contains(name),
+            ExprKind::FieldAccess(obj, field) => {
+                if let Some((_type_name, field_defs)) = self.resolve_struct_type(obj) {
+                    if let Some((_, ty)) = field_defs.iter().find(|(n, _)| n == field) {
+                        return *ty == Ty::String;
+                    }
+                }
+                false
+            }
+            _ => false,
+        }
+    }
+
     /// Resolve the struct type (value or data) of an expression.
     /// Returns (type_name, field_defs) if the expression is a known struct-typed binding.
     fn resolve_struct_type(&self, expr: &Expr) -> Option<(String, Vec<(String, Ty)>)> {
@@ -1216,7 +1262,8 @@ impl LowerCtx {
                 | Instruction::Load { dest, .. }
                 | Instruction::Phi { dest, .. }
                 | Instruction::StructInit { dest, .. }
-                | Instruction::FieldGet { dest, .. } => return Some(dest.clone()),
+                | Instruction::FieldGet { dest, .. }
+                | Instruction::StringFormat { dest, .. } => return Some(dest.clone()),
                 _ => continue,
             }
         }
@@ -1237,7 +1284,8 @@ impl LowerCtx {
                 | Instruction::Load { dest, .. }
                 | Instruction::Phi { dest, .. }
                 | Instruction::StructInit { dest, .. }
-                | Instruction::FieldGet { dest, .. } => return Some(dest.clone()),
+                | Instruction::FieldGet { dest, .. }
+                | Instruction::StringFormat { dest, .. } => return Some(dest.clone()),
                 _ => continue,
             }
         }

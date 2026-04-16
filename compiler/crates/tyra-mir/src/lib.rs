@@ -401,4 +401,45 @@ print("done")
             "expected >= 2 StructInit (init + field mutation), got {struct_inits}"
         );
     }
+
+    #[test]
+    fn string_interp_emits_string_format() {
+        let source = "let name = \"world\"\nlet s = \"hello #{name}\"\n";
+        let prog = lower_str(source);
+        let main = &prog.functions[0];
+        let has_format = main
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::StringFormat { .. }));
+        assert!(
+            has_format,
+            "expected StringFormat instruction for standalone string interpolation"
+        );
+    }
+
+    #[test]
+    fn string_interp_in_print_uses_segments() {
+        let source = "let x = 42\nprint(\"val=#{x}\")\n";
+        let prog = lower_str(source);
+        let main = &prog.functions[0];
+        // print with StringInterp should use segment approach (multiple print calls)
+        let print_calls = main
+            .body
+            .iter()
+            .filter(|i| matches!(i, Instruction::Call { func, .. } if func == "print"))
+            .count();
+        assert!(
+            print_calls >= 2,
+            "expected multiple print calls for print+interp, got {print_calls}"
+        );
+        // Should NOT have StringFormat (optimization: direct segment printing)
+        let has_format = main
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::StringFormat { .. }));
+        assert!(
+            !has_format,
+            "print+interp should NOT use StringFormat (segment optimization)"
+        );
+    }
 }

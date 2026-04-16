@@ -118,6 +118,16 @@ pub enum Instruction {
         type_name: String,
         field_index: u32,
     },
+
+    /// `dest = string_format(format_ref, args...)`
+    /// Formats a string using a printf-style format string and arguments.
+    /// Used for string interpolation outside print() calls.
+    /// format_ref is an index into Program.string_constants.
+    StringFormat {
+        dest: String,
+        format_ref: usize,
+        args: Vec<Operand>,
+    },
 }
 
 /// A constant value.

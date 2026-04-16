@@ -107,6 +107,7 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "; External declarations").unwrap();
     writeln!(out, "declare i32 @puts(ptr)").unwrap();
     writeln!(out, "declare i32 @printf(ptr, ...)").unwrap();
+    writeln!(out, "declare i32 @snprintf(ptr, i64, ptr, ...)").unwrap();
     writeln!(out).unwrap();
 
     // Build function signature map for cross-function type resolution
@@ -218,6 +219,9 @@ fn emit_function(
                 if string_temps.contains(source.as_str()) {
                     string_temps.insert(dest.clone());
                 }
+            }
+            Instruction::StringFormat { dest, .. } => {
+                string_temps.insert(dest.clone());
             }
             Instruction::Load { dest, source } => {
                 // Propagate string/float type from alloca
@@ -686,6 +690,59 @@ fn emit_instruction(
             writeln!(
                 out,
                 "  %{dest} = extractvalue {llvm_ty} {val}, {field_index}"
+            )
+            .unwrap();
+        }
+
+        Instruction::StringFormat {
+            dest,
+            format_ref,
+            args,
+        } => {
+            // Allocate a 1024-byte stack buffer for the formatted string
+            writeln!(out, "  %{dest}.buf = alloca [1024 x i8]").unwrap();
+            writeln!(
+                out,
+                "  %{dest}.ptr = getelementptr [1024 x i8], ptr %{dest}.buf, i64 0, i64 0"
+            )
+            .unwrap();
+
+            // Build format string reference
+            let fmt_len = strings[*format_ref].len() + 1;
+            let fmt_ref = format!(
+                "getelementptr ([{fmt_len} x i8], ptr @.str.{format_ref}, i64 0, i64 0)"
+            );
+
+            // Build snprintf argument list
+            let mut snprintf_args = vec![
+                format!("ptr %{dest}.ptr"),
+                "i64 1024".to_string(),
+                format!("ptr {fmt_ref}"),
+            ];
+
+            for (j, arg) in args.iter().enumerate() {
+                let val = operand_ref(arg, func);
+                let ty = infer_operand_type(arg, ctx);
+                if ty == "i1" {
+                    // Bool needs widening for printf varargs
+                    writeln!(out, "  %{dest}.zext.{j} = zext i1 {val} to i64").unwrap();
+                    snprintf_args.push(format!("i64 %{dest}.zext.{j}"));
+                } else {
+                    snprintf_args.push(format!("{ty} {val}"));
+                }
+            }
+
+            writeln!(
+                out,
+                "  %{dest}.len = call i32 (ptr, i64, ptr, ...) @snprintf({})",
+                snprintf_args.join(", ")
+            )
+            .unwrap();
+
+            // Result is the buffer pointer
+            writeln!(
+                out,
+                "  %{dest} = getelementptr [1024 x i8], ptr %{dest}.buf, i64 0, i64 0"
             )
             .unwrap();
         }
