@@ -174,6 +174,8 @@ fn emit_function(
     let mut string_temps: std::collections::HashSet<String> = std::collections::HashSet::new();
     // Pre-scan: collect temps that hold float values
     let mut float_temps: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // Pre-scan: collect temps that hold bool values
+    let mut bool_temps: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     // Register function params by their declared type
     for (name, ty) in &func.params {
@@ -183,6 +185,9 @@ fn emit_function(
             }
             Ty::Float => {
                 float_temps.insert(name.clone());
+            }
+            Ty::Bool => {
+                bool_temps.insert(name.clone());
             }
             _ => {}
         }
@@ -197,6 +202,9 @@ fn emit_function(
                 Constant::Float(_) => {
                     float_temps.insert(dest.clone());
                 }
+                Constant::Bool(_) => {
+                    bool_temps.insert(dest.clone());
+                }
                 _ => {}
             },
             Instruction::BinOp { dest, op, .. } => {
@@ -209,6 +217,27 @@ fn emit_function(
                 ) {
                     float_temps.insert(dest.clone());
                 }
+                // Comparison ops produce i1 (bool) results
+                if matches!(
+                    op,
+                    MirBinOp::EqInt
+                        | MirBinOp::NeqInt
+                        | MirBinOp::LtInt
+                        | MirBinOp::LeInt
+                        | MirBinOp::GtInt
+                        | MirBinOp::GeInt
+                        | MirBinOp::LtFloat
+                        | MirBinOp::LeFloat
+                        | MirBinOp::GtFloat
+                        | MirBinOp::GeFloat
+                        | MirBinOp::And
+                        | MirBinOp::Or
+                ) {
+                    bool_temps.insert(dest.clone());
+                }
+            }
+            Instruction::Not { dest, .. } => {
+                bool_temps.insert(dest.clone());
             }
             Instruction::FieldGet {
                 dest,
@@ -222,6 +251,8 @@ fn emit_function(
                             float_temps.insert(dest.clone());
                         } else if *field_ty == Ty::String {
                             string_temps.insert(dest.clone());
+                        } else if *field_ty == Ty::Bool {
+                            bool_temps.insert(dest.clone());
                         }
                     }
                 }
@@ -240,8 +271,22 @@ fn emit_function(
                         Ty::Float => {
                             float_temps.insert(dest.clone());
                         }
+                        Ty::Bool => {
+                            bool_temps.insert(dest.clone());
+                        }
                         _ => {}
                     }
+                }
+            }
+            Instruction::Neg { dest, operand } => {
+                // Float negation produces a float result
+                let is_float = match operand {
+                    Operand::Const(Constant::Float(_)) => true,
+                    Operand::Var(name) => float_temps.contains(name),
+                    _ => false,
+                };
+                if is_float {
+                    float_temps.insert(dest.clone());
                 }
             }
             Instruction::Copy { dest, source } => {
@@ -250,6 +295,9 @@ fn emit_function(
                 }
                 if string_temps.contains(source.as_str()) {
                     string_temps.insert(dest.clone());
+                }
+                if bool_temps.contains(source.as_str()) {
+                    bool_temps.insert(dest.clone());
                 }
             }
             Instruction::StringFormat { dest, .. } => {
@@ -268,6 +316,8 @@ fn emit_function(
                             string_temps.insert(dest.clone());
                         } else if *field_ty == Ty::Float {
                             float_temps.insert(dest.clone());
+                        } else if *field_ty == Ty::Bool {
+                            bool_temps.insert(dest.clone());
                         }
                     }
                 }
@@ -289,6 +339,7 @@ fn emit_function(
         func,
         &string_temps,
         &float_temps,
+        &bool_temps,
         &struct_temps,
         struct_map,
     );
@@ -303,6 +354,9 @@ fn emit_function(
                     }
                     "double" => {
                         float_temps.insert(dest.clone());
+                    }
+                    "i1" => {
+                        bool_temps.insert(dest.clone());
                     }
                     _ => {}
                 }
@@ -345,6 +399,7 @@ fn emit_function(
         fn_sigs,
         string_temps: &string_temps,
         float_temps: &float_temps,
+        bool_temps: &bool_temps,
         struct_temps: &struct_temps,
         alloca_llvm_types: &alloca_llvm_types,
     };
@@ -462,6 +517,7 @@ fn pre_scan_alloca_llvm_types(
     func: &Function,
     string_temps: &std::collections::HashSet<String>,
     float_temps: &std::collections::HashSet<String>,
+    bool_temps: &std::collections::HashSet<String>,
     struct_temps: &std::collections::HashMap<String, String>,
     struct_map: &std::collections::HashMap<String, StructInfo>,
 ) -> std::collections::HashMap<String, String> {
@@ -478,6 +534,8 @@ fn pre_scan_alloca_llvm_types(
                     alloca_llvm_types.insert(dest.clone(), "ptr".into());
                 } else if float_temps.contains(name) {
                     alloca_llvm_types.insert(dest.clone(), "double".into());
+                } else if bool_temps.contains(name) {
+                    alloca_llvm_types.insert(dest.clone(), "i1".into());
                 } else if let Some(stype) = struct_temps.get(name.as_str()) {
                     alloca_llvm_types.insert(
                         dest.clone(),
@@ -498,6 +556,7 @@ struct EmitCtx<'a> {
     fn_sigs: &'a std::collections::HashMap<String, FnSig>,
     string_temps: &'a std::collections::HashSet<String>,
     float_temps: &'a std::collections::HashSet<String>,
+    bool_temps: &'a std::collections::HashSet<String>,
     struct_temps: &'a std::collections::HashMap<String, String>,
     /// Resolved LLVM type for alloca slots (from Store analysis).
     alloca_llvm_types: &'a std::collections::HashMap<String, String>,
@@ -580,8 +639,22 @@ fn emit_instruction(
                 MirBinOp::SubFloat => format!("fsub double {l}, {r}"),
                 MirBinOp::MulFloat => format!("fmul double {l}, {r}"),
                 MirBinOp::DivFloat => format!("fdiv double {l}, {r}"),
-                MirBinOp::EqInt => format!("icmp eq i64 {l}, {r}"),
-                MirBinOp::NeqInt => format!("icmp ne i64 {l}, {r}"),
+                MirBinOp::EqInt => {
+                    let is_bool = is_bool_operand(lhs, ctx) || is_bool_operand(rhs, ctx);
+                    if is_bool {
+                        format!("icmp eq i1 {l}, {r}")
+                    } else {
+                        format!("icmp eq i64 {l}, {r}")
+                    }
+                }
+                MirBinOp::NeqInt => {
+                    let is_bool = is_bool_operand(lhs, ctx) || is_bool_operand(rhs, ctx);
+                    if is_bool {
+                        format!("icmp ne i1 {l}, {r}")
+                    } else {
+                        format!("icmp ne i64 {l}, {r}")
+                    }
+                }
                 MirBinOp::LtInt => format!("icmp slt i64 {l}, {r}"),
                 MirBinOp::LeInt => format!("icmp sle i64 {l}, {r}"),
                 MirBinOp::GtInt => format!("icmp sgt i64 {l}, {r}"),
@@ -598,7 +671,16 @@ fn emit_instruction(
 
         Instruction::Neg { dest, operand } => {
             let v = operand_ref(operand, func);
-            writeln!(out, "  %{dest} = sub i64 0, {v}").unwrap();
+            let is_float = match operand {
+                Operand::Const(Constant::Float(_)) => true,
+                Operand::Var(name) => ctx.float_temps.contains(name),
+                _ => false,
+            };
+            if is_float {
+                writeln!(out, "  %{dest} = fneg double {v}").unwrap();
+            } else {
+                writeln!(out, "  %{dest} = sub i64 0, {v}").unwrap();
+            }
         }
 
         Instruction::Not { dest, operand } => {
@@ -627,6 +709,8 @@ fn emit_instruction(
                     .unwrap();
             } else if ctx.float_temps.contains(source.as_str()) {
                 writeln!(out, "  %{dest} = fadd double %{source}, 0.0").unwrap();
+            } else if ctx.bool_temps.contains(source.as_str()) {
+                writeln!(out, "  %{dest} = xor i1 %{source}, 0").unwrap();
             } else {
                 // SSA alias: create a new SSA value identical to the source
                 writeln!(out, "  %{dest} = add i64 %{source}, 0").unwrap();
@@ -672,11 +756,16 @@ fn emit_instruction(
         }
 
         Instruction::Phi { dest, branches } => {
+            let phi_ty = if let Some((first_val, _)) = branches.first() {
+                infer_operand_type(first_val, ctx)
+            } else {
+                "i64".into()
+            };
             let entries: Vec<String> = branches
                 .iter()
                 .map(|(val, label)| format!("[{}, %{label}]", operand_ref(val, func)))
                 .collect();
-            writeln!(out, "  %{dest} = phi i64 {}", entries.join(", ")).unwrap();
+            writeln!(out, "  %{dest} = phi {phi_ty} {}", entries.join(", ")).unwrap();
         }
 
         Instruction::Alloca { dest } => {
@@ -959,6 +1048,7 @@ fn emit_print_call(
         Operand::Var(name) => ctx.float_temps.contains(name),
         _ => false,
     };
+    let is_bool = is_bool_operand(arg, ctx);
 
     let call_str = if is_string && is_println {
         format!("call i32 @puts(ptr {val})")
@@ -971,6 +1061,17 @@ fn emit_print_call(
             "@.fmt.float"
         };
         format!("call i32 (ptr, ...) @printf(ptr {fmt}, double {val})")
+    } else if is_bool {
+        // Bool (i1) must be widened to i64 for printf varargs
+        let fmt = if is_println {
+            "@.fmt.int_ln"
+        } else {
+            "@.fmt.int"
+        };
+        // Emit zext inline before the call
+        let wide = format!("{val}.wide");
+        writeln!(out, "  {wide} = zext i1 {val} to i64").unwrap();
+        format!("call i32 (ptr, ...) @printf(ptr {fmt}, i64 {wide})")
     } else {
         let fmt = if is_println {
             "@.fmt.int_ln"
@@ -1025,6 +1126,8 @@ fn infer_operand_type(op: &Operand, ctx: &EmitCtx) -> String {
                 "ptr".into()
             } else if ctx.float_temps.contains(name) {
                 "double".into()
+            } else if ctx.bool_temps.contains(name) {
+                "i1".into()
             } else if let Some(stype) = ctx.struct_temps.get(name.as_str()) {
                 ctx.struct_map[stype.as_str()].llvm_name.clone()
             } else {
@@ -1037,6 +1140,15 @@ fn infer_operand_type(op: &Operand, ctx: &EmitCtx) -> String {
             Constant::StringRef(_) => "ptr".into(),
             _ => "i64".into(),
         },
+    }
+}
+
+/// Check if an operand holds a bool (i1) value.
+fn is_bool_operand(op: &Operand, ctx: &EmitCtx) -> bool {
+    match op {
+        Operand::Const(Constant::Bool(_)) => true,
+        Operand::Var(name) => ctx.bool_temps.contains(name),
+        _ => false,
     }
 }
 
