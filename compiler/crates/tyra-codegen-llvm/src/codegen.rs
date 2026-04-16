@@ -108,6 +108,8 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare i32 @puts(ptr)").unwrap();
     writeln!(out, "declare i32 @printf(ptr, ...)").unwrap();
     writeln!(out, "declare i32 @snprintf(ptr, i64, ptr, ...)").unwrap();
+    writeln!(out, "declare ptr @malloc(i64)").unwrap();
+    writeln!(out, "declare void @abort()").unwrap();
     writeln!(out).unwrap();
 
     // Build function signature map for cross-function type resolution
@@ -712,16 +714,30 @@ fn emit_instruction(
             format_ref,
             args,
         } => {
-            // Allocate a 1024-byte stack buffer for the formatted string.
-            // Known limitation: buffer doesn't survive function return (stack-allocated).
+            // Heap-allocate a 1024-byte buffer for the formatted string.
+            // Uses malloc so the string survives function return (needed for to_string()).
             // Strings longer than 1024 bytes are truncated by snprintf.
-            // Both limitations are acceptable for pre-alpha; heap allocation deferred to GC milestone.
-            writeln!(out, "  %{dest}.buf = alloca [1024 x i8]").unwrap();
+            // TODO: GC integration to free these buffers.
             writeln!(
                 out,
-                "  %{dest} = getelementptr [1024 x i8], ptr %{dest}.buf, i64 0, i64 0"
+                "  %{dest} = call ptr @malloc(i64 1024)"
             )
             .unwrap();
+            // Abort if malloc returns null (out of memory)
+            writeln!(
+                out,
+                "  %{dest}.null = icmp eq ptr %{dest}, null"
+            )
+            .unwrap();
+            writeln!(
+                out,
+                "  br i1 %{dest}.null, label %{dest}.oom, label %{dest}.ok"
+            )
+            .unwrap();
+            writeln!(out, "{dest}.oom:").unwrap();
+            writeln!(out, "  call void @abort()").unwrap();
+            writeln!(out, "  unreachable").unwrap();
+            writeln!(out, "{dest}.ok:").unwrap();
 
             // Build format string reference
             let fmt_len = strings[*format_ref].len() + 1;
