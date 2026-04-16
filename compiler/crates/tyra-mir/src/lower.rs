@@ -165,6 +165,8 @@ struct LowerCtx {
     /// Set of type names that are data types (reference semantics, §8.6).
     /// Used to prevent copy() on data types and for future mut field handling.
     data_types: std::collections::HashSet<String>,
+    /// Tracks variable/temp → struct type name mapping for correct type resolution
+    var_types: std::collections::HashMap<String, String>,
     /// Tracks variables/temps known to hold Float values (for correct binop selection)
     float_vars: std::collections::HashSet<String>,
     /// Tracks variables/temps known to hold String values (for interpolation type detection)
@@ -199,6 +201,7 @@ impl LowerCtx {
             variant_tags: std::collections::HashMap::new(),
             struct_fields: std::collections::HashMap::new(),
             data_types: std::collections::HashSet::new(),
+            var_types: std::collections::HashMap::new(),
             float_vars: std::collections::HashSet::new(),
             string_vars: std::collections::HashSet::new(),
             mut_vars: std::collections::HashSet::new(),
@@ -251,6 +254,7 @@ impl LowerCtx {
 
     fn lower_fn(&mut self, f: &FnDef) -> Function {
         // Clear per-function state
+        self.var_types.clear();
         self.float_vars.clear();
         self.string_vars.clear();
         self.mut_vars.clear();
@@ -261,7 +265,7 @@ impl LowerCtx {
             .map(|p| (p.name.clone(), Ty::from_type_expr(&p.type_annotation)))
             .collect();
 
-        // Register parameter types for correct binop/interpolation type detection
+        // Register parameter types for correct type resolution
         for (name, ty) in &params {
             match ty {
                 Ty::Float => {
@@ -269,6 +273,11 @@ impl LowerCtx {
                 }
                 Ty::String => {
                     self.string_vars.insert(name.clone());
+                }
+                Ty::Named(type_name) => {
+                    if self.struct_fields.contains_key(type_name) {
+                        self.var_types.insert(name.clone(), type_name.clone());
+                    }
                 }
                 _ => {}
             }
@@ -311,12 +320,16 @@ impl LowerCtx {
             Stmt::Let(s) => {
                 let is_float = self.is_float_expr(&s.value);
                 let is_string = self.is_string_expr(&s.value);
+                let struct_type = self.expr_struct_type(&s.value);
                 let val = self.lower_expr(&s.value, body);
                 if is_float {
                     self.float_vars.insert(s.name.clone());
                 }
                 if is_string {
                     self.string_vars.insert(s.name.clone());
+                }
+                if let Some(stype) = struct_type {
+                    self.var_types.insert(s.name.clone(), stype);
                 }
                 body.push(Instruction::Copy {
                     dest: s.name.clone(),
@@ -326,12 +339,16 @@ impl LowerCtx {
             Stmt::Mut(s) => {
                 let is_float = self.is_float_expr(&s.value);
                 let is_string = self.is_string_expr(&s.value);
+                let struct_type = self.expr_struct_type(&s.value);
                 let val = self.lower_expr(&s.value, body);
                 if is_float {
                     self.float_vars.insert(s.name.clone());
                 }
                 if is_string {
                     self.string_vars.insert(s.name.clone());
+                }
+                if let Some(stype) = struct_type {
+                    self.var_types.insert(s.name.clone(), stype);
                 }
                 // Mutable locals use alloca+store for SSA-compatible mutation
                 body.push(Instruction::Alloca {
@@ -1134,12 +1151,50 @@ impl LowerCtx {
         }
     }
 
+    /// Determine the struct type name of an expression (for var_types tracking).
+    /// Returns the type name if the expression is a struct constructor call or copy().
+    fn expr_struct_type(&self, expr: &Expr) -> Option<String> {
+        match &expr.kind {
+            ExprKind::Call(callee, _) => {
+                if let ExprKind::Ident(name) = &callee.kind {
+                    // Constructor call: Point(x: 3.0, y: 4.0)
+                    if self.struct_fields.contains_key(name) {
+                        return Some(name.clone());
+                    }
+                    // Regular function call: check return type
+                    if let Some(Ty::Named(type_name)) = self.fn_return_types.get(name) {
+                        if self.struct_fields.contains_key(type_name) {
+                            return Some(type_name.clone());
+                        }
+                    }
+                }
+                if let ExprKind::FieldAccess(obj, method) = &callee.kind {
+                    // copy() call: p.copy(x: 1.0)
+                    if method == "copy" {
+                        return self.resolve_struct_type(obj).map(|(tn, _)| tn);
+                    }
+                    // impl method call: check return type
+                    if let ImplMethodResult::Resolved(mangled) =
+                        self.resolve_impl_method(obj, method)
+                    {
+                        if let Some(Ty::Named(type_name)) = self.fn_return_types.get(&mangled)
+                        {
+                            if self.struct_fields.contains_key(type_name) {
+                                return Some(type_name.clone());
+                            }
+                        }
+                    }
+                }
+                None
+            }
+            ExprKind::Ident(name) => self.var_types.get(name).cloned(),
+            _ => None,
+        }
+    }
+
     /// Resolve the struct type (value or data) of an expression.
     /// Returns (type_name, field_defs) if the expression is a known struct-typed binding.
     fn resolve_struct_type(&self, expr: &Expr) -> Option<(String, Vec<(String, Ty)>)> {
-        // For identifiers, check if any value type has matching fields.
-        // In the absence of full type tracking, we check all value types.
-        // TODO: Thread proper type information from the type checker.
         match &expr.kind {
             ExprKind::Ident(name) => {
                 // If this is `self` in an impl method, return the known self type
@@ -1151,18 +1206,25 @@ impl LowerCtx {
                     }
                 }
 
-                // Heuristic: if there's exactly one value type with >0 fields, use it.
-                // With multiple value types, we can't disambiguate without type info.
-                let value_types: Vec<_> = self.struct_fields.iter().collect();
-                if value_types.len() == 1 {
-                    let (tn, fields) = value_types[0];
-                    return Some((tn.clone(), fields.clone()));
+                // Check var_types for tracked variable types
+                if let Some(type_name) = self.var_types.get(name) {
+                    if let Some(fields) = self.struct_fields.get(type_name) {
+                        return Some((type_name.clone(), fields.clone()));
+                    }
                 }
-                // Multiple value types: best-effort heuristic
-                // TODO: Proper type tracking would solve this.
-                if value_types.len() > 1 {
-                    let (tn, fields) = value_types[0];
-                    return Some((tn.clone(), fields.clone()));
+
+                None
+            }
+            ExprKind::FieldAccess(obj, field) => {
+                // Chained field access: resolve inner object, then look up field type
+                if let Some((_parent_type, field_defs)) = self.resolve_struct_type(obj) {
+                    if let Some((_, Ty::Named(field_type_name))) =
+                        field_defs.iter().find(|(n, _)| n == field)
+                    {
+                        if let Some(inner_fields) = self.struct_fields.get(field_type_name) {
+                            return Some((field_type_name.clone(), inner_fields.clone()));
+                        }
+                    }
                 }
                 None
             }
