@@ -166,7 +166,7 @@ pub fn parse_trait_def(ts: &mut TokenStream, report: &mut Report, is_export: boo
 
     let mut methods = Vec::new();
     while ts.check(&TokenKind::Fn) {
-        methods.push(parse_fn_def(ts, report, false, false));
+        methods.push(parse_fn_signature(ts, report));
         ts.skip_newlines();
     }
 
@@ -177,6 +177,52 @@ pub fn parse_trait_def(ts: &mut TokenStream, report: &mut Report, is_export: boo
         type_params,
         methods,
         is_export,
+        span: start.merge(end),
+    }
+}
+
+/// Parse a function signature without body (for trait method declarations).
+/// `fn name(self, params...) -> ReturnType`
+fn parse_fn_signature(ts: &mut TokenStream, report: &mut Report) -> FnDef {
+    let start = ts.advance().span; // consume 'fn'
+    let name = ts.expect_ident(report).unwrap_or_default();
+    let type_params = parse_type_params(ts, report);
+
+    ts.expect(&TokenKind::LParen, report);
+
+    let self_param = if matches!(ts.peek(), TokenKind::Ident(s) if s == "self") {
+        let sp = ts.advance().span;
+        if ts.check(&TokenKind::Comma) {
+            ts.advance();
+        }
+        Some(SelfParam { span: sp })
+    } else {
+        None
+    };
+
+    let params = parse_params(ts, report);
+    ts.expect(&TokenKind::RParen, report);
+
+    let return_type = if ts.check(&TokenKind::Arrow) {
+        ts.advance();
+        Some(parse_type(ts, report))
+    } else {
+        None
+    };
+
+    // Signature only — no body, no end keyword
+    ts.expect_newline_or_eof(report);
+    let end = ts.peek_span();
+
+    FnDef {
+        name,
+        type_params,
+        self_param,
+        params,
+        return_type,
+        body: vec![],
+        is_async: false,
+        is_export: false,
         span: start.merge(end),
     }
 }

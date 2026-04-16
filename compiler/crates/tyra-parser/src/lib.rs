@@ -473,4 +473,30 @@ print("hello")
         assert!(matches!(ast.items[0], Item::FnDef(_)));
         assert!(matches!(ast.items[1], Item::Stmt(_)));
     }
+
+    #[test]
+    fn parse_trait_def_signature_only() {
+        let source = "trait Stringable\n  fn to_string(self) -> String\nend\n";
+        let (ast, report) = parse_str(source);
+        assert!(!report.has_errors(), "errors: {:?}", report.diagnostics());
+        if let Item::TraitDef(t) = &ast.items[0] {
+            assert_eq!(t.name, "Stringable");
+            assert_eq!(t.methods.len(), 1);
+            assert_eq!(t.methods[0].name, "to_string");
+            assert!(t.methods[0].self_param.is_some());
+            assert!(t.methods[0].body.is_empty());
+        } else {
+            panic!("expected TraitDef");
+        }
+    }
+
+    #[test]
+    fn parse_trait_followed_by_impl() {
+        let source = "trait Summable\n  fn sum(self) -> Int\nend\nimpl Summable for Pair\n  fn sum(self) -> Int\n    self.first + self.second\n  end\nend\n";
+        let (ast, report) = parse_str(source);
+        assert!(!report.has_errors(), "errors: {:?}", report.diagnostics());
+        assert_eq!(ast.items.len(), 2);
+        assert!(matches!(ast.items[0], Item::TraitDef(_)));
+        assert!(matches!(ast.items[1], Item::ImplDef(_)));
+    }
 }
