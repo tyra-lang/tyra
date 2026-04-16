@@ -6,6 +6,7 @@
 
 pub mod ir;
 pub mod lower;
+mod monomorphize;
 
 pub use ir::*;
 pub use lower::lower;
