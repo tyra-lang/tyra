@@ -319,4 +319,40 @@ print("done")
             "expected FieldGet for second field in copy()"
         );
     }
+
+    #[test]
+    fn impl_method_lowered_as_mangled_function() {
+        let source = "value Pair\n  first: Int\n  second: Int\nend\nimpl Summable for Pair\n  fn sum(self) -> Int\n    self.first + self.second\n  end\nend\n";
+        let prog = lower_str(source);
+        // Should have a function named Pair__sum
+        let has_mangled = prog
+            .functions
+            .iter()
+            .any(|f| f.name == "Pair__sum");
+        assert!(
+            has_mangled,
+            "expected mangled function Pair__sum, got: {:?}",
+            prog.functions.iter().map(|f| &f.name).collect::<Vec<_>>()
+        );
+        // The mangled function should have self as first param
+        let pair_sum = prog.functions.iter().find(|f| f.name == "Pair__sum").unwrap();
+        assert_eq!(pair_sum.params[0].0, "self");
+        assert_eq!(pair_sum.params[0].1, tyra_types::Ty::Named("Pair".into()));
+    }
+
+    #[test]
+    fn method_call_resolved_to_mangled_name() {
+        let source = "value Pair\n  first: Int\n  second: Int\nend\nimpl Summable for Pair\n  fn sum(self) -> Int\n    self.first + self.second\n  end\nend\nlet p = Pair(first: 10, second: 20)\nlet r = p.sum()\n";
+        let prog = lower_str(source);
+        let main = &prog.functions.iter().find(|f| f.name == "main").unwrap();
+        // Should have a Call to Pair__sum
+        let has_call = main.body.iter().any(|i| {
+            matches!(i, Instruction::Call { func, .. } if func == "Pair__sum")
+        });
+        assert!(
+            has_call,
+            "expected Call to Pair__sum, got: {:?}",
+            main.body
+        );
+    }
 }

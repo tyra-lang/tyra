@@ -51,6 +51,21 @@ pub fn lower(file: &SourceFile) -> Program {
         }
     }
 
+    // Collect impl block methods for method dispatch (§8.7)
+    for item in &file.items {
+        if let Item::ImplDef(impl_def) = item {
+            if let TypeExprKind::Named(target_name) = &impl_def.target_type.kind {
+                for method in &impl_def.methods {
+                    let mangled = format!("{target_name}__{}", method.name);
+                    ctx.impl_methods.insert(
+                        (target_name.clone(), method.name.clone()),
+                        mangled,
+                    );
+                }
+            }
+        }
+    }
+
     // Lower function definitions
     for item in &file.items {
         if let Item::FnDef(f) = item {
@@ -59,6 +74,18 @@ pub fn lower(file: &SourceFile) -> Program {
                 func.is_main = true;
             }
             ctx.functions.push(func);
+        }
+    }
+
+    // Lower impl method definitions as mangled functions (§8.7, static dispatch)
+    for item in &file.items {
+        if let Item::ImplDef(impl_def) = item {
+            if let TypeExprKind::Named(target_name) = &impl_def.target_type.kind {
+                for method in &impl_def.methods {
+                    let func = ctx.lower_impl_method(method, target_name);
+                    ctx.functions.push(func);
+                }
+            }
         }
     }
 
@@ -108,6 +135,10 @@ struct LowerCtx {
     value_fields: std::collections::HashMap<String, Vec<(String, Ty)>>,
     /// Tracks variables/temps known to hold Float values (for correct binop selection)
     float_vars: std::collections::HashSet<String>,
+    /// Impl method registry: (target_type_name, method_name) → mangled_fn_name
+    impl_methods: std::collections::HashMap<(String, String), String>,
+    /// Current self type when lowering impl method bodies (None outside impl methods)
+    self_type: Option<String>,
 }
 
 impl LowerCtx {
@@ -120,6 +151,8 @@ impl LowerCtx {
             variant_tags: std::collections::HashMap::new(),
             value_fields: std::collections::HashMap::new(),
             float_vars: std::collections::HashSet::new(),
+            impl_methods: std::collections::HashMap::new(),
+            self_type: None,
         }
     }
 
@@ -143,6 +176,25 @@ impl LowerCtx {
             self.string_constants.push(s.to_string());
             idx
         }
+    }
+
+    /// Lower an impl method as a standalone function with mangled name.
+    /// Injects `self` as the first parameter with the target type.
+    fn lower_impl_method(&mut self, f: &FnDef, target_type_name: &str) -> Function {
+        self.self_type = Some(target_type_name.to_string());
+        let mut func = self.lower_fn(f);
+
+        // Inject self as first parameter
+        if f.self_param.is_some() {
+            let self_ty = Ty::Named(target_type_name.to_string());
+            func.params.insert(0, ("self".into(), self_ty));
+        }
+
+        // Apply mangled name
+        func.name = format!("{target_type_name}__{}", f.name);
+
+        self.self_type = None;
+        func
     }
 
     fn lower_fn(&mut self, f: &FnDef) -> Function {
@@ -370,6 +422,26 @@ impl LowerCtx {
                         );
                     }
                     // Not a value type — fall through to regular method call
+                }
+
+                // Check for impl trait method call: p.method() → Type__method(p)
+                // (§8.7 static dispatch)
+                if let ExprKind::FieldAccess(obj, method) = &callee.kind {
+                    if let Some(mangled_name) = self.resolve_impl_method(obj, method) {
+                        let self_val = self.lower_expr(obj, body);
+                        let mut arg_operands = vec![Operand::Var(self_val)];
+                        for a in args {
+                            let t = self.lower_expr(&a.value, body);
+                            arg_operands.push(Operand::Var(t));
+                        }
+                        let dest = self.fresh_temp();
+                        body.push(Instruction::Call {
+                            dest: Some(dest.clone()),
+                            func: mangled_name,
+                            args: arg_operands,
+                        });
+                        return dest;
+                    }
                 }
 
                 // Special case: print/println/eprint/eprintln with StringInterp argument.
@@ -877,21 +949,26 @@ impl LowerCtx {
         // In the absence of full type tracking, we check all value types.
         // TODO: Thread proper type information from the type checker.
         match &expr.kind {
-            ExprKind::Ident(_name) => {
+            ExprKind::Ident(name) => {
+                // If this is `self` in an impl method, return the known self type
+                if name == "self" {
+                    if let Some(type_name) = &self.self_type {
+                        if let Some(fields) = self.value_fields.get(type_name) {
+                            return Some((type_name.clone(), fields.clone()));
+                        }
+                    }
+                }
+
                 // Heuristic: if there's exactly one value type with >0 fields, use it.
                 // With multiple value types, we can't disambiguate without type info.
-                // For now, return the first multi-field type, or the only type available.
                 let value_types: Vec<_> = self.value_fields.iter().collect();
                 if value_types.len() == 1 {
                     let (tn, fields) = value_types[0];
                     return Some((tn.clone(), fields.clone()));
                 }
-                // Multiple value types: try to match by checking downstream usage.
-                // For now, return None and let the caller handle it.
+                // Multiple value types: best-effort heuristic
                 // TODO: Proper type tracking would solve this.
                 if value_types.len() > 1 {
-                    // Return the first one as a best-effort heuristic
-                    // This is known imprecise — see known limitations in CLAUDE.md
                     let (tn, fields) = value_types[0];
                     return Some((tn.clone(), fields.clone()));
                 }
@@ -899,6 +976,30 @@ impl LowerCtx {
             }
             _ => None,
         }
+    }
+
+    /// Resolve a method call to a mangled impl function name.
+    /// Tries type-specific lookup first, falls back to method-name-only if unambiguous.
+    fn resolve_impl_method(&self, obj: &Expr, method: &str) -> Option<String> {
+        // Try type-specific lookup
+        if let Some((type_name, _)) = self.resolve_value_type(obj) {
+            let key = (type_name, method.to_string());
+            if let Some(mangled) = self.impl_methods.get(&key) {
+                return Some(mangled.clone());
+            }
+        }
+
+        // Fall back: if exactly one impl has this method, use it
+        let matches: Vec<_> = self
+            .impl_methods
+            .iter()
+            .filter(|((_, mn), _)| mn == method)
+            .collect();
+        if matches.len() == 1 {
+            return Some(matches[0].1.clone());
+        }
+
+        None
     }
 
     /// Lower a .copy() call on a value type.
