@@ -47,6 +47,16 @@ pub fn lower(file: &SourceFile) -> Program {
                     .collect();
                 ctx.value_fields.insert(v.name.clone(), fields);
             }
+            Item::DataDef(d) => {
+                // Data types use the same struct representation as value types.
+                // Reference semantics (GC-managed pointers) deferred to later milestone.
+                let fields: Vec<(String, Ty)> = d
+                    .fields
+                    .iter()
+                    .map(|f| (f.name.clone(), Ty::from_type_expr(&f.type_annotation)))
+                    .collect();
+                ctx.value_fields.insert(d.name.clone(), fields);
+            }
             _ => {}
         }
     }
