@@ -123,6 +123,8 @@ pub enum Instruction {
     /// Formats a string using a printf-style format string and arguments.
     /// Used for string interpolation outside print() calls.
     /// format_ref is an index into Program.string_constants.
+    /// Known limitation: result is a stack-allocated 1024-byte buffer that does not
+    /// survive function return. Strings longer than 1024 bytes are truncated.
     StringFormat {
         dest: String,
         format_ref: usize,

@@ -62,12 +62,30 @@ pub fn lower(file: &SourceFile) -> Program {
         }
     }
 
+    // Collect function return types for type inference in interpolation
+    for item in &file.items {
+        if let Item::FnDef(f) = item {
+            let ret_ty = f
+                .return_type
+                .as_ref()
+                .map(Ty::from_type_expr)
+                .unwrap_or(Ty::Unit);
+            ctx.fn_return_types.insert(f.name.clone(), ret_ty);
+        }
+    }
+
     // Collect impl block methods for method dispatch (§8.7)
     for item in &file.items {
         if let Item::ImplDef(impl_def) = item {
             if let TypeExprKind::Named(target_name) = &impl_def.target_type.kind {
                 for method in &impl_def.methods {
                     let mangled = format!("{target_name}__{}", method.name);
+                    let ret_ty = method
+                        .return_type
+                        .as_ref()
+                        .map(Ty::from_type_expr)
+                        .unwrap_or(Ty::Unit);
+                    ctx.fn_return_types.insert(mangled.clone(), ret_ty);
                     ctx.impl_methods.insert(
                         (target_name.clone(), method.name.clone()),
                         mangled,
@@ -153,6 +171,8 @@ struct LowerCtx {
     string_vars: std::collections::HashSet<String>,
     /// Tracks mutable local variables (use alloca/store/load instead of SSA copy)
     mut_vars: std::collections::HashSet<String>,
+    /// Function return type registry: fn_name → return_type (for type inference in interpolation)
+    fn_return_types: std::collections::HashMap<String, Ty>,
     /// Impl method registry: (target_type_name, method_name) → mangled_fn_name
     impl_methods: std::collections::HashMap<(String, String), String>,
     /// Current self type when lowering impl method bodies (None outside impl methods)
@@ -182,6 +202,7 @@ impl LowerCtx {
             float_vars: std::collections::HashSet::new(),
             string_vars: std::collections::HashSet::new(),
             mut_vars: std::collections::HashSet::new(),
+            fn_return_types: std::collections::HashMap::new(),
             impl_methods: std::collections::HashMap::new(),
             self_type: None,
         }
@@ -239,6 +260,19 @@ impl LowerCtx {
             .iter()
             .map(|p| (p.name.clone(), Ty::from_type_expr(&p.type_annotation)))
             .collect();
+
+        // Register parameter types for correct binop/interpolation type detection
+        for (name, ty) in &params {
+            match ty {
+                Ty::Float => {
+                    self.float_vars.insert(name.clone());
+                }
+                Ty::String => {
+                    self.string_vars.insert(name.clone());
+                }
+                _ => {}
+            }
+        }
         let return_type = f
             .return_type
             .as_ref()
@@ -1041,7 +1075,6 @@ impl LowerCtx {
             ExprKind::FloatLit(_) => true,
             ExprKind::Ident(name) => self.float_vars.contains(name),
             ExprKind::FieldAccess(obj, field) => {
-                // Check if field access on a value type yields Float
                 if let Some((_type_name, field_defs)) = self.resolve_struct_type(obj) {
                     if let Some((_, ty)) = field_defs.iter().find(|(n, _)| n == field) {
                         return *ty == Ty::Float;
@@ -1053,6 +1086,7 @@ impl LowerCtx {
                 self.is_float_expr(lhs) || self.is_float_expr(rhs)
             }
             ExprKind::UnaryOp(_, inner) => self.is_float_expr(inner),
+            ExprKind::Call(callee, _) => self.call_returns_type(callee, &Ty::Float),
             _ => false,
         }
     }
@@ -1069,6 +1103,30 @@ impl LowerCtx {
                     if let Some((_, ty)) = field_defs.iter().find(|(n, _)| n == field) {
                         return *ty == Ty::String;
                     }
+                }
+                false
+            }
+            ExprKind::Call(callee, _) => self.call_returns_type(callee, &Ty::String),
+            _ => false,
+        }
+    }
+
+    /// Check if a function/method call returns a specific type.
+    fn call_returns_type(&self, callee: &Expr, expected: &Ty) -> bool {
+        match &callee.kind {
+            ExprKind::Ident(name) => self
+                .fn_return_types
+                .get(name.as_str())
+                .map_or(false, |ty| ty == expected),
+            ExprKind::FieldAccess(obj, method) => {
+                // Check impl method return type
+                if let ImplMethodResult::Resolved(mangled) =
+                    self.resolve_impl_method(obj, method)
+                {
+                    return self
+                        .fn_return_types
+                        .get(mangled.as_str())
+                        .map_or(false, |ty| ty == expected);
                 }
                 false
             }

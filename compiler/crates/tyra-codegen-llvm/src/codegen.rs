@@ -156,6 +156,19 @@ fn emit_function(
     // Pre-scan: collect temps that hold float values
     let mut float_temps: std::collections::HashSet<String> = std::collections::HashSet::new();
 
+    // Register function params by their declared type
+    for (name, ty) in &func.params {
+        match ty {
+            Ty::String => {
+                string_temps.insert(name.clone());
+            }
+            Ty::Float => {
+                float_temps.insert(name.clone());
+            }
+            _ => {}
+        }
+    }
+
     for inst in &func.body {
         match inst {
             Instruction::Const { dest, value } => match value {
@@ -699,11 +712,14 @@ fn emit_instruction(
             format_ref,
             args,
         } => {
-            // Allocate a 1024-byte stack buffer for the formatted string
+            // Allocate a 1024-byte stack buffer for the formatted string.
+            // Known limitation: buffer doesn't survive function return (stack-allocated).
+            // Strings longer than 1024 bytes are truncated by snprintf.
+            // Both limitations are acceptable for pre-alpha; heap allocation deferred to GC milestone.
             writeln!(out, "  %{dest}.buf = alloca [1024 x i8]").unwrap();
             writeln!(
                 out,
-                "  %{dest}.ptr = getelementptr [1024 x i8], ptr %{dest}.buf, i64 0, i64 0"
+                "  %{dest} = getelementptr [1024 x i8], ptr %{dest}.buf, i64 0, i64 0"
             )
             .unwrap();
 
@@ -715,7 +731,7 @@ fn emit_instruction(
 
             // Build snprintf argument list
             let mut snprintf_args = vec![
-                format!("ptr %{dest}.ptr"),
+                format!("ptr %{dest}"),
                 "i64 1024".to_string(),
                 format!("ptr {fmt_ref}"),
             ];
@@ -736,13 +752,6 @@ fn emit_instruction(
                 out,
                 "  %{dest}.len = call i32 (ptr, i64, ptr, ...) @snprintf({})",
                 snprintf_args.join(", ")
-            )
-            .unwrap();
-
-            // Result is the buffer pointer
-            writeln!(
-                out,
-                "  %{dest} = getelementptr [1024 x i8], ptr %{dest}.buf, i64 0, i64 0"
             )
             .unwrap();
         }
