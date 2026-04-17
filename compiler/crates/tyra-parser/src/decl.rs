@@ -356,7 +356,7 @@ fn parse_field_defs(ts: &mut TokenStream, report: &mut Report) -> Vec<FieldDef> 
     while !matches!(ts.peek(), TokenKind::End | TokenKind::Eof) {
         let start = ts.peek_span();
         let is_mut = ts.eat(&TokenKind::Mut);
-        let name = ts.expect_ident(report).unwrap_or_default();
+        let name = ts.expect_ident_or_field_keyword(report).unwrap_or_default();
         ts.expect(&TokenKind::Colon, report);
         let type_annotation = parse_type(ts, report);
         let end = type_annotation.span;
@@ -382,7 +382,7 @@ fn parse_variant(ts: &mut TokenStream, report: &mut Report) -> Variant {
         let mut fields = Vec::new();
         while !ts.check(&TokenKind::RParen) && !ts.at_eof() {
             let fstart = ts.peek_span();
-            let fname = ts.expect_ident(report).unwrap_or_default();
+            let fname = ts.expect_ident_or_field_keyword(report).unwrap_or_default();
             ts.expect(&TokenKind::Colon, report);
             let ftype = parse_type(ts, report);
             let fend = ftype.span;

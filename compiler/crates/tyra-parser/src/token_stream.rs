@@ -147,6 +147,46 @@ impl TokenStream {
         }
     }
 
+    /// Expect an identifier or a contextual keyword usable as a field name.
+    /// Keywords like `value`, `data`, `type` are valid as field names in
+    /// value/data type definitions and ADT variant fields.
+    pub fn expect_ident_or_field_keyword(&mut self, report: &mut Report) -> Option<String> {
+        match self.peek().clone() {
+            TokenKind::Ident(name) => {
+                self.advance();
+                Some(name)
+            }
+            ref kw => {
+                if let Some(name) = keyword_as_ident(kw) {
+                    let name = name.to_string();
+                    self.advance();
+                    return Some(name);
+                }
+                let token = self.peek_token().clone();
+                report.add(
+                    Diagnostic::error(format!(
+                        "expected identifier, found {}",
+                        kind_name(&token.kind)
+                    ))
+                    .with_code("E0102")
+                    .with_label(Label::new(token.span, "expected identifier")),
+                );
+                None
+            }
+        }
+    }
+
+    /// Check if the token after the current logical token is a colon.
+    /// Accounts for newline-skipping via peek_skip_newlines.
+    pub fn peek_ahead_is_colon(&self) -> bool {
+        let (_, current_idx) = self.peek_skip_newlines();
+        let mut i = current_idx + 1;
+        while i < self.tokens.len() && self.tokens[i].kind == TokenKind::Newline {
+            i += 1;
+        }
+        i < self.tokens.len() && self.tokens[i].kind == TokenKind::Colon
+    }
+
     // -- Internal helpers --
 
     /// Peek at the raw current token without skipping newlines.
@@ -272,5 +312,27 @@ pub fn kind_name(kind: &TokenKind) -> &'static str {
         TokenKind::Newline => "newline",
         TokenKind::Eof => "end of file",
         TokenKind::Error => "error token",
+    }
+}
+
+/// Convert a keyword token to its string form if it can be used as a field name.
+/// Most keywords are valid as field names in contextual positions.
+pub fn keyword_as_ident(kind: &TokenKind) -> Option<&'static str> {
+    match kind {
+        TokenKind::Value => Some("value"),
+        TokenKind::Data => Some("data"),
+        TokenKind::Type => Some("type"),
+        TokenKind::Trait => Some("trait"),
+        TokenKind::Impl => Some("impl"),
+        TokenKind::Mut => Some("mut"),
+        TokenKind::Async => Some("async"),
+        TokenKind::Await => Some("await"),
+        TokenKind::Spawn => Some("spawn"),
+        TokenKind::Import => Some("import"),
+        TokenKind::Export => Some("export"),
+        TokenKind::Defer => Some("defer"),
+        // Control flow keywords (fn, let, if, else, match, when, for, in,
+        // while, return, end, and, or, not) are NOT valid as field names.
+        _ => None,
     }
 }

@@ -499,4 +499,28 @@ print("hello")
         assert!(matches!(ast.items[0], Item::TraitDef(_)));
         assert!(matches!(ast.items[1], Item::ImplDef(_)));
     }
+
+    #[test]
+    fn keyword_as_field_name_in_adt_variant() {
+        // `value` keyword should be accepted as a field name in ADT variants
+        let (ast, report) = parse_str("type Err =\n  | Bad(value: String)\n");
+        assert!(
+            !report.has_errors(),
+            "keyword 'value' should be accepted as field name: {:?}",
+            report.diagnostics()
+        );
+        assert!(matches!(ast.items[0], Item::TypeDef(_)));
+    }
+
+    #[test]
+    fn keyword_as_field_name_in_value_def() {
+        // `type` keyword should be accepted as a field name in value types
+        let (ast, report) = parse_str("value Config\n  type: String\nend\n");
+        assert!(
+            !report.has_errors(),
+            "keyword 'type' should be accepted as field name: {:?}",
+            report.diagnostics()
+        );
+        assert!(matches!(ast.items[0], Item::ValueDef(_)));
+    }
 }

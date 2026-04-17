@@ -423,6 +423,24 @@ fn parse_call_args(ts: &mut TokenStream, report: &mut Report) -> Vec<Arg> {
     ts.expect(&TokenKind::LParen, report);
     let args = parse_comma_separated(ts, report, &TokenKind::RParen, |ts, r| {
         let start = ts.peek_span();
+
+        // Check for keyword-as-label: `value: expr`, `type: expr`, etc.
+        if let Some(kw_name) = crate::token_stream::keyword_as_ident(ts.peek()) {
+            // Peek ahead: is the next-next token a colon?
+            if ts.peek_ahead_is_colon() {
+                let label = kw_name.to_string();
+                ts.advance(); // consume keyword
+                ts.advance(); // consume ':'
+                let value = parse_expr(ts, r);
+                let span = start.merge(value.span);
+                return Arg {
+                    label: Some(label),
+                    value,
+                    span,
+                };
+            }
+        }
+
         let first = parse_expr(ts, r);
 
         // Check if this is a labeled argument: `name: value`

@@ -143,8 +143,12 @@ fn parse_pattern_fields(ts: &mut TokenStream, report: &mut Report) -> Vec<Patter
     while !ts.check(&TokenKind::RParen) && !ts.at_eof() {
         let start = ts.peek_span();
 
-        // Try to parse as `name: pattern`
-        if let TokenKind::Ident(name) = ts.peek().clone() {
+        // Try to parse as `name: pattern` (accepting keywords as field names)
+        let maybe_name = match ts.peek().clone() {
+            TokenKind::Ident(name) => Some(name),
+            ref kw => crate::token_stream::keyword_as_ident(kw).map(String::from),
+        };
+        if let Some(name) = maybe_name {
             ts.advance();
 
             if ts.check(&TokenKind::Colon) {
