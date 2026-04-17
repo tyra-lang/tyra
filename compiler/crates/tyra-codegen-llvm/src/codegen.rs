@@ -1114,7 +1114,9 @@ fn emit_instruction(
 
             // Fill remaining fields from the fields vector, zero-filling extras
             for fi in 1..num_fields {
-                let field_ty_str = llvm_type_str(&info.field_types[fi], ctx.struct_map);
+                let raw_ty = llvm_type_str(&info.field_types[fi], ctx.struct_map);
+                // Unit (void) is stored as i64 in struct fields
+                let field_ty_str = if raw_ty == "void" { "i64".into() } else { raw_ty };
                 let is_last = fi + 1 == num_fields;
                 let step_dest = if is_last {
                     format!("%{dest}")

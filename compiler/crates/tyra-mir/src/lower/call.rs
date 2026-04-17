@@ -217,8 +217,12 @@ impl super::LowerCtx {
             && method == "ok_or"
             && args.len() == 1
         {
-            // Determine if receiver is Option<T>
-            let opt_type = self.infer_expr_type(obj)
+            // Lower receiver first so chained calls (e.g., .get().ok_or()) are tracked
+            let obj_val = self.lower_expr(obj, body);
+
+            // Determine if receiver is Option<T> (check lowered temp in generic_var_types)
+            let opt_type = self.generic_var_types.get(&obj_val).cloned()
+                .or_else(|| self.infer_expr_type(obj))
                 .or_else(|| {
                     if let ExprKind::Ident(name) = &obj.kind {
                         self.generic_var_types.get(name).cloned()
@@ -229,7 +233,6 @@ impl super::LowerCtx {
             if let Some(ref oty) = opt_type
                 && oty.is_option()
             {
-                let obj_val = self.lower_expr(obj, body);
                 let err_arg = self.lower_expr(&args[0].value, body);
 
                 // Infer err type from the argument expression, variable
@@ -350,6 +353,23 @@ impl super::LowerCtx {
                     .insert(result_val.clone(), result_type.monomorphized_name());
                 return result_val;
             }
+            // Receiver was lowered but is not Option — treat as generic method call.
+            // Use obj_val directly to avoid double-lowering.
+            let arg_operands: Vec<Operand> = args
+                .iter()
+                .map(|a| {
+                    let t = self.lower_expr(&a.value, body);
+                    Operand::Var(t)
+                })
+                .collect();
+            let dest = self.fresh_temp();
+            let mangled = format!("{obj_val}.ok_or");
+            body.push(Instruction::Call {
+                dest: Some(dest.clone()),
+                func: mangled,
+                args: arg_operands,
+            });
+            return dest;
         }
 
         // Check for .copy() on value types only (§8.6)

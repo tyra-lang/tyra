@@ -348,6 +348,7 @@ impl super::LowerCtx {
             ExprKind::FloatLit(_) => Some(Ty::Float),
             ExprKind::StringLit(_) | ExprKind::StringInterp(_) => Some(Ty::String),
             ExprKind::BoolLit(_) => Some(Ty::Bool),
+            ExprKind::UnitLit => Some(Ty::Unit),
             ExprKind::Ident(name) => {
                 if self.float_vars.contains(name) {
                     Some(Ty::Float)
