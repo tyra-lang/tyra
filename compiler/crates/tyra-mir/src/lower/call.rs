@@ -67,18 +67,31 @@ impl super::LowerCtx {
                 .copied()
                 .unwrap_or(0);
 
-            // Map labeled args to field order (same logic as value constructors)
+            // Per-variant slot layout: total payload slots = struct len - 1 (tag).
+            // This variant's fields start at variant_offset (1-based struct field index).
             let max_field_count = self
                 .adt_struct_defs
                 .get(type_name)
-                .map(|f| f.len() - 1) // subtract tag field
+                .map(|f| f.len() - 1) // total payload slots (excluding tag)
                 .unwrap_or(vfields.len());
+            // variant_field_offsets is populated for all user-defined ADT variants in
+            // TypeDef processing. Option/Result/List constructors (Ok/Err/Some/None)
+            // are handled by earlier branches in lower_call and never reach this path,
+            // so the fallback is only a safety net for unregistered edge cases.
+            let variant_offset = self
+                .variant_field_offsets
+                .get(&(type_name.clone(), variant_name.clone()))
+                .copied()
+                .unwrap_or(1);
 
-            let mut field_operands = Vec::with_capacity(max_field_count);
+            // Fill all payload slots with zeroinitializer, then overwrite this variant's slots.
+            let mut field_operands = vec![Operand::Const(Constant::Int(0)); max_field_count];
+
             let mut used_args: std::collections::HashSet<usize> =
                 std::collections::HashSet::new();
 
-            for (_fi, (fname, _fty)) in vfields.iter().enumerate() {
+            for (fi, (fname, _fty)) in vfields.iter().enumerate() {
+                let slot = variant_offset - 1 + fi; // 0-based index into field_operands
                 let labeled = args.iter().enumerate().find(|(idx, a)| {
                     !used_args.contains(idx) && a.label.as_deref() == Some(fname)
                 });
@@ -97,15 +110,10 @@ impl super::LowerCtx {
                 };
                 if let Some(a) = resolved {
                     let val = self.lower_expr(&a.value, body);
-                    field_operands.push(Operand::Var(val));
-                } else {
-                    field_operands.push(Operand::Const(Constant::Int(0)));
+                    if slot < field_operands.len() {
+                        field_operands[slot] = Operand::Var(val);
+                    }
                 }
-            }
-
-            // Pad with zeros for fields beyond this variant's count
-            while field_operands.len() < max_field_count {
-                field_operands.push(Operand::Const(Constant::Int(0)));
             }
 
             let dest = self.fresh_temp();
@@ -400,11 +408,24 @@ impl super::LowerCtx {
                         arg_operands.push(Operand::Var(t));
                     }
                     let dest = self.fresh_temp();
+                    let ret_ty = self.fn_return_types.get(&mangled_name).cloned();
                     body.push(Instruction::Call {
                         dest: Some(dest.clone()),
                         func: mangled_name,
                         args: arg_operands,
                     });
+                    if let Some(ref ty) = ret_ty {
+                        match ty {
+                            Ty::String => { self.string_vars.insert(dest.clone()); }
+                            Ty::Float => { self.float_vars.insert(dest.clone()); }
+                            Ty::Named(n) => { self.var_types.insert(dest.clone(), n.clone()); }
+                            Ty::Generic(_, _) => {
+                                self.generic_var_types.insert(dest.clone(), ty.clone());
+                                self.var_types.insert(dest.clone(), ty.monomorphized_name());
+                            }
+                            _ => {}
+                        }
+                    }
                     return dest;
                 }
                 super::ImplMethodResult::Ambiguous => {

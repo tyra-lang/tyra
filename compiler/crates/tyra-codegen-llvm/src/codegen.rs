@@ -437,9 +437,30 @@ fn emit_function(
     };
     let _ = &alloca_types; // Used by alloca_llvm_types computation
 
-    // Emit instructions
+    // Emit instructions, skipping dead code after block terminators.
+    let mut block_terminated = false;
     for inst in &func.body {
+        match inst {
+            Instruction::Label(_) => {
+                block_terminated = false;
+            }
+            _ if block_terminated => continue,
+            _ => {}
+        }
         emit_instruction(out, inst, func, strings, &ctx);
+        match inst {
+            Instruction::Return { .. }
+            | Instruction::Jump { .. }
+            | Instruction::BranchIf { .. } => {
+                block_terminated = true;
+            }
+            Instruction::Call { func: fname, .. }
+                if matches!(fname.as_str(), "panic" | "sys__exit") =>
+            {
+                block_terminated = true;
+            }
+            _ => {}
+        }
     }
 
     writeln!(out, "}}").unwrap();
@@ -573,6 +594,33 @@ fn pre_scan_struct_types(
             Instruction::Load { dest, source } => {
                 if let Some(stype) = alloca_types.get(source).cloned() {
                     struct_temps.insert(dest.clone(), stype);
+                }
+            }
+            Instruction::AdtPayload {
+                dest,
+                type_name,
+                field_index,
+                ..
+            } => {
+                // If the extracted payload field is itself a struct type, track it.
+                // This handles Result<StructType, E> and Option<StructType> unwrapping.
+                if let Some(info) = struct_map.get(type_name.as_str()) {
+                    if let Some(field_ty) = info.field_types.get(*field_index as usize) {
+                        match field_ty {
+                            Ty::Named(ft_name) => {
+                                if struct_map.contains_key(ft_name.as_str()) {
+                                    struct_temps.insert(dest.clone(), ft_name.clone());
+                                }
+                            }
+                            Ty::Generic(..) => {
+                                let mono = field_ty.monomorphized_name();
+                                if struct_map.contains_key(mono.as_str()) {
+                                    struct_temps.insert(dest.clone(), mono);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
                 }
             }
             _ => {}
@@ -809,8 +857,13 @@ fn emit_instruction(
                 match value {
                     Some(v) => {
                         let ret_ty = llvm_type_str(&func.return_type, ctx.struct_map);
-                        let val = operand_ref(v, func);
-                        writeln!(out, "  ret {ret_ty} {val}").unwrap();
+                        if ret_ty == "void" {
+                            // Unit return: value is a dummy placeholder, ignore it
+                            writeln!(out, "  ret void").unwrap();
+                        } else {
+                            let val = operand_ref(v, func);
+                            writeln!(out, "  ret {ret_ty} {val}").unwrap();
+                        }
                     }
                     None => {
                         writeln!(out, "  ret void").unwrap();

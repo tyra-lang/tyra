@@ -1,0 +1,24 @@
+# stdlib/fs.tyra — Tier 2 file system module (§22)
+# v0.1 stub: open always fails with IoError.
+# Full implementation (fopen/fread/fclose via LLVM extern) deferred to Milestone 3.
+
+export data File
+  _fd: Int
+end
+
+export type FsError =
+  | IoError(message: String)
+
+export fn open(_ path: String) -> Result<File, FsError>
+  Err(FsError.IoError(message: "no such file or directory"))
+end
+
+impl FileOps for File
+  fn close(self) -> Unit
+    ()
+  end
+
+  fn read_all(self) -> Result<String, FsError>
+    Err(FsError.IoError(message: "read_all: not implemented in v0.1"))
+  end
+end

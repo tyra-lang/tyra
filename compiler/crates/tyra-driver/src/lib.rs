@@ -110,6 +110,28 @@ pub fn compile_to_ir(source_path: &Path) -> CompileResult {
     }
 }
 
+/// Find the stdlib directory by walking up from `main_dir` looking for a `stdlib/` folder.
+/// Also checks the `TYRA_STDLIB` environment variable first.
+fn find_stdlib_dir(main_dir: &Path) -> Option<std::path::PathBuf> {
+    if let Ok(p) = std::env::var("TYRA_STDLIB") {
+        let pb = std::path::PathBuf::from(p);
+        if pb.is_dir() {
+            return Some(pb);
+        }
+    }
+    let mut dir = main_dir.to_path_buf();
+    loop {
+        let candidate = dir.join("stdlib");
+        if candidate.is_dir() {
+            return Some(candidate);
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+    None
+}
+
 /// Resolve import declarations by parsing module files and merging exported items.
 /// `import math` → parse `<main_dir>/math.tyra`, merge exported fns as `math__fn_name`.
 fn resolve_imports(
@@ -151,25 +173,46 @@ fn resolve_imports(
         }
 
         // Resolve file path: import a.b.c → <main_dir>/a/b/c.tyra
+        // Fallback: search stdlib directory (found by walking up from main_dir).
         let mut module_path = main_dir.to_path_buf();
         for segment in &imp.path {
             module_path.push(segment);
         }
         module_path.set_extension("tyra");
 
-        let module_source = match std::fs::read_to_string(&module_path) {
-            Ok(s) => s,
-            Err(e) => {
-                report.add(
-                    tyra_diagnostics::Diagnostic::error(format!(
-                        "cannot import `{}`: cannot read `{}`: {e}",
-                        imp.path.join("."),
-                        module_path.display()
-                    ))
-                    .with_code("E0200"),
-                );
-                continue;
+        let module_source = if let Ok(s) = std::fs::read_to_string(&module_path) {
+            s
+        } else if let Some(stdlib_dir) = find_stdlib_dir(main_dir) {
+            let mut stdlib_path = stdlib_dir;
+            for segment in &imp.path {
+                stdlib_path.push(segment);
             }
+            stdlib_path.set_extension("tyra");
+            match std::fs::read_to_string(&stdlib_path) {
+                Ok(s) => {
+                    module_path = stdlib_path;
+                    s
+                }
+                Err(_) => {
+                    report.add(
+                        tyra_diagnostics::Diagnostic::error(format!(
+                            "cannot import `{}`: module not found",
+                            imp.path.join(".")
+                        ))
+                        .with_code("E0200"),
+                    );
+                    continue;
+                }
+            }
+        } else {
+            report.add(
+                tyra_diagnostics::Diagnostic::error(format!(
+                    "cannot import `{}`: module not found",
+                    imp.path.join(".")
+                ))
+                .with_code("E0200"),
+            );
+            continue;
         };
 
         let module_id = sources.add(

@@ -228,9 +228,25 @@ impl super::LowerCtx {
                                     });
 
                                 if let Some(expected_tag) = inner_tag {
-                                    // Unit-variant ADT: payload is the tag integer directly.
-                                    // NOTE: For struct-based inner ADTs (e.g., NotFound(String)),
-                                    // we would need AdtTag extraction instead of EqInt on payload.
+                                    let itn = inner_type_name.as_ref().unwrap();
+                                    let is_inner_struct =
+                                        self.adt_struct_defs.contains_key(itn.as_str());
+
+                                    // Choose the subject for the tag comparison.
+                                    // Struct-based ADTs need AdtTag extraction; unit-variant
+                                    // ADTs (no fields) store the tag as an integer directly.
+                                    let tag_subject = if is_inner_struct {
+                                        let inner_tag_val = self.fresh_temp();
+                                        body.push(Instruction::AdtTag {
+                                            dest: inner_tag_val.clone(),
+                                            obj: Operand::Var(payload),
+                                            type_name: itn.clone(),
+                                        });
+                                        inner_tag_val
+                                    } else {
+                                        payload
+                                    };
+
                                     let inner_lit = self.fresh_temp();
                                     body.push(Instruction::Const {
                                         dest: inner_lit.clone(),
@@ -240,7 +256,7 @@ impl super::LowerCtx {
                                     body.push(Instruction::BinOp {
                                         dest: inner_cond.clone(),
                                         op: MirBinOp::EqInt,
-                                        lhs: Operand::Var(payload),
+                                        lhs: Operand::Var(tag_subject),
                                         rhs: Operand::Var(inner_lit),
                                     });
                                     body.push(Instruction::BranchIf {
@@ -439,12 +455,17 @@ impl super::LowerCtx {
                             .cloned();
 
                         if let Some(vfields) = vfields {
+                            // Use per-variant slot offset for correct field extraction.
+                            let variant_offset = self.variant_field_offsets
+                                .get(&(stn.clone(), variant_name.clone()))
+                                .copied()
+                                .unwrap_or(1); // fallback: first payload slot
                             for (fi, pf) in fields.iter().enumerate() {
                                 // Skip wildcard bindings
                                 if pf.field_name == "_" {
                                     continue;
                                 }
-                                let field_index = (fi + 1) as u32; // +1 for tag at field 0
+                                let field_index = (variant_offset + fi) as u32;
                                 let payload = self.fresh_temp();
                                 body.push(Instruction::AdtPayload {
                                     dest: payload.clone(),
@@ -479,17 +500,24 @@ impl super::LowerCtx {
                 self.lower_stmt(stmt, body);
             }
 
-            // Store arm result into the alloca'd slot (scan only this arm's instructions)
-            if let Some(last) = self.last_temp_in_range(body, arm_body_start) {
-                body.push(Instruction::Store {
-                    dest: result_slot.clone(),
-                    value: Operand::Var(last),
+            // If the arm body already ends with a block terminator (Return, Jump,
+            // or BranchIf from a nested match/if), skip Store/Jump to avoid
+            // emitting dead instructions after a terminator.
+            let arm_terminates = super::range_terminates(body, arm_body_start);
+
+            if !arm_terminates {
+                // Store arm result into the alloca'd slot (scan only this arm's instructions)
+                if let Some(last) = self.last_temp_in_range(body, arm_body_start) {
+                    body.push(Instruction::Store {
+                        dest: result_slot.clone(),
+                        value: Operand::Var(last),
+                    });
+                }
+
+                body.push(Instruction::Jump {
+                    label: end_label.clone(),
                 });
             }
-
-            body.push(Instruction::Jump {
-                label: end_label.clone(),
-            });
 
             // Next arm label
             if i + 1 < m.arms.len() {

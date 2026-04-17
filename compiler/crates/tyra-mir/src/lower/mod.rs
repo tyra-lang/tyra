@@ -41,14 +41,15 @@ pub fn lower(file: &SourceFile) -> Program {
         match item {
             Item::TypeDef(t) => {
                 if let TypeDefKind::Adt(variants) = &t.kind {
-                    // Track max field count across all variants for struct layout
-                    let mut max_fields: Vec<(String, Ty)> = Vec::new();
+                    // Per-variant field layout: each variant's fields get their own slots
+                    // starting after the tag. This avoids LLVM type conflicts when variants
+                    // have incompatible field types (e.g., struct vs ptr).
+                    let mut struct_fields: Vec<(String, Ty)> = vec![("tag".into(), Ty::Int)];
 
                     for (i, variant) in variants.iter().enumerate() {
                         ctx.variant_tags
                             .insert((t.name.clone(), variant.name.clone()), i as i64);
 
-                        // Collect variant field definitions for payload lowering
                         let vfields: Vec<(String, Ty)> = variant
                             .fields
                             .iter()
@@ -59,27 +60,20 @@ pub fn lower(file: &SourceFile) -> Program {
                             vfields.clone(),
                         );
 
-                        // Extend max_fields to cover all variant fields.
-                        // When variants have different types at the same position,
-                        // use the "widest" type to avoid LLVM type mismatches.
-                        for (j, (fname, fty)) in vfields.iter().enumerate() {
-                            if j >= max_fields.len() {
-                                max_fields.push((fname.clone(), fty.clone()));
-                            } else if max_fields[j].1 != *fty {
-                                // Type conflict at this position: use the wider type.
-                                // On 64-bit: ptr and i64 are both 8 bytes; String (ptr)
-                                // is the safest common representation.
-                                max_fields[j] = (fname.clone(), wider_type(&max_fields[j].1, fty));
-                            }
-                        }
+                        // Record the starting slot for this variant (1-based struct field index).
+                        let offset = struct_fields.len();
+                        ctx.variant_field_offsets.insert(
+                            (t.name.clone(), variant.name.clone()),
+                            offset,
+                        );
+
+                        // Append this variant's fields as separate slots.
+                        struct_fields.extend(vfields);
                     }
 
-                    // Register struct def for ADTs with payload fields
-                    if !max_fields.is_empty() {
-                        let mut struct_fields = vec![("tag".into(), Ty::Int)];
-                        struct_fields.extend(max_fields);
-                        ctx.adt_struct_defs
-                            .insert(t.name.clone(), struct_fields);
+                    // Register struct def only when there are payload fields.
+                    if struct_fields.len() > 1 {
+                        ctx.adt_struct_defs.insert(t.name.clone(), struct_fields);
                     }
                 }
             }
@@ -268,6 +262,9 @@ pub(crate) struct LowerCtx {
     pub(crate) generic_var_types: std::collections::HashMap<String, Ty>,
     /// ADT variant field definitions: (type_name, variant_name) → [(field_name, field_type)]
     pub(crate) adt_variant_fields: std::collections::HashMap<(String, String), Vec<(String, Ty)>>,
+    /// Per-variant slot offset: (type_name, variant_name) → first struct field index (1-based)
+    /// Each variant's fields occupy consecutive slots starting at this offset.
+    pub(crate) variant_field_offsets: std::collections::HashMap<(String, String), usize>,
     /// Return type of the function currently being lowered (for ? operator)
     pub(crate) current_fn_return_type: Ty,
     /// Collected ADT struct defs (monomorphized Option/Result types)
@@ -310,6 +307,7 @@ impl LowerCtx {
             self_type: None,
             generic_var_types: std::collections::HashMap::new(),
             adt_variant_fields: std::collections::HashMap::new(),
+            variant_field_offsets: std::collections::HashMap::new(),
             current_fn_return_type: Ty::Unit,
             adt_struct_defs: std::collections::HashMap::new(),
             deferred_exprs: Vec::new(),
@@ -424,11 +422,14 @@ impl LowerCtx {
 
         // If last instruction isn't a return, add implicit return
         if !matches!(body.last(), Some(Instruction::Return { .. })) {
+            // Capture last temp BEFORE emitting defers so defer calls don't
+            // overwrite the return value (spec §12.3).
+            let pre_defer_last_temp = self.last_temp_name(&body);
             // spec §12.3: emit deferred expressions before implicit return
             self.emit_deferred(&mut body);
             if return_type == Ty::Unit {
                 body.push(Instruction::Return { value: None });
-            } else if let Some(last_temp) = self.last_temp_name(&body) {
+            } else if let Some(last_temp) = pre_defer_last_temp {
                 body.push(Instruction::Return {
                     value: Some(Operand::Var(last_temp)),
                 });
@@ -549,15 +550,17 @@ impl LowerCtx {
         for stmt in &if_expr.then_body {
             self.lower_stmt(stmt, body);
         }
-        if let Some(last) = self.last_temp_in_range(body, then_start) {
-            body.push(Instruction::Store {
-                dest: result_slot.clone(),
-                value: Operand::Var(last),
+        if !range_terminates(body, then_start) {
+            if let Some(last) = self.last_temp_in_range(body, then_start) {
+                body.push(Instruction::Store {
+                    dest: result_slot.clone(),
+                    value: Operand::Var(last),
+                });
+            }
+            body.push(Instruction::Jump {
+                label: end_label.clone(),
             });
         }
-        body.push(Instruction::Jump {
-            label: end_label.clone(),
-        });
 
         // Else branch
         body.push(Instruction::Label(else_label));
@@ -573,15 +576,17 @@ impl LowerCtx {
             }
             None => {}
         }
-        if let Some(last) = self.last_temp_in_range(body, else_start) {
-            body.push(Instruction::Store {
-                dest: result_slot.clone(),
-                value: Operand::Var(last),
+        if !range_terminates(body, else_start) {
+            if let Some(last) = self.last_temp_in_range(body, else_start) {
+                body.push(Instruction::Store {
+                    dest: result_slot.clone(),
+                    value: Operand::Var(last),
+                });
+            }
+            body.push(Instruction::Jump {
+                label: end_label.clone(),
             });
         }
-        body.push(Instruction::Jump {
-            label: end_label.clone(),
-        });
 
         body.push(Instruction::Label(end_label));
 
@@ -691,21 +696,14 @@ pub(crate) fn ast_binop_to_mir(op: BinOp, is_float: bool) -> MirBinOp {
 }
 
 /// Choose the wider type when two ADT variants have different types at the same
-/// field position. On 64-bit platforms, String (ptr) and Int (i64) are both 8 bytes.
-/// When types differ, prefer String (ptr) as the safe common representation.
-fn wider_type(a: &Ty, b: &Ty) -> Ty {
-    // Same type: no conflict
-    if a == b {
-        return a.clone();
-    }
-    // String (ptr) is the safest fallback for mixed types
-    if matches!(a, Ty::String) || matches!(b, Ty::String) {
-        return Ty::String;
-    }
-    // Float (double) vs Int: use Float (8 bytes, superset representation)
-    if matches!(a, Ty::Float) || matches!(b, Ty::Float) {
-        return Ty::Float;
-    }
-    // Default: keep the first type (both i64-compatible)
-    a.clone()
+/// Returns true if the instruction range `body[start..]` already ends with a block
+/// terminator (Return, Jump, or BranchIf), so that the caller can skip emitting
+/// a redundant Store + Jump.
+pub(crate) fn range_terminates(body: &[Instruction], start: usize) -> bool {
+    body[start..].iter().rev().find(|i| {
+        !matches!(i, Instruction::Alloca { .. } | Instruction::Label(_))
+    }).is_some_and(|i| matches!(
+        i,
+        Instruction::Return { .. } | Instruction::Jump { .. } | Instruction::BranchIf { .. }
+    ))
 }
