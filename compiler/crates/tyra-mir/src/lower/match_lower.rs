@@ -127,7 +127,7 @@ impl super::LowerCtx {
                         label: arm_label.clone(),
                     });
                 }
-                PatternKind::Constructor(variant_name, _) => {
+                PatternKind::Constructor(variant_name, pat_fields) => {
                     // Check if this is an Option/Result variant (Some/None/Ok/Err)
                     let prelude_tag = match variant_name.as_str() {
                         "Some" | "Ok" => Some(0i64),
@@ -143,9 +143,6 @@ impl super::LowerCtx {
                             .map(|t| t.monomorphized_name())
                             .or_else(|| self.var_types.get(&subject).cloned())
                             .unwrap_or_else(|| {
-                                // BUG: subject type not tracked. This indicates a gap in
-                                // generic_var_types / var_types tracking. Fall back to
-                                // the function return type if it's an Option/Result.
                                 if self.current_fn_return_type.is_option()
                                     || self.current_fn_return_type.is_result()
                                 {
@@ -161,7 +158,7 @@ impl super::LowerCtx {
                         body.push(Instruction::AdtTag {
                             dest: tag_val.clone(),
                             obj: Operand::Var(subject.clone()),
-                            type_name: subject_type_name,
+                            type_name: subject_type_name.clone(),
                         });
                         let lit = self.fresh_temp();
                         body.push(Instruction::Const {
@@ -175,11 +172,96 @@ impl super::LowerCtx {
                             lhs: Operand::Var(tag_val),
                             rhs: Operand::Var(lit),
                         });
-                        body.push(Instruction::BranchIf {
-                            cond: Operand::Var(cond),
-                            true_label: arm_label.clone(),
-                            false_label: next_label.clone(),
+
+                        // Check for nested Constructor pattern: Err(NotFound) vs Err(name)
+                        // If the inner field is a Constructor, we need to check its tag too.
+                        let has_inner_constructor = pat_fields.first().is_some_and(|pf| {
+                            matches!(pf.pattern.kind, PatternKind::Constructor(_, _))
                         });
+
+                        if has_inner_constructor {
+                            let inner_check = self.fresh_label("inner_check");
+                            body.push(Instruction::BranchIf {
+                                cond: Operand::Var(cond),
+                                true_label: inner_check.clone(),
+                                false_label: next_label.clone(),
+                            });
+
+                            // Inner tag check: extract payload and compare inner variant tag
+                            body.push(Instruction::Label(inner_check));
+                            let field_index = if variant_name == "Err" { 2 } else { 1 };
+                            let payload = self.fresh_temp();
+                            body.push(Instruction::AdtPayload {
+                                dest: payload.clone(),
+                                obj: Operand::Var(subject.clone()),
+                                type_name: subject_type_name,
+                                field_index,
+                            });
+
+                            if let PatternKind::Constructor(ref inner_variant, _) =
+                                pat_fields[0].pattern.kind
+                            {
+                                // Look up the inner ADT type from the subject's generic type
+                                let inner_type_name = self
+                                    .generic_var_types
+                                    .get(&subject)
+                                    .and_then(|ty| {
+                                        if variant_name == "Err" {
+                                            ty.result_err_type().cloned()
+                                        } else if variant_name == "Ok" {
+                                            ty.result_ok_type().cloned()
+                                        } else {
+                                            ty.option_inner().cloned()
+                                        }
+                                    })
+                                    .and_then(|ty| match ty {
+                                        Ty::Named(n) => Some(n),
+                                        _ => None,
+                                    });
+
+                                let inner_tag = inner_type_name
+                                    .as_ref()
+                                    .and_then(|tn| {
+                                        self.variant_tags
+                                            .get(&(tn.clone(), inner_variant.clone()))
+                                            .copied()
+                                    });
+
+                                if let Some(expected_tag) = inner_tag {
+                                    // Unit-variant ADT: payload is the tag integer directly.
+                                    // NOTE: For struct-based inner ADTs (e.g., NotFound(String)),
+                                    // we would need AdtTag extraction instead of EqInt on payload.
+                                    let inner_lit = self.fresh_temp();
+                                    body.push(Instruction::Const {
+                                        dest: inner_lit.clone(),
+                                        value: Constant::Int(expected_tag),
+                                    });
+                                    let inner_cond = self.fresh_temp();
+                                    body.push(Instruction::BinOp {
+                                        dest: inner_cond.clone(),
+                                        op: MirBinOp::EqInt,
+                                        lhs: Operand::Var(payload),
+                                        rhs: Operand::Var(inner_lit),
+                                    });
+                                    body.push(Instruction::BranchIf {
+                                        cond: Operand::Var(inner_cond),
+                                        true_label: arm_label.clone(),
+                                        false_label: next_label.clone(),
+                                    });
+                                } else {
+                                    // Could not resolve inner tag — fall through
+                                    body.push(Instruction::Jump {
+                                        label: arm_label.clone(),
+                                    });
+                                }
+                            }
+                        } else {
+                            body.push(Instruction::BranchIf {
+                                cond: Operand::Var(cond),
+                                true_label: arm_label.clone(),
+                                false_label: next_label.clone(),
+                            });
+                        }
                     } else {
                         // User-defined ADT: look up tag from variant_tags.
                         // Use subject type name for disambiguation when available.
@@ -276,8 +358,14 @@ impl super::LowerCtx {
             // Bind constructor payload variables: when Some(x) → x = payload
             if let PatternKind::Constructor(variant_name, fields) = &arm.pattern.kind {
                 let is_prelude = matches!(variant_name.as_str(), "Some" | "Ok" | "Err");
+                // Skip payload binding when inner pattern is a nested Constructor
+                // (e.g., Err(NotFound)) — the inner tag was already checked in pattern test.
+                let inner_is_constructor = fields.first().is_some_and(|pf| {
+                    matches!(pf.pattern.kind, PatternKind::Constructor(_, _))
+                });
                 if is_prelude && !fields.is_empty()
                     && fields[0].field_name != "_"
+                    && !inner_is_constructor
                 {
                     let subject_type_name = self
                         .generic_var_types

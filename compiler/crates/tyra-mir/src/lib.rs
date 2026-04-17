@@ -938,4 +938,34 @@ end\n";
         });
         assert!(has_eq_string, "expected EqString for string pattern matching");
     }
+
+    #[test]
+    fn nested_adt_match_checks_inner_tag() {
+        // Err(NotFound) vs Err(InvalidId) should generate separate inner tag checks
+        let source = "\
+type E =\n\
+  | NotFound\n\
+  | InvalidId\n\
+fn f() -> Result<Int, E>\n\
+  let r = Err(E.InvalidId)\n\
+  match r\n\
+  when Ok(v)\n\
+    Ok(v)\n\
+  when Err(NotFound)\n\
+    Ok(0)\n\
+  when Err(InvalidId)\n\
+    Ok(1)\n\
+  end\n\
+end\n";
+        let prog = lower_str(source);
+        let f = prog.functions.iter().find(|f| f.name == "f").unwrap();
+        // Should have at least 2 AdtPayload extractions (outer Ok/Err + inner variant checks)
+        let payload_count = f.body.iter().filter(|inst| {
+            matches!(inst, Instruction::AdtPayload { .. })
+        }).count();
+        assert!(
+            payload_count >= 2,
+            "expected at least 2 AdtPayload extractions for nested ADT match, got {payload_count}"
+        );
+    }
 }
