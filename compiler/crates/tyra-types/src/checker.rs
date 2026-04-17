@@ -141,9 +141,54 @@ fn check_fn(f: &FnDef, env: &mut TypeEnv, report: &mut Report) {
         env.define("self".to_string(), Ty::Error);
     }
 
-    for stmt in &f.body {
+    // Walk body and track the last expression statement's type
+    let mut last_expr_ty: Option<Ty> = None;
+    let mut last_expr_span = None;
+    for (i, stmt) in f.body.iter().enumerate() {
         check_stmt(stmt, env, report);
+        // Cache the last expression statement's type (avoids double inference)
+        if i + 1 == f.body.len() {
+            if let Stmt::Expr(expr_stmt) = stmt {
+                last_expr_ty = Some(infer_expr(&expr_stmt.expr, env, report));
+                last_expr_span = Some(expr_stmt.expr.span);
+            }
+        }
     }
+
+    // Return type verification: check that the last expression's type matches
+    // the declared return type (if any).
+    // NOTE: explicit `return` statements are not checked yet (future improvement).
+    let declared_ret = f
+        .return_type
+        .as_ref()
+        .map(Ty::from_type_expr)
+        .unwrap_or(Ty::Unit);
+
+    if declared_ret != Ty::Unit {
+        if let (Some(actual_ty), Some(span)) = (last_expr_ty, last_expr_span) {
+            // Skip if either side is Error (cascading), Never (bottom type),
+            // Unit (if/else not yet type-unified), Named/Generic (not fully resolved)
+            let skip = actual_ty.is_error()
+                || declared_ret.is_error()
+                || matches!(
+                    actual_ty,
+                    Ty::Never | Ty::Unit | Ty::Named(_) | Ty::Generic(_, _)
+                )
+                || matches!(declared_ret, Ty::Named(_) | Ty::Generic(_, _));
+            if !skip && actual_ty != declared_ret {
+                report.add(
+                    Diagnostic::error(format!(
+                        "return type mismatch: expected {}, found {}",
+                        declared_ret.display_name(),
+                        actual_ty.display_name()
+                    ))
+                    .with_code("E0309")
+                    .with_label(Label::new(span, "this expression has the wrong type")),
+                );
+            }
+        }
+    }
+
     env.pop();
 }
 

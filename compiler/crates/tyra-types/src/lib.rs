@@ -184,4 +184,31 @@ print("hello")
         let report = check_str(source);
         assert!(!report.has_errors(), "errors: {:?}", report.diagnostics());
     }
+
+    #[test]
+    fn return_type_mismatch_detected() {
+        let source = r#"
+fn wrong() -> Int
+  "not an int"
+end
+"#;
+        let report = check_str(source);
+        assert!(report.has_errors(), "expected return type mismatch error");
+        let has_e0309 = report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code.as_deref() == Some("E0309"));
+        assert!(has_e0309, "expected E0309 error code");
+    }
+
+    #[test]
+    fn return_type_match_ok() {
+        let source = r#"
+fn add(_ x: Int, _ y: Int) -> Int
+  x + y
+end
+"#;
+        let report = check_str(source);
+        assert!(!report.has_errors(), "errors: {:?}", report.diagnostics());
+    }
 }
