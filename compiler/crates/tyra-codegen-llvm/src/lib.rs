@@ -40,7 +40,7 @@ mod tests {
         let ir = emit_llvm_ir(&program);
         assert!(ir.contains("@.str.0"));
         assert!(ir.contains("hello, tyra"));
-        assert!(ir.contains("define i32 @main()"));
+        assert!(ir.contains("define i32 @main(i32 %argc, ptr %argv)"));
         assert!(ir.contains("call"));
         assert!(ir.contains("ret i32 0"));
     }

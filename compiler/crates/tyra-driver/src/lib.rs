@@ -142,6 +142,14 @@ fn resolve_imports(
             .or_else(|| imp.path.last().map(String::as_str))
             .unwrap_or("_unknown");
 
+        // Check for built-in modules (core.sys, etc.)
+        let module_key = imp.path.join(".");
+        if is_builtin_module(&module_key) {
+            // Built-in modules don't need file resolution.
+            // The lowering and codegen layers handle their functions as builtins.
+            continue;
+        }
+
         // Resolve file path: import a.b.c → <main_dir>/a/b/c.tyra
         let mut module_path = main_dir.to_path_buf();
         for segment in &imp.path {
@@ -207,6 +215,11 @@ fn resolve_imports(
 
     // Append merged items to the main AST
     ast.items.extend(merged_items);
+}
+
+/// Check if a module path refers to a compiler built-in module.
+fn is_builtin_module(module_path: &str) -> bool {
+    matches!(module_path, "core.sys")
 }
 
 /// Compile a Tyra source file to a native binary.

@@ -115,6 +115,16 @@ pub fn lower(file: &SourceFile) -> Program {
                 .or_else(|| imp.path.last().map(String::as_str))
                 .unwrap_or("_unknown");
             ctx.imported_modules.insert(local_name.to_string());
+
+            // Register built-in module types
+            let module_key: String = imp.path.join(".");
+            if module_key == "core.sys" {
+                // sys.args() -> List<String>
+                let list_string = Ty::Generic("List".into(), vec![Ty::String]);
+                ctx.register_adt_type(&list_string);
+                ctx.fn_return_types
+                    .insert("sys__args".into(), list_string);
+            }
         }
     }
 

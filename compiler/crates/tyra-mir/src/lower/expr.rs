@@ -469,6 +469,32 @@ impl super::LowerCtx {
                         .map(Ty::from_type_expr)
                         .collect();
 
+                    // Built-in turbofish functions (parse::<T>)
+                    if fn_name == "parse" && concrete_types.len() == 1 {
+                        let mangled_name = format!("parse__{}", concrete_types[0].monomorphized_name());
+                        let ret_ty = Ty::Generic("Option".into(), vec![concrete_types[0].clone()]);
+                        self.register_adt_type(&ret_ty);
+                        self.fn_return_types.insert(mangled_name.clone(), ret_ty.clone());
+
+                        let arg_operands: Vec<Operand> = args
+                            .iter()
+                            .map(|a| {
+                                let t = self.lower_expr(&a.value, body);
+                                Operand::Var(t)
+                            })
+                            .collect();
+
+                        let dest = self.fresh_temp();
+                        body.push(Instruction::Call {
+                            dest: Some(dest.clone()),
+                            func: mangled_name,
+                            args: arg_operands,
+                        });
+                        self.generic_var_types.insert(dest.clone(), ret_ty.clone());
+                        self.var_types.insert(dest.clone(), ret_ty.monomorphized_name());
+                        return dest;
+                    }
+
                     // Monomorphize and get mangled name
                     let mangled = self.monomorphize(fn_name, &concrete_types);
 

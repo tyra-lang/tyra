@@ -132,7 +132,7 @@ impl Default for ScopeStack {
 // -- Prelude definitions (§17.1) --
 
 /// Prelude functions: auto-imported, no `import` needed.
-const PRELUDE_FUNCTIONS: &[&str] = &["print", "println", "eprint", "eprintln", "panic"];
+const PRELUDE_FUNCTIONS: &[&str] = &["print", "println", "eprint", "eprintln", "panic", "parse"];
 
 /// Prelude ADT constructors: unqualified access to Option/Result variants.
 const PRELUDE_CONSTRUCTORS: &[&str] = &["Some", "None", "Ok", "Err"];

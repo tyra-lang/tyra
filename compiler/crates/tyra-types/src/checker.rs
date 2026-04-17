@@ -92,6 +92,11 @@ fn register_prelude(env: &mut TypeEnv) {
         "panic".to_string(),
         Ty::Fn(vec![Ty::String], Box::new(Ty::Never)),
     );
+    // parse::<T>(str) -> Option<T>: generic, use Error as escape hatch
+    env.define(
+        "parse".to_string(),
+        Ty::Fn(vec![Ty::Error], Box::new(Ty::Error)),
+    );
 }
 
 /// Collect top-level function signatures for forward reference.

@@ -420,11 +420,25 @@ impl super::LowerCtx {
                         })
                         .collect();
                     let dest = self.fresh_temp();
+                    // Track return type from fn_return_types
+                    let ret_ty = self.fn_return_types.get(&qualified_name).cloned();
                     body.push(Instruction::Call {
                         dest: Some(dest.clone()),
                         func: qualified_name,
                         args: arg_operands,
                     });
+                    if let Some(ref ty) = ret_ty {
+                        match ty {
+                            Ty::String => { self.string_vars.insert(dest.clone()); }
+                            Ty::Float => { self.float_vars.insert(dest.clone()); }
+                            Ty::Named(n) => { self.var_types.insert(dest.clone(), n.clone()); }
+                            Ty::Generic(_, _) => {
+                                self.generic_var_types.insert(dest.clone(), ty.clone());
+                                self.var_types.insert(dest.clone(), ty.monomorphized_name());
+                            }
+                            _ => {}
+                        }
+                    }
                     return dest;
                 }
             }

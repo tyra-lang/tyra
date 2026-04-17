@@ -48,6 +48,11 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "target triple = \"{}\"", target_triple()).unwrap();
     writeln!(out).unwrap();
 
+    // Globals for sys.args() (argc/argv captured at main entry)
+    writeln!(out, "@.tyra.argc = internal global i32 0").unwrap();
+    writeln!(out, "@.tyra.argv = internal global ptr null").unwrap();
+    writeln!(out).unwrap();
+
     // Struct type declarations
     for sd in &program.struct_defs {
         let info = &struct_map[sd.name.as_str()];
@@ -60,7 +65,9 @@ pub fn emit_llvm_ir(program: &Program) -> String {
                 if info.is_adt && i == 0 {
                     "i8".into()
                 } else {
-                    llvm_type_str(ty, &struct_map)
+                    let ty_str = llvm_type_str(ty, &struct_map);
+                    // Unit (void) is not valid as a struct field; use i64 placeholder
+                    if ty_str == "void" { "i64".into() } else { ty_str }
                 }
             })
             .collect();
@@ -127,6 +134,8 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare ptr @malloc(i64)").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();
+    // strtol returns long (i64 on LP64 platforms). TODO: use strtoll for Windows LLP64.
+    writeln!(out, "declare i64 @strtol(ptr, ptr, i32)").unwrap();
     writeln!(out).unwrap();
 
     // Build function signature map for cross-function type resolution
@@ -390,7 +399,7 @@ fn emit_function(
         .collect();
 
     if func.is_main {
-        writeln!(out, "define i32 @main() {{").unwrap();
+        writeln!(out, "define i32 @main(i32 %argc, ptr %argv) {{").unwrap();
     } else {
         writeln!(
             out,
@@ -402,6 +411,12 @@ fn emit_function(
     }
 
     writeln!(out, "entry:").unwrap();
+
+    // Save argc/argv to globals for sys.args()
+    if func.is_main {
+        writeln!(out, "  store i32 %argc, ptr @.tyra.argc").unwrap();
+        writeln!(out, "  store ptr %argv, ptr @.tyra.argv").unwrap();
+    }
 
     // Allocate parameter copies for mutation support
     for (name, ty) in &func.params {
@@ -494,6 +509,20 @@ fn pre_scan_struct_types(
                 func: fname,
                 ..
             } => {
+                // Built-in functions with struct return types
+                match fname.as_str() {
+                    "sys__args" => {
+                        if struct_map.contains_key("List__String") {
+                            struct_temps.insert(dest.clone(), "List__String".into());
+                        }
+                    }
+                    "parse__Int" => {
+                        if struct_map.contains_key("Option__Int") {
+                            struct_temps.insert(dest.clone(), "Option__Int".into());
+                        }
+                    }
+                    _ => {}
+                }
                 // Check if the called function returns a struct type
                 if let Some(sig) = fn_sigs.get(fname.as_str()) {
                     if let Ty::Named(type_name) = &sig.return_type {
@@ -658,6 +687,88 @@ fn emit_instruction(
                     }
                     writeln!(out, "  call void @abort()").unwrap();
                     writeln!(out, "  unreachable").unwrap();
+                }
+                "sys__args" => {
+                    // §17.1: core.sys.args() -> List<String>
+                    // Build List<String> from saved argc/argv globals.
+                    let d = dest.as_deref().unwrap_or("_sys_args");
+                    let list_ty = if let Some(info) = ctx.struct_map.get("List__String") {
+                        &info.llvm_name
+                    } else {
+                        "%struct.List__String"
+                    };
+                    // Load argc and argv (argc is always >= 1: argv[0] is program name)
+                    writeln!(out, "  %{d}.argc = load i32, ptr @.tyra.argc").unwrap();
+                    writeln!(out, "  %{d}.argc64 = sext i32 %{d}.argc to i64").unwrap();
+                    writeln!(out, "  %{d}.argv = load ptr, ptr @.tyra.argv").unwrap();
+                    // Malloc data array (argc * 8 bytes for ptr array)
+                    writeln!(out, "  %{d}.size = mul i64 %{d}.argc64, 8").unwrap();
+                    writeln!(out, "  %{d}.data = call ptr @malloc(i64 %{d}.size)").unwrap();
+                    // Copy argv pointers into list data using alloca-based loop
+                    // (alloca avoids phi predecessor issues in non-entry blocks)
+                    writeln!(out, "  %{d}.ctr = alloca i64").unwrap();
+                    writeln!(out, "  store i64 0, ptr %{d}.ctr").unwrap();
+                    writeln!(out, "  br label %{d}.loop").unwrap();
+                    writeln!(out, "{d}.loop:").unwrap();
+                    writeln!(out, "  %{d}.i = load i64, ptr %{d}.ctr").unwrap();
+                    writeln!(out, "  %{d}.done = icmp sge i64 %{d}.i, %{d}.argc64").unwrap();
+                    writeln!(out, "  br i1 %{d}.done, label %{d}.end, label %{d}.body").unwrap();
+                    writeln!(out, "{d}.body:").unwrap();
+                    writeln!(out, "  %{d}.argp = getelementptr ptr, ptr %{d}.argv, i64 %{d}.i").unwrap();
+                    writeln!(out, "  %{d}.arg = load ptr, ptr %{d}.argp").unwrap();
+                    writeln!(out, "  %{d}.dstp = getelementptr ptr, ptr %{d}.data, i64 %{d}.i").unwrap();
+                    writeln!(out, "  store ptr %{d}.arg, ptr %{d}.dstp").unwrap();
+                    writeln!(out, "  %{d}.next = add i64 %{d}.i, 1").unwrap();
+                    writeln!(out, "  store i64 %{d}.next, ptr %{d}.ctr").unwrap();
+                    writeln!(out, "  br label %{d}.loop").unwrap();
+                    writeln!(out, "{d}.end:").unwrap();
+                    // Build List struct {ptr, i64}
+                    writeln!(out, "  %{d}.s0 = insertvalue {list_ty} undef, ptr %{d}.data, 0").unwrap();
+                    writeln!(out, "  %{d} = insertvalue {list_ty} %{d}.s0, i64 %{d}.argc64, 1").unwrap();
+                }
+                "parse__Int" => {
+                    // parse::<Int>(str) -> Option<Int>
+                    // Uses strtol with endptr check.
+                    let d = dest.as_deref().unwrap_or("_parse");
+                    let opt_ty = if let Some(info) = ctx.struct_map.get("Option__Int") {
+                        &info.llvm_name
+                    } else {
+                        "%struct.Option__Int"
+                    };
+                    let val = if let Some(arg) = args.first() {
+                        operand_ref(arg, func)
+                    } else {
+                        "null".to_string()
+                    };
+                    // Alloca for endptr
+                    writeln!(out, "  %{d}.endp = alloca ptr").unwrap();
+                    // Call strtol(str, &endptr, 10)
+                    writeln!(out, "  %{d}.val = call i64 @strtol(ptr {val}, ptr %{d}.endp, i32 10)").unwrap();
+                    // Load endptr
+                    writeln!(out, "  %{d}.ep = load ptr, ptr %{d}.endp").unwrap();
+                    // Check: endptr == str means no conversion at all
+                    writeln!(out, "  %{d}.nconv = icmp eq ptr %{d}.ep, {val}").unwrap();
+                    // Check: *endptr != '\0' means trailing garbage (partial parse)
+                    writeln!(out, "  %{d}.epch = load i8, ptr %{d}.ep").unwrap();
+                    writeln!(out, "  %{d}.partial = icmp ne i8 %{d}.epch, 0").unwrap();
+                    writeln!(out, "  %{d}.fail = or i1 %{d}.nconv, %{d}.partial").unwrap();
+                    writeln!(out, "  %{d}.slot = alloca {opt_ty}").unwrap();
+                    writeln!(out, "  br i1 %{d}.fail, label %{d}.none, label %{d}.some").unwrap();
+                    // Some path
+                    writeln!(out, "{d}.some:").unwrap();
+                    writeln!(out, "  %{d}.some.s0 = insertvalue {opt_ty} undef, i8 0, 0").unwrap();
+                    writeln!(out, "  %{d}.some.v = insertvalue {opt_ty} %{d}.some.s0, i64 %{d}.val, 1").unwrap();
+                    writeln!(out, "  store {opt_ty} %{d}.some.v, ptr %{d}.slot").unwrap();
+                    writeln!(out, "  br label %{d}.merge").unwrap();
+                    // None path
+                    writeln!(out, "{d}.none:").unwrap();
+                    writeln!(out, "  %{d}.none.s0 = insertvalue {opt_ty} undef, i8 1, 0").unwrap();
+                    writeln!(out, "  %{d}.none.v = insertvalue {opt_ty} %{d}.none.s0, i64 0, 1").unwrap();
+                    writeln!(out, "  store {opt_ty} %{d}.none.v, ptr %{d}.slot").unwrap();
+                    writeln!(out, "  br label %{d}.merge").unwrap();
+                    // Merge
+                    writeln!(out, "{d}.merge:").unwrap();
+                    writeln!(out, "  %{d} = load {opt_ty}, ptr %{d}.slot").unwrap();
                 }
                 _ => {
                     // User-defined function call — look up signature for types
