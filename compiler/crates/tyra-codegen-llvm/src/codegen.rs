@@ -1477,7 +1477,7 @@ fn operand_ref(op: &Operand, func: &Function) -> String {
                 }
             }
             Constant::StringRef(_) => "null".into(),
-            Constant::Unit => "void".into(),
+            Constant::Unit => "0".into(),
         },
     }
 }
