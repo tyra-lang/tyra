@@ -632,8 +632,9 @@ fn emit_instruction(
                 .unwrap();
             }
             Constant::Unit => {
-                // Unit has no runtime representation; emit a dummy
-                writeln!(out, "  ; {dest} = unit (no-op)").unwrap();
+                // Unit is represented as i64 0 at runtime so it can be used in
+                // Store/Load (e.g., match arm results). Cost-free in practice.
+                writeln!(out, "  %{dest} = add i64 0, 0").unwrap();
             }
         },
 
