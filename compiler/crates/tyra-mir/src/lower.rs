@@ -371,8 +371,9 @@ impl LowerCtx {
         for (name, ty) in &params {
             // Register ADT struct defs for generic parameter types
             self.register_adt_type(ty);
-            if ty.is_option() || ty.is_result() {
+            if ty.is_option() || ty.is_result() || ty.is_list() {
                 self.generic_var_types.insert(name.clone(), ty.clone());
+                self.var_types.insert(name.clone(), ty.monomorphized_name());
             }
             match ty {
                 Ty::Float => {
@@ -776,6 +777,51 @@ impl LowerCtx {
                     return dest;
                 }
 
+                // Check for .len() on List<T> (spec §11)
+                if let ExprKind::FieldAccess(obj, method) = &callee.kind
+                    && method == "len"
+                    && args.is_empty()
+                {
+                    if let Some(_list_ty) = self.infer_list_type(obj) {
+                        let obj_val = self.lower_expr(obj, body);
+                        let dest = self.fresh_temp();
+                        body.push(Instruction::ListLen {
+                            dest: dest.clone(),
+                            list: Operand::Var(obj_val),
+                        });
+                        return dest;
+                    }
+                }
+
+                // Check for .get(index) on List<T> (spec §11)
+                if let ExprKind::FieldAccess(obj, method) = &callee.kind
+                    && method == "get"
+                    && args.len() == 1
+                {
+                    if let Some(list_ty) = self.infer_list_type(obj) {
+                        let elem_type = list_ty.list_elem().cloned().unwrap_or(Ty::Int);
+                        let obj_val = self.lower_expr(obj, body);
+                        let idx_val = self.lower_expr(&args[0].value, body);
+
+                        let option_type = Ty::Generic("Option".into(), vec![elem_type.clone()]);
+                        self.register_adt_type(&option_type);
+                        let option_type_name = option_type.monomorphized_name();
+
+                        let dest = self.fresh_temp();
+                        body.push(Instruction::ListGetSafe {
+                            dest: dest.clone(),
+                            list: Operand::Var(obj_val),
+                            index: Operand::Var(idx_val),
+                            elem_type,
+                        });
+
+                        // Track the result as Option<T>
+                        self.generic_var_types.insert(dest.clone(), option_type);
+                        self.var_types.insert(dest.clone(), option_type_name);
+                        return dest;
+                    }
+                }
+
                 // Check for .ok_or() on Option<T> (spec §12.2):
                 // Converts Option<T> to Result<T, E> where E is the type of the argument.
                 if let ExprKind::FieldAccess(obj, method) = &callee.kind
@@ -1125,14 +1171,131 @@ impl LowerCtx {
 
             ExprKind::For(f) => {
                 let iter_val = self.lower_expr(&f.iter, body);
-                // Simplified: lower body once (no actual iteration in MIR yet)
-                body.push(Instruction::Copy {
-                    dest: f.binding.clone(),
-                    source: iter_val,
-                });
-                for stmt in &f.body {
-                    self.lower_stmt(stmt, body);
+
+                // Detect if iterating over a List
+                let list_type = self
+                    .generic_var_types
+                    .get(&iter_val)
+                    .filter(|ty| ty.is_list())
+                    .cloned();
+
+                if let Some(list_ty) = list_type {
+                    let elem_type = list_ty.list_elem().cloned().unwrap_or(Ty::Int);
+
+                    // Get length
+                    let len = self.fresh_temp();
+                    body.push(Instruction::ListLen {
+                        dest: len.clone(),
+                        list: Operand::Var(iter_val.clone()),
+                    });
+
+                    // mut i = 0
+                    let idx_var = self.fresh_temp();
+                    body.push(Instruction::Alloca {
+                        dest: idx_var.clone(),
+                    });
+                    let zero = self.fresh_temp();
+                    body.push(Instruction::Const {
+                        dest: zero.clone(),
+                        value: Constant::Int(0),
+                    });
+                    body.push(Instruction::Store {
+                        dest: idx_var.clone(),
+                        value: Operand::Var(zero),
+                    });
+
+                    let loop_label = self.fresh_label("for");
+                    let body_label = format!("{loop_label}_body");
+                    let end_label = self.fresh_label("for_end");
+
+                    // Jump into loop header
+                    body.push(Instruction::Jump {
+                        label: loop_label.clone(),
+                    });
+
+                    // Loop header: check i < len
+                    body.push(Instruction::Label(loop_label.clone()));
+                    let cur_idx = self.fresh_temp();
+                    body.push(Instruction::Load {
+                        dest: cur_idx.clone(),
+                        source: idx_var.clone(),
+                    });
+                    let cond = self.fresh_temp();
+                    body.push(Instruction::BinOp {
+                        dest: cond.clone(),
+                        op: MirBinOp::LtInt,
+                        lhs: Operand::Var(cur_idx.clone()),
+                        rhs: Operand::Var(len.clone()),
+                    });
+                    body.push(Instruction::BranchIf {
+                        cond: Operand::Var(cond),
+                        true_label: body_label.clone(),
+                        false_label: end_label.clone(),
+                    });
+
+                    // Loop body: binding = list[i]
+                    body.push(Instruction::Label(body_label));
+                    let elem = self.fresh_temp();
+                    body.push(Instruction::ListGet {
+                        dest: elem.clone(),
+                        list: Operand::Var(iter_val),
+                        index: Operand::Var(cur_idx.clone()),
+                        elem_type: elem_type.clone(),
+                    });
+                    // Track element type for codegen (Bool tracked in codegen pre-scan)
+                    match &elem_type {
+                        Ty::String => {
+                            self.string_vars.insert(f.binding.clone());
+                        }
+                        Ty::Float => {
+                            self.float_vars.insert(f.binding.clone());
+                        }
+                        _ => {}
+                    }
+                    body.push(Instruction::Copy {
+                        dest: f.binding.clone(),
+                        source: elem,
+                    });
+
+                    // User's loop body
+                    for stmt in &f.body {
+                        self.lower_stmt(stmt, body);
+                    }
+
+                    // Increment: i = i + 1
+                    let one = self.fresh_temp();
+                    body.push(Instruction::Const {
+                        dest: one.clone(),
+                        value: Constant::Int(1),
+                    });
+                    let next_idx = self.fresh_temp();
+                    body.push(Instruction::BinOp {
+                        dest: next_idx.clone(),
+                        op: MirBinOp::AddInt,
+                        lhs: Operand::Var(cur_idx),
+                        rhs: Operand::Var(one),
+                    });
+                    body.push(Instruction::Store {
+                        dest: idx_var,
+                        value: Operand::Var(next_idx),
+                    });
+                    body.push(Instruction::Jump {
+                        label: loop_label,
+                    });
+
+                    // End
+                    body.push(Instruction::Label(end_label));
+                } else {
+                    // Non-list iteration: keep current stub behavior
+                    body.push(Instruction::Copy {
+                        dest: f.binding.clone(),
+                        source: iter_val,
+                    });
+                    for stmt in &f.body {
+                        self.lower_stmt(stmt, body);
+                    }
                 }
+
                 let dest = self.fresh_temp();
                 body.push(Instruction::Const {
                     dest: dest.clone(),
@@ -1389,13 +1552,38 @@ impl LowerCtx {
             }
 
             ExprKind::Index(obj, idx) => {
-                self.lower_expr(obj, body);
-                self.lower_expr(idx, body);
+                // §11: items[index] — panicking index access
+                let obj_val = self.lower_expr(obj, body);
+                let idx_val = self.lower_expr(idx, body);
+
+                // Determine element type from tracking
+                let elem_type = self
+                    .generic_var_types
+                    .get(&obj_val)
+                    .and_then(|ty| ty.list_elem().cloned())
+                    .unwrap_or(Ty::Int);
+
                 let dest = self.fresh_temp();
-                body.push(Instruction::Const {
+                body.push(Instruction::ListGet {
                     dest: dest.clone(),
-                    value: Constant::Unit,
+                    list: Operand::Var(obj_val),
+                    index: Operand::Var(idx_val),
+                    elem_type: elem_type.clone(),
                 });
+
+                // Propagate element type to the result temp
+                match &elem_type {
+                    Ty::String => {
+                        self.string_vars.insert(dest.clone());
+                    }
+                    Ty::Float => {
+                        self.float_vars.insert(dest.clone());
+                    }
+                    Ty::Named(n) => {
+                        self.var_types.insert(dest.clone(), n.clone());
+                    }
+                    _ => {}
+                }
                 dest
             }
 
@@ -1464,14 +1652,36 @@ impl LowerCtx {
             }
 
             ExprKind::ListLit(items) => {
-                for item in items {
-                    self.lower_expr(item, body);
-                }
+                // §11: List literal [a, b, c]
+                let elem_operands: Vec<Operand> = items
+                    .iter()
+                    .map(|item| {
+                        let t = self.lower_expr(item, body);
+                        Operand::Var(t)
+                    })
+                    .collect();
+
+                // Infer element type from first item (default Int for empty)
+                let elem_type = if let Some(first) = items.first() {
+                    self.infer_expr_type(first).unwrap_or(Ty::Int)
+                } else {
+                    Ty::Int
+                };
+
+                let list_type = Ty::Generic("List".into(), vec![elem_type.clone()]);
+                self.register_adt_type(&list_type);
+                let type_name = list_type.monomorphized_name();
+
                 let dest = self.fresh_temp();
-                body.push(Instruction::Const {
+                body.push(Instruction::ListInit {
                     dest: dest.clone(),
-                    value: Constant::Unit,
+                    elem_type,
+                    elements: elem_operands,
                 });
+
+                // Track as a generic type for downstream use
+                self.generic_var_types.insert(dest.clone(), list_type);
+                self.var_types.insert(dest.clone(), type_name);
                 dest
             }
 
@@ -2217,6 +2427,25 @@ impl LowerCtx {
         }
     }
 
+    /// Infer if an expression is a List<T> type from variable tracking.
+    fn infer_list_type(&self, expr: &Expr) -> Option<Ty> {
+        match &expr.kind {
+            ExprKind::Ident(name) => self
+                .generic_var_types
+                .get(name)
+                .filter(|t| t.is_list())
+                .cloned(),
+            ExprKind::ListLit(items) => {
+                let elem_ty = items
+                    .first()
+                    .and_then(|e| self.infer_expr_type(e))
+                    .unwrap_or(Ty::Int);
+                Some(Ty::Generic("List".into(), vec![elem_ty]))
+            }
+            _ => None,
+        }
+    }
+
     /// Lower a .copy() call on a value type.
     /// Extracts all fields from the original, overrides specified fields, builds new struct.
     fn lower_copy(
@@ -2292,6 +2521,20 @@ impl LowerCtx {
                     ("err_value".into(), err_ty.clone()),
                 ],
             );
+        } else if let Some(elem_ty) = ty.list_elem() {
+            // List<T> = { data: ptr, len: Int } (§11)
+            // data is a heap-allocated array of T. We use Ty::String as a proxy for
+            // "pointer type" since String → ptr in LLVM IR. TODO: add Ty::Ptr if needed.
+            self.adt_struct_defs.insert(
+                mono_name,
+                vec![
+                    ("data".into(), Ty::String), // ptr in LLVM
+                    ("len".into(), Ty::Int),
+                ],
+            );
+            // Also register Option<T> for .get() safe access
+            let opt_ty = Ty::Generic("Option".into(), vec![elem_ty.clone()]);
+            self.register_adt_type(&opt_ty);
         }
     }
 
@@ -2431,7 +2674,11 @@ impl LowerCtx {
                 | Instruction::FieldGet { dest, .. }
                 | Instruction::AdtInit { dest, .. }
                 | Instruction::AdtPayload { dest, .. }
-                | Instruction::StringFormat { dest, .. } => return Some(dest.clone()),
+                | Instruction::StringFormat { dest, .. }
+                | Instruction::ListInit { dest, .. }
+                | Instruction::ListLen { dest, .. }
+                | Instruction::ListGet { dest, .. }
+                | Instruction::ListGetSafe { dest, .. } => return Some(dest.clone()),
                 _ => continue,
             }
         }
@@ -2533,7 +2780,11 @@ impl LowerCtx {
                 | Instruction::FieldGet { dest, .. }
                 | Instruction::AdtInit { dest, .. }
                 | Instruction::AdtPayload { dest, .. }
-                | Instruction::StringFormat { dest, .. } => return Some(dest.clone()),
+                | Instruction::StringFormat { dest, .. }
+                | Instruction::ListInit { dest, .. }
+                | Instruction::ListLen { dest, .. }
+                | Instruction::ListGet { dest, .. }
+                | Instruction::ListGetSafe { dest, .. } => return Some(dest.clone()),
                 _ => continue,
             }
         }

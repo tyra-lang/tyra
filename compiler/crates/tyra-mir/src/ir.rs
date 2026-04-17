@@ -160,6 +160,38 @@ pub enum Instruction {
         format_ref: usize,
         args: Vec<Operand>,
     },
+
+    /// `dest = list_init(elem_type, [e0, e1, ...])` — construct a list from elements (§11).
+    /// Heap-allocates storage for elements and produces a {ptr, i64} struct.
+    ListInit {
+        dest: String,
+        elem_type: Ty,
+        elements: Vec<Operand>,
+    },
+
+    /// `dest = list_len(list)` — extract the length (field 1) from a list struct (§11).
+    ListLen {
+        dest: String,
+        list: Operand,
+    },
+
+    /// `dest = list_get(list, index, elem_type)` — panicking index access (§11).
+    /// Aborts if index >= length.
+    ListGet {
+        dest: String,
+        list: Operand,
+        index: Operand,
+        elem_type: Ty,
+    },
+
+    /// `dest = list_get_safe(list, index, elem_type)` — safe access returning Option<T> (§11).
+    /// Returns Some(element) if in bounds, None otherwise.
+    ListGetSafe {
+        dest: String,
+        list: Operand,
+        index: Operand,
+        elem_type: Ty,
+    },
 }
 
 /// A constant value.

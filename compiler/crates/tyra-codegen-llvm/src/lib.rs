@@ -180,4 +180,98 @@ mod tests {
         assert!(ir.contains("extractvalue %struct.Pair %_t2, 0"));
         assert!(ir.contains("extractvalue %struct.Pair %_t2, 1"));
     }
+
+    #[test]
+    fn list_init_emits_malloc_and_stores() {
+        // §11: ListInit should emit malloc, GEP+store per element, insertvalue
+        let program = tyra_mir::Program {
+            functions: vec![tyra_mir::Function {
+                name: "main".into(),
+                params: vec![],
+                return_type: tyra_types::Ty::Unit,
+                body: vec![
+                    tyra_mir::Instruction::Const {
+                        dest: "_t0".into(),
+                        value: tyra_mir::Constant::Int(10),
+                    },
+                    tyra_mir::Instruction::Const {
+                        dest: "_t1".into(),
+                        value: tyra_mir::Constant::Int(20),
+                    },
+                    tyra_mir::Instruction::ListInit {
+                        dest: "_t2".into(),
+                        elem_type: tyra_types::Ty::Int,
+                        elements: vec![
+                            tyra_mir::Operand::Var("_t0".into()),
+                            tyra_mir::Operand::Var("_t1".into()),
+                        ],
+                    },
+                    tyra_mir::Instruction::Return { value: None },
+                ],
+                is_main: true,
+            }],
+            string_constants: vec![],
+            struct_defs: vec![tyra_mir::StructDef {
+                name: "List__Int".into(),
+                fields: vec![
+                    ("data".into(), tyra_types::Ty::String), // ptr
+                    ("len".into(), tyra_types::Ty::Int),
+                ],
+            }],
+        };
+
+        let ir = emit_llvm_ir(&program);
+        assert!(ir.contains("%struct.List__Int = type { ptr, i64 }"));
+        assert!(ir.contains("@malloc(i64 16)")); // 2 elements * 8 bytes
+        assert!(ir.contains("getelementptr i64"));
+        assert!(ir.contains("insertvalue %struct.List__Int"));
+    }
+
+    #[test]
+    fn list_get_emits_bounds_check() {
+        // §11: ListGet should emit bounds check with icmp + abort branch
+        let program = tyra_mir::Program {
+            functions: vec![tyra_mir::Function {
+                name: "main".into(),
+                params: vec![],
+                return_type: tyra_types::Ty::Unit,
+                body: vec![
+                    tyra_mir::Instruction::Const {
+                        dest: "_t0".into(),
+                        value: tyra_mir::Constant::Int(10),
+                    },
+                    tyra_mir::Instruction::ListInit {
+                        dest: "_t1".into(),
+                        elem_type: tyra_types::Ty::Int,
+                        elements: vec![tyra_mir::Operand::Var("_t0".into())],
+                    },
+                    tyra_mir::Instruction::Const {
+                        dest: "_t2".into(),
+                        value: tyra_mir::Constant::Int(0),
+                    },
+                    tyra_mir::Instruction::ListGet {
+                        dest: "_t3".into(),
+                        list: tyra_mir::Operand::Var("_t1".into()),
+                        index: tyra_mir::Operand::Var("_t2".into()),
+                        elem_type: tyra_types::Ty::Int,
+                    },
+                    tyra_mir::Instruction::Return { value: None },
+                ],
+                is_main: true,
+            }],
+            string_constants: vec![],
+            struct_defs: vec![tyra_mir::StructDef {
+                name: "List__Int".into(),
+                fields: vec![
+                    ("data".into(), tyra_types::Ty::String),
+                    ("len".into(), tyra_types::Ty::Int),
+                ],
+            }],
+        };
+
+        let ir = emit_llvm_ir(&program);
+        assert!(ir.contains("icmp ult i64"), "expected bounds check");
+        assert!(ir.contains("call void @abort()"), "expected abort on OOB");
+        assert!(ir.contains("load i64"), "expected load from list data");
+    }
 }

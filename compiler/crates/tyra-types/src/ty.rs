@@ -91,6 +91,19 @@ impl Ty {
         }
     }
 
+    /// Check if this is a List<T> type.
+    pub fn is_list(&self) -> bool {
+        matches!(self, Ty::Generic(name, args) if name == "List" && args.len() == 1)
+    }
+
+    /// Extract the element type T from List<T>.
+    pub fn list_elem(&self) -> Option<&Ty> {
+        match self {
+            Ty::Generic(name, args) if name == "List" && args.len() == 1 => Some(&args[0]),
+            _ => None,
+        }
+    }
+
     /// Generate a monomorphized name for codegen.
     /// e.g., Option<Int> → "Option__Int", Result<String, AppError> → "Result__String__AppError"
     pub fn monomorphized_name(&self) -> String {
@@ -255,6 +268,24 @@ mod tests {
         assert_eq!(res.result_ok_type(), Some(&Ty::String));
         assert_eq!(res.result_err_type(), Some(&Ty::Named("Err".into())));
         assert_eq!(Ty::Int.result_ok_type(), None);
+    }
+
+    #[test]
+    fn is_list() {
+        let list = Ty::Generic("List".into(), vec![Ty::Int]);
+        assert!(list.is_list());
+        assert!(!list.is_option());
+        assert!(!Ty::Int.is_list());
+    }
+
+    #[test]
+    fn list_elem_type() {
+        let list = Ty::Generic("List".into(), vec![Ty::String]);
+        assert_eq!(list.list_elem(), Some(&Ty::String));
+        assert_eq!(Ty::Int.list_elem(), None);
+
+        let list_named = Ty::Generic("List".into(), vec![Ty::Named("User".into())]);
+        assert_eq!(list_named.list_elem(), Some(&Ty::Named("User".into())));
     }
 
     #[test]

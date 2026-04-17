@@ -746,4 +746,115 @@ let b = id::<Int>(2)\n";
         let count = prog.functions.iter().filter(|f| f.name == "id__Int").count();
         assert_eq!(count, 1, "expected exactly 1 id__Int function, got {count}");
     }
+
+    // ---- List<T> tests (§11) ----
+
+    #[test]
+    fn list_literal_lowers_to_list_init() {
+        // spec §11: [1, 2, 3] produces ListInit with 3 elements
+        let source = "let xs = [1, 2, 3]\n";
+        let prog = lower_str(source);
+        let main = prog.functions.iter().find(|f| f.is_main).unwrap();
+        let has_list_init = main.body.iter().any(|inst| {
+            matches!(inst, Instruction::ListInit { elements, .. } if elements.len() == 3)
+        });
+        assert!(has_list_init, "expected ListInit with 3 elements");
+    }
+
+    #[test]
+    fn list_literal_registers_struct_def() {
+        // List<Int> should register a struct_def named "List__Int"
+        let source = "let xs = [1, 2, 3]\n";
+        let prog = lower_str(source);
+        let has_list_def = prog.struct_defs.iter().any(|sd| sd.name == "List__Int");
+        assert!(has_list_def, "expected struct def List__Int");
+    }
+
+    #[test]
+    fn list_index_lowers_to_list_get() {
+        // spec §11: xs[0] produces ListGet
+        let source = "\
+let xs = [10, 20, 30]\n\
+let x = xs[1]\n";
+        let prog = lower_str(source);
+        let main = prog.functions.iter().find(|f| f.is_main).unwrap();
+        let has_list_get = main.body.iter().any(|inst| {
+            matches!(inst, Instruction::ListGet { .. })
+        });
+        assert!(has_list_get, "expected ListGet instruction");
+    }
+
+    #[test]
+    fn list_get_method_lowers_to_list_get_safe() {
+        // spec §11: xs.get(0) produces ListGetSafe
+        let source = "\
+let xs = [10, 20, 30]\n\
+let y = xs.get(0)\n";
+        let prog = lower_str(source);
+        let main = prog.functions.iter().find(|f| f.is_main).unwrap();
+        let has_list_get_safe = main.body.iter().any(|inst| {
+            matches!(inst, Instruction::ListGetSafe { .. })
+        });
+        assert!(has_list_get_safe, "expected ListGetSafe instruction");
+    }
+
+    #[test]
+    fn list_len_method_lowers_to_list_len() {
+        // spec §11: xs.len() produces ListLen
+        let source = "\
+let xs = [1, 2, 3]\n\
+let n = xs.len()\n";
+        let prog = lower_str(source);
+        let main = prog.functions.iter().find(|f| f.is_main).unwrap();
+        let has_list_len = main.body.iter().any(|inst| {
+            matches!(inst, Instruction::ListLen { .. })
+        });
+        assert!(has_list_len, "expected ListLen instruction");
+    }
+
+    #[test]
+    fn list_param_registers_struct_def() {
+        // fn f(_ items: List<Int>) should register List__Int
+        let source = "\
+fn f(_ items: List<Int>) -> Int\n\
+  items.len()\n\
+end\n";
+        let prog = lower_str(source);
+        let has_list_def = prog.struct_defs.iter().any(|sd| sd.name == "List__Int");
+        assert!(has_list_def, "expected struct def List__Int for param type");
+    }
+
+    #[test]
+    fn list_get_safe_registers_option_struct_def() {
+        // .get() should also register Option__Int
+        let source = "\
+let xs = [1, 2, 3]\n\
+let y = xs.get(0)\n";
+        let prog = lower_str(source);
+        let has_option_def = prog.struct_defs.iter().any(|sd| sd.name == "Option__Int");
+        assert!(
+            has_option_def,
+            "expected struct def Option__Int from .get()"
+        );
+    }
+
+    #[test]
+    fn for_loop_over_list_generates_loop() {
+        // for x in xs should generate BranchIf + ListGet for List iteration
+        let source = "\
+let xs = [10, 20, 30]\n\
+for x in xs\n\
+  println(x)\n\
+end\n";
+        let prog = lower_str(source);
+        let main = prog.functions.iter().find(|f| f.is_main).unwrap();
+        let has_branch = main.body.iter().any(|inst| {
+            matches!(inst, Instruction::BranchIf { .. })
+        });
+        let has_list_get = main.body.iter().any(|inst| {
+            matches!(inst, Instruction::ListGet { .. })
+        });
+        assert!(has_branch, "expected BranchIf in for-loop");
+        assert!(has_list_get, "expected ListGet in for-loop body");
+    }
 }
