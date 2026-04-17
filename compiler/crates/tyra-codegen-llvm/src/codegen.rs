@@ -126,6 +126,7 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare i32 @snprintf(ptr, i64, ptr, ...)").unwrap();
     writeln!(out, "declare ptr @malloc(i64)").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
+    writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();
     writeln!(out).unwrap();
 
     // Build function signature map for cross-function type resolution
@@ -229,6 +230,8 @@ fn emit_function(
                         | MirBinOp::LeFloat
                         | MirBinOp::GtFloat
                         | MirBinOp::GeFloat
+                        | MirBinOp::EqString
+                        | MirBinOp::NeqString
                         | MirBinOp::And
                         | MirBinOp::Or
                 ) {
@@ -701,6 +704,25 @@ fn emit_instruction(
                 MirBinOp::LeFloat => format!("fcmp ole double {l}, {r}"),
                 MirBinOp::GtFloat => format!("fcmp ogt double {l}, {r}"),
                 MirBinOp::GeFloat => format!("fcmp oge double {l}, {r}"),
+                MirBinOp::EqString | MirBinOp::NeqString => {
+                    // String comparison via strcmp: returns 0 if equal
+                    let cmp_op = if matches!(op, MirBinOp::EqString) {
+                        "eq"
+                    } else {
+                        "ne"
+                    };
+                    writeln!(
+                        out,
+                        "  %{dest}.cmp = call i32 @strcmp(ptr {l}, ptr {r})"
+                    )
+                    .unwrap();
+                    writeln!(
+                        out,
+                        "  %{dest} = icmp {cmp_op} i32 %{dest}.cmp, 0"
+                    )
+                    .unwrap();
+                    return; // Already wrote %dest, skip the generic writeln below
+                }
                 MirBinOp::And => format!("and i1 {l}, {r}"),
                 MirBinOp::Or => format!("or i1 {l}, {r}"),
             };

@@ -857,4 +857,85 @@ end\n";
         assert!(has_branch, "expected BranchIf in for-loop");
         assert!(has_list_get, "expected ListGet in for-loop body");
     }
+
+    // ---- Comparison tests (§8.6, §11) ----
+
+    #[test]
+    fn string_eq_lowers_to_eq_string() {
+        // String == String should use EqString, not EqInt
+        let source = "\
+let a = \"hello\"\n\
+let b = \"world\"\n\
+let eq = a == b\n";
+        let prog = lower_str(source);
+        let main = prog.functions.iter().find(|f| f.is_main).unwrap();
+        let has_eq_string = main.body.iter().any(|inst| {
+            matches!(inst, Instruction::BinOp { op: MirBinOp::EqString, .. })
+        });
+        assert!(has_eq_string, "expected EqString for string equality");
+    }
+
+    #[test]
+    fn value_type_lt_extracts_field() {
+        // §8.6: single-field value type Ord → FieldGet + LtInt
+        let source = "\
+value UserId\n\
+  id: Int\n\
+end\n\
+let id1 = UserId(id: 1)\n\
+let id2 = UserId(id: 2)\n\
+let cmp = id1 < id2\n";
+        let prog = lower_str(source);
+        let main = prog.functions.iter().find(|f| f.is_main).unwrap();
+        let has_field_get = main.body.iter().any(|inst| {
+            matches!(inst, Instruction::FieldGet { type_name, .. } if type_name == "UserId")
+        });
+        let has_lt_int = main.body.iter().any(|inst| {
+            matches!(inst, Instruction::BinOp { op: MirBinOp::LtInt, .. })
+        });
+        assert!(has_field_get, "expected FieldGet for UserId field extraction");
+        assert!(has_lt_int, "expected LtInt for field comparison");
+    }
+
+    #[test]
+    fn value_type_eq_compares_all_fields() {
+        // §8.6: multi-field value type Eq → FieldGet per field + EqInt + And
+        let source = "\
+value Pair\n\
+  x: Int\n\
+  y: Int\n\
+end\n\
+let a = Pair(x: 1, y: 2)\n\
+let b = Pair(x: 1, y: 2)\n\
+let eq = a == b\n";
+        let prog = lower_str(source);
+        let main = prog.functions.iter().find(|f| f.is_main).unwrap();
+        let field_gets = main.body.iter().filter(|inst| {
+            matches!(inst, Instruction::FieldGet { type_name, .. } if type_name == "Pair")
+        }).count();
+        let has_and = main.body.iter().any(|inst| {
+            matches!(inst, Instruction::BinOp { op: MirBinOp::And, .. })
+        });
+        assert!(field_gets >= 4, "expected at least 4 FieldGets (2 fields x 2 operands)");
+        assert!(has_and, "expected And to combine field comparisons");
+    }
+
+    #[test]
+    fn match_string_literal_generates_comparison() {
+        // match on string literal should generate EqString + BranchIf
+        let source = "\
+let cmd = \"serve\"\n\
+match cmd\n\
+when \"serve\"\n\
+  println(\"ok\")\n\
+when _\n\
+  println(\"no\")\n\
+end\n";
+        let prog = lower_str(source);
+        let main = prog.functions.iter().find(|f| f.is_main).unwrap();
+        let has_eq_string = main.body.iter().any(|inst| {
+            matches!(inst, Instruction::BinOp { op: MirBinOp::EqString, .. })
+        });
+        assert!(has_eq_string, "expected EqString for string pattern matching");
+    }
 }

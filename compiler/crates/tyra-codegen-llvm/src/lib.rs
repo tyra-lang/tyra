@@ -274,4 +274,40 @@ mod tests {
         assert!(ir.contains("call void @abort()"), "expected abort on OOB");
         assert!(ir.contains("load i64"), "expected load from list data");
     }
+
+    #[test]
+    fn eq_string_emits_strcmp() {
+        // EqString should emit call @strcmp + icmp eq
+        let program = tyra_mir::Program {
+            functions: vec![tyra_mir::Function {
+                name: "main".into(),
+                params: vec![],
+                return_type: tyra_types::Ty::Unit,
+                body: vec![
+                    tyra_mir::Instruction::Const {
+                        dest: "_t0".into(),
+                        value: tyra_mir::Constant::StringRef(0),
+                    },
+                    tyra_mir::Instruction::Const {
+                        dest: "_t1".into(),
+                        value: tyra_mir::Constant::StringRef(1),
+                    },
+                    tyra_mir::Instruction::BinOp {
+                        dest: "_t2".into(),
+                        op: tyra_mir::MirBinOp::EqString,
+                        lhs: tyra_mir::Operand::Var("_t0".into()),
+                        rhs: tyra_mir::Operand::Var("_t1".into()),
+                    },
+                    tyra_mir::Instruction::Return { value: None },
+                ],
+                is_main: true,
+            }],
+            string_constants: vec!["hello".into(), "world".into()],
+            struct_defs: vec![],
+        };
+
+        let ir = emit_llvm_ir(&program);
+        assert!(ir.contains("@strcmp(ptr"), "expected strcmp call");
+        assert!(ir.contains("icmp eq i32"), "expected icmp eq on strcmp result");
+    }
 }

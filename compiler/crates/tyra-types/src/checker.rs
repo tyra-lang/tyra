@@ -547,7 +547,8 @@ fn infer_binop(op: BinOp, left: &Ty, right: &Ty, span: Span, report: &mut Report
             Ty::Bool
         }
         BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq => {
-            if left == right && matches!(left, Ty::Int | Ty::Float) {
+            // Allow Int, Float, and Error (escape hatch for value types not yet registered)
+            if left == right && matches!(left, Ty::Int | Ty::Float | Ty::Error) {
                 Ty::Bool
             } else {
                 report.add(

@@ -235,6 +235,8 @@ pub enum MirBinOp {
     LeFloat,
     GtFloat,
     GeFloat,
+    EqString,
+    NeqString,
     And,
     Or,
 }

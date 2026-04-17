@@ -594,6 +594,33 @@ impl LowerCtx {
             ExprKind::BinaryOp(lhs, op, rhs) => {
                 let l = self.lower_expr(lhs, body);
                 let r = self.lower_expr(rhs, body);
+
+                // String comparison: use strcmp-based ops
+                let is_string = self.is_string_expr(lhs) || self.is_string_expr(rhs);
+                if is_string && matches!(op, BinOp::Eq | BinOp::NotEq) {
+                    let mir_op = if *op == BinOp::Eq {
+                        MirBinOp::EqString
+                    } else {
+                        MirBinOp::NeqString
+                    };
+                    let dest = self.fresh_temp();
+                    body.push(Instruction::BinOp {
+                        dest: dest.clone(),
+                        op: mir_op,
+                        lhs: Operand::Var(l),
+                        rhs: Operand::Var(r),
+                    });
+                    return dest;
+                }
+
+                // Value type comparison: extract fields and compare
+                if let Some(dest) = self.lower_value_type_binop(
+                    &l, &r, *op, lhs, rhs, body,
+                ) {
+                    return dest;
+                }
+
+                // Default: Int/Float/Bool comparison
                 let dest = self.fresh_temp();
                 let is_float = self.is_float_expr(lhs) || self.is_float_expr(rhs);
                 let mir_op = ast_binop_to_mir(*op, is_float);
@@ -1898,7 +1925,29 @@ impl LowerCtx {
                         false_label: next_label.clone(),
                     });
                 }
-                PatternKind::StringLit(_) | PatternKind::FloatLit(_) => {
+                PatternKind::StringLit(s) => {
+                    // §11: match on string literal via strcmp
+                    let pat_ref = self.intern_string(s);
+                    let pat_temp = self.fresh_temp();
+                    body.push(Instruction::Const {
+                        dest: pat_temp.clone(),
+                        value: Constant::StringRef(pat_ref),
+                    });
+                    let cond = self.fresh_temp();
+                    body.push(Instruction::BinOp {
+                        dest: cond.clone(),
+                        op: MirBinOp::EqString,
+                        lhs: Operand::Var(subject.clone()),
+                        rhs: Operand::Var(pat_temp),
+                    });
+                    body.push(Instruction::BranchIf {
+                        cond: Operand::Var(cond),
+                        true_label: arm_label.clone(),
+                        false_label: next_label.clone(),
+                    });
+                }
+                PatternKind::FloatLit(_) => {
+                    // Float pattern matching: deferred (Float has no Eq)
                     body.push(Instruction::Jump {
                         label: arm_label.clone(),
                     });
@@ -2299,6 +2348,142 @@ impl LowerCtx {
                 None
             }
             ExprKind::Ident(name) => self.var_types.get(name).cloned(),
+            _ => None,
+        }
+    }
+
+    /// Lower a binary operation on value types (§8.6 ability derivation).
+    /// Returns Some(dest) if both operands are the same Named type, None otherwise.
+    fn lower_value_type_binop(
+        &mut self,
+        l: &str,
+        r: &str,
+        op: BinOp,
+        lhs_expr: &Expr,
+        rhs_expr: &Expr,
+        body: &mut Vec<Instruction>,
+    ) -> Option<String> {
+        // Both operands must be the same named type
+        let l_type = self.resolve_struct_type(lhs_expr);
+        let r_type = self.resolve_struct_type(rhs_expr);
+        let (type_name, fields) = match (&l_type, &r_type) {
+            (Some((ln, lf)), Some((rn, _))) if ln == rn => (ln.clone(), lf.clone()),
+            _ => return None,
+        };
+
+        match op {
+            // Eq/NotEq: compare all fields (spec §8.6: auto-derives if all fields have Eq)
+            BinOp::Eq | BinOp::NotEq => {
+                // Float fields block Eq derivation (ADR-0002)
+                if fields.iter().any(|(_, ty)| *ty == Ty::Float) {
+                    return None; // Fall through to default (will error or use EqInt)
+                }
+
+                let mut field_conds = Vec::new();
+                for (i, (_, field_ty)) in fields.iter().enumerate() {
+                    let l_field = self.fresh_temp();
+                    body.push(Instruction::FieldGet {
+                        dest: l_field.clone(),
+                        obj: Operand::Var(l.to_string()),
+                        type_name: type_name.clone(),
+                        field_index: i as u32,
+                    });
+                    let r_field = self.fresh_temp();
+                    body.push(Instruction::FieldGet {
+                        dest: r_field.clone(),
+                        obj: Operand::Var(r.to_string()),
+                        type_name: type_name.clone(),
+                        field_index: i as u32,
+                    });
+                    let field_eq = self.fresh_temp();
+                    let field_op = if *field_ty == Ty::String {
+                        MirBinOp::EqString
+                    } else {
+                        MirBinOp::EqInt
+                    };
+                    body.push(Instruction::BinOp {
+                        dest: field_eq.clone(),
+                        op: field_op,
+                        lhs: Operand::Var(l_field),
+                        rhs: Operand::Var(r_field),
+                    });
+                    field_conds.push(field_eq);
+                }
+
+                // Empty struct: always equal
+                if field_conds.is_empty() {
+                    let dest = self.fresh_temp();
+                    body.push(Instruction::Const {
+                        dest: dest.clone(),
+                        value: if op == BinOp::Eq {
+                            Constant::Bool(true)
+                        } else {
+                            Constant::Bool(false)
+                        },
+                    });
+                    return Some(dest);
+                }
+
+                // AND all field comparisons together
+                let mut result = field_conds[0].clone();
+                for cond in &field_conds[1..] {
+                    let combined = self.fresh_temp();
+                    body.push(Instruction::BinOp {
+                        dest: combined.clone(),
+                        op: MirBinOp::And,
+                        lhs: Operand::Var(result),
+                        rhs: Operand::Var(cond.clone()),
+                    });
+                    result = combined;
+                }
+
+                // For NotEq: negate the result
+                if op == BinOp::NotEq {
+                    let negated = self.fresh_temp();
+                    body.push(Instruction::Not {
+                        dest: negated.clone(),
+                        operand: Operand::Var(result),
+                    });
+                    result = negated;
+                }
+
+                Some(result)
+            }
+
+            // Ord: only for single-field value types (spec §8.6)
+            BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq => {
+                if fields.len() != 1 {
+                    return None; // Multi-field values don't derive Ord
+                }
+                let (_, field_ty) = &fields[0];
+
+                let l_field = self.fresh_temp();
+                body.push(Instruction::FieldGet {
+                    dest: l_field.clone(),
+                    obj: Operand::Var(l.to_string()),
+                    type_name: type_name.clone(),
+                    field_index: 0,
+                });
+                let r_field = self.fresh_temp();
+                body.push(Instruction::FieldGet {
+                    dest: r_field.clone(),
+                    obj: Operand::Var(r.to_string()),
+                    type_name: type_name.clone(),
+                    field_index: 0,
+                });
+
+                let is_float = *field_ty == Ty::Float;
+                let mir_op = ast_binop_to_mir(op, is_float);
+                let dest = self.fresh_temp();
+                body.push(Instruction::BinOp {
+                    dest: dest.clone(),
+                    op: mir_op,
+                    lhs: Operand::Var(l_field),
+                    rhs: Operand::Var(r_field),
+                });
+                Some(dest)
+            }
+
             _ => None,
         }
     }
