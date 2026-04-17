@@ -5,9 +5,11 @@
 // Control flow is desugared into labels and branches.
 
 mod adt;
+mod call;
 mod expr;
 mod match_lower;
 mod method;
+mod propagate;
 mod types;
 
 use tyra_ast::*;
