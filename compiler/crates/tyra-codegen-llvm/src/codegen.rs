@@ -12,16 +12,16 @@ use tyra_mir::*;
 use tyra_types::Ty;
 
 /// Struct type metadata for codegen.
-struct StructInfo {
+pub(crate) struct StructInfo {
     /// LLVM type name: "%struct.Point"
-    llvm_name: String,
+    pub(crate) llvm_name: String,
     /// Field types in declaration order.
     /// For ADTs: field_types[0] is the tag type, stored as Ty::Int in MIR
     /// but emitted as i8 in LLVM.
-    field_types: Vec<Ty>,
+    pub(crate) field_types: Vec<Ty>,
     /// Whether this is an ADT tagged struct (Option/Result).
     /// When true, field 0 is the i8 tag regardless of field_types[0].
-    is_adt: bool,
+    pub(crate) is_adt: bool,
 }
 
 /// Generate LLVM IR text from a MIR program.
@@ -167,9 +167,9 @@ pub fn emit_llvm_ir(program: &Program) -> String {
 }
 
 /// Function signature for cross-function type resolution.
-struct FnSig {
-    param_types: Vec<Ty>,
-    return_type: Ty,
+pub(crate) struct FnSig {
+    pub(crate) param_types: Vec<Ty>,
+    pub(crate) return_type: Ty,
 }
 
 fn emit_function(
@@ -621,15 +621,15 @@ fn pre_scan_alloca_llvm_types(
 }
 
 /// Context passed to instruction emitters.
-struct EmitCtx<'a> {
-    struct_map: &'a std::collections::HashMap<String, StructInfo>,
-    fn_sigs: &'a std::collections::HashMap<String, FnSig>,
-    string_temps: &'a std::collections::HashSet<String>,
-    float_temps: &'a std::collections::HashSet<String>,
-    bool_temps: &'a std::collections::HashSet<String>,
-    struct_temps: &'a std::collections::HashMap<String, String>,
+pub(crate) struct EmitCtx<'a> {
+    pub(crate) struct_map: &'a std::collections::HashMap<String, StructInfo>,
+    pub(crate) fn_sigs: &'a std::collections::HashMap<String, FnSig>,
+    pub(crate) string_temps: &'a std::collections::HashSet<String>,
+    pub(crate) float_temps: &'a std::collections::HashSet<String>,
+    pub(crate) bool_temps: &'a std::collections::HashSet<String>,
+    pub(crate) struct_temps: &'a std::collections::HashMap<String, String>,
     /// Resolved LLVM type for alloca slots (from Store analysis).
-    alloca_llvm_types: &'a std::collections::HashMap<String, String>,
+    pub(crate) alloca_llvm_types: &'a std::collections::HashMap<String, String>,
 }
 
 fn emit_instruction(
@@ -672,120 +672,22 @@ fn emit_instruction(
             func: fname,
             args,
         } => {
-            // Map Tyra builtins to C functions
-            match fname.as_str() {
-                "print" | "eprint" | "println" | "eprintln" => {
-                    let is_println = fname == "println" || fname == "eprintln";
-                    emit_print_call(out, dest.as_deref(), args, func, is_println, ctx);
-                }
-                "panic" => {
-                    // §12.1: panic(_ message: String) -> Never
-                    // Print message to stdout then abort.
-                    if let Some(arg) = args.first() {
-                        let val = operand_ref(arg, func);
-                        writeln!(out, "  call i32 @puts(ptr {val})").unwrap();
-                    }
-                    writeln!(out, "  call void @abort()").unwrap();
-                    writeln!(out, "  unreachable").unwrap();
-                }
-                "sys__args" => {
-                    // §17.1: core.sys.args() -> List<String>
-                    // Build List<String> from saved argc/argv globals.
-                    let d = dest.as_deref().unwrap_or("_sys_args");
-                    let list_ty = if let Some(info) = ctx.struct_map.get("List__String") {
-                        &info.llvm_name
-                    } else {
-                        "%struct.List__String"
-                    };
-                    // Load argc and argv (argc is always >= 1: argv[0] is program name)
-                    writeln!(out, "  %{d}.argc = load i32, ptr @.tyra.argc").unwrap();
-                    writeln!(out, "  %{d}.argc64 = sext i32 %{d}.argc to i64").unwrap();
-                    writeln!(out, "  %{d}.argv = load ptr, ptr @.tyra.argv").unwrap();
-                    // Malloc data array (argc * 8 bytes for ptr array)
-                    writeln!(out, "  %{d}.size = mul i64 %{d}.argc64, 8").unwrap();
-                    writeln!(out, "  %{d}.data = call ptr @malloc(i64 %{d}.size)").unwrap();
-                    // Copy argv pointers into list data using alloca-based loop
-                    // (alloca avoids phi predecessor issues in non-entry blocks)
-                    writeln!(out, "  %{d}.ctr = alloca i64").unwrap();
-                    writeln!(out, "  store i64 0, ptr %{d}.ctr").unwrap();
-                    writeln!(out, "  br label %{d}.loop").unwrap();
-                    writeln!(out, "{d}.loop:").unwrap();
-                    writeln!(out, "  %{d}.i = load i64, ptr %{d}.ctr").unwrap();
-                    writeln!(out, "  %{d}.done = icmp sge i64 %{d}.i, %{d}.argc64").unwrap();
-                    writeln!(out, "  br i1 %{d}.done, label %{d}.end, label %{d}.body").unwrap();
-                    writeln!(out, "{d}.body:").unwrap();
-                    writeln!(out, "  %{d}.argp = getelementptr ptr, ptr %{d}.argv, i64 %{d}.i").unwrap();
-                    writeln!(out, "  %{d}.arg = load ptr, ptr %{d}.argp").unwrap();
-                    writeln!(out, "  %{d}.dstp = getelementptr ptr, ptr %{d}.data, i64 %{d}.i").unwrap();
-                    writeln!(out, "  store ptr %{d}.arg, ptr %{d}.dstp").unwrap();
-                    writeln!(out, "  %{d}.next = add i64 %{d}.i, 1").unwrap();
-                    writeln!(out, "  store i64 %{d}.next, ptr %{d}.ctr").unwrap();
-                    writeln!(out, "  br label %{d}.loop").unwrap();
-                    writeln!(out, "{d}.end:").unwrap();
-                    // Build List struct {ptr, i64}
-                    writeln!(out, "  %{d}.s0 = insertvalue {list_ty} undef, ptr %{d}.data, 0").unwrap();
-                    writeln!(out, "  %{d} = insertvalue {list_ty} %{d}.s0, i64 %{d}.argc64, 1").unwrap();
-                }
-                "parse__Int" => {
-                    // parse::<Int>(str) -> Option<Int>
-                    // Uses strtol with endptr check.
-                    let d = dest.as_deref().unwrap_or("_parse");
-                    let opt_ty = if let Some(info) = ctx.struct_map.get("Option__Int") {
-                        &info.llvm_name
-                    } else {
-                        "%struct.Option__Int"
-                    };
-                    let val = if let Some(arg) = args.first() {
-                        operand_ref(arg, func)
-                    } else {
-                        "null".to_string()
-                    };
-                    // Alloca for endptr
-                    writeln!(out, "  %{d}.endp = alloca ptr").unwrap();
-                    // Call strtol(str, &endptr, 10)
-                    writeln!(out, "  %{d}.val = call i64 @strtol(ptr {val}, ptr %{d}.endp, i32 10)").unwrap();
-                    // Load endptr
-                    writeln!(out, "  %{d}.ep = load ptr, ptr %{d}.endp").unwrap();
-                    // Check: endptr == str means no conversion at all
-                    writeln!(out, "  %{d}.nconv = icmp eq ptr %{d}.ep, {val}").unwrap();
-                    // Check: *endptr != '\0' means trailing garbage (partial parse)
-                    writeln!(out, "  %{d}.epch = load i8, ptr %{d}.ep").unwrap();
-                    writeln!(out, "  %{d}.partial = icmp ne i8 %{d}.epch, 0").unwrap();
-                    writeln!(out, "  %{d}.fail = or i1 %{d}.nconv, %{d}.partial").unwrap();
-                    writeln!(out, "  %{d}.slot = alloca {opt_ty}").unwrap();
-                    writeln!(out, "  br i1 %{d}.fail, label %{d}.none, label %{d}.some").unwrap();
-                    // Some path
-                    writeln!(out, "{d}.some:").unwrap();
-                    writeln!(out, "  %{d}.some.s0 = insertvalue {opt_ty} undef, i8 0, 0").unwrap();
-                    writeln!(out, "  %{d}.some.v = insertvalue {opt_ty} %{d}.some.s0, i64 %{d}.val, 1").unwrap();
-                    writeln!(out, "  store {opt_ty} %{d}.some.v, ptr %{d}.slot").unwrap();
-                    writeln!(out, "  br label %{d}.merge").unwrap();
-                    // None path
-                    writeln!(out, "{d}.none:").unwrap();
-                    writeln!(out, "  %{d}.none.s0 = insertvalue {opt_ty} undef, i8 1, 0").unwrap();
-                    writeln!(out, "  %{d}.none.v = insertvalue {opt_ty} %{d}.none.s0, i64 0, 1").unwrap();
-                    writeln!(out, "  store {opt_ty} %{d}.none.v, ptr %{d}.slot").unwrap();
-                    writeln!(out, "  br label %{d}.merge").unwrap();
-                    // Merge
-                    writeln!(out, "{d}.merge:").unwrap();
-                    writeln!(out, "  %{d} = load {opt_ty}, ptr %{d}.slot").unwrap();
-                }
-                _ => {
-                    // User-defined function call — look up signature for types
-                    let ret_ty = if let Some(sig) = ctx.fn_sigs.get(fname.as_str()) {
-                        llvm_type_str(&sig.return_type, ctx.struct_map)
-                    } else {
-                        "i64".into()
-                    };
-                    let user_args = emit_call_args_typed(args, fname, func, ctx);
-                    if ret_ty == "void" {
-                        writeln!(out, "  call void @{fname}({user_args})").unwrap();
-                    } else if let Some(d) = dest {
-                        writeln!(out, "  %{d} = call {ret_ty} @{fname}({user_args})")
-                            .unwrap();
-                    } else {
-                        writeln!(out, "  call {ret_ty} @{fname}({user_args})").unwrap();
-                    }
+            // Try builtin dispatch first; fall through to user-defined call
+            if !super::builtins::emit_builtin_call(out, dest, fname, args, func, ctx) {
+                // User-defined function call — look up signature for types
+                let ret_ty = if let Some(sig) = ctx.fn_sigs.get(fname.as_str()) {
+                    llvm_type_str(&sig.return_type, ctx.struct_map)
+                } else {
+                    "i64".into()
+                };
+                let user_args = emit_call_args_typed(args, fname, func, ctx);
+                if ret_ty == "void" {
+                    writeln!(out, "  call void @{fname}({user_args})").unwrap();
+                } else if let Some(d) = dest {
+                    writeln!(out, "  %{d} = call {ret_ty} @{fname}({user_args})")
+                        .unwrap();
+                } else {
+                    writeln!(out, "  call {ret_ty} @{fname}({user_args})").unwrap();
                 }
             }
         }
@@ -1204,316 +1106,13 @@ fn emit_instruction(
             .unwrap();
         }
 
-        // §11: List<T> instructions
-
-        Instruction::ListInit {
-            dest,
-            elem_type,
-            elements,
-        } => {
-            let list_ty = Ty::Generic("List".into(), vec![elem_type.clone()]);
-            let mono = list_ty.monomorphized_name();
-            let llvm_struct_ty = &ctx.struct_map[mono.as_str()].llvm_name;
-            let elem_llvm_ty = llvm_type_str(elem_type, ctx.struct_map);
-            let count = elements.len();
-
-            if count == 0 {
-                // Empty list: null pointer, length 0
-                writeln!(
-                    out,
-                    "  %{dest}.s0 = insertvalue {llvm_struct_ty} undef, ptr null, 0"
-                )
-                .unwrap();
-                writeln!(
-                    out,
-                    "  %{dest} = insertvalue {llvm_struct_ty} %{dest}.s0, i64 0, 1"
-                )
-                .unwrap();
-            } else {
-                let elem_size = llvm_elem_size(elem_type);
-                let total_size = count * elem_size;
-                writeln!(out, "  %{dest}.ptr = call ptr @malloc(i64 {total_size})").unwrap();
-                // Null check + abort on OOM
-                writeln!(out, "  %{dest}.null = icmp eq ptr %{dest}.ptr, null").unwrap();
-                writeln!(
-                    out,
-                    "  br i1 %{dest}.null, label %{dest}.oom, label %{dest}.ok"
-                )
-                .unwrap();
-                writeln!(out, "{dest}.oom:").unwrap();
-                writeln!(out, "  call void @abort()").unwrap();
-                writeln!(out, "  unreachable").unwrap();
-                writeln!(out, "{dest}.ok:").unwrap();
-
-                // Store each element via GEP
-                for (i, elem) in elements.iter().enumerate() {
-                    let val = operand_ref(elem, func);
-                    writeln!(
-                        out,
-                        "  %{dest}.gep.{i} = getelementptr {elem_llvm_ty}, ptr %{dest}.ptr, i64 {i}"
-                    )
-                    .unwrap();
-                    writeln!(out, "  store {elem_llvm_ty} {val}, ptr %{dest}.gep.{i}").unwrap();
-                }
-
-                // Build struct {ptr, i64}
-                writeln!(
-                    out,
-                    "  %{dest}.s0 = insertvalue {llvm_struct_ty} undef, ptr %{dest}.ptr, 0"
-                )
-                .unwrap();
-                writeln!(
-                    out,
-                    "  %{dest} = insertvalue {llvm_struct_ty} %{dest}.s0, i64 {count}, 1"
-                )
-                .unwrap();
-            }
+        // List instructions are handled by list_codegen delegation above
+        Instruction::ListInit { .. }
+        | Instruction::ListLen { .. }
+        | Instruction::ListGet { .. }
+        | Instruction::ListGetSafe { .. } => {
+            super::list_codegen::emit_list_instruction(out, inst, func, ctx);
         }
-
-        Instruction::ListLen { dest, list } => {
-            let list_val = operand_ref(list, func);
-            // ListLen doesn't carry elem_type, so we must rely on struct_temps.
-            // All List<T> have the same physical layout {ptr, i64}, so fallback is safe.
-            let llvm_struct_ty = list_struct_type(list, ctx);
-            writeln!(
-                out,
-                "  %{dest} = extractvalue {llvm_struct_ty} {list_val}, 1"
-            )
-            .unwrap();
-        }
-
-        Instruction::ListGet {
-            dest,
-            list,
-            index,
-            elem_type,
-        } => {
-            let list_val = operand_ref(list, func);
-            let idx_val = operand_ref(index, func);
-            let elem_llvm_ty = llvm_type_str(elem_type, ctx.struct_map);
-            let llvm_struct_ty = list_struct_type_from_elem(elem_type, list, ctx);
-
-            // Extract ptr and len
-            writeln!(
-                out,
-                "  %{dest}.data = extractvalue {llvm_struct_ty} {list_val}, 0"
-            )
-            .unwrap();
-            writeln!(
-                out,
-                "  %{dest}.len = extractvalue {llvm_struct_ty} {list_val}, 1"
-            )
-            .unwrap();
-
-            // Bounds check: index < len (unsigned)
-            writeln!(
-                out,
-                "  %{dest}.inb = icmp ult i64 {idx_val}, %{dest}.len"
-            )
-            .unwrap();
-            writeln!(
-                out,
-                "  br i1 %{dest}.inb, label %{dest}.ok, label %{dest}.oob"
-            )
-            .unwrap();
-
-            // Out-of-bounds: abort
-            writeln!(out, "{dest}.oob:").unwrap();
-            writeln!(out, "  call void @abort()").unwrap();
-            writeln!(out, "  unreachable").unwrap();
-
-            // In-bounds: GEP + load
-            writeln!(out, "{dest}.ok:").unwrap();
-            writeln!(
-                out,
-                "  %{dest}.gep = getelementptr {elem_llvm_ty}, ptr %{dest}.data, i64 {idx_val}"
-            )
-            .unwrap();
-            writeln!(
-                out,
-                "  %{dest} = load {elem_llvm_ty}, ptr %{dest}.gep"
-            )
-            .unwrap();
-        }
-
-        Instruction::ListGetSafe {
-            dest,
-            list,
-            index,
-            elem_type,
-        } => {
-            let list_val = operand_ref(list, func);
-            let idx_val = operand_ref(index, func);
-            let elem_llvm_ty = llvm_type_str(elem_type, ctx.struct_map);
-
-            let opt_ty = Ty::Generic("Option".into(), vec![elem_type.clone()]);
-            let opt_mono = opt_ty.monomorphized_name();
-            let opt_llvm_ty = &ctx.struct_map[opt_mono.as_str()].llvm_name;
-
-            let llvm_struct_ty = list_struct_type_from_elem(elem_type, list, ctx);
-
-            // Extract ptr and len
-            writeln!(
-                out,
-                "  %{dest}.data = extractvalue {llvm_struct_ty} {list_val}, 0"
-            )
-            .unwrap();
-            writeln!(
-                out,
-                "  %{dest}.len = extractvalue {llvm_struct_ty} {list_val}, 1"
-            )
-            .unwrap();
-
-            // Bounds check
-            writeln!(
-                out,
-                "  %{dest}.inb = icmp ult i64 {idx_val}, %{dest}.len"
-            )
-            .unwrap();
-
-            // Alloca for result
-            writeln!(out, "  %{dest}.slot = alloca {opt_llvm_ty}").unwrap();
-            writeln!(
-                out,
-                "  br i1 %{dest}.inb, label %{dest}.some, label %{dest}.none"
-            )
-            .unwrap();
-
-            // Some path: load element, wrap in Option(tag=0, value=elem)
-            writeln!(out, "{dest}.some:").unwrap();
-            writeln!(
-                out,
-                "  %{dest}.gep = getelementptr {elem_llvm_ty}, ptr %{dest}.data, i64 {idx_val}"
-            )
-            .unwrap();
-            writeln!(
-                out,
-                "  %{dest}.elem = load {elem_llvm_ty}, ptr %{dest}.gep"
-            )
-            .unwrap();
-            writeln!(
-                out,
-                "  %{dest}.some.s0 = insertvalue {opt_llvm_ty} undef, i8 0, 0"
-            )
-            .unwrap();
-            writeln!(
-                out,
-                "  %{dest}.some.val = insertvalue {opt_llvm_ty} %{dest}.some.s0, {elem_llvm_ty} %{dest}.elem, 1"
-            )
-            .unwrap();
-            writeln!(
-                out,
-                "  store {opt_llvm_ty} %{dest}.some.val, ptr %{dest}.slot"
-            )
-            .unwrap();
-            writeln!(out, "  br label %{dest}.end").unwrap();
-
-            // None path: Option(tag=1, value=zero)
-            writeln!(out, "{dest}.none:").unwrap();
-            let zero_val = llvm_zero_val(elem_type, &elem_llvm_ty);
-            writeln!(
-                out,
-                "  %{dest}.none.s0 = insertvalue {opt_llvm_ty} undef, i8 1, 0"
-            )
-            .unwrap();
-            writeln!(
-                out,
-                "  %{dest}.none.val = insertvalue {opt_llvm_ty} %{dest}.none.s0, {elem_llvm_ty} {zero_val}, 1"
-            )
-            .unwrap();
-            writeln!(
-                out,
-                "  store {opt_llvm_ty} %{dest}.none.val, ptr %{dest}.slot"
-            )
-            .unwrap();
-            writeln!(out, "  br label %{dest}.end").unwrap();
-
-            // Merge
-            writeln!(out, "{dest}.end:").unwrap();
-            writeln!(
-                out,
-                "  %{dest} = load {opt_llvm_ty}, ptr %{dest}.slot"
-            )
-            .unwrap();
-        }
-    }
-}
-
-/// Emit a print/println call, auto-detecting argument type.
-/// String args use %s format, Int args use %ld format, Float args use %g format.
-fn emit_print_call(
-    out: &mut String,
-    dest: Option<&str>,
-    args: &[Operand],
-    func: &Function,
-    is_println: bool,
-    ctx: &EmitCtx,
-) {
-    if args.is_empty() {
-        if is_println {
-            let call = "call i32 @puts(ptr @.fmt.str)";
-            if let Some(d) = dest {
-                writeln!(out, "  %{d} = {call}").unwrap();
-            } else {
-                writeln!(out, "  {call}").unwrap();
-            }
-        }
-        return;
-    }
-
-    let arg = &args[0];
-    let val = operand_ref(arg, func);
-
-    // Detect type using pre-scanned temp sets
-    let is_string = match arg {
-        Operand::Const(Constant::StringRef(_)) => true,
-        Operand::Var(name) => ctx.string_temps.contains(name),
-        _ => false,
-    };
-    let is_float = match arg {
-        Operand::Const(Constant::Float(_)) => true,
-        Operand::Var(name) => ctx.float_temps.contains(name),
-        _ => false,
-    };
-    let is_bool = is_bool_operand(arg, ctx);
-
-    let call_str = if is_string && is_println {
-        format!("call i32 @puts(ptr {val})")
-    } else if is_string {
-        format!("call i32 (ptr, ...) @printf(ptr @.fmt.str, ptr {val})")
-    } else if is_float {
-        let fmt = if is_println {
-            "@.fmt.float_ln"
-        } else {
-            "@.fmt.float"
-        };
-        format!("call i32 (ptr, ...) @printf(ptr {fmt}, double {val})")
-    } else if is_bool {
-        // Bool (i1) must be widened to i64 for printf varargs
-        let fmt = if is_println {
-            "@.fmt.int_ln"
-        } else {
-            "@.fmt.int"
-        };
-        // Emit zext inline before the call
-        let wide = format!("{val}.wide");
-        writeln!(out, "  {wide} = zext i1 {val} to i64").unwrap();
-        format!("call i32 (ptr, ...) @printf(ptr {fmt}, i64 {wide})")
-    } else {
-        let fmt = if is_println {
-            "@.fmt.int_ln"
-        } else {
-            "@.fmt.int"
-        };
-        format!("call i32 (ptr, ...) @printf(ptr {fmt}, i64 {val})")
-    };
-
-    if let Some(d) = dest {
-        // printf/puts return i32; widen to i64 so the dest can be used as i64 elsewhere
-        writeln!(out, "  %{d}.i32 = {call_str}").unwrap();
-        writeln!(out, "  %{d} = sext i32 %{d}.i32 to i64").unwrap();
-    } else {
-        writeln!(out, "  {call_str}").unwrap();
     }
 }
 
@@ -1546,7 +1145,7 @@ fn emit_call_args_typed(
 }
 
 /// Infer the LLVM type of an operand from pre-scanned temp sets.
-fn infer_operand_type(op: &Operand, ctx: &EmitCtx) -> String {
+pub(crate) fn infer_operand_type(op: &Operand, ctx: &EmitCtx) -> String {
     match op {
         Operand::Var(name) => {
             if ctx.string_temps.contains(name) {
@@ -1571,7 +1170,7 @@ fn infer_operand_type(op: &Operand, ctx: &EmitCtx) -> String {
 }
 
 /// Check if an operand holds a bool (i1) value.
-fn is_bool_operand(op: &Operand, ctx: &EmitCtx) -> bool {
+pub(crate) fn is_bool_operand(op: &Operand, ctx: &EmitCtx) -> bool {
     match op {
         Operand::Const(Constant::Bool(_)) => true,
         Operand::Var(name) => ctx.bool_temps.contains(name),
@@ -1579,7 +1178,7 @@ fn is_bool_operand(op: &Operand, ctx: &EmitCtx) -> bool {
     }
 }
 
-fn operand_ref(op: &Operand, func: &Function) -> String {
+pub(crate) fn operand_ref(op: &Operand, func: &Function) -> String {
     match op {
         Operand::Var(name) => {
             if is_param(name, func) {
@@ -1609,59 +1208,7 @@ fn is_param(name: &str, func: &Function) -> bool {
     func.params.iter().any(|(n, _)| n == name)
 }
 
-/// Allocation size in bytes for a list element type.
-/// i64, double, ptr are 8 bytes; i1 (Bool) is 1 byte.
-fn llvm_elem_size(ty: &Ty) -> usize {
-    match ty {
-        Ty::Bool => 1,
-        _ => 8, // i64, double, ptr
-    }
-}
-
-/// LLVM zero/null value for a type, used in Option None payloads.
-fn llvm_zero_val<'a>(ty: &Ty, llvm_ty_str: &str) -> &'a str {
-    match ty {
-        Ty::String => "null",
-        Ty::Float => "0.0",
-        Ty::Bool => "0",
-        _ if llvm_ty_str.starts_with("%struct.") => "zeroinitializer",
-        _ => "0",
-    }
-}
-
-/// Resolve the LLVM struct type name for a List operand.
-/// Prefers struct_temps lookup; falls back to deriving from elem_type.
-fn list_struct_type_from_elem(
-    elem_type: &Ty,
-    list: &Operand,
-    ctx: &EmitCtx,
-) -> String {
-    if let Operand::Var(name) = list {
-        if let Some(stype) = ctx.struct_temps.get(name.as_str()) {
-            return ctx.struct_map[stype.as_str()].llvm_name.clone();
-        }
-    }
-    // Derive from elem_type: List<T> → "List__T"
-    let list_ty = Ty::Generic("List".into(), vec![elem_type.clone()]);
-    let mono = list_ty.monomorphized_name();
-    ctx.struct_map
-        .get(mono.as_str())
-        .map(|info| info.llvm_name.clone())
-        .unwrap_or_else(|| format!("%struct.{mono}"))
-}
-
-/// Resolve the LLVM struct type name for a List operand (when elem_type is unknown).
-fn list_struct_type(list: &Operand, ctx: &EmitCtx) -> String {
-    if let Operand::Var(name) = list {
-        if let Some(stype) = ctx.struct_temps.get(name.as_str()) {
-            return ctx.struct_map[stype.as_str()].llvm_name.clone();
-        }
-    }
-    // All List<T> have identical physical layout {ptr, i64}, so any is valid.
-    "%struct.List__Int".into()
-}
-
-fn llvm_type_str(
+pub(crate) fn llvm_type_str(
     ty: &Ty,
     struct_map: &std::collections::HashMap<String, StructInfo>,
 ) -> String {
@@ -1693,7 +1240,7 @@ fn llvm_type_str(
 }
 
 /// Get the LLVM type for a function parameter by name.
-fn param_llvm_type(
+pub(crate) fn param_llvm_type(
     name: &str,
     func: &Function,
     struct_map: &std::collections::HashMap<String, StructInfo>,

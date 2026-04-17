@@ -4,7 +4,9 @@
 // then compile with clang. No LLVM library dependency needed.
 // Can be upgraded to inkwell for direct LLVM API access later.
 
+mod builtins;
 mod codegen;
+mod list_codegen;
 
 pub use codegen::emit_llvm_ir;
 
