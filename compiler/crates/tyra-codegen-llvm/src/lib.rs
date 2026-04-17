@@ -310,4 +310,35 @@ mod tests {
         assert!(ir.contains("@strcmp(ptr"), "expected strcmp call");
         assert!(ir.contains("icmp eq i32"), "expected icmp eq on strcmp result");
     }
+
+    #[test]
+    fn panic_emits_puts_abort_unreachable() {
+        // §12.1: panic(msg) → puts(msg) + abort + unreachable
+        let program = tyra_mir::Program {
+            functions: vec![tyra_mir::Function {
+                name: "main".into(),
+                params: vec![],
+                return_type: tyra_types::Ty::Unit,
+                body: vec![
+                    tyra_mir::Instruction::Const {
+                        dest: "_t0".into(),
+                        value: tyra_mir::Constant::StringRef(0),
+                    },
+                    tyra_mir::Instruction::Call {
+                        dest: None,
+                        func: "panic".into(),
+                        args: vec![tyra_mir::Operand::Var("_t0".into())],
+                    },
+                ],
+                is_main: true,
+            }],
+            string_constants: vec!["oops".into()],
+            struct_defs: vec![],
+        };
+
+        let ir = emit_llvm_ir(&program);
+        assert!(ir.contains("@puts(ptr"), "expected puts call for panic message");
+        assert!(ir.contains("call void @abort()"), "expected abort after panic");
+        assert!(ir.contains("unreachable"), "expected unreachable after abort");
+    }
 }

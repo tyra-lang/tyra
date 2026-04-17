@@ -649,6 +649,16 @@ fn emit_instruction(
                     let is_println = fname == "println" || fname == "eprintln";
                     emit_print_call(out, dest.as_deref(), args, func, is_println, ctx);
                 }
+                "panic" => {
+                    // §12.1: panic(_ message: String) -> Never
+                    // Print message to stdout then abort.
+                    if let Some(arg) = args.first() {
+                        let val = operand_ref(arg, func);
+                        writeln!(out, "  call i32 @puts(ptr {val})").unwrap();
+                    }
+                    writeln!(out, "  call void @abort()").unwrap();
+                    writeln!(out, "  unreachable").unwrap();
+                }
                 _ => {
                     // User-defined function call — look up signature for types
                     let ret_ty = if let Some(sig) = ctx.fn_sigs.get(fname.as_str()) {
