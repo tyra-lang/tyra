@@ -36,6 +36,18 @@ pub(crate) fn emit_builtin_call(
             emit_parse_int(out, dest.as_deref(), args, func, ctx);
             true
         }
+        "sys__exit" => {
+            // §17.1: core.sys.exit(_ code: Int) -> Never
+            if let Some(arg) = args.first() {
+                let val = operand_ref(arg, func);
+                writeln!(out, "  %{}.i32 = trunc i64 {val} to i32", dest.as_deref().unwrap_or("_exit")).unwrap();
+                writeln!(out, "  call void @exit(i32 %{}.i32)", dest.as_deref().unwrap_or("_exit")).unwrap();
+            } else {
+                writeln!(out, "  call void @exit(i32 0)").unwrap();
+            }
+            writeln!(out, "  unreachable").unwrap();
+            true
+        }
         _ => false,
     }
 }

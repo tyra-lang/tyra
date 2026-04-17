@@ -124,6 +124,9 @@ pub fn lower(file: &SourceFile) -> Program {
                 ctx.register_adt_type(&list_string);
                 ctx.fn_return_types
                     .insert("sys__args".into(), list_string);
+                // sys.exit(_ code: Int) -> Never
+                ctx.fn_return_types
+                    .insert("sys__exit".into(), Ty::Never);
             }
         }
     }

@@ -133,6 +133,7 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare i32 @snprintf(ptr, i64, ptr, ...)").unwrap();
     writeln!(out, "declare ptr @malloc(i64)").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
+    writeln!(out, "declare void @exit(i32)").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();
     // strtol returns long (i64 on LP64 platforms). TODO: use strtoll for Windows LLP64.
     writeln!(out, "declare i64 @strtol(ptr, ptr, i32)").unwrap();
