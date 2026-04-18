@@ -1,0 +1,39 @@
+# stdlib/http/server.tyra — HTTP server stub (§22, Tier 2)
+# v0.1: listen() returns Ok immediately (no actual socket binding).
+
+export data Request
+  method: String
+  path: String
+  body: String
+end
+
+export data Response
+  status: Int
+  body: String
+end
+
+export data AppServer
+  _port: Int
+end
+
+export fn new() -> AppServer
+  AppServer(_port: 0)
+end
+
+impl RequestOps for Request
+  fn query(self, _ key: String) -> Option<String>
+    None
+  end
+end
+
+impl AppServerOps for AppServer
+  # handler is typed as String (ptr) for LLVM compatibility with function pointers
+  fn get(self, _ path: String, _ handler: String) -> Unit
+    ()
+  end
+
+  # AppError is defined by the caller; Ok(()) means listen succeeds immediately
+  fn listen(self, _ port: Int) -> Result<Unit, AppError>
+    Ok(())
+  end
+end

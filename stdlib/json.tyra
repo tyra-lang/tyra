@@ -1,0 +1,27 @@
+# stdlib/json.tyra — JSON parsing stub (§22, Tier 2)
+# v0.1: parse() returns Ok with a stub Value; get/as_string/kind are stubs.
+# JsonError must be defined by the caller.
+
+export data Value
+  _tag: Int
+  _str: String
+  _int: Int
+end
+
+export fn parse(_ text: String) -> Result<Value, JsonError>
+  Ok(Value(_tag: 0, _str: text, _int: 0))
+end
+
+impl ValueOps for Value
+  fn get(self, _ key: String) -> Option<Value>
+    None
+  end
+
+  fn as_string(self) -> Option<String>
+    Some(self._str)
+  end
+
+  fn kind(self) -> String
+    "string"
+  end
+end
