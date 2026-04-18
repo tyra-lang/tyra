@@ -17,6 +17,8 @@ use tyra_types::Ty;
 pub struct StructDef {
     pub name: String,
     pub fields: Vec<(String, Ty)>,
+    /// true = data type (reference semantics, §8.6); false = value type or ADT
+    pub is_data: bool,
 }
 
 /// A complete MIR program.
@@ -117,6 +119,15 @@ pub enum Instruction {
         obj: Operand,
         type_name: String,
         field_index: u32,
+    },
+
+    /// In-place field mutation for data types: `obj.field_index = value` (GEP + store, §8.6).
+    /// `obj` must be a pointer to the struct (data type only).
+    FieldSet {
+        obj: Operand,
+        type_name: String,
+        field_index: u32,
+        value: Operand,
     },
 
     /// `dest = adt_init type_name { tag, fields... }`
