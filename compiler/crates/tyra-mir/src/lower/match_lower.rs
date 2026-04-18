@@ -20,21 +20,14 @@ impl super::LowerCtx {
         body.push(Instruction::Alloca {
             dest: result_slot.clone(),
         });
+        let mut result_slot_is_string = false;
+        let mut result_slot_is_float = false;
 
         // Pre-allocate pattern-bound variables to avoid SSA dominance issues.
         // When multiple arms bind the same name (e.g., Dog(name) + Cat(name)),
         // the alloca must dominate all uses across all arms.
         for arm in &m.arms {
-            if let PatternKind::Constructor(_, fields) = &arm.pattern.kind {
-                for pf in fields {
-                    if !self.mut_vars.contains(&pf.field_name) {
-                        body.push(Instruction::Alloca {
-                            dest: pf.field_name.clone(),
-                        });
-                        self.mut_vars.insert(pf.field_name.clone());
-                    }
-                }
-            }
+            self.pre_alloca_pattern_vars(&arm.pattern.kind, body);
         }
 
         // Pre-generate all labels
@@ -228,23 +221,20 @@ impl super::LowerCtx {
                                     });
 
                                 if let Some(expected_tag) = inner_tag {
-                                    let itn = inner_type_name.as_ref().unwrap();
+                                    let itn = inner_type_name.as_ref().unwrap().clone();
                                     let is_inner_struct =
                                         self.adt_struct_defs.contains_key(itn.as_str());
 
-                                    // Choose the subject for the tag comparison.
-                                    // Struct-based ADTs need AdtTag extraction; unit-variant
-                                    // ADTs (no fields) store the tag as an integer directly.
-                                    let tag_subject = if is_inner_struct {
+                                    let (tag_subject, payload_for_recurse) = if is_inner_struct {
                                         let inner_tag_val = self.fresh_temp();
                                         body.push(Instruction::AdtTag {
                                             dest: inner_tag_val.clone(),
-                                            obj: Operand::Var(payload),
+                                            obj: Operand::Var(payload.clone()),
                                             type_name: itn.clone(),
                                         });
-                                        inner_tag_val
+                                        (inner_tag_val, payload)
                                     } else {
-                                        payload
+                                        (payload.clone(), payload)
                                     };
 
                                     let inner_lit = self.fresh_temp();
@@ -259,11 +249,39 @@ impl super::LowerCtx {
                                         lhs: Operand::Var(tag_subject),
                                         rhs: Operand::Var(inner_lit),
                                     });
-                                    body.push(Instruction::BranchIf {
-                                        cond: Operand::Var(inner_cond),
-                                        true_label: arm_label.clone(),
-                                        false_label: next_label.clone(),
-                                    });
+
+                                    // Check if inner pattern has extractable payload fields.
+                                    // Only meaningful when the inner ADT is struct-based.
+                                    let inner_fields_ref = if let PatternKind::Constructor(_, ref ifields) = pat_fields[0].pattern.kind { ifields } else { unreachable!() };
+                                    let has_deeper = is_inner_struct && inner_fields_ref.iter().any(|pf| !matches!(pf.pattern.kind, PatternKind::Wildcard));
+
+                                    if has_deeper {
+                                        let inner_ok = self.fresh_label("inner_ok");
+                                        body.push(Instruction::BranchIf {
+                                            cond: Operand::Var(inner_cond),
+                                            true_label: inner_ok.clone(),
+                                            false_label: next_label.clone(),
+                                        });
+                                        body.push(Instruction::Label(inner_ok));
+                                        let inner_fields_cloned = inner_fields_ref.clone();
+                                        let inner_variant_clone = inner_variant.clone();
+                                        let next_label_clone = next_label.clone();
+                                        self.lower_ctor_payload_and_vars(
+                                            &payload_for_recurse,
+                                            &itn,
+                                            &inner_variant_clone,
+                                            &inner_fields_cloned,
+                                            &next_label_clone,
+                                            body,
+                                        );
+                                        body.push(Instruction::Jump { label: arm_label.clone() });
+                                    } else {
+                                        body.push(Instruction::BranchIf {
+                                            cond: Operand::Var(inner_cond),
+                                            true_label: arm_label.clone(),
+                                            false_label: next_label.clone(),
+                                        });
+                                    }
                                 } else {
                                     // Could not resolve inner tag — fall through
                                     body.push(Instruction::Jump {
@@ -376,7 +394,7 @@ impl super::LowerCtx {
                 let is_prelude = matches!(variant_name.as_str(), "Some" | "Ok" | "Err");
                 // Skip payload binding when inner pattern is a nested Constructor
                 // (e.g., Err(NotFound)) — the inner tag was already checked in pattern test.
-                let inner_is_constructor = fields.first().is_some_and(|pf| {
+                let inner_is_constructor = fields.iter().any(|pf| {
                     matches!(pf.pattern.kind, PatternKind::Constructor(_, _))
                 });
                 if is_prelude && !fields.is_empty()
@@ -508,6 +526,12 @@ impl super::LowerCtx {
             if !arm_terminates {
                 // Store arm result into the alloca'd slot (scan only this arm's instructions)
                 if let Some(last) = self.last_temp_in_range(body, arm_body_start) {
+                    if self.string_vars.contains(&last) {
+                        result_slot_is_string = true;
+                    }
+                    if self.float_vars.contains(&last) {
+                        result_slot_is_float = true;
+                    }
                     body.push(Instruction::Store {
                         dest: result_slot.clone(),
                         value: Operand::Var(last),
@@ -533,6 +557,156 @@ impl super::LowerCtx {
             dest: result.clone(),
             source: result_slot,
         });
+        if result_slot_is_string {
+            self.string_vars.insert(result.clone());
+        }
+        if result_slot_is_float {
+            self.float_vars.insert(result.clone());
+        }
         result
+    }
+
+    /// Recursively pre-allocate all leaf Ident variables in a pattern.
+    pub(super) fn pre_alloca_pattern_vars(
+        &mut self,
+        pattern: &PatternKind,
+        body: &mut Vec<Instruction>,
+    ) {
+        match pattern {
+            PatternKind::Constructor(_, fields) => {
+                for pf in fields {
+                    match &pf.pattern.kind {
+                        PatternKind::Ident(name) if name != "_" => {
+                            if !self.mut_vars.contains(name) && !self.pattern_vars.contains(name) {
+                                body.push(Instruction::Alloca { dest: name.clone() });
+                                self.pattern_vars.insert(name.clone());
+                            }
+                        }
+                        PatternKind::Constructor(_, _) => {
+                            self.pre_alloca_pattern_vars(&pf.pattern.kind, body);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Recursively extract payload fields and bind pattern variables for a user-defined ADT.
+    /// `subject` holds the extracted payload at this level.
+    /// `type_name` / `variant_name` identify which ADT variant is being destructured.
+    /// On inner tag mismatch, branches to `fail_label`.
+    pub(super) fn lower_ctor_payload_and_vars(
+        &mut self,
+        subject: &str,
+        type_name: &str,
+        variant_name: &str,
+        fields: &[PatternField],
+        fail_label: &str,
+        body: &mut Vec<Instruction>,
+    ) {
+        let vfields: Vec<(String, Ty)> = self
+            .adt_variant_fields
+            .get(&(type_name.to_string(), variant_name.to_string()))
+            .cloned()
+            .unwrap_or_default();
+
+        let variant_offset = self
+            .variant_field_offsets
+            .get(&(type_name.to_string(), variant_name.to_string()))
+            .copied()
+            .unwrap_or(1);
+
+        for (fi, pf) in fields.iter().enumerate() {
+            if pf.field_name == "_" {
+                match &pf.pattern.kind {
+                    PatternKind::Constructor(_, _) | PatternKind::Ident(_) => {}
+                    _ => continue,
+                }
+            }
+
+            // Use positional index: pf.field_name is the pattern variable name,
+            // not necessarily the struct field name, so name-based lookup would be wrong.
+            let field_index = (variant_offset + fi) as u32;
+
+            let payload = self.fresh_temp();
+            body.push(Instruction::AdtPayload {
+                dest: payload.clone(),
+                obj: Operand::Var(subject.to_string()),
+                type_name: type_name.to_string(),
+                field_index,
+            });
+
+            let field_ty = vfields.get(fi).map(|(_, ty)| ty.clone());
+
+            match &pf.pattern.kind {
+                PatternKind::Constructor(inner_variant, inner_fields) => {
+                    // Determine inner ADT type name from field type
+                    let inner_tn = field_ty.as_ref().and_then(|ty| match ty {
+                        Ty::Named(n) => Some(n.clone()),
+                        _ => None,
+                    });
+                    if let Some(inner_tn) = inner_tn {
+                        if self.adt_struct_defs.contains_key(inner_tn.as_str()) {
+                            // Check inner tag
+                            let inner_tag = self
+                                .variant_tags
+                                .get(&(inner_tn.clone(), inner_variant.clone()))
+                                .copied()
+                                .unwrap_or(0);
+                            let tag_val = self.fresh_temp();
+                            body.push(Instruction::AdtTag {
+                                dest: tag_val.clone(),
+                                obj: Operand::Var(payload.clone()),
+                                type_name: inner_tn.clone(),
+                            });
+                            let lit = self.fresh_temp();
+                            body.push(Instruction::Const {
+                                dest: lit.clone(),
+                                value: Constant::Int(inner_tag),
+                            });
+                            let cond = self.fresh_temp();
+                            body.push(Instruction::BinOp {
+                                dest: cond.clone(),
+                                op: MirBinOp::EqInt,
+                                lhs: Operand::Var(tag_val),
+                                rhs: Operand::Var(lit),
+                            });
+                            let ok_label = self.fresh_label("nested_ok");
+                            body.push(Instruction::BranchIf {
+                                cond: Operand::Var(cond),
+                                true_label: ok_label.clone(),
+                                false_label: fail_label.to_string(),
+                            });
+                            body.push(Instruction::Label(ok_label));
+                            // Recurse
+                            self.lower_ctor_payload_and_vars(
+                                &payload,
+                                &inner_tn,
+                                inner_variant,
+                                inner_fields,
+                                fail_label,
+                                body,
+                            );
+                        }
+                    }
+                }
+                PatternKind::Ident(var_name) if var_name != "_" => {
+                    body.push(Instruction::Store {
+                        dest: var_name.clone(),
+                        value: Operand::Var(payload),
+                    });
+                    if let Some(ty) = field_ty {
+                        match ty {
+                            Ty::String => { self.string_vars.insert(var_name.clone()); }
+                            Ty::Float => { self.float_vars.insert(var_name.clone()); }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 }

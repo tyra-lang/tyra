@@ -361,7 +361,7 @@ fn emit_function(
     let (struct_temps, alloca_types) = pre_scan_struct_types(func, struct_map, fn_sigs);
 
     // Pre-scan: determine LLVM types for alloca slots (match results, etc.)
-    let alloca_llvm_types = pre_scan_alloca_llvm_types(
+    let mut alloca_llvm_types = pre_scan_alloca_llvm_types(
         func,
         &string_temps,
         &float_temps,
@@ -387,6 +387,70 @@ fn emit_function(
                     _ => {}
                 }
             }
+        }
+    }
+
+    // Iterate: after load propagation, newly typed temps may reveal alloca types
+    // that were unknown before (e.g. String loaded from ptr alloca stored into
+    // a match-result alloca). Repeat until stable.
+    loop {
+        let mut changed = false;
+        // Re-scan Store instructions: allow upgrading unknown/untyped alloca slots.
+        // Removing "first store wins" guard so later Stores can refine the type.
+        for inst in &func.body {
+            if let Instruction::Store { dest, value } = inst {
+                if let Operand::Var(name) = value {
+                    let new_ty = if string_temps.contains(name) {
+                        Some("ptr")
+                    } else if float_temps.contains(name) {
+                        Some("double")
+                    } else if bool_temps.contains(name) {
+                        Some("i1")
+                    } else {
+                        None
+                    };
+                    if let Some(ty) = new_ty {
+                        let old = alloca_llvm_types.insert(dest.clone(), ty.into());
+                        if old.as_deref() != Some(ty) {
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+        // Propagate newly discovered alloca types to Load destinations
+        for inst in &func.body {
+            if let Instruction::Load { dest, source } = inst {
+                if string_temps.contains(dest) || float_temps.contains(dest) || bool_temps.contains(dest) {
+                    continue; // already typed
+                }
+                if let Some(ty) = alloca_llvm_types.get(source.as_str()) {
+                    match ty.as_str() {
+                        "ptr" => { string_temps.insert(dest.clone()); changed = true; }
+                        "double" => { float_temps.insert(dest.clone()); changed = true; }
+                        "i1" => { bool_temps.insert(dest.clone()); changed = true; }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        // Propagate through Copy instructions (e.g. let name = <match result>).
+        // Use independent checks (not else-if) for consistency with the initial scan.
+        for inst in &func.body {
+            if let Instruction::Copy { dest, source } = inst {
+                if string_temps.contains(source.as_str()) && string_temps.insert(dest.clone()) {
+                    changed = true;
+                }
+                if float_temps.contains(source.as_str()) && float_temps.insert(dest.clone()) {
+                    changed = true;
+                }
+                if bool_temps.contains(source.as_str()) && bool_temps.insert(dest.clone()) {
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
         }
     }
 
@@ -1181,7 +1245,17 @@ fn emit_call_args_typed(
     args.iter()
         .enumerate()
         .map(|(i, a)| {
-            let val = operand_ref(a, func);
+            // Function references (e.g. passing `greet_handler` as a callback)
+            // must use @name (global) instead of %name (local variable).
+            let val = if let Operand::Var(name) = a {
+                if ctx.fn_sigs.contains_key(name.as_str()) {
+                    format!("@{name}")
+                } else {
+                    operand_ref(a, func)
+                }
+            } else {
+                operand_ref(a, func)
+            };
             // Use callee's param type if available, otherwise infer
             let ty = if let Some(sig) = sig {
                 if let Some(param_ty) = sig.param_types.get(i) {
@@ -1232,16 +1306,9 @@ pub(crate) fn is_bool_operand(op: &Operand, ctx: &EmitCtx) -> bool {
     }
 }
 
-pub(crate) fn operand_ref(op: &Operand, func: &Function) -> String {
+pub(crate) fn operand_ref(op: &Operand, _func: &Function) -> String {
     match op {
-        Operand::Var(name) => {
-            if is_param(name, func) {
-                // Params are loaded from their alloca
-                format!("%{name}")
-            } else {
-                format!("%{name}")
-            }
-        }
+        Operand::Var(name) => format!("%{name}"),
         Operand::Const(c) => match c {
             Constant::Int(n) => n.to_string(),
             Constant::Float(f) => llvm_float_literal(*f),

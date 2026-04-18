@@ -394,10 +394,14 @@ impl super::LowerCtx {
                     }
                     self.fn_return_types.get(fname).cloned()
                 } else if let ExprKind::FieldAccess(obj, variant) = &callee.kind {
-                    // ADT payload constructor: TypeName.Variant(args)
-                    if let ExprKind::Ident(type_name) = &obj.kind {
-                        if self.variant_tags.contains_key(&(type_name.clone(), variant.clone())) {
-                            return Some(Ty::Named(type_name.clone()));
+                    if let ExprKind::Ident(type_or_module) = &obj.kind {
+                        // ADT payload constructor: TypeName.Variant(args)
+                        if self.variant_tags.contains_key(&(type_or_module.clone(), variant.clone())) {
+                            return Some(Ty::Named(type_or_module.clone()));
+                        }
+                        // Module-qualified struct constructor: module.TypeName(args)
+                        if self.struct_fields.contains_key(variant.as_str()) {
+                            return Some(Ty::Named(variant.clone()));
                         }
                     }
                     None
@@ -414,8 +418,16 @@ impl super::LowerCtx {
                 }
                 // Struct field access: look up var_types → struct_fields
                 if let ExprKind::Ident(var_name) = &obj.kind {
-                    if let Some(struct_name) = self.var_types.get(var_name.as_str()) {
-                        if let Some(fields) = self.struct_fields.get(struct_name.as_str()) {
+                    // Special case: `self` in impl methods uses self_type
+                    let struct_name = if var_name == "self" {
+                        self.self_type.as_deref().and_then(|sn| {
+                            if self.struct_fields.contains_key(sn) { Some(sn) } else { None }
+                        })
+                    } else {
+                        self.var_types.get(var_name.as_str()).map(|s| s.as_str())
+                    };
+                    if let Some(sname) = struct_name {
+                        if let Some(fields) = self.struct_fields.get(sname) {
                             if let Some((_, fty)) = fields.iter().find(|(n, _)| n == field) {
                                 return Some(fty.clone());
                             }

@@ -252,6 +252,9 @@ pub(crate) struct LowerCtx {
     pub(crate) string_vars: std::collections::HashSet<String>,
     /// Tracks mutable local variables (use alloca/store/load instead of SSA copy)
     pub(crate) mut_vars: std::collections::HashSet<String>,
+    /// Tracks pattern-bound variables (alloca-backed but semantically immutable).
+    /// Kept separate from mut_vars so future immutability checks are not confused.
+    pub(crate) pattern_vars: std::collections::HashSet<String>,
     /// Function return type registry: fn_name → return_type (for type inference in interpolation)
     pub(crate) fn_return_types: std::collections::HashMap<String, Ty>,
     /// Impl method registry: (target_type_name, method_name) → mangled_fn_name
@@ -303,6 +306,7 @@ impl LowerCtx {
             float_vars: std::collections::HashSet::new(),
             string_vars: std::collections::HashSet::new(),
             mut_vars: std::collections::HashSet::new(),
+            pattern_vars: std::collections::HashSet::new(),
             fn_return_types: std::collections::HashMap::new(),
             imported_modules: std::collections::HashSet::new(),
             impl_methods: std::collections::HashMap::new(),
@@ -365,6 +369,7 @@ impl LowerCtx {
         self.float_vars.clear();
         self.string_vars.clear();
         self.mut_vars.clear();
+        self.pattern_vars.clear();
         self.generic_var_types.clear();
         self.deferred_exprs.clear();
 

@@ -79,13 +79,20 @@ impl super::LowerCtx {
                     return dest;
                 }
 
-                if self.mut_vars.contains(name.as_str()) {
-                    // Mutable local: load from alloca
+                if self.mut_vars.contains(name.as_str()) || self.pattern_vars.contains(name.as_str()) {
+                    // Alloca-backed variable (mutable or pattern-bound): load from alloca
                     let temp = self.fresh_temp();
                     body.push(Instruction::Load {
                         dest: temp.clone(),
                         source: name.clone(),
                     });
+                    // Propagate string/float tracking through load
+                    if self.string_vars.contains(name.as_str()) {
+                        self.string_vars.insert(temp.clone());
+                    }
+                    if self.float_vars.contains(name.as_str()) {
+                        self.float_vars.insert(temp.clone());
+                    }
                     temp
                 } else {
                     name.clone()
@@ -166,6 +173,13 @@ impl super::LowerCtx {
                                 dest: name.clone(),
                                 value: Operand::Var(val.clone()),
                             });
+                            // Propagate string/float type on reassignment
+                            if self.string_vars.contains(&val) {
+                                self.string_vars.insert(name.clone());
+                            }
+                            if self.float_vars.contains(&val) {
+                                self.float_vars.insert(name.clone());
+                            }
                         } else {
                             body.push(Instruction::Copy {
                                 dest: name.clone(),

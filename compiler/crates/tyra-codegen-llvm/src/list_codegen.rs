@@ -83,9 +83,19 @@ fn emit_list_init(
         )
         .unwrap();
     } else {
-        let elem_size = llvm_elem_size(elem_type);
-        let total_size = count * elem_size;
-        writeln!(out, "  %{dest}.ptr = call ptr @malloc(i64 {total_size})").unwrap();
+        // GEP without inbounds on a null pointer: well-defined in LLVM IR as pure
+        // pointer arithmetic (no inbounds = no UB). Gives sizeof(elem_llvm_ty) as i64.
+        if elem_llvm_ty.starts_with("%struct.") {
+            writeln!(out, "  %{dest}.esz_ptr = getelementptr {elem_llvm_ty}, ptr null, i64 1")
+                .unwrap();
+            writeln!(out, "  %{dest}.esz = ptrtoint ptr %{dest}.esz_ptr to i64").unwrap();
+            writeln!(out, "  %{dest}.tsz = mul i64 {count}, %{dest}.esz").unwrap();
+            writeln!(out, "  %{dest}.ptr = call ptr @malloc(i64 %{dest}.tsz)").unwrap();
+        } else {
+            let elem_size = llvm_elem_size(elem_type);
+            let total_size = count * elem_size;
+            writeln!(out, "  %{dest}.ptr = call ptr @malloc(i64 {total_size})").unwrap();
+        }
         // Null check + abort on OOM
         writeln!(out, "  %{dest}.null = icmp eq ptr %{dest}.ptr, null").unwrap();
         writeln!(
@@ -357,5 +367,10 @@ fn list_struct_type(list: &Operand, ctx: &EmitCtx) -> String {
         }
     }
     // All List<T> have identical physical layout {ptr, i64}, so any is valid.
-    "%struct.List__Int".into()
+    // Prefer an actually registered List struct to avoid dangling type references.
+    ctx.struct_map
+        .iter()
+        .find(|(k, _)| k.starts_with("List__"))
+        .map(|(_, v)| v.llvm_name.clone())
+        .unwrap_or_else(|| "%struct.List__Int".into())
 }

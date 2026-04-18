@@ -34,8 +34,18 @@ pub fn parse_type(ts: &mut TokenStream, report: &mut Report) -> TypeExpr {
         }
 
         // Named type, possibly generic: `Int`, `List<T>`, `Result<T, E>`
+        // Also handles module-qualified types: `server.Request` → `Named("Request")`
         TokenKind::Ident(name) => {
             ts.advance();
+
+            // Qualified type name: module.TypeName → drop module prefix (§13, v0.1)
+            let name = if ts.check(&TokenKind::Dot) {
+                // peek ahead: if next after '.' is an Ident, it's a qualified type
+                ts.advance(); // consume '.'
+                ts.expect_ident(report).unwrap_or(name)
+            } else {
+                name
+            };
 
             if ts.check(&TokenKind::Lt) {
                 ts.advance(); // consume '<'
