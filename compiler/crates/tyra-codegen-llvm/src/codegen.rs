@@ -22,6 +22,8 @@ pub(crate) struct StructInfo {
     /// Whether this is an ADT tagged struct (Option/Result).
     /// When true, field 0 is the i8 tag regardless of field_types[0].
     pub(crate) is_adt: bool,
+    /// true = data type, heap-allocated and passed as ptr (§8.6 reference semantics).
+    pub(crate) is_data: bool,
 }
 
 /// Generate LLVM IR text from a MIR program.
@@ -38,6 +40,7 @@ pub fn emit_llvm_ir(program: &Program) -> String {
                 llvm_name: format!("%struct.{}", sd.name),
                 field_types: sd.fields.iter().map(|(_, ty)| ty.clone()).collect(),
                 is_adt,
+                is_data: sd.is_data,
             };
             (sd.name.clone(), info)
         })
@@ -1342,7 +1345,11 @@ pub(crate) fn llvm_type_str(
         Ty::Never => "void".into(),
         Ty::Named(name) => {
             if let Some(info) = struct_map.get(name.as_str()) {
-                info.llvm_name.clone()
+                if info.is_data {
+                    "ptr".into() // data types are heap-allocated pointers (§8.6)
+                } else {
+                    info.llvm_name.clone()
+                }
             } else {
                 "i64".into() // fallback for ADTs, etc.
             }
