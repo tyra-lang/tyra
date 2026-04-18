@@ -215,6 +215,7 @@ pub fn lower(file: &SourceFile) -> Program {
         .map(|(name, fields)| crate::ir::StructDef {
             name: name.clone(),
             fields: fields.clone(),
+            is_data: ctx.data_types.contains(name),
         })
         .collect();
 
@@ -223,6 +224,7 @@ pub fn lower(file: &SourceFile) -> Program {
         struct_defs.push(crate::ir::StructDef {
             name: name.clone(),
             fields: fields.clone(),
+            is_data: false, // ADTs are not data types
         });
     }
 

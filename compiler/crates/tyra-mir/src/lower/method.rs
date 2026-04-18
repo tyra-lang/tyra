@@ -7,7 +7,7 @@ use crate::ir::*;
 
 impl super::LowerCtx {
     /// Lower a field assignment: `obj.field = val`.
-    /// Loads the struct, replaces the target field, stores back.
+    /// For data types: load the ptr, then GEP+store in-place (§8.6 reference semantics).
     pub(super) fn lower_field_assign(
         &mut self,
         obj_name: &str,
@@ -23,41 +23,18 @@ impl super::LowerCtx {
                 return;
             }
             if let Some(field_idx) = field_defs.iter().position(|(n, _)| n == field) {
-                // Load current struct value
-                let current = self.fresh_temp();
+                // Data type: obj_name alloca holds a ptr to the heap struct.
+                // Load the ptr, then GEP+store directly — no struct rebuild needed.
+                let ptr = self.fresh_temp();
                 body.push(Instruction::Load {
-                    dest: current.clone(),
+                    dest: ptr.clone(),
                     source: obj_name.to_string(),
                 });
-
-                // Build new struct: extract all fields, replace the target
-                let mut field_operands = Vec::with_capacity(field_defs.len());
-                for (i, _) in field_defs.iter().enumerate() {
-                    if i == field_idx {
-                        field_operands.push(Operand::Var(val.to_string()));
-                    } else {
-                        let extracted = self.fresh_temp();
-                        body.push(Instruction::FieldGet {
-                            dest: extracted.clone(),
-                            obj: Operand::Var(current.clone()),
-                            type_name: type_name.clone(),
-                            field_index: i as u32,
-                        });
-                        field_operands.push(Operand::Var(extracted));
-                    }
-                }
-
-                let new_struct = self.fresh_temp();
-                body.push(Instruction::StructInit {
-                    dest: new_struct.clone(),
+                body.push(Instruction::FieldSet {
+                    obj: Operand::Var(ptr),
                     type_name: type_name.clone(),
-                    fields: field_operands,
-                });
-
-                // Store back to the mutable variable
-                body.push(Instruction::Store {
-                    dest: obj_name.to_string(),
-                    value: Operand::Var(new_struct),
+                    field_index: field_idx as u32,
+                    value: Operand::Var(val.to_string()),
                 });
             }
         }
