@@ -6,7 +6,8 @@ use std::fmt::Write;
 
 use tyra_mir::*;
 
-use super::codegen::{operand_ref, EmitCtx, is_bool_operand};
+use crate::codegen::EmitCtx;
+use crate::helpers::{is_bool_operand, operand_ref};
 
 /// Try to emit a builtin function call. Returns `true` if handled,
 /// `false` if the caller should fall through to user-defined call codegen.

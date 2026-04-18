@@ -1,0 +1,591 @@
+// Instruction-level LLVM IR emission.
+//
+// Extracted from codegen.rs. The main `emit_instruction` function is a big
+// match on MIR instructions that writes the corresponding LLVM IR. Keeping
+// this in its own module keeps codegen.rs focused on orchestration.
+
+use std::fmt::Write;
+
+use tyra_mir::*;
+
+use crate::builtins::emit_builtin_call;
+use crate::codegen::EmitCtx;
+use crate::helpers::{
+    infer_operand_type, is_bool_operand, is_param, llvm_float_literal, llvm_type_str, operand_ref,
+    param_llvm_type,
+};
+use crate::list_codegen::emit_list_instruction;
+
+pub(crate) fn emit_instruction(
+    out: &mut String,
+    inst: &Instruction,
+    func: &Function,
+    strings: &[String],
+    ctx: &EmitCtx,
+) {
+    match inst {
+        Instruction::Const { dest, value } => match value {
+            Constant::Int(n) => {
+                writeln!(out, "  %{dest} = add i64 {n}, 0").unwrap();
+            }
+            Constant::Float(f) => {
+                let lit = llvm_float_literal(*f);
+                writeln!(out, "  %{dest} = fadd double {lit}, 0.0").unwrap();
+            }
+            Constant::Bool(b) => {
+                let val = if *b { 1 } else { 0 };
+                writeln!(out, "  %{dest} = add i1 {val}, 0").unwrap();
+            }
+            Constant::StringRef(idx) => {
+                let len = strings[*idx].len() + 1;
+                writeln!(
+                    out,
+                    "  %{dest} = getelementptr [{len} x i8], ptr @.str.{idx}, i64 0, i64 0"
+                )
+                .unwrap();
+            }
+            Constant::Unit => {
+                // Unit is represented as i64 0 at runtime so it can be used in
+                // Store/Load (e.g., match arm results). Cost-free in practice.
+                writeln!(out, "  %{dest} = add i64 0, 0").unwrap();
+            }
+        },
+
+        Instruction::Call {
+            dest,
+            func: fname,
+            args,
+        } => {
+            // Try builtin dispatch first; fall through to user-defined call
+            if !emit_builtin_call(out, dest, fname, args, func, ctx) {
+                // User-defined function call — look up signature for types
+                let ret_ty = if let Some(sig) = ctx.fn_sigs.get(fname.as_str()) {
+                    llvm_type_str(&sig.return_type, ctx.struct_map)
+                } else {
+                    "i64".into()
+                };
+                let user_args = emit_call_args_typed(args, fname, func, ctx);
+                if ret_ty == "void" {
+                    writeln!(out, "  call void @{fname}({user_args})").unwrap();
+                } else if let Some(d) = dest {
+                    writeln!(out, "  %{d} = call {ret_ty} @{fname}({user_args})")
+                        .unwrap();
+                } else {
+                    writeln!(out, "  call {ret_ty} @{fname}({user_args})").unwrap();
+                }
+            }
+        }
+
+        Instruction::BinOp { dest, op, lhs, rhs } => {
+            let l = operand_ref(lhs, func);
+            let r = operand_ref(rhs, func);
+            let instr = match op {
+                MirBinOp::AddInt => format!("add i64 {l}, {r}"),
+                MirBinOp::SubInt => format!("sub i64 {l}, {r}"),
+                MirBinOp::MulInt => format!("mul i64 {l}, {r}"),
+                MirBinOp::DivInt => format!("sdiv i64 {l}, {r}"),
+                MirBinOp::AddFloat => format!("fadd double {l}, {r}"),
+                MirBinOp::SubFloat => format!("fsub double {l}, {r}"),
+                MirBinOp::MulFloat => format!("fmul double {l}, {r}"),
+                MirBinOp::DivFloat => format!("fdiv double {l}, {r}"),
+                MirBinOp::EqInt => {
+                    let is_bool = is_bool_operand(lhs, ctx) || is_bool_operand(rhs, ctx);
+                    if is_bool {
+                        format!("icmp eq i1 {l}, {r}")
+                    } else {
+                        format!("icmp eq i64 {l}, {r}")
+                    }
+                }
+                MirBinOp::NeqInt => {
+                    let is_bool = is_bool_operand(lhs, ctx) || is_bool_operand(rhs, ctx);
+                    if is_bool {
+                        format!("icmp ne i1 {l}, {r}")
+                    } else {
+                        format!("icmp ne i64 {l}, {r}")
+                    }
+                }
+                MirBinOp::LtInt => format!("icmp slt i64 {l}, {r}"),
+                MirBinOp::LeInt => format!("icmp sle i64 {l}, {r}"),
+                MirBinOp::GtInt => format!("icmp sgt i64 {l}, {r}"),
+                MirBinOp::GeInt => format!("icmp sge i64 {l}, {r}"),
+                MirBinOp::LtFloat => format!("fcmp olt double {l}, {r}"),
+                MirBinOp::LeFloat => format!("fcmp ole double {l}, {r}"),
+                MirBinOp::GtFloat => format!("fcmp ogt double {l}, {r}"),
+                MirBinOp::GeFloat => format!("fcmp oge double {l}, {r}"),
+                MirBinOp::EqString | MirBinOp::NeqString => {
+                    // String comparison via strcmp: returns 0 if equal
+                    let cmp_op = if matches!(op, MirBinOp::EqString) {
+                        "eq"
+                    } else {
+                        "ne"
+                    };
+                    writeln!(
+                        out,
+                        "  %{dest}.cmp = call i32 @strcmp(ptr {l}, ptr {r})"
+                    )
+                    .unwrap();
+                    writeln!(
+                        out,
+                        "  %{dest} = icmp {cmp_op} i32 %{dest}.cmp, 0"
+                    )
+                    .unwrap();
+                    return; // Already wrote %dest, skip the generic writeln below
+                }
+                MirBinOp::And => format!("and i1 {l}, {r}"),
+                MirBinOp::Or => format!("or i1 {l}, {r}"),
+            };
+            writeln!(out, "  %{dest} = {instr}").unwrap();
+        }
+
+        Instruction::Neg { dest, operand } => {
+            let v = operand_ref(operand, func);
+            let is_float = match operand {
+                Operand::Const(Constant::Float(_)) => true,
+                Operand::Var(name) => ctx.float_temps.contains(name),
+                _ => false,
+            };
+            if is_float {
+                writeln!(out, "  %{dest} = fneg double {v}").unwrap();
+            } else {
+                writeln!(out, "  %{dest} = sub i64 0, {v}").unwrap();
+            }
+        }
+
+        Instruction::Not { dest, operand } => {
+            let v = operand_ref(operand, func);
+            writeln!(out, "  %{dest} = xor i1 {v}, 1").unwrap();
+        }
+
+        Instruction::Copy { dest, source } => {
+            if is_param(source, func) {
+                let lt = param_llvm_type(source, func, ctx.struct_map);
+                writeln!(out, "  %{dest} = load {lt}, ptr %{source}.addr").unwrap();
+            } else if ctx.struct_temps.contains_key(source.as_str()) {
+                // Struct SSA copy: use alloca+store+load to create a new SSA name
+                let stype = &ctx.struct_temps[source.as_str()];
+                let llvm_ty = &ctx.struct_map[stype.as_str()].llvm_name;
+                writeln!(out, "  %{dest}.copy.addr = alloca {llvm_ty}").unwrap();
+                writeln!(out, "  store {llvm_ty} %{source}, ptr %{dest}.copy.addr")
+                    .unwrap();
+                writeln!(out, "  %{dest} = load {llvm_ty}, ptr %{dest}.copy.addr")
+                    .unwrap();
+            } else if ctx.string_temps.contains(source.as_str()) {
+                // String (ptr) SSA copy via inttoptr/ptrtoint round-trip
+                writeln!(out, "  %{dest}.ptr.int = ptrtoint ptr %{source} to i64")
+                    .unwrap();
+                writeln!(out, "  %{dest} = inttoptr i64 %{dest}.ptr.int to ptr")
+                    .unwrap();
+            } else if ctx.float_temps.contains(source.as_str()) {
+                writeln!(out, "  %{dest} = fadd double %{source}, 0.0").unwrap();
+            } else if ctx.bool_temps.contains(source.as_str()) {
+                writeln!(out, "  %{dest} = xor i1 %{source}, 0").unwrap();
+            } else {
+                // SSA alias: create a new SSA value identical to the source
+                writeln!(out, "  %{dest} = add i64 %{source}, 0").unwrap();
+            }
+        }
+
+        Instruction::Return { value } => {
+            if func.is_main {
+                writeln!(out, "  ret i32 0").unwrap();
+            } else {
+                match value {
+                    Some(v) => {
+                        let ret_ty = llvm_type_str(&func.return_type, ctx.struct_map);
+                        if ret_ty == "void" {
+                            // Unit return: value is a dummy placeholder, ignore it
+                            writeln!(out, "  ret void").unwrap();
+                        } else {
+                            let val = operand_ref(v, func);
+                            writeln!(out, "  ret {ret_ty} {val}").unwrap();
+                        }
+                    }
+                    None => {
+                        writeln!(out, "  ret void").unwrap();
+                    }
+                }
+            }
+        }
+
+        Instruction::Label(name) => {
+            writeln!(out, "{name}:").unwrap();
+        }
+
+        Instruction::BranchIf {
+            cond,
+            true_label,
+            false_label,
+        } => {
+            let c = operand_ref(cond, func);
+            writeln!(
+                out,
+                "  br i1 {c}, label %{true_label}, label %{false_label}"
+            )
+            .unwrap();
+        }
+
+        Instruction::Jump { label } => {
+            writeln!(out, "  br label %{label}").unwrap();
+        }
+
+        Instruction::Phi { dest, branches } => {
+            let phi_ty = if let Some((first_val, _)) = branches.first() {
+                infer_operand_type(first_val, ctx)
+            } else {
+                "i64".into()
+            };
+            let entries: Vec<String> = branches
+                .iter()
+                .map(|(val, label)| format!("[{}, %{label}]", operand_ref(val, func)))
+                .collect();
+            writeln!(out, "  %{dest} = phi {phi_ty} {}", entries.join(", ")).unwrap();
+        }
+
+        Instruction::Alloca { dest } => {
+            let llvm_ty = ctx
+                .alloca_llvm_types
+                .get(dest.as_str())
+                .map(String::as_str)
+                .unwrap_or("i64");
+            writeln!(out, "  %{dest} = alloca {llvm_ty}").unwrap();
+        }
+
+        Instruction::Store { dest, value } => {
+            let val = operand_ref(value, func);
+            let llvm_ty = ctx
+                .alloca_llvm_types
+                .get(dest.as_str())
+                .map(String::as_str)
+                .unwrap_or("i64");
+            writeln!(out, "  store {llvm_ty} {val}, ptr %{dest}").unwrap();
+        }
+
+        Instruction::Load { dest, source } => {
+            let llvm_ty = ctx
+                .alloca_llvm_types
+                .get(source.as_str())
+                .map(String::as_str)
+                .unwrap_or("i64");
+            writeln!(out, "  %{dest} = load {llvm_ty}, ptr %{source}").unwrap();
+        }
+
+        Instruction::StructInit {
+            dest,
+            type_name,
+            fields,
+        } => {
+            let info = &ctx.struct_map[type_name.as_str()];
+            let llvm_ty = &info.llvm_name;
+            if info.is_data {
+                // Data type: heap-allocate via malloc, then GEP+store each field (§8.6).
+                // Follows the same malloc+null-check pattern as StringFormat.
+                writeln!(out, "  %{dest}.size.gep = getelementptr {llvm_ty}, ptr null, i32 1").unwrap();
+                writeln!(out, "  %{dest}.size = ptrtoint ptr %{dest}.size.gep to i64").unwrap();
+                writeln!(out, "  %{dest} = call ptr @malloc(i64 %{dest}.size)").unwrap();
+                // Abort on OOM (consistent with StringFormat)
+                writeln!(out, "  %{dest}.null = icmp eq ptr %{dest}, null").unwrap();
+                writeln!(out, "  br i1 %{dest}.null, label %{dest}.oom, label %{dest}.ok").unwrap();
+                writeln!(out, "{dest}.oom:").unwrap();
+                writeln!(out, "  call void @abort()").unwrap();
+                writeln!(out, "  unreachable").unwrap();
+                writeln!(out, "{dest}.ok:").unwrap();
+                for (i, field_op) in fields.iter().enumerate() {
+                    let val = operand_ref(field_op, func);
+                    let field_ty = llvm_type_str(&info.field_types[i], ctx.struct_map);
+                    writeln!(out, "  %{dest}.f{i}.gep = getelementptr {llvm_ty}, ptr %{dest}, i32 0, i32 {i}").unwrap();
+                    writeln!(out, "  store {field_ty} {val}, ptr %{dest}.f{i}.gep").unwrap();
+                }
+            } else if fields.is_empty() {
+                // Zero-field struct: just produce undef
+                writeln!(out, "  ; %{dest} = {llvm_ty} undef (zero-field struct)")
+                    .unwrap();
+            } else {
+                // Value type: build struct value via insertvalue chain starting from undef
+                let mut current = "undef".to_string();
+                for (i, field_op) in fields.iter().enumerate() {
+                    let val = operand_ref(field_op, func);
+                    let field_ty = llvm_type_str(&info.field_types[i], ctx.struct_map);
+                    let step_dest = if i + 1 == fields.len() {
+                        dest.clone()
+                    } else {
+                        format!("{dest}.s{i}")
+                    };
+                    writeln!(
+                        out,
+                        "  %{step_dest} = insertvalue {llvm_ty} {current}, {field_ty} {val}, {i}"
+                    )
+                    .unwrap();
+                    current = format!("%{step_dest}");
+                }
+            }
+        }
+
+        Instruction::FieldGet {
+            dest,
+            obj,
+            type_name,
+            field_index,
+        } => {
+            let info = &ctx.struct_map[type_name.as_str()];
+            let val = operand_ref(obj, func);
+            if info.is_data {
+                // Data type: GEP + load the field from the heap struct
+                let llvm_ty = &info.llvm_name;
+                let field_llvm_ty = llvm_type_str(&info.field_types[*field_index as usize], ctx.struct_map);
+                writeln!(out, "  %{dest}.gep = getelementptr {llvm_ty}, ptr {val}, i32 0, i32 {field_index}").unwrap();
+                writeln!(out, "  %{dest} = load {field_llvm_ty}, ptr %{dest}.gep").unwrap();
+            } else {
+                // Value type: extractvalue from struct
+                let llvm_ty = &info.llvm_name;
+                writeln!(
+                    out,
+                    "  %{dest} = extractvalue {llvm_ty} {val}, {field_index}"
+                )
+                .unwrap();
+            }
+        }
+
+        Instruction::FieldSet {
+            obj,
+            type_name,
+            field_index,
+            value,
+        } => {
+            let info = &ctx.struct_map[type_name.as_str()];
+            let llvm_ty = &info.llvm_name;
+            let field_llvm_ty = llvm_type_str(&info.field_types[*field_index as usize], ctx.struct_map);
+            let ptr_val = operand_ref(obj, func);
+            let store_val = operand_ref(value, func);
+            let obj_name = match obj {
+                Operand::Var(n) => n.as_str(),
+                _ => "fset",
+            };
+            writeln!(out, "  %{obj_name}.f{field_index}.gep = getelementptr {llvm_ty}, ptr {ptr_val}, i32 0, i32 {field_index}").unwrap();
+            writeln!(out, "  store {field_llvm_ty} {store_val}, ptr %{obj_name}.f{field_index}.gep").unwrap();
+        }
+
+        Instruction::StringFormat {
+            dest,
+            format_ref,
+            args,
+        } => {
+            // Heap-allocate a 1024-byte buffer for the formatted string.
+            // Uses malloc so the string survives function return (needed for to_string()).
+            // Strings longer than 1024 bytes are truncated by snprintf.
+            // TODO: GC integration to free these buffers.
+            writeln!(
+                out,
+                "  %{dest} = call ptr @malloc(i64 1024)"
+            )
+            .unwrap();
+            // Abort if malloc returns null (out of memory)
+            writeln!(
+                out,
+                "  %{dest}.null = icmp eq ptr %{dest}, null"
+            )
+            .unwrap();
+            writeln!(
+                out,
+                "  br i1 %{dest}.null, label %{dest}.oom, label %{dest}.ok"
+            )
+            .unwrap();
+            writeln!(out, "{dest}.oom:").unwrap();
+            writeln!(out, "  call void @abort()").unwrap();
+            writeln!(out, "  unreachable").unwrap();
+            writeln!(out, "{dest}.ok:").unwrap();
+
+            // Build format string reference
+            let fmt_len = strings[*format_ref].len() + 1;
+            let fmt_ref = format!(
+                "getelementptr ([{fmt_len} x i8], ptr @.str.{format_ref}, i64 0, i64 0)"
+            );
+
+            // Build snprintf argument list
+            let mut snprintf_args = vec![
+                format!("ptr %{dest}"),
+                "i64 1024".to_string(),
+                format!("ptr {fmt_ref}"),
+            ];
+
+            for (j, arg) in args.iter().enumerate() {
+                let val = operand_ref(arg, func);
+                let ty = infer_operand_type(arg, ctx);
+                if ty == "i1" {
+                    // Bool needs widening for printf varargs
+                    writeln!(out, "  %{dest}.zext.{j} = zext i1 {val} to i64").unwrap();
+                    snprintf_args.push(format!("i64 %{dest}.zext.{j}"));
+                } else {
+                    snprintf_args.push(format!("{ty} {val}"));
+                }
+            }
+
+            writeln!(
+                out,
+                "  %{dest}.len = call i32 (ptr, i64, ptr, ...) @snprintf({})",
+                snprintf_args.join(", ")
+            )
+            .unwrap();
+        }
+
+        Instruction::AdtInit {
+            dest,
+            type_name,
+            tag,
+            fields,
+        } => {
+            let info = &ctx.struct_map[type_name.as_str()];
+            let llvm_ty = &info.llvm_name;
+            let num_fields = info.field_types.len();
+
+            // Field 0: tag (i8)
+            let mut current = if num_fields <= 1 && fields.is_empty() {
+                // Tag-only struct (unit variant with no payload fields in struct)
+                format!("%{dest}")
+            } else {
+                format!("%{dest}.s0")
+            };
+            writeln!(
+                out,
+                "  {current} = insertvalue {llvm_ty} undef, i8 {tag}, 0"
+            )
+            .unwrap();
+
+            // Fill remaining fields from the fields vector, zero-filling extras
+            for fi in 1..num_fields {
+                let raw_ty = llvm_type_str(&info.field_types[fi], ctx.struct_map);
+                // Unit (void) is stored as i64 in struct fields
+                let field_ty_str = if raw_ty == "void" { "i64".into() } else { raw_ty };
+                let is_last = fi + 1 == num_fields;
+                let step_dest = if is_last {
+                    format!("%{dest}")
+                } else {
+                    format!("%{dest}.s{fi}")
+                };
+
+                let field_idx = fi - 1; // fields[0] → struct field 1, etc.
+                if let Some(field_op) = fields.get(field_idx) {
+                    // Check for zero placeholder on non-integer fields
+                    let val = match field_op {
+                        Operand::Const(Constant::Int(0)) if field_ty_str == "ptr" => {
+                            "null".to_string()
+                        }
+                        Operand::Const(Constant::Int(0)) if field_ty_str == "double" => {
+                            "0.0".to_string()
+                        }
+                        Operand::Const(Constant::Int(0))
+                            if field_ty_str.starts_with("%struct.") =>
+                        {
+                            "zeroinitializer".to_string()
+                        }
+                        _ => operand_ref(field_op, func),
+                    };
+                    writeln!(
+                        out,
+                        "  {step_dest} = insertvalue {llvm_ty} {current}, {field_ty_str} {val}, {fi}"
+                    )
+                    .unwrap();
+                } else {
+                    // No field provided: insert zero
+                    let zero = if field_ty_str == "ptr" {
+                        "null"
+                    } else if field_ty_str == "double" {
+                        "0.0"
+                    } else if field_ty_str.starts_with("%struct.") {
+                        "zeroinitializer"
+                    } else {
+                        "0"
+                    };
+                    writeln!(
+                        out,
+                        "  {step_dest} = insertvalue {llvm_ty} {current}, {field_ty_str} {zero}, {fi}"
+                    )
+                    .unwrap();
+                }
+                current = step_dest;
+            }
+        }
+
+        Instruction::AdtTag {
+            dest,
+            obj,
+            type_name,
+        } => {
+            let info = &ctx.struct_map[type_name.as_str()];
+            let llvm_ty = &info.llvm_name;
+            let val = operand_ref(obj, func);
+            // Extract tag (field 0, i8) and extend to i64 for comparison
+            writeln!(
+                out,
+                "  %{dest}.i8 = extractvalue {llvm_ty} {val}, 0"
+            )
+            .unwrap();
+            writeln!(
+                out,
+                "  %{dest} = zext i8 %{dest}.i8 to i64"
+            )
+            .unwrap();
+        }
+
+        Instruction::AdtPayload {
+            dest,
+            obj,
+            type_name,
+            field_index,
+        } => {
+            let info = &ctx.struct_map[type_name.as_str()];
+            let llvm_ty = &info.llvm_name;
+            let val = operand_ref(obj, func);
+            writeln!(
+                out,
+                "  %{dest} = extractvalue {llvm_ty} {val}, {field_index}"
+            )
+            .unwrap();
+        }
+
+        // List instructions are handled by list_codegen delegation above
+        Instruction::ListInit { .. }
+        | Instruction::ListLen { .. }
+        | Instruction::ListGet { .. }
+        | Instruction::ListGetSafe { .. } => {
+            emit_list_instruction(out, inst, func, ctx);
+        }
+    }
+}
+
+/// Emit call arguments using the callee's function signature for type info.
+pub(crate) fn emit_call_args_typed(
+    args: &[Operand],
+    callee_name: &str,
+    func: &Function,
+    ctx: &EmitCtx,
+) -> String {
+    let sig = ctx.fn_sigs.get(callee_name);
+    args.iter()
+        .enumerate()
+        .map(|(i, a)| {
+            // Function references (e.g. passing `greet_handler` as a callback)
+            // must use @name (global) instead of %name (local variable).
+            let val = if let Operand::Var(name) = a {
+                if ctx.fn_sigs.contains_key(name.as_str()) {
+                    format!("@{name}")
+                } else {
+                    operand_ref(a, func)
+                }
+            } else {
+                operand_ref(a, func)
+            };
+            // Use callee's param type if available, otherwise infer
+            let ty = if let Some(sig) = sig {
+                if let Some(param_ty) = sig.param_types.get(i) {
+                    llvm_type_str(param_ty, ctx.struct_map)
+                } else {
+                    infer_operand_type(a, ctx)
+                }
+            } else {
+                infer_operand_type(a, ctx)
+            };
+            format!("{ty} {val}")
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}

@@ -1,11 +1,14 @@
 //! List<T> instruction codegen — ListInit, ListLen, ListGet, ListGetSafe.
+//!
+//! Extracted from codegen.rs to isolate the List-specific emission logic.
 
 use std::fmt::Write;
 
 use tyra_mir::*;
 use tyra_types::Ty;
 
-use super::codegen::{llvm_type_str, operand_ref, EmitCtx};
+use crate::codegen::EmitCtx;
+use crate::helpers::{llvm_type_str, operand_ref};
 
 /// Emit LLVM IR for List instructions.
 /// Returns `true` if `inst` was handled, `false` otherwise.

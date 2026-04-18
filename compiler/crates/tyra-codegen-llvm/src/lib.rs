@@ -6,7 +6,10 @@
 
 mod builtins;
 mod codegen;
+mod helpers;
+mod instr_emit;
 mod list_codegen;
+mod type_scan;
 
 pub use codegen::emit_llvm_ir;
 
