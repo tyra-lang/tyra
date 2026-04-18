@@ -12,6 +12,8 @@ pub use ty::{Ty, types_compatible};
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use tyra_diagnostics::{Report, SourceMap};
 
     fn check_str(source: &str) -> Report {
@@ -404,5 +406,381 @@ end
 "#;
         let report = check_str(source);
         assert!(!has_e0400(&report), "ident binding should catch-all for user ADT; got: {:?}", report.diagnostics());
+    }
+
+    // ========================================================================
+    // Redundant arm detection (§10.3, W0401)
+    // ========================================================================
+
+    fn has_w0401(report: &Report) -> bool {
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code.as_deref() == Some("W0401"))
+    }
+
+    #[test]
+    fn duplicate_constructor_arm_warns() {
+        let source = r#"
+type Color =
+  | Red
+  | Green
+  | Blue
+fn f(_ c: Color) -> Unit
+  match c
+  when Red
+    print("r1")
+  when Red
+    print("r2")
+  when Green
+    print("g")
+  when Blue
+    print("b")
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(has_w0401(&report), "expected W0401 for duplicate Red arm; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn arm_after_wildcard_warns() {
+        let source = r#"
+let x = true
+match x
+when _
+  print("any")
+when true
+  print("never reached")
+end
+"#;
+        let report = check_str(source);
+        assert!(has_w0401(&report), "expected W0401 for arm after wildcard; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn duplicate_bool_lit_warns() {
+        let source = r#"
+let x = true
+match x
+when true
+  print("t1")
+when true
+  print("t2")
+when false
+  print("f")
+end
+"#;
+        let report = check_str(source);
+        assert!(has_w0401(&report), "expected W0401 for duplicate true arm");
+    }
+
+    #[test]
+    fn duplicate_int_lit_warns() {
+        let source = r#"
+fn f(_ n: Int) -> Unit
+  match n
+  when 0
+    print("zero")
+  when 0
+    print("zero again")
+  when _
+    print("other")
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(has_w0401(&report), "expected W0401 for duplicate int 0");
+    }
+
+    #[test]
+    fn non_duplicate_arms_no_warning() {
+        let source = r#"
+type Color =
+  | Red
+  | Green
+  | Blue
+fn f(_ c: Color) -> Unit
+  match c
+  when Red
+    print("r")
+  when Green
+    print("g")
+  when Blue
+    print("b")
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_w0401(&report), "distinct arms should not warn");
+    }
+
+    // ========================================================================
+    // Nested Constructor exhaustiveness (§10.3, E0401)
+    // ========================================================================
+
+    fn has_e0401(report: &Report) -> bool {
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code.as_deref() == Some("E0401"))
+    }
+
+    #[test]
+    fn nested_result_err_non_exhaustive_errors() {
+        let source = r#"
+type MyErr =
+  | NotFound
+  | Forbidden
+fn f(_ r: Result<Int, MyErr>) -> Unit
+  match r
+  when Ok(x)
+    print("ok")
+  when Err(NotFound)
+    print("nf")
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0401(&report), "expected E0401 for missing Err(Forbidden); got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn nested_result_err_exhaustive_ok() {
+        let source = r#"
+type MyErr =
+  | NotFound
+  | Forbidden
+fn f(_ r: Result<Int, MyErr>) -> Unit
+  match r
+  when Ok(x)
+    print("ok")
+  when Err(NotFound)
+    print("nf")
+  when Err(Forbidden)
+    print("fb")
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0401(&report), "all nested Err variants present; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn nested_err_wildcard_is_catchall() {
+        let source = r#"
+type MyErr =
+  | NotFound
+  | Forbidden
+fn f(_ r: Result<Int, MyErr>) -> Unit
+  match r
+  when Ok(x)
+    print("ok")
+  when Err(e)
+    print("err")
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0401(&report), "ident binding in Err should act as nested catch-all");
+    }
+
+    #[test]
+    fn nested_option_adt_non_exhaustive_errors() {
+        let source = r#"
+type Color =
+  | Red
+  | Green
+fn f(_ o: Option<Color>) -> Unit
+  match o
+  when Some(Red)
+    print("r")
+  when None
+    print("n")
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0401(&report), "expected E0401 for missing Some(Green); got: {:?}", report.diagnostics());
+    }
+
+    // ========================================================================
+    // Review regression: W0401 must NOT fire when payload distinguishes arms
+    // ========================================================================
+
+    #[test]
+    fn distinct_nested_payloads_no_w0401_regression() {
+        // Err(NotFound) and Err(Forbidden) share the same head Constructor `Err`
+        // but are semantically distinct — must NOT warn as redundant.
+        let source = r#"
+type MyErr =
+  | NotFound
+  | Forbidden
+fn f(_ r: Result<Int, MyErr>) -> Unit
+  match r
+  when Ok(x)
+    print("ok")
+  when Err(NotFound)
+    print("nf")
+  when Err(Forbidden)
+    print("fb")
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_w0401(&report),
+            "expected NO W0401 for distinct nested payloads; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn duplicate_constructor_with_catchall_fields_warns() {
+        // Same head + all fields are wildcards → redundant.
+        let source = r#"
+type MyErr =
+  | NotFound
+  | Forbidden
+fn f(_ r: Result<Int, MyErr>) -> Unit
+  match r
+  when Ok(x)
+    print("ok1")
+  when Ok(_)
+    print("ok2")
+  when Err(e)
+    print("err")
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(has_w0401(&report), "expected W0401 for two Ok arms with catch-all fields");
+    }
+
+    // ========================================================================
+    // Additional E0401 / W0401 edge cases
+    // ========================================================================
+
+    #[test]
+    fn nested_option_adt_exhaustive_ok() {
+        let source = r#"
+type Color =
+  | Red
+  | Green
+fn f(_ o: Option<Color>) -> Unit
+  match o
+  when Some(Red)
+    print("r")
+  when Some(Green)
+    print("g")
+  when None
+    print("n")
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0401(&report), "exhaustive Option<ADT> should not report E0401; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn outer_catchall_skips_nested_check() {
+        // Outer `_` arm → both E0400 and E0401 should skip.
+        // Even though Err(NotFound) only covers one inner variant, the outer `_`
+        // makes the whole match exhaustive.
+        let source = r#"
+type MyErr =
+  | NotFound
+  | Forbidden
+fn f(_ r: Result<Int, MyErr>) -> Unit
+  match r
+  when Err(NotFound)
+    print("nf")
+  when _
+    print("rest")
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0401(&report), "outer catch-all should skip nested check");
+        assert!(!has_e0400(&report), "outer catch-all should skip E0400 as well");
+    }
+
+    #[test]
+    fn nested_some_ident_is_catchall() {
+        // Some(x) should act as nested catch-all, so Green is OK.
+        let source = r#"
+type Color =
+  | Red
+  | Green
+fn f(_ o: Option<Color>) -> Unit
+  match o
+  when Some(x)
+    print("any")
+  when None
+    print("n")
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0401(&report), "Some(x) should be nested catch-all; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn duplicate_string_lit_warns() {
+        let source = r#"
+fn f(_ s: String) -> Unit
+  match s
+  when "hi"
+    print("h1")
+  when "hi"
+    print("h2")
+  when _
+    print("other")
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(has_w0401(&report), "expected W0401 for duplicate string literal");
+    }
+
+    #[test]
+    fn triple_duplicate_constructor_warns_twice() {
+        // 3 Red arms → arms 2 and 3 are redundant (2 distinct spans).
+        // Note: check_fn double-processes the last expression (match is the fn body),
+        // so we deduplicate by label span rather than asserting a raw count.
+        let source = r#"
+type Color =
+  | Red
+  | Green
+  | Blue
+fn f(_ c: Color) -> Unit
+  match c
+  when Red
+    print("r1")
+  when Red
+    print("r2")
+  when Red
+    print("r3")
+  when Green
+    print("g")
+  when Blue
+    print("b")
+  end
+end
+"#;
+        let report = check_str(source);
+        let distinct_spans: HashSet<_> = report
+            .diagnostics()
+            .iter()
+            .filter(|d| d.code.as_deref() == Some("W0401"))
+            .flat_map(|d| d.labels.iter().map(|l| (l.span.start, l.span.end)))
+            .collect();
+        assert_eq!(
+            distinct_spans.len(),
+            2,
+            "expected 2 distinct W0401 spans for 3 Red arms; got {}: {:?}",
+            distinct_spans.len(),
+            report.diagnostics()
+        );
     }
 }

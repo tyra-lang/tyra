@@ -439,6 +439,8 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
         ExprKind::Match(m) => {
             let subject_ty = infer_expr(&m.subject, env, report);
             check_match_exhaustiveness(&subject_ty, m, env, report);
+            check_nested_exhaustiveness(&subject_ty, m, env, report);
+            check_redundant_arms(m, report);
             let mut arm_ty = Ty::Unit;
             for arm in &m.arms {
                 env.push();
@@ -667,6 +669,13 @@ fn check_type_match(expected: &Ty, actual: &Ty, span: Span, report: &mut Report)
     }
 }
 
+/// A pattern is a catch-all when it matches any value:
+/// - `_` (wildcard)
+/// - a bare ident binding (e.g. `when x`) — binds `x` to the subject
+fn is_catchall_pattern(kind: &PatternKind) -> bool {
+    matches!(kind, PatternKind::Wildcard | PatternKind::Ident(_))
+}
+
 fn bind_pattern_types(pat: &Pattern, env: &mut TypeEnv) {
     match &pat.kind {
         PatternKind::Ident(name) => {
@@ -701,9 +710,10 @@ fn check_match_exhaustiveness(
     // This mirrors the semantics of Rust and OCaml: `when x` binds `x` to the
     // subject and matches any value, identical to `when _` except that the value
     // is nameable inside the arm body.
-    let has_catchall = match_expr.arms.iter().any(|arm| {
-        matches!(arm.pattern.kind, PatternKind::Wildcard | PatternKind::Ident(_))
-    });
+    let has_catchall = match_expr
+        .arms
+        .iter()
+        .any(|arm| is_catchall_pattern(&arm.pattern.kind));
     if has_catchall {
         return;
     }
@@ -762,6 +772,244 @@ fn check_match_exhaustiveness(
                 quoted.join(", ")
             )),
         );
+    }
+}
+
+/// §10.3: check nested Constructor exhaustiveness for Option<ADT> / Result<ADT, _> / Result<_, ADT>.
+/// Example: `match r when Ok(x) => ... when Err(NotFound) => ... end` with
+/// `r: Result<T, MyErr>` and `MyErr = | NotFound | Forbidden` reports E0401
+/// because `Err(Forbidden)` is uncovered.
+///
+/// Limitations (acknowledged in the emitted note):
+/// - depth-1 only — only the field directly inside the outer Constructor is checked.
+///   Deeper nesting (e.g. `Some(Ok(Red))`) is not analyzed.
+/// - Only Option/Result. User ADTs with ADT fields are not supported yet.
+/// - `Ty::Generic` inner types (e.g. `Option<Option<T>>`) are skipped — only direct
+///   `Ty::Named` ADTs are analyzed. See `adt_name_of`.
+fn check_nested_exhaustiveness(
+    subject_ty: &Ty,
+    match_expr: &MatchExpr,
+    env: &TypeEnv,
+    report: &mut Report,
+) {
+    // Skip if the outer match already has a catch-all — nothing to check further.
+    let outer_catchall = match_expr
+        .arms
+        .iter()
+        .any(|arm| is_catchall_pattern(&arm.pattern.kind));
+    if outer_catchall {
+        return;
+    }
+
+    // Per-outer-variant inner ADT name (fixed set — Option/Result only).
+    // Small N (2) so a simple array beats a HashMap here.
+    let inner_types: Vec<(&'static str, Option<String>)> = match subject_ty {
+        Ty::Generic(name, args) if name == "Option" && args.len() == 1 => {
+            vec![("Some", adt_name_of(&args[0], env)), ("None", None)]
+        }
+        Ty::Generic(name, args) if name == "Result" && args.len() == 2 => {
+            vec![
+                ("Ok", adt_name_of(&args[0], env)),
+                ("Err", adt_name_of(&args[1], env)),
+            ]
+        }
+        _ => return,
+    };
+
+    // For each outer variant, accumulate inner patterns used.
+    // State: (covered inner variant names, nested catchall seen, first-arm span for labels).
+    #[derive(Default)]
+    struct InnerState {
+        covered: HashSet<String>,
+        has_catchall: bool,
+        /// Span of the first nested arm encountered for this outer variant.
+        /// Used as the label location for E0401 — narrower than the match span.
+        first_arm_span: Option<Span>,
+    }
+    let mut inner_info: Vec<(&'static str, InnerState)> = inner_types
+        .iter()
+        .map(|(v, _)| (*v, InnerState::default()))
+        .collect();
+
+    for arm in &match_expr.arms {
+        if let PatternKind::Constructor(outer_name, fields) = &arm.pattern.kind {
+            // Map user-written variant name to our canonical key.
+            if !matches!(outer_name.as_str(), "Some" | "None" | "Ok" | "Err") {
+                continue;
+            }
+            let Some(entry) = inner_info
+                .iter_mut()
+                .find(|(v, _)| *v == outer_name.as_str())
+                .map(|(_, s)| s)
+            else {
+                continue;
+            };
+            if entry.first_arm_span.is_none() {
+                entry.first_arm_span = Some(arm.pattern.span);
+            }
+            // Look at the first field's pattern (Option/Result payloads are single-field).
+            if let Some(f) = fields.first() {
+                match &f.pattern.kind {
+                    _ if is_catchall_pattern(&f.pattern.kind) => {
+                        entry.has_catchall = true;
+                    }
+                    PatternKind::Constructor(inner_name, _) => {
+                        entry.covered.insert(inner_name.clone());
+                    }
+                    _ => {}
+                }
+            } else {
+                // Unit variant (None). No inner type to check.
+                entry.has_catchall = true;
+            }
+        }
+    }
+
+    // For each variant whose inner is an ADT, check inner exhaustiveness.
+    for (outer_v, inner_ty_name) in &inner_types {
+        let Some(inner_name) = inner_ty_name else { continue };
+        let Some(expected_inner) = env.adt_variants(inner_name) else { continue };
+        let Some(state) = inner_info.iter().find(|(v, _)| v == outer_v).map(|(_, s)| s) else {
+            continue;
+        };
+        if state.has_catchall {
+            continue;
+        }
+        let missing: Vec<String> = expected_inner
+            .iter()
+            .filter(|v| !state.covered.contains(v.as_str()))
+            .cloned()
+            .collect();
+        if !missing.is_empty() {
+            let quoted: Vec<String> = missing.iter().map(|v| format!("`{v}`")).collect();
+            let label_span = state.first_arm_span.unwrap_or(match_expr.span);
+            report.add(
+                Diagnostic::error(format!(
+                    "non-exhaustive nested match in `{outer_v}(...)`: missing inner {}",
+                    quoted.join(", ")
+                ))
+                .with_code("E0401")
+                .with_label(Label::new(label_span, "nested patterns are not exhaustive"))
+                .with_note(format!(
+                    "inner type `{inner_name}` not covered: {}. Add nested arms or use `{outer_v}(_)`.",
+                    quoted.join(", ")
+                ))
+                .with_note(
+                    "nested exhaustiveness is checked at depth 1 only — deeper nesting is not analyzed.".to_string(),
+                ),
+            );
+        }
+    }
+}
+
+/// Return the ADT type name if `ty` resolves to a known user-defined ADT.
+/// Only `Ty::Named` is matched; generic types (e.g. `Option<Option<_>>`) are
+/// deliberately skipped to honor the depth-1 limitation.
+fn adt_name_of(ty: &Ty, env: &TypeEnv) -> Option<String> {
+    match ty {
+        Ty::Named(name) if env.adt_variants(name).is_some() => Some(name.clone()),
+        _ => None,
+    }
+}
+
+/// §10.3: detect unreachable match arms.
+/// Reports W0401 when:
+/// - An arm follows a catch-all (wildcard or ident binding) — all subsequent arms are dead.
+/// - A Constructor pattern repeats an earlier one with the *same head* AND both arms
+///   have no distinguishing sub-patterns (zero fields, or all fields are catch-alls).
+///   Example: `when Red / when Red` warns; `when Err(NotFound) / when Err(Forbidden)`
+///   does NOT warn because nested patterns differ.
+/// - Duplicate BoolLit / IntLit / StringLit literals always warn.
+fn check_redundant_arms(match_expr: &MatchExpr, report: &mut Report) {
+    let mut seen_heads: HashSet<String> = HashSet::new();
+    let mut catchall_seen = false;
+    let mut catchall_span: Option<Span> = None;
+
+    for arm in &match_expr.arms {
+        if catchall_seen {
+            let note_span = catchall_span.unwrap_or(arm.pattern.span);
+            report.add(
+                Diagnostic::warning("unreachable match arm: preceded by a catch-all pattern")
+                    .with_code("W0401")
+                    .with_label(Label::new(arm.pattern.span, "this arm is unreachable"))
+                    .with_note(format!(
+                        "a wildcard or ident pattern at span {:?} already matches everything",
+                        (note_span.start, note_span.end)
+                    )),
+            );
+            continue;
+        }
+
+        match &arm.pattern.kind {
+            PatternKind::Wildcard | PatternKind::Ident(_) => {
+                catchall_seen = true;
+                catchall_span = Some(arm.pattern.span);
+            }
+            PatternKind::Constructor(name, fields) => {
+                // Only treat a repeated Constructor head as redundant when its sub-patterns
+                // cannot distinguish it from the earlier arm (zero fields, or every field is
+                // a catch-all). Otherwise, nested patterns may differentiate the arms —
+                // e.g. `Err(NotFound)` vs `Err(Forbidden)` are distinct.
+                let all_fields_catchall = fields
+                    .iter()
+                    .all(|f| is_catchall_pattern(&f.pattern.kind));
+                let head_is_redundant_candidate = fields.is_empty() || all_fields_catchall;
+                if head_is_redundant_candidate && !seen_heads.insert(name.clone()) {
+                    report.add(
+                        Diagnostic::warning(format!(
+                            "unreachable match arm: variant `{name}` already matched"
+                        ))
+                        .with_code("W0401")
+                        .with_label(Label::new(
+                            arm.pattern.span,
+                            "this arm duplicates a previous Constructor pattern",
+                        ))
+                        .with_note(
+                            "the earlier arm already matches this variant with no distinguishing sub-pattern.",
+                        ),
+                    );
+                }
+                // Arms with distinguishing sub-patterns are not tracked — they could
+                // legitimately differ from a later arm (pattern equality is not analyzed).
+            }
+            PatternKind::BoolLit(b) => {
+                let name = if *b { "true" } else { "false" };
+                if !seen_heads.insert(name.into()) {
+                    report.add(
+                        Diagnostic::warning(format!(
+                            "unreachable match arm: `{name}` already matched"
+                        ))
+                        .with_code("W0401")
+                        .with_label(Label::new(arm.pattern.span, "duplicate boolean literal")),
+                    );
+                }
+            }
+            PatternKind::IntLit(n) => {
+                let key = format!("int:{n}");
+                if !seen_heads.insert(key) {
+                    report.add(
+                        Diagnostic::warning(format!(
+                            "unreachable match arm: integer `{n}` already matched"
+                        ))
+                        .with_code("W0401")
+                        .with_label(Label::new(arm.pattern.span, "duplicate integer literal")),
+                    );
+                }
+            }
+            PatternKind::StringLit(s) => {
+                let key = format!("str:{s}");
+                if !seen_heads.insert(key) {
+                    report.add(
+                        Diagnostic::warning(format!(
+                            "unreachable match arm: string `{s:?}` already matched"
+                        ))
+                        .with_code("W0401")
+                        .with_label(Label::new(arm.pattern.span, "duplicate string literal")),
+                    );
+                }
+            }
+            _ => {}
+        }
     }
 }
 
