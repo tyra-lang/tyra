@@ -362,6 +362,13 @@ impl super::LowerCtx {
                     None
                 }
             }
+            ExprKind::ListLit(items) => {
+                let elem_ty = items
+                    .first()
+                    .and_then(|e| self.infer_expr_type(e))
+                    .unwrap_or(Ty::Int);
+                Some(Ty::Generic("List".into(), vec![elem_ty]))
+            }
             ExprKind::BinaryOp(lhs, _, _) => {
                 if self.is_float_expr(lhs) {
                     Some(Ty::Float)
@@ -403,6 +410,16 @@ impl super::LowerCtx {
                 if let ExprKind::Ident(type_name) = &obj.kind {
                     if self.variant_tags.contains_key(&(type_name.clone(), field.clone())) {
                         return Some(Ty::Named(type_name.clone()));
+                    }
+                }
+                // Struct field access: look up var_types → struct_fields
+                if let ExprKind::Ident(var_name) = &obj.kind {
+                    if let Some(struct_name) = self.var_types.get(var_name.as_str()) {
+                        if let Some(fields) = self.struct_fields.get(struct_name.as_str()) {
+                            if let Some((_, fty)) = fields.iter().find(|(n, _)| n == field) {
+                                return Some(fty.clone());
+                            }
+                        }
                     }
                 }
                 None

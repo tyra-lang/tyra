@@ -122,6 +122,8 @@ pub fn lower(file: &SourceFile) -> Program {
                 ctx.fn_return_types
                     .insert("sys__exit".into(), Ty::Never);
             }
+            // core.tasks: tasks.join_all is handled as identity in call lowering.
+            // No fn_return_types entry needed; the list arg type is propagated directly.
         }
     }
 

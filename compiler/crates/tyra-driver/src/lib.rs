@@ -262,7 +262,7 @@ fn resolve_imports(
 
 /// Check if a module path refers to a compiler built-in module.
 fn is_builtin_module(module_path: &str) -> bool {
-    matches!(module_path, "core.sys")
+    matches!(module_path, "core.sys" | "core.tasks")
 }
 
 /// Compile a Tyra source file to a native binary.

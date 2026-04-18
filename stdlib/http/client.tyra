@@ -1,0 +1,14 @@
+# stdlib/http/client.tyra — HTTP client stub (§22, Tier 2)
+# client.get(url) returns Ok with a stub response.
+
+export data Response
+  status: Int
+  body: String
+end
+
+# FetchError must be defined by the caller; referenced here by name only.
+# Callers must define: type FetchError = | NetworkError(message: String) | Timeout | NotFound
+
+export fn get(_ url: String) -> Result<Response, FetchError>
+  Ok(Response(status: 200, body: "stub response"))
+end

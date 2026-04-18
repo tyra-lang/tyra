@@ -395,6 +395,7 @@ impl super::LowerCtx {
                 // Value type field access: emit FieldGet instruction
                 if let Some((type_name, field_defs)) = self.resolve_struct_type(obj) {
                     if let Some(idx) = field_defs.iter().position(|(n, _)| n == field) {
+                        let field_ty = field_defs[idx].1.clone();
                         let dest = self.fresh_temp();
                         body.push(Instruction::FieldGet {
                             dest: dest.clone(),
@@ -402,6 +403,17 @@ impl super::LowerCtx {
                             type_name,
                             field_index: idx as u32,
                         });
+                        // Track field type so downstream callers can infer it correctly
+                        match &field_ty {
+                            Ty::String => { self.string_vars.insert(dest.clone()); }
+                            Ty::Float => { self.float_vars.insert(dest.clone()); }
+                            Ty::Named(n) => { self.var_types.insert(dest.clone(), n.clone()); }
+                            Ty::Generic(_, _) => {
+                                self.generic_var_types.insert(dest.clone(), field_ty.clone());
+                                self.var_types.insert(dest.clone(), field_ty.monomorphized_name());
+                            }
+                            _ => {}
+                        }
                         return dest;
                     }
                 }
@@ -446,6 +458,10 @@ impl super::LowerCtx {
                     }
                     Ty::Named(n) => {
                         self.var_types.insert(dest.clone(), n.clone());
+                    }
+                    Ty::Generic(_, _) => {
+                        self.generic_var_types.insert(dest.clone(), elem_type.clone());
+                        self.var_types.insert(dest.clone(), elem_type.monomorphized_name());
                     }
                     _ => {}
                 }

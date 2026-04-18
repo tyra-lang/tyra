@@ -394,25 +394,15 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             }
         }
 
-        // Await
+        // Await (§14.3): v0.1 — accept any type (async is synchronous no-op)
         ExprKind::Await(inner) => {
             let inner_ty = infer_expr(inner, env, report);
             match inner_ty {
                 Ty::Generic(ref name, ref args) if name == "Task" && args.len() == 1 => {
                     args[0].clone()
                 }
-                Ty::Error => Ty::Error,
-                _ => {
-                    report.add(
-                        Diagnostic::error(format!(
-                            "`.await` requires Task, found {}",
-                            inner_ty.display_name()
-                        ))
-                        .with_code("E0303")
-                        .with_label(Label::new(expr.span, "cannot await this type")),
-                    );
-                    Ty::Error
-                }
+                // v0.1: async fn returns T directly (not Task<T>); .await is identity
+                other => other,
             }
         }
 

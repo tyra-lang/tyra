@@ -448,11 +448,66 @@ impl super::LowerCtx {
             }
         }
 
+        // Special case: tasks.join_all(list) is identity — return the list directly (§17.1).
+        // With v0.1 synchronous execution, spawn is a no-op so tasks are plain values.
+        if let ExprKind::FieldAccess(obj, fn_name) = &callee.kind
+            && let ExprKind::Ident(module_name) = &obj.kind
+            && self.imported_modules.contains(module_name.as_str())
+            && fn_name == "join_all"
+            && args.len() == 1
+        {
+            return self.lower_expr(&args[0].value, body);
+        }
+
         // Check for module-qualified call: math.square() → math__square() (§13)
         if let ExprKind::FieldAccess(obj, fn_name) = &callee.kind {
             if let ExprKind::Ident(module_name) = &obj.kind {
                 if self.imported_modules.contains(module_name.as_str()) {
                     let qualified_name = format!("{module_name}__{fn_name}");
+
+                    // Module-qualified struct constructor: server.Response(fields) → StructInit
+                    if fn_name.chars().next().map_or(false, |c| c.is_uppercase()) {
+                        if let Some(field_defs) = self.struct_fields.get(fn_name.as_str()).cloned() {
+                            let mut field_operands = Vec::with_capacity(field_defs.len());
+                            let mut used_args: std::collections::HashSet<usize> =
+                                std::collections::HashSet::new();
+                            for (fname, _fty) in &field_defs {
+                                let labeled = args.iter().enumerate().find(|(idx, a)| {
+                                    !used_args.contains(idx)
+                                        && a.label.as_deref() == Some(fname)
+                                });
+                                let resolved = if let Some((idx, a)) = labeled {
+                                    used_args.insert(idx);
+                                    Some(a)
+                                } else {
+                                    let positional = args
+                                        .iter()
+                                        .enumerate()
+                                        .find(|(idx, _)| !used_args.contains(idx));
+                                    if let Some((idx, a)) = positional {
+                                        used_args.insert(idx);
+                                        Some(a)
+                                    } else {
+                                        None
+                                    }
+                                };
+                                if let Some(a) = resolved {
+                                    let val = self.lower_expr(&a.value, body);
+                                    field_operands.push(Operand::Var(val));
+                                } else {
+                                    field_operands.push(Operand::Const(Constant::Unit));
+                                }
+                            }
+                            let dest = self.fresh_temp();
+                            body.push(Instruction::StructInit {
+                                dest: dest.clone(),
+                                type_name: fn_name.clone(),
+                                fields: field_operands,
+                            });
+                            self.var_types.insert(dest.clone(), fn_name.clone());
+                            return dest;
+                        }
+                    }
                     let arg_operands: Vec<Operand> = args
                         .iter()
                         .map(|a| {
