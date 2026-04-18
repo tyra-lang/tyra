@@ -22,9 +22,22 @@ use std::collections::{HashMap, HashSet};
 use tyra_ast::*;
 use tyra_diagnostics::{Diagnostic, Label, Report, Span};
 
-use crate::ty::{Ty, types_compatible};
+use crate::ty::{Ability, Ty, types_compatible};
 
-/// Type environment: maps names to their types.
+/// Type environment: holds all state used during type checking.
+///
+/// Three distinct concerns live here for convenience — all are read from the
+/// same `infer_expr` call site, so a single struct avoids plumbing three
+/// references through every helper. Future split candidate when one of these
+/// grows (tracked as a suggestion in the review, non-blocking):
+///
+/// - **Lexical bindings (`bindings`)**: scoped name → type map, push/pop with
+///   block scopes. The traditional "env" part.
+/// - **Module registries (`adt_variants`, `trait_methods`, `trait_impls`,
+///   `type_abilities`, `user_defined_types`)**: built once during
+///   `collect_top_level_types`, then read-only. Act as a TypeCtx.
+/// - **Call-site context (`return_type_stack`)**: push/pop around fn bodies
+///   for `return` / `?` checks.
 #[derive(Debug)]
 pub struct TypeEnv {
     bindings: Vec<HashMap<String, Ty>>,
@@ -32,6 +45,23 @@ pub struct TypeEnv {
     /// - User-defined: `type Color = | Red | Green | Blue` → "Color" → ["Red", "Green", "Blue"]
     /// - Prelude: "Option" → ["Some", "None"], "Result" → ["Ok", "Err"]
     adt_variants: HashMap<String, Vec<String>>,
+    /// Stack of enclosing function return types (for `return` stmt and `?` operator checks).
+    /// Top of stack = innermost enclosing function. Empty when not inside any fn body.
+    return_type_stack: Vec<Ty>,
+    /// Trait name → required method names (§8.7).
+    /// Populated by register_trait from TraitDef definitions.
+    trait_methods: HashMap<String, Vec<String>>,
+    /// (trait_name, type_name) → Vec<method_name> for impls.
+    /// Used to verify trait method bodies and to check that a type has an impl
+    /// for a given trait (e.g. Stringable).
+    trait_impls: HashMap<(String, String), Vec<String>>,
+    /// Named type → abilities granted to that type (§8 auto-derivation rules).
+    /// Primitives are seeded in register_prelude; user types are computed from
+    /// their fields/variants in collect_top_level_types.
+    type_abilities: HashMap<String, HashSet<Ability>>,
+    /// User-defined type names (value/data/ADT). Used to distinguish user types
+    /// from primitives for checks like Stringable impl requirement (E0501).
+    user_defined_types: HashSet<String>,
 }
 
 impl TypeEnv {
@@ -39,7 +69,24 @@ impl TypeEnv {
         Self {
             bindings: vec![HashMap::new()],
             adt_variants: HashMap::new(),
+            return_type_stack: Vec::new(),
+            trait_methods: HashMap::new(),
+            trait_impls: HashMap::new(),
+            type_abilities: HashMap::new(),
+            user_defined_types: HashSet::new(),
         }
+    }
+
+    pub fn push_return_type(&mut self, ty: Ty) {
+        self.return_type_stack.push(ty);
+    }
+
+    pub fn pop_return_type(&mut self) {
+        self.return_type_stack.pop();
+    }
+
+    pub fn current_return_type(&self) -> Option<&Ty> {
+        self.return_type_stack.last()
     }
 
     pub fn push(&mut self) {
@@ -71,6 +118,76 @@ impl TypeEnv {
     /// Get variant names for an ADT type, if registered.
     pub fn adt_variants(&self, type_name: &str) -> Option<&Vec<String>> {
         self.adt_variants.get(type_name)
+    }
+
+    /// Register a trait and its required method names (§8.7).
+    pub fn register_trait(&mut self, trait_name: String, methods: Vec<String>) {
+        self.trait_methods.insert(trait_name, methods);
+    }
+
+    /// Get required method names for a trait, if registered.
+    pub fn trait_methods(&self, trait_name: &str) -> Option<&Vec<String>> {
+        self.trait_methods.get(trait_name)
+    }
+
+    /// Register an impl (trait, type) → methods implemented.
+    pub fn register_impl(&mut self, trait_name: String, type_name: String, methods: Vec<String>) {
+        self.trait_impls.insert((trait_name, type_name), methods);
+    }
+
+    /// Check if a type implements a given trait.
+    pub fn has_trait_impl(&self, trait_name: &str, type_name: &str) -> bool {
+        self.trait_impls
+            .contains_key(&(trait_name.to_string(), type_name.to_string()))
+    }
+
+    /// Register the ability set for a named type (§8 auto-derivation).
+    pub fn register_type_abilities(&mut self, type_name: String, abilities: HashSet<Ability>) {
+        self.type_abilities.insert(type_name, abilities);
+    }
+
+    /// Mark a name as a user-defined type (value/data/ADT).
+    pub fn register_user_type(&mut self, type_name: String) {
+        self.user_defined_types.insert(type_name);
+    }
+
+    /// Check whether a name refers to a user-defined type.
+    pub fn is_user_defined_type(&self, type_name: &str) -> bool {
+        self.user_defined_types.contains(type_name)
+    }
+
+    /// Check whether a Ty has a given ability. Handles primitives inline
+    /// and dispatches to type_abilities for named/generic types.
+    pub fn ty_has_ability(&self, ty: &Ty, ability: Ability) -> bool {
+        match ty {
+            Ty::Int | Ty::Rune | Ty::Bytes => matches!(
+                ability,
+                Ability::Eq | Ability::Hash | Ability::Ord | Ability::Debug
+            ),
+            Ty::String => matches!(
+                ability,
+                Ability::Eq | Ability::Hash | Ability::Ord | Ability::Debug
+            ),
+            Ty::Bool | Ty::Unit => matches!(
+                ability,
+                Ability::Eq | Ability::Hash | Ability::Ord | Ability::Debug
+            ),
+            // Float: ADR-0002 — NO Eq, hence no Hash or Ord either.
+            Ty::Float => matches!(ability, Ability::Debug),
+            Ty::Never => true, // bottom type satisfies anything (vacuously)
+            Ty::Error => true, // cascade: don't double-report
+            Ty::Named(name) => self
+                .type_abilities
+                .get(name.as_str())
+                .map(|a| a.contains(&ability))
+                .unwrap_or(false),
+            Ty::Generic(name, _) => self
+                .type_abilities
+                .get(name.as_str())
+                .map(|a| a.contains(&ability))
+                .unwrap_or(false),
+            _ => false,
+        }
     }
 }
 
@@ -116,10 +233,42 @@ fn register_prelude(env: &mut TypeEnv) {
     // Prelude ADTs for §10.3 exhaustiveness checking.
     env.register_adt("Option".into(), vec!["Some".into(), "None".into()]);
     env.register_adt("Result".into(), vec!["Ok".into(), "Err".into()]);
+
+    // Prelude traits (§8.7, §17.1).
+    //
+    // Only traits whose implementations are user-facing are registered here.
+    // That means:
+    // - Stringable: requires an explicit `impl Stringable for T` per §8.7.
+    //
+    // Not registered (intentionally):
+    // - Eq / Hash / Ord / Debug — auto-derived per §8.5/§8.6; enforcing an
+    //   explicit impl for them would conflict with the derivation rules.
+    // - Into — conversion trait is resolved at MIR lowering (§12.2 `?`),
+    //   not via impl registry.
+    env.register_trait("Stringable".into(), vec!["to_string".into()]);
 }
 
-/// Collect top-level function signatures and ADT definitions for forward reference.
+/// Collect abilities from a set of fields by conjunction: the type has ability X
+/// iff every field's type has ability X.
+/// Empty input: returns the full candidate set (vacuous truth). Callers must
+/// strip abilities that are structurally disallowed (e.g. Ord on empty value,
+/// Ord on ADT/data) themselves.
+fn conjunct_field_abilities(field_tys: &[Ty], env: &TypeEnv) -> HashSet<Ability> {
+    let candidates = [Ability::Eq, Ability::Hash, Ability::Ord, Ability::Debug];
+    candidates
+        .into_iter()
+        .filter(|a| field_tys.iter().all(|t| env.ty_has_ability(t, *a)))
+        .collect()
+}
+
+/// Collect top-level function signatures and type definitions.
+/// Runs in two passes so that ability derivation (pass 2) can see every
+/// user-defined type regardless of source order — forward references across
+/// `value`/`data`/`type` are allowed.
 fn collect_top_level_types(items: &[Item], env: &mut TypeEnv) {
+    // Pass 1: register names only (fn signatures, ADT variants, user type marker,
+    // trait method lists, impl method maps). Ability sets are intentionally left
+    // empty or left to pass 2.
     for item in items {
         match item {
             Item::FnDef(f) => {
@@ -139,35 +288,214 @@ fn collect_top_level_types(items: &[Item], env: &mut TypeEnv) {
                 if let TypeDefKind::Adt(variants) = &t.kind {
                     let names: Vec<String> = variants.iter().map(|v| v.name.clone()).collect();
                     env.register_adt(t.name.clone(), names);
+                    env.register_user_type(t.name.clone());
+                }
+            }
+            Item::ValueDef(v) => {
+                env.register_user_type(v.name.clone());
+            }
+            Item::DataDef(d) => {
+                env.register_user_type(d.name.clone());
+            }
+            Item::TraitDef(t) => {
+                let methods: Vec<String> = t.methods.iter().map(|m| m.name.clone()).collect();
+                env.register_trait(t.name.clone(), methods);
+            }
+            Item::ImplDef(i) => {
+                let methods: Vec<String> = i.methods.iter().map(|m| m.name.clone()).collect();
+                if let Some(target_name) = type_expr_name(&i.target_type) {
+                    env.register_impl(i.trait_name.clone(), target_name, methods);
                 }
             }
             _ => {}
         }
     }
+
+    // Pass 2: ability auto-derivation (§8.5/§8.6).
+    // Seeded optimistically: every user type starts with the full ability set,
+    // then each pass conjunction-shrinks based on fields/variants. Sets only
+    // shrink, so the fixed point is reached in at most |types| * |abilities|
+    // iterations — in practice 1–2 passes.
+    let all_abilities: HashSet<Ability> = [
+        Ability::Eq,
+        Ability::Hash,
+        Ability::Ord,
+        Ability::Debug,
+    ]
+    .into_iter()
+    .collect();
+    for name in env.user_defined_types.clone() {
+        env.register_type_abilities(name, all_abilities.clone());
+    }
+
+    loop {
+        let mut changed = false;
+        for item in items {
+            let (name, new_abilities) = match item {
+                Item::TypeDef(t) => {
+                    if let TypeDefKind::Adt(variants) = &t.kind {
+                        let field_tys: Vec<Ty> = variants
+                            .iter()
+                            .flat_map(|v| {
+                                v.fields.iter().map(|f| Ty::from_type_expr(&f.type_annotation))
+                            })
+                            .collect();
+                        let mut abilities = conjunct_field_abilities(&field_tys, env);
+                        abilities.remove(&Ability::Ord); // §8.5: ADTs never auto-derive Ord
+                        (t.name.clone(), abilities)
+                    } else {
+                        continue;
+                    }
+                }
+                Item::ValueDef(v) => {
+                    let field_tys: Vec<Ty> = v
+                        .fields
+                        .iter()
+                        .map(|f| Ty::from_type_expr(&f.type_annotation))
+                        .collect();
+                    let mut abilities = conjunct_field_abilities(&field_tys, env);
+                    // Ord: §8.6 — only single-field value where that field has Ord.
+                    // Empty-field value has zero fields, explicitly not Ord.
+                    let ord_ok = v.fields.len() == 1
+                        && env.ty_has_ability(&field_tys[0], Ability::Ord);
+                    if !ord_ok {
+                        abilities.remove(&Ability::Ord);
+                    }
+                    (v.name.clone(), abilities)
+                }
+                Item::DataDef(d) => {
+                    let field_tys: Vec<Ty> = d
+                        .fields
+                        .iter()
+                        .map(|f| Ty::from_type_expr(&f.type_annotation))
+                        .collect();
+                    let mut abilities = conjunct_field_abilities(&field_tys, env);
+                    abilities.remove(&Ability::Ord); // §8.6: data never auto-derives Ord
+                    if d.fields.iter().any(|f| f.is_mut) {
+                        abilities.remove(&Ability::Hash); // §8.6: mut fields disallow Hash
+                    }
+                    (d.name.clone(), abilities)
+                }
+                _ => continue,
+            };
+            let prev = env.type_abilities.get(&name).cloned().unwrap_or_default();
+            if prev != new_abilities {
+                changed = true;
+                env.register_type_abilities(name, new_abilities);
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+}
+
+/// Return `true` when return-type checking should be skipped for this pair.
+/// Used by both implicit-final-expression (check_fn) and explicit `return` (Stmt::Return)
+/// paths to keep the skip rules in sync.
+///
+/// TODO: Named/Generic are skipped because the type checker doesn't yet resolve
+/// constructor calls (e.g. `Some(x)` → Option<T>) — once that lands, these can
+/// be tightened and the check will cover real-world return-type mismatches.
+fn return_check_skip(declared: &Ty, actual: &Ty) -> bool {
+    actual.is_error()
+        || declared.is_error()
+        || matches!(
+            actual,
+            Ty::Never | Ty::Unit | Ty::Named(_) | Ty::Generic(_, _)
+        )
+        || matches!(declared, Ty::Named(_) | Ty::Generic(_, _))
+}
+
+/// Extract the outermost type name from a TypeExpr, if simple.
+fn type_expr_name(ty: &TypeExpr) -> Option<String> {
+    match &ty.kind {
+        TypeExprKind::Named(name) => Some(name.clone()),
+        TypeExprKind::Generic(name, _) => Some(name.clone()),
+        TypeExprKind::Fn(..) => None,
+    }
 }
 
 fn check_item(item: &Item, env: &mut TypeEnv, report: &mut Report) {
     match item {
-        Item::FnDef(f) => check_fn(f, env, report),
+        Item::FnDef(f) => check_fn(f, env, None, report),
         Item::Stmt(s) => {
             check_stmt(s, env, report);
         }
-        // Type definitions, traits, impls — type checking deferred to later milestones
+        Item::ImplDef(i) => check_impl(i, env, report),
+        // TypeDef/TraitDef bodies are registered in collect_top_level_types;
+        // no further per-item checks yet.
         _ => {}
     }
 }
 
-fn check_fn(f: &FnDef, env: &mut TypeEnv, report: &mut Report) {
+/// §8.7: verify that an `impl Trait for Type` implements every required method.
+fn check_impl(i: &ImplDef, env: &mut TypeEnv, report: &mut Report) {
+    let Some(required) = env.trait_methods(&i.trait_name).cloned() else {
+        // Trait not registered — either unknown trait (resolver should have caught
+        // this) or an external trait (Into, Eq, Hash, Ord, Debug are auto/external).
+        // Skip silently; we only enforce explicit impls for registered traits.
+        return;
+    };
+    let implemented: HashSet<String> = i.methods.iter().map(|m| m.name.clone()).collect();
+    let missing: Vec<String> = required
+        .iter()
+        .filter(|m| !implemented.contains(m.as_str()))
+        .cloned()
+        .collect();
+    if !missing.is_empty() {
+        let target = type_expr_name(&i.target_type).unwrap_or_else(|| "?".into());
+        let quoted: Vec<String> = missing.iter().map(|m| format!("`{m}`")).collect();
+        report.add(
+            Diagnostic::error(format!(
+                "impl of `{}` for `{target}` is missing method {}",
+                i.trait_name,
+                quoted.join(", ")
+            ))
+            .with_code("E0500")
+            .with_label(Label::new(i.span, "missing required trait methods"))
+            .with_note(format!(
+                "trait `{}` requires: {}",
+                i.trait_name,
+                required
+                    .iter()
+                    .map(|m| format!("`{m}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+        );
+    }
+
+    // Type-check each method body. Bind `self` to the impl's target type so
+    // method bodies get meaningful E0308/E0306 diagnostics on `self.field`.
+    let self_ty = Ty::from_type_expr(&i.target_type);
+    for m in &i.methods {
+        check_fn(m, env, Some(&self_ty), report);
+    }
+}
+
+fn check_fn(f: &FnDef, env: &mut TypeEnv, self_ty: Option<&Ty>, report: &mut Report) {
     env.push();
     for param in &f.params {
         let ty = Ty::from_type_expr(&param.type_annotation);
         env.define(param.name.clone(), ty);
     }
     if f.self_param.is_some() {
-        // self type is not known without the enclosing impl context
-        // For now, use Error to avoid cascading type errors
-        env.define("self".to_string(), Ty::Error);
+        // Free fns pass None (no enclosing impl); impl methods pass the target type
+        // so `self.field` type-checks against the impl'd type rather than silently
+        // cascading through Error.
+        let ty = self_ty.cloned().unwrap_or(Ty::Error);
+        env.define("self".to_string(), ty);
     }
+
+    let declared_ret = f
+        .return_type
+        .as_ref()
+        .map(Ty::from_type_expr)
+        .unwrap_or(Ty::Unit);
+
+    // Push return type context so Stmt::Return and `?` can access it.
+    env.push_return_type(declared_ret.clone());
 
     // Walk body and track the last expression statement's type
     let mut last_expr_ty: Option<Ty> = None;
@@ -184,26 +512,12 @@ fn check_fn(f: &FnDef, env: &mut TypeEnv, report: &mut Report) {
     }
 
     // Return type verification: check that the last expression's type matches
-    // the declared return type (if any).
-    // NOTE: explicit `return` statements are not checked yet (future improvement).
-    let declared_ret = f
-        .return_type
-        .as_ref()
-        .map(Ty::from_type_expr)
-        .unwrap_or(Ty::Unit);
+    // the declared return type (if any). Explicit `return` stmts are checked in
+    // check_stmt via the return_type_stack.
 
     if declared_ret != Ty::Unit {
         if let (Some(actual_ty), Some(span)) = (last_expr_ty, last_expr_span) {
-            // Skip if either side is Error (cascading), Never (bottom type),
-            // Unit (if/else not yet type-unified), Named/Generic (not fully resolved)
-            let skip = actual_ty.is_error()
-                || declared_ret.is_error()
-                || matches!(
-                    actual_ty,
-                    Ty::Never | Ty::Unit | Ty::Named(_) | Ty::Generic(_, _)
-                )
-                || matches!(declared_ret, Ty::Named(_) | Ty::Generic(_, _));
-            if !skip && actual_ty != declared_ret {
+            if !return_check_skip(&declared_ret, &actual_ty) && actual_ty != declared_ret {
                 report.add(
                     Diagnostic::error(format!(
                         "return type mismatch: expected {}, found {}",
@@ -217,6 +531,7 @@ fn check_fn(f: &FnDef, env: &mut TypeEnv, report: &mut Report) {
         }
     }
 
+    env.pop_return_type();
     env.pop();
 }
 
@@ -239,8 +554,35 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
             env.define(s.name.clone(), value_ty);
         }
         Stmt::Return(s) => {
-            if let Some(v) = &s.value {
-                infer_expr(v, env, report);
+            // For bare `return`, actual is definitively Unit — no deferral needed.
+            let (actual_ty, is_bare) = match &s.value {
+                Some(v) => (infer_expr(v, env, report), false),
+                None => (Ty::Unit, true),
+            };
+            // Compare against the enclosing fn's declared return type.
+            if let Some(declared_ret) = env.current_return_type().cloned() {
+                // Bare `return` should error when declared_ret != Unit, even though
+                // the general skip rules ignore Unit actuals (they exist to tolerate
+                // unresolved if/else). Skip rules still apply when declared is Named/Generic
+                // (type checker hasn't resolved the constructor).
+                let should_check = if is_bare {
+                    !matches!(declared_ret, Ty::Named(_) | Ty::Generic(_, _))
+                        && !declared_ret.is_error()
+                } else {
+                    !return_check_skip(&declared_ret, &actual_ty)
+                };
+                if should_check && actual_ty != declared_ret {
+                    let span = s.value.as_ref().map(|v| v.span).unwrap_or(s.span);
+                    report.add(
+                        Diagnostic::error(format!(
+                            "return type mismatch: expected {}, found {}",
+                            declared_ret.display_name(),
+                            actual_ty.display_name()
+                        ))
+                        .with_code("E0309")
+                        .with_label(Label::new(span, "this return value has the wrong type")),
+                    );
+                }
             }
         }
         Stmt::Defer(s) => {
@@ -293,7 +635,7 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
         ExprKind::BinaryOp(left, op, right) => {
             let left_ty = infer_expr(left, env, report);
             let right_ty = infer_expr(right, env, report);
-            infer_binop(*op, &left_ty, &right_ty, expr.span, report)
+            infer_binop(*op, &left_ty, &right_ty, expr.span, env, report)
         }
 
         // Unary operations
@@ -338,6 +680,24 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
 
         // Function call
         ExprKind::Call(callee, args) => {
+            // Method-call shape: `obj.method(args)` parses as Call(FieldAccess(obj, m), args).
+            // Intercept to verify trait impls (§8.7) before general call type-checking.
+            if let ExprKind::FieldAccess(obj, method) = &callee.kind {
+                let obj_ty = infer_expr(obj, env, report);
+                check_trait_method_call(&obj_ty, method, expr.span, env, report);
+                // Still infer arg types so argument errors surface.
+                for arg in args {
+                    infer_expr(&arg.value, env, report);
+                }
+                // Method return type is not yet resolved by the type checker
+                // (impl method signatures live in MIR). Returning Ty::Error here
+                // intentionally suppresses downstream E0308 — users see the
+                // E0501 (Stringable impl) diagnostic without cascading false
+                // positives. When method resolution lands, this should return
+                // the impl method's declared return type.
+                return Ty::Error;
+            }
+
             let callee_ty = infer_expr(callee, env, report);
             match callee_ty {
                 Ty::Fn(param_tys, ret_ty) => {
@@ -400,14 +760,15 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
         // Propagation (?)
         ExprKind::Propagate(inner) => {
             let inner_ty = infer_expr(inner, env, report);
-            match inner_ty {
+            // Determine the inner "ok" payload type and the operand's family (Option/Result).
+            let (payload_ty, inner_kind) = match inner_ty {
                 Ty::Generic(ref name, ref args) if name == "Option" && args.len() == 1 => {
-                    args[0].clone()
+                    (args[0].clone(), Some("Option"))
                 }
                 Ty::Generic(ref name, ref args) if name == "Result" && args.len() == 2 => {
-                    args[0].clone()
+                    (args[0].clone(), Some("Result"))
                 }
-                Ty::Error => Ty::Error,
+                Ty::Error => (Ty::Error, None),
                 _ => {
                     report.add(
                         Diagnostic::error(format!(
@@ -417,9 +778,45 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                         .with_code("E0302")
                         .with_label(Label::new(expr.span, "cannot use `?` on this type")),
                     );
-                    Ty::Error
+                    return Ty::Error;
+                }
+            };
+
+            // §12.2: the enclosing fn must return the same family (Option/Result).
+            // Option<T>? requires fn -> Option<U>; Result<T,E>? requires fn -> Result<U,F>.
+            // The E -> F conversion (Into) is checked at MIR lowering; here we only
+            // check the family compatibility.
+            if let (Some(kind), Some(ret)) = (inner_kind, env.current_return_type()) {
+                let ok = match ret {
+                    Ty::Generic(name, args) => match kind {
+                        "Option" => name == "Option" && args.len() == 1,
+                        "Result" => name == "Result" && args.len() == 2,
+                        _ => false,
+                    },
+                    Ty::Error => true, // cascade
+                    _ => false,
+                };
+                if !ok {
+                    report.add(
+                        Diagnostic::error(format!(
+                            "`?` on {kind} requires the enclosing function to return {kind}; found {}",
+                            ret.display_name()
+                        ))
+                        .with_code("E0310")
+                        .with_label(Label::new(
+                            expr.span,
+                            format!("cannot use `?` here — enclosing fn returns {}", ret.display_name()),
+                        ))
+                        .with_note(format!(
+                            "change the function's return type to {kind}<...>, or handle the {kind} explicitly."
+                        )),
+                    );
                 }
             }
+            // Top-level `?` is reported as E0211 by the resolver (ADR-0006 Rule 3);
+            // we don't duplicate the diagnostic here.
+
+            payload_ty
         }
 
         // Await (§14.3): v0.1 — accept any type (async is synchronous no-op)
@@ -550,7 +947,14 @@ fn check_if(if_expr: &IfExpr, env: &mut TypeEnv, report: &mut Report) -> Ty {
 }
 
 /// Infer binary operator result type.
-fn infer_binop(op: BinOp, left: &Ty, right: &Ty, span: Span, report: &mut Report) -> Ty {
+fn infer_binop(
+    op: BinOp,
+    left: &Ty,
+    right: &Ty,
+    span: Span,
+    env: &TypeEnv,
+    report: &mut Report,
+) -> Ty {
     if left.is_error() || right.is_error() {
         return Ty::Error;
     }
@@ -598,6 +1002,21 @@ fn infer_binop(op: BinOp, left: &Ty, right: &Ty, span: Span, report: &mut Report
                 );
                 return Ty::Error;
             }
+            // §8: user-defined types need Eq ability (auto-derived from fields).
+            if matches!(left, Ty::Named(_) | Ty::Generic(_, _)) && !env.ty_has_ability(left, Ability::Eq) {
+                report.add(
+                    Diagnostic::error(format!(
+                        "type `{}` does not have Eq; `==` is not available",
+                        left.display_name()
+                    ))
+                    .with_code("E0306")
+                    .with_label(Label::new(span, "missing Eq ability"))
+                    .with_note(
+                        "Eq is auto-derived when every field has Eq. Check for Float fields or mut fields that block auto-derivation.",
+                    ),
+                );
+                return Ty::Error;
+            }
             Ty::Bool
         }
         // Reference equality: only valid for data types (§8.6)
@@ -618,21 +1037,49 @@ fn infer_binop(op: BinOp, left: &Ty, right: &Ty, span: Span, report: &mut Report
             Ty::Bool
         }
         BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq => {
-            // Allow Int, Float, and Error (escape hatch for value types not yet registered)
-            if left == right && matches!(left, Ty::Int | Ty::Float | Ty::Error) {
-                Ty::Bool
-            } else {
+            if left != right {
                 report.add(
                     Diagnostic::error(format!(
-                        "comparison requires matching Int or Float operands, found {} and {}",
+                        "comparison requires matching operands, found {} and {}",
                         left.display_name(),
                         right.display_name()
                     ))
                     .with_code("E0305")
                     .with_label(Label::new(span, "type mismatch")),
                 );
-                Ty::Error
+                return Ty::Error;
             }
+            // Built-in orderings: Int / Float.
+            if matches!(left, Ty::Int | Ty::Float | Ty::Error) {
+                return Ty::Bool;
+            }
+            // Named/Generic: require Ord ability (§8 auto-derivation).
+            if matches!(left, Ty::Named(_) | Ty::Generic(_, _)) {
+                if env.ty_has_ability(left, Ability::Ord) {
+                    return Ty::Bool;
+                }
+                report.add(
+                    Diagnostic::error(format!(
+                        "type `{}` does not have Ord; comparison operators are not available",
+                        left.display_name()
+                    ))
+                    .with_code("E0307")
+                    .with_label(Label::new(span, "missing Ord ability"))
+                    .with_note(
+                        "Ord is auto-derived only for single-field value types whose field has Ord. data types and ADTs never auto-derive Ord.",
+                    ),
+                );
+                return Ty::Error;
+            }
+            report.add(
+                Diagnostic::error(format!(
+                    "comparison not supported for {}",
+                    left.display_name()
+                ))
+                .with_code("E0305")
+                .with_label(Label::new(span, "unsupported operand type")),
+            );
+            Ty::Error
         }
         // Logical: Bool operands -> Bool (§10.1)
         BinOp::And | BinOp::Or => {
@@ -649,6 +1096,43 @@ fn infer_binop(op: BinOp, left: &Ty, right: &Ty, span: Span, report: &mut Report
             }
             Ty::Bool
         }
+    }
+}
+
+/// §8.7: check that a trait-backed method call is valid — currently only
+/// `.to_string()` requires explicit `impl Stringable for T`.
+/// Other method calls are resolved at MIR lowering; we only flag the
+/// well-known Stringable requirement here.
+fn check_trait_method_call(
+    obj_ty: &Ty,
+    method: &str,
+    span: Span,
+    env: &TypeEnv,
+    report: &mut Report,
+) {
+    if method != "to_string" {
+        return; // only Stringable is enforced in v0.1
+    }
+    // Skip if we don't have a concrete named type to check (Error / primitives / generics).
+    let type_name = match obj_ty {
+        Ty::Named(name) => name.clone(),
+        Ty::Generic(name, _) => name.clone(),
+        _ => return,
+    };
+    // Primitives / prelude types have implicit Stringable via core formatting —
+    // not enforced here. Only user-defined types require an explicit impl.
+    // Heuristic: if the type is registered as an ADT/value/data and lacks the impl, warn.
+    if !env.has_trait_impl("Stringable", &type_name) && env.is_user_defined_type(&type_name) {
+        report.add(
+            Diagnostic::error(format!(
+                "type `{type_name}` does not implement Stringable; `to_string()` requires an explicit `impl Stringable for {type_name}`"
+            ))
+            .with_code("E0501")
+            .with_label(Label::new(span, "no Stringable impl for this type"))
+            .with_note(
+                "add `impl Stringable for ...` or call the method on a type that implements it.",
+            ),
+        );
     }
 }
 

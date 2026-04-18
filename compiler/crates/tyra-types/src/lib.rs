@@ -743,6 +743,395 @@ end
         assert!(has_w0401(&report), "expected W0401 for duplicate string literal");
     }
 
+    // ========================================================================
+    // Explicit `return` type check (§9.5, E0309)
+    // ========================================================================
+
+    fn has_e0309(report: &Report) -> bool {
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code.as_deref() == Some("E0309"))
+    }
+
+    #[test]
+    fn explicit_return_type_mismatch_detected() {
+        let source = r#"
+fn f(_ x: Int) -> Int
+  if x < 0
+    return "negative"
+  end
+  x
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0309(&report), "expected E0309 for return String from Int fn; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn explicit_return_type_ok() {
+        let source = r#"
+fn f(_ x: Int) -> Int
+  if x < 0
+    return 0
+  end
+  x
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0309(&report), "correct return type should not report E0309");
+    }
+
+    #[test]
+    fn return_unit_from_unit_fn_ok() {
+        let source = r#"
+fn greet(_ name: String) -> Unit
+  if name == ""
+    return
+  end
+  print(name)
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0309(&report), "bare return in Unit fn should be OK");
+    }
+
+    // ========================================================================
+    // ? operator return-type constraint (§12.2, E0310)
+    // ========================================================================
+
+    fn has_e0310(report: &Report) -> bool {
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code.as_deref() == Some("E0310"))
+    }
+
+    #[test]
+    fn propagate_in_non_result_fn_errors() {
+        // ? on Result requires the fn to return Result.
+        let source = r#"
+fn f(_ x: Result<Int, String>) -> Int
+  let n = x?
+  n
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0310(&report), "expected E0310 for ? in Int fn; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn propagate_in_matching_result_fn_ok() {
+        let source = r#"
+fn f(_ x: Result<Int, String>) -> Result<Int, String>
+  let n = x?
+  Ok(n)
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0310(&report), "? with matching Result fn should not report E0310");
+    }
+
+    #[test]
+    fn propagate_option_in_option_fn_ok() {
+        let source = r#"
+fn f(_ x: Option<Int>) -> Option<Int>
+  let n = x?
+  Some(n)
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0310(&report), "? Option in Option fn should not report E0310");
+    }
+
+    #[test]
+    fn propagate_option_in_result_fn_errors() {
+        // Cross-family: Option? in Result-returning fn is not allowed.
+        let source = r#"
+fn f(_ x: Option<Int>) -> Result<Int, String>
+  let n = x?
+  Ok(n)
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0310(&report), "Option? in Result fn should report E0310");
+    }
+
+    // Top-level `?` is caught earlier by the resolver (E0211) — ADR-0006 Rule 3.
+    // See resolver tests for that behavior; no duplicate check needed here.
+
+    // ========================================================================
+    // Trait impl required methods (§8.7, E0500)
+    // ========================================================================
+
+    fn has_e0500(report: &Report) -> bool {
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code.as_deref() == Some("E0500"))
+    }
+
+    #[test]
+    fn impl_missing_required_method_errors() {
+        let source = r#"
+trait Greeter
+  fn greet(self) -> String
+  fn farewell(self) -> String
+end
+value Person
+  name: String
+end
+impl Greeter for Person
+  fn greet(self) -> String
+    "hello"
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0500(&report), "expected E0500 for missing farewell method; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn impl_all_required_methods_ok() {
+        let source = r#"
+trait Greeter
+  fn greet(self) -> String
+end
+value Person
+  name: String
+end
+impl Greeter for Person
+  fn greet(self) -> String
+    "hello"
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0500(&report), "complete impl should not report E0500");
+    }
+
+    #[test]
+    fn stringable_impl_missing_to_string_errors() {
+        // Stringable is prelude-registered; missing `to_string` → E0500.
+        let source = r#"
+value Point
+  x: Int
+end
+impl Stringable for Point
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0500(&report), "expected E0500 for Stringable without to_string; got: {:?}", report.diagnostics());
+    }
+
+    // ========================================================================
+    // Stringable explicit impl requirement (§8.7, E0501)
+    // ========================================================================
+
+    fn has_e0501(report: &Report) -> bool {
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code.as_deref() == Some("E0501"))
+    }
+
+    #[test]
+    fn to_string_without_stringable_impl_errors() {
+        let source = r#"
+value Point
+  x: Int
+end
+fn show(_ p: Point) -> String
+  p.to_string()
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0501(&report), "expected E0501 for .to_string() without impl; got: {:?}", report.diagnostics());
+    }
+
+    // ========================================================================
+    // Ability tracking (§8 auto-derivation)
+    // ========================================================================
+
+    fn has_e0306(report: &Report) -> bool {
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code.as_deref() == Some("E0306"))
+    }
+
+    fn has_e0307(report: &Report) -> bool {
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code.as_deref() == Some("E0307"))
+    }
+
+    #[test]
+    fn value_with_float_field_cannot_eq() {
+        // Point has Float fields → no Eq auto-derive.
+        let source = r#"
+value Point
+  x: Float
+  y: Float
+end
+fn f(_ a: Point, _ b: Point) -> Bool
+  a == b
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0306(&report), "expected E0306 for Point==Point (Float blocks Eq); got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn value_int_fields_can_eq() {
+        let source = r#"
+value Pair
+  a: Int
+  b: Int
+end
+fn f(_ x: Pair, _ y: Pair) -> Bool
+  x == y
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0306(&report), "Int-field value should auto-derive Eq; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn single_field_int_value_has_ord() {
+        let source = r#"
+value Id
+  n: Int
+end
+fn f(_ a: Id, _ b: Id) -> Bool
+  a < b
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0307(&report), "single-field Int value should auto-derive Ord; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn two_field_value_no_ord() {
+        let source = r#"
+value Pair
+  a: Int
+  b: Int
+end
+fn f(_ x: Pair, _ y: Pair) -> Bool
+  x < y
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0307(&report), "two-field value should not have Ord; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn data_type_no_ord() {
+        // data types never auto-derive Ord (§8.6).
+        let source = r#"
+data User
+  id: Int
+end
+fn f(_ a: User, _ b: User) -> Bool
+  a < b
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0307(&report), "data type should not have Ord; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn forward_reference_ability_derivation_ok() {
+        // Outer refers to Inner defined AFTER it. Pass-1 should register both
+        // names; pass-2 should still compute correct abilities. Fails pre-C1-fix.
+        let source = r#"
+value Outer
+  inner: Inner
+end
+value Inner
+  x: Int
+end
+fn eq_outer(_ a: Outer, _ b: Outer) -> Bool
+  a == b
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0306(&report), "forward-ref value should auto-derive Eq; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn data_with_mut_field_no_hash_keeps_eq() {
+        // §8.6: mut field blocks Hash but Eq still derivable.
+        let source = r#"
+data User
+  id: Int
+  mut name: String
+end
+fn eq_user(_ a: User, _ b: User) -> Bool
+  a == b
+end
+"#;
+        let report = check_str(source);
+        // Eq is retained (Int/String both have Eq; mut only blocks Hash).
+        assert!(!has_e0306(&report), "data with mut field should still have Eq; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn zero_field_adt_variant_eq_ok() {
+        // Unit-style ADT variants have no fields; the ADT should still auto-derive Eq.
+        let source = r#"
+type Color =
+  | Red
+  | Green
+  | Blue
+fn eq(_ a: Color, _ b: Color) -> Bool
+  a == b
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0306(&report), "zero-field ADT variants should keep Eq; got: {:?}", report.diagnostics());
+    }
+
+    // ========================================================================
+    // Bare `return;` from non-Unit fn (§9.5, E0309)
+    // ========================================================================
+
+    #[test]
+    fn bare_return_from_non_unit_fn_errors() {
+        // `return` without value in a fn declared to return Int should be an error.
+        let source = r#"
+fn f(_ x: Int) -> Int
+  if x < 0
+    return
+  end
+  x
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0309(&report), "bare return in non-Unit fn should report E0309; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn to_string_with_stringable_impl_ok() {
+        let source = r#"
+value Point
+  x: Int
+end
+impl Stringable for Point
+  fn to_string(self) -> String
+    "p"
+  end
+end
+fn show(_ p: Point) -> String
+  p.to_string()
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0501(&report), "impl'd Stringable should not error; got: {:?}", report.diagnostics());
+    }
+
     #[test]
     fn triple_duplicate_constructor_warns_twice() {
         // 3 Red arms → arms 2 and 3 are redundant (2 distinct spans).

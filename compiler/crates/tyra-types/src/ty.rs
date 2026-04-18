@@ -1,6 +1,21 @@
 // Internal type representation for the Tyra type checker.
 // spec reference: §7.2 (primitives), §8 (type system), §9.4 (function types)
 
+/// Abilities a type can have (§8). Auto-derived for value/data/ADT per
+/// the spec's structural rules; primitives get theirs from the prelude.
+///
+/// - `Eq`: supports `==` / `!=`
+/// - `Hash`: can be a key in Set/Map (implies Eq)
+/// - `Ord`: supports `<` / `<=` / `>` / `>=`
+/// - `Debug`: supports string-interpolation and auto-Debug formatting
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Ability {
+    Eq,
+    Hash,
+    Ord,
+    Debug,
+}
+
 /// The internal representation of a Tyra type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ty {
