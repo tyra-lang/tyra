@@ -202,6 +202,11 @@ fn emit_function(
             Ty::Bool => {
                 bool_temps.insert(name.clone());
             }
+            Ty::Named(type_name) => {
+                if struct_map.get(type_name.as_str()).map(|i| i.is_data).unwrap_or(false) {
+                    string_temps.insert(name.clone()); // data type ptr treated as ptr
+                }
+            }
             _ => {}
         }
     }
@@ -220,6 +225,11 @@ fn emit_function(
                 }
                 _ => {}
             },
+            Instruction::StructInit { dest, type_name, .. } => {
+                if struct_map.get(type_name.as_str()).map(|i| i.is_data).unwrap_or(false) {
+                    string_temps.insert(dest.clone()); // data type StructInit result is a ptr
+                }
+            }
             Instruction::BinOp { dest, op, .. } => {
                 if matches!(
                     op,
@@ -268,6 +278,11 @@ fn emit_function(
                             string_temps.insert(dest.clone());
                         } else if *field_ty == Ty::Bool {
                             bool_temps.insert(dest.clone());
+                        } else if let Ty::Named(ft_name) = field_ty {
+                            // Field is itself a data type: result is a ptr
+                            if struct_map.get(ft_name.as_str()).map(|i| i.is_data).unwrap_or(false) {
+                                string_temps.insert(dest.clone());
+                            }
                         }
                     }
                 }
@@ -547,11 +562,14 @@ fn pre_scan_struct_types(
     let mut alloca_types: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
 
-    // Function params that are struct-typed
+    // Function params that are struct-typed (value types only; data types go to string_temps)
     for (name, ty) in &func.params {
         if let Ty::Named(type_name) = ty {
-            if struct_map.contains_key(type_name.as_str()) {
-                struct_temps.insert(name.clone(), type_name.clone());
+            if let Some(info) = struct_map.get(type_name.as_str()) {
+                if !info.is_data {
+                    struct_temps.insert(name.clone(), type_name.clone());
+                }
+                // data types already tracked as string_temps (ptr) in the caller
             }
         }
         // Generic params (List<T>, Option<T>, Result<T,E>)
@@ -569,7 +587,12 @@ fn pre_scan_struct_types(
             Instruction::StructInit {
                 dest, type_name, ..
             } => {
-                struct_temps.insert(dest.clone(), type_name.clone());
+                if let Some(info) = struct_map.get(type_name.as_str()) {
+                    if !info.is_data {
+                        struct_temps.insert(dest.clone(), type_name.clone());
+                    }
+                    // data types tracked as string_temps (ptr) in the caller scan
+                }
             }
             Instruction::AdtInit {
                 dest, type_name, ..
@@ -1008,12 +1031,23 @@ fn emit_instruction(
         } => {
             let info = &ctx.struct_map[type_name.as_str()];
             let llvm_ty = &info.llvm_name;
-            if fields.is_empty() {
+            if info.is_data {
+                // Data type: heap-allocate via malloc, then GEP+store each field (§8.6)
+                writeln!(out, "  %{dest}.size.gep = getelementptr {llvm_ty}, ptr null, i32 1").unwrap();
+                writeln!(out, "  %{dest}.size = ptrtoint ptr %{dest}.size.gep to i64").unwrap();
+                writeln!(out, "  %{dest} = call ptr @malloc(i64 %{dest}.size)").unwrap();
+                for (i, field_op) in fields.iter().enumerate() {
+                    let val = operand_ref(field_op, func);
+                    let field_ty = llvm_type_str(&info.field_types[i], ctx.struct_map);
+                    writeln!(out, "  %{dest}.f{i} = getelementptr {llvm_ty}, ptr %{dest}, i32 0, i32 {i}").unwrap();
+                    writeln!(out, "  store {field_ty} {val}, ptr %{dest}.f{i}").unwrap();
+                }
+            } else if fields.is_empty() {
                 // Zero-field struct: just produce undef
                 writeln!(out, "  ; %{dest} = {llvm_ty} undef (zero-field struct)")
                     .unwrap();
             } else {
-                // Build struct value via insertvalue chain starting from undef
+                // Value type: build struct value via insertvalue chain starting from undef
                 let mut current = "undef".to_string();
                 for (i, field_op) in fields.iter().enumerate() {
                     let val = operand_ref(field_op, func);
@@ -1040,13 +1074,41 @@ fn emit_instruction(
             field_index,
         } => {
             let info = &ctx.struct_map[type_name.as_str()];
-            let llvm_ty = &info.llvm_name;
             let val = operand_ref(obj, func);
-            writeln!(
-                out,
-                "  %{dest} = extractvalue {llvm_ty} {val}, {field_index}"
-            )
-            .unwrap();
+            if info.is_data {
+                // Data type: GEP + load the field from the heap struct
+                let llvm_ty = &info.llvm_name;
+                let field_llvm_ty = llvm_type_str(&info.field_types[*field_index as usize], ctx.struct_map);
+                writeln!(out, "  %{dest}.gep = getelementptr {llvm_ty}, ptr {val}, i32 0, i32 {field_index}").unwrap();
+                writeln!(out, "  %{dest} = load {field_llvm_ty}, ptr %{dest}.gep").unwrap();
+            } else {
+                // Value type: extractvalue from struct
+                let llvm_ty = &info.llvm_name;
+                writeln!(
+                    out,
+                    "  %{dest} = extractvalue {llvm_ty} {val}, {field_index}"
+                )
+                .unwrap();
+            }
+        }
+
+        Instruction::FieldSet {
+            obj,
+            type_name,
+            field_index,
+            value,
+        } => {
+            let info = &ctx.struct_map[type_name.as_str()];
+            let llvm_ty = &info.llvm_name;
+            let field_llvm_ty = llvm_type_str(&info.field_types[*field_index as usize], ctx.struct_map);
+            let ptr_val = operand_ref(obj, func);
+            let store_val = operand_ref(value, func);
+            let obj_name = match obj {
+                Operand::Var(n) => n.as_str(),
+                _ => "fset",
+            };
+            writeln!(out, "  %{obj_name}.f{field_index}.ptr = getelementptr {llvm_ty}, ptr {ptr_val}, i32 0, i32 {field_index}").unwrap();
+            writeln!(out, "  store {field_llvm_ty} {store_val}, ptr %{obj_name}.f{field_index}.ptr").unwrap();
         }
 
         Instruction::StringFormat {
