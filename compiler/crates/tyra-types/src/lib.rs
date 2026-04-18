@@ -211,4 +211,198 @@ end
         let report = check_str(source);
         assert!(!report.has_errors(), "errors: {:?}", report.diagnostics());
     }
+
+    // ========================================================================
+    // Match exhaustiveness checks (§10.3, E0400)
+    // ========================================================================
+
+    fn has_e0400(report: &Report) -> bool {
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code.as_deref() == Some("E0400"))
+    }
+
+    #[test]
+    fn non_exhaustive_bool_match_errors() {
+        let source = r#"
+let x = true
+match x
+when true
+  print("t")
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0400(&report), "expected E0400 for non-exhaustive Bool match; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn exhaustive_bool_match_ok() {
+        let source = r#"
+let x = true
+match x
+when true
+  print("t")
+when false
+  print("f")
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0400(&report), "exhaustive Bool match should not report E0400");
+    }
+
+    #[test]
+    fn wildcard_arm_satisfies_exhaustiveness() {
+        let source = r#"
+let x = true
+match x
+when true
+  print("t")
+when _
+  print("other")
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0400(&report), "wildcard arm should satisfy exhaustiveness");
+    }
+
+    #[test]
+    fn ident_binding_arm_satisfies_exhaustiveness() {
+        let source = r#"
+let x = true
+match x
+when true
+  print("t")
+when other
+  print("else")
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0400(&report), "ident binding arm acts as catch-all");
+    }
+
+    #[test]
+    fn exhaustive_user_adt_match_ok() {
+        let source = r#"
+type Color =
+  | Red
+  | Green
+  | Blue
+fn describe(_ c: Color) -> Unit
+  match c
+  when Red
+    print("r")
+  when Green
+    print("g")
+  when Blue
+    print("b")
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0400(&report), "exhaustive ADT match should not report E0400; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn non_exhaustive_user_adt_match_errors() {
+        let source = r#"
+type Color =
+  | Red
+  | Green
+  | Blue
+fn describe(_ c: Color) -> Unit
+  match c
+  when Red
+    print("r")
+  when Green
+    print("g")
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0400(&report), "expected E0400 for missing Blue; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn non_exhaustive_option_match_errors() {
+        // Only `Some(n)` arm, missing `None`.
+        let source = r#"
+fn f(_ x: Option<Int>) -> Int
+  match x
+  when Some(n)
+    n
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0400(&report), "expected E0400 for missing None arm; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn exhaustive_option_match_ok() {
+        let source = r#"
+fn f(_ x: Option<Int>) -> Int
+  match x
+  when Some(n)
+    n
+  when None
+    0
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0400(&report), "exhaustive Option match should not report E0400; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn non_exhaustive_result_match_errors() {
+        // Spec §10.3 uses Result as its primary example — missing Err arm.
+        let source = r#"
+fn f(_ x: Result<Int, String>) -> Int
+  match x
+  when Ok(n)
+    n
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0400(&report), "expected E0400 for missing Err arm; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn exhaustive_result_match_ok() {
+        let source = r#"
+fn f(_ x: Result<Int, String>) -> Int
+  match x
+  when Ok(n)
+    n
+  when Err(e)
+    0
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0400(&report), "exhaustive Result match should not report E0400; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn ident_catchall_on_user_adt_ok() {
+        // Ensures the ident-as-catchall path works for non-Bool subjects too.
+        let source = r#"
+type Color =
+  | Red
+  | Green
+  | Blue
+fn describe(_ c: Color) -> Unit
+  match c
+  when Red
+    print("r")
+  when other
+    print("else")
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0400(&report), "ident binding should catch-all for user ADT; got: {:?}", report.diagnostics());
+    }
 }

@@ -17,7 +17,7 @@
 //
 // spec reference: §8 (type system), §10.1 (operators), §12.2 (?)
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use tyra_ast::*;
 use tyra_diagnostics::{Diagnostic, Label, Report, Span};
@@ -28,12 +28,17 @@ use crate::ty::{Ty, types_compatible};
 #[derive(Debug)]
 pub struct TypeEnv {
     bindings: Vec<HashMap<String, Ty>>,
+    /// ADT variant names keyed by type name (§10.3 exhaustiveness).
+    /// - User-defined: `type Color = | Red | Green | Blue` → "Color" → ["Red", "Green", "Blue"]
+    /// - Prelude: "Option" → ["Some", "None"], "Result" → ["Ok", "Err"]
+    adt_variants: HashMap<String, Vec<String>>,
 }
 
 impl TypeEnv {
     pub fn new() -> Self {
         Self {
             bindings: vec![HashMap::new()],
+            adt_variants: HashMap::new(),
         }
     }
 
@@ -56,6 +61,16 @@ impl TypeEnv {
             }
         }
         None
+    }
+
+    /// Register an ADT with its variant names for exhaustiveness checking.
+    pub fn register_adt(&mut self, type_name: String, variants: Vec<String>) {
+        self.adt_variants.insert(type_name, variants);
+    }
+
+    /// Get variant names for an ADT type, if registered.
+    pub fn adt_variants(&self, type_name: &str) -> Option<&Vec<String>> {
+        self.adt_variants.get(type_name)
     }
 }
 
@@ -97,23 +112,36 @@ fn register_prelude(env: &mut TypeEnv) {
         "parse".to_string(),
         Ty::Fn(vec![Ty::Error], Box::new(Ty::Error)),
     );
+
+    // Prelude ADTs for §10.3 exhaustiveness checking.
+    env.register_adt("Option".into(), vec!["Some".into(), "None".into()]);
+    env.register_adt("Result".into(), vec!["Ok".into(), "Err".into()]);
 }
 
-/// Collect top-level function signatures for forward reference.
+/// Collect top-level function signatures and ADT definitions for forward reference.
 fn collect_top_level_types(items: &[Item], env: &mut TypeEnv) {
     for item in items {
-        if let Item::FnDef(f) = item {
-            let param_tys: Vec<Ty> = f
-                .params
-                .iter()
-                .map(|p| Ty::from_type_expr(&p.type_annotation))
-                .collect();
-            let ret_ty = f
-                .return_type
-                .as_ref()
-                .map(Ty::from_type_expr)
-                .unwrap_or(Ty::Unit);
-            env.define(f.name.clone(), Ty::Fn(param_tys, Box::new(ret_ty)));
+        match item {
+            Item::FnDef(f) => {
+                let param_tys: Vec<Ty> = f
+                    .params
+                    .iter()
+                    .map(|p| Ty::from_type_expr(&p.type_annotation))
+                    .collect();
+                let ret_ty = f
+                    .return_type
+                    .as_ref()
+                    .map(Ty::from_type_expr)
+                    .unwrap_or(Ty::Unit);
+                env.define(f.name.clone(), Ty::Fn(param_tys, Box::new(ret_ty)));
+            }
+            Item::TypeDef(t) => {
+                if let TypeDefKind::Adt(variants) = &t.kind {
+                    let names: Vec<String> = variants.iter().map(|v| v.name.clone()).collect();
+                    env.register_adt(t.name.clone(), names);
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -409,7 +437,8 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
         // Control flow
         ExprKind::If(if_expr) => check_if(if_expr, env, report),
         ExprKind::Match(m) => {
-            infer_expr(&m.subject, env, report);
+            let subject_ty = infer_expr(&m.subject, env, report);
+            check_match_exhaustiveness(&subject_ty, m, env, report);
             let mut arm_ty = Ty::Unit;
             for arm in &m.arms {
                 env.push();
@@ -649,6 +678,90 @@ fn bind_pattern_types(pat: &Pattern, env: &mut TypeEnv) {
             }
         }
         _ => {}
+    }
+}
+
+/// §10.3: `match` must be exhaustive.
+/// Reports E0400 when an enumerable subject type (ADT, Option, Result, Bool)
+/// has uncovered variants and no wildcard/ident catch-all arm.
+///
+/// Limitations (future work):
+/// - Nested Constructor exhaustiveness (e.g. Err(NotFound) only) not checked
+/// - Unknown Named types and generics other than Option/Result are skipped
+/// - Literal exhaustiveness (Int/String) not checked
+fn check_match_exhaustiveness(
+    subject_ty: &Ty,
+    match_expr: &MatchExpr,
+    env: &TypeEnv,
+    report: &mut Report,
+) {
+    // A wildcard or ident-binding arm is a catch-all — exhaustiveness is satisfied.
+    // Rationale: in a match context, a bare lowercase ident is always a fresh
+    // binding (not a constructor reference — those parse as `Constructor(name, _)`).
+    // This mirrors the semantics of Rust and OCaml: `when x` binds `x` to the
+    // subject and matches any value, identical to `when _` except that the value
+    // is nameable inside the arm body.
+    let has_catchall = match_expr.arms.iter().any(|arm| {
+        matches!(arm.pattern.kind, PatternKind::Wildcard | PatternKind::Ident(_))
+    });
+    if has_catchall {
+        return;
+    }
+
+    // Determine the expected variant set for the subject type.
+    let (type_display, expected): (String, Vec<String>) = match subject_ty {
+        Ty::Bool => ("Bool".into(), vec!["true".into(), "false".into()]),
+        Ty::Named(name) => match env.adt_variants(name) {
+            Some(vs) => (name.clone(), vs.clone()),
+            None => return, // not an enumerable type → skip
+        },
+        Ty::Generic(name, _) if name == "Option" || name == "Result" => {
+            match env.adt_variants(name) {
+                Some(vs) => (name.clone(), vs.clone()),
+                None => return,
+            }
+        }
+        _ => return, // non-enumerable or unresolved type → skip
+    };
+
+    if expected.is_empty() {
+        return;
+    }
+
+    // Collect variant names matched by Constructor/BoolLit patterns.
+    let mut covered: HashSet<String> = HashSet::new();
+    for arm in &match_expr.arms {
+        match &arm.pattern.kind {
+            PatternKind::Constructor(name, _) => {
+                covered.insert(name.clone());
+            }
+            PatternKind::BoolLit(b) => {
+                covered.insert(if *b { "true".into() } else { "false".into() });
+            }
+            _ => {}
+        }
+    }
+
+    let missing: Vec<String> = expected
+        .iter()
+        .filter(|v| !covered.contains(v.as_str()))
+        .cloned()
+        .collect();
+
+    if !missing.is_empty() {
+        let quoted: Vec<String> = missing.iter().map(|v| format!("`{v}`")).collect();
+        report.add(
+            Diagnostic::error(format!(
+                "non-exhaustive match on {type_display}: missing pattern {}",
+                quoted.join(", ")
+            ))
+            .with_code("E0400")
+            .with_label(Label::new(match_expr.span, "non-exhaustive patterns"))
+            .with_note(format!(
+                "not covered: {}. Add arms for these patterns or use `_` for a catch-all.",
+                quoted.join(", ")
+            )),
+        );
     }
 }
 
