@@ -382,6 +382,7 @@ print("done")
 
     #[test]
     fn data_field_mutation() {
+        // §8.6: data type field mutation uses FieldSet (GEP+store in-place), not struct rebuild
         let source = "data User\n  id: Int\n  mut name: String\nend\nmut user = User(id: 1, name: \"alice\")\nuser.name = \"bob\"\n";
         let prog = lower_str(source);
         let main = &prog.functions[0];
@@ -391,15 +392,25 @@ print("done")
             .iter()
             .any(|i| matches!(i, Instruction::Alloca { dest } if dest == "user"));
         assert!(has_alloca, "expected Alloca for mut user");
-        // Should have at least 2 StructInit (constructor + field mutation rebuild)
+        // Should have exactly 1 StructInit (constructor only; mutation uses FieldSet)
         let struct_inits = main
             .body
             .iter()
             .filter(|i| matches!(i, Instruction::StructInit { .. }))
             .count();
         assert!(
-            struct_inits >= 2,
-            "expected >= 2 StructInit (init + field mutation), got {struct_inits}"
+            struct_inits == 1,
+            "expected exactly 1 StructInit (constructor), got {struct_inits}"
+        );
+        // Should have exactly 1 FieldSet (in-place mutation via GEP+store)
+        let field_sets = main
+            .body
+            .iter()
+            .filter(|i| matches!(i, Instruction::FieldSet { .. }))
+            .count();
+        assert!(
+            field_sets == 1,
+            "expected exactly 1 FieldSet for user.name = \"bob\", got {field_sets}"
         );
     }
 

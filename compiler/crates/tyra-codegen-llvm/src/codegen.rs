@@ -304,6 +304,12 @@ fn emit_function(
                         Ty::Bool => {
                             bool_temps.insert(dest.clone());
                         }
+                        Ty::Named(type_name) => {
+                            // If return type is a data type, result is a ptr
+                            if struct_map.get(type_name.as_str()).map(|i| i.is_data).unwrap_or(false) {
+                                string_temps.insert(dest.clone());
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -348,6 +354,11 @@ fn emit_function(
                             float_temps.insert(dest.clone());
                         } else if *field_ty == Ty::Bool {
                             bool_temps.insert(dest.clone());
+                        } else if let Ty::Named(ft_name) = field_ty {
+                            // If payload type is a data type, result is a ptr
+                            if struct_map.get(ft_name.as_str()).map(|i| i.is_data).unwrap_or(false) {
+                                string_temps.insert(dest.clone());
+                            }
                         }
                     }
                 }
@@ -605,12 +616,15 @@ fn pre_scan_struct_types(
                 field_index,
                 ..
             } => {
-                // Check if the extracted field is itself a struct type
+                // Check if the extracted field is itself a value-type struct
                 if let Some(info) = struct_map.get(type_name.as_str()) {
                     if let Some(field_ty) = info.field_types.get(*field_index as usize) {
                         if let Ty::Named(ft_name) = field_ty {
-                            if struct_map.contains_key(ft_name.as_str()) {
-                                struct_temps.insert(dest.clone(), ft_name.clone());
+                            if let Some(ft_info) = struct_map.get(ft_name.as_str()) {
+                                if !ft_info.is_data {
+                                    struct_temps.insert(dest.clone(), ft_name.clone());
+                                }
+                                // data type fields are ptrs, tracked as string_temps in caller
                             }
                         }
                     }
@@ -635,11 +649,14 @@ fn pre_scan_struct_types(
                     }
                     _ => {}
                 }
-                // Check if the called function returns a struct type
+                // Check if the called function returns a value-type struct (not data types)
                 if let Some(sig) = fn_sigs.get(fname.as_str()) {
                     if let Ty::Named(type_name) = &sig.return_type {
-                        if struct_map.contains_key(type_name.as_str()) {
-                            struct_temps.insert(dest.clone(), type_name.clone());
+                        if let Some(ret_info) = struct_map.get(type_name.as_str()) {
+                            if !ret_info.is_data {
+                                struct_temps.insert(dest.clone(), type_name.clone());
+                            }
+                            // data type return values are ptrs, tracked as string_temps in caller
                         }
                     }
                     // Also check for generic return types (Option/Result)
@@ -683,7 +700,10 @@ fn pre_scan_struct_types(
             }
             Instruction::Load { dest, source } => {
                 if let Some(stype) = alloca_types.get(source).cloned() {
-                    struct_temps.insert(dest.clone(), stype);
+                    // Only propagate to struct_temps for value types (data types are ptrs)
+                    if struct_map.get(stype.as_str()).map(|i| !i.is_data).unwrap_or(true) {
+                        struct_temps.insert(dest.clone(), stype);
+                    }
                 }
             }
             Instruction::AdtPayload {
@@ -692,14 +712,17 @@ fn pre_scan_struct_types(
                 field_index,
                 ..
             } => {
-                // If the extracted payload field is itself a struct type, track it.
-                // This handles Result<StructType, E> and Option<StructType> unwrapping.
+                // If the extracted payload field is a value-type struct, track it.
+                // Data types are ptrs — tracked as string_temps in the caller scan.
                 if let Some(info) = struct_map.get(type_name.as_str()) {
                     if let Some(field_ty) = info.field_types.get(*field_index as usize) {
                         match field_ty {
                             Ty::Named(ft_name) => {
-                                if struct_map.contains_key(ft_name.as_str()) {
-                                    struct_temps.insert(dest.clone(), ft_name.clone());
+                                if let Some(ft_info) = struct_map.get(ft_name.as_str()) {
+                                    if !ft_info.is_data {
+                                        struct_temps.insert(dest.clone(), ft_name.clone());
+                                    }
+                                    // data type ptrs tracked as string_temps in caller
                                 }
                             }
                             Ty::Generic(..) => {
