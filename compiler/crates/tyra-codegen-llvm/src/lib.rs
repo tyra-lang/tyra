@@ -118,6 +118,7 @@ mod tests {
                     ("x".into(), tyra_types::Ty::Float),
                     ("y".into(), tyra_types::Ty::Float),
                 ],
+                is_data: false,
             }],
         };
 
@@ -172,6 +173,7 @@ mod tests {
                     ("first".into(), tyra_types::Ty::Int),
                     ("second".into(), tyra_types::Ty::Int),
                 ],
+                is_data: false,
             }],
         };
 
@@ -219,6 +221,7 @@ mod tests {
                     ("data".into(), tyra_types::Ty::String), // ptr
                     ("len".into(), tyra_types::Ty::Int),
                 ],
+                is_data: false,
             }],
         };
 
@@ -268,6 +271,7 @@ mod tests {
                     ("data".into(), tyra_types::Ty::String),
                     ("len".into(), tyra_types::Ty::Int),
                 ],
+                is_data: false,
             }],
         };
 
@@ -342,5 +346,73 @@ mod tests {
         assert!(ir.contains("@puts(ptr"), "expected puts call for panic message");
         assert!(ir.contains("call void @abort()"), "expected abort after panic");
         assert!(ir.contains("unreachable"), "expected unreachable after abort");
+    }
+
+    #[test]
+    fn data_type_struct_init_uses_malloc() {
+        // §8.6: data types are heap-allocated reference types
+        let program = tyra_mir::Program {
+            functions: vec![tyra_mir::Function {
+                name: "main".into(),
+                params: vec![],
+                return_type: tyra_types::Ty::Unit,
+                body: vec![
+                    tyra_mir::Instruction::StructInit {
+                        dest: "user".into(),
+                        type_name: "User".into(),
+                        fields: vec![tyra_mir::Operand::Const(tyra_mir::Constant::Int(1))],
+                    },
+                    tyra_mir::Instruction::Return { value: None },
+                ],
+                is_main: true,
+            }],
+            string_constants: vec![],
+            struct_defs: vec![tyra_mir::StructDef {
+                name: "User".into(),
+                fields: vec![("id".into(), tyra_types::Ty::Int)],
+                is_data: true,
+            }],
+        };
+
+        let ir = emit_llvm_ir(&program);
+        assert!(ir.contains("call ptr @malloc"), "data StructInit must use malloc");
+        assert!(ir.contains("getelementptr %struct.User"), "must use GEP to init fields");
+        assert!(!ir.contains("insertvalue"), "data types must not use insertvalue");
+    }
+
+    #[test]
+    fn data_type_field_get_uses_gep_load() {
+        // §8.6: field access on data type uses GEP + load, not extractvalue
+        let program = tyra_mir::Program {
+            functions: vec![tyra_mir::Function {
+                name: "get_id".into(),
+                params: vec![("user".into(), tyra_types::Ty::Named("User".into()))],
+                return_type: tyra_types::Ty::Int,
+                body: vec![
+                    tyra_mir::Instruction::FieldGet {
+                        dest: "id_val".into(),
+                        obj: tyra_mir::Operand::Var("user".into()),
+                        type_name: "User".into(),
+                        field_index: 0,
+                    },
+                    tyra_mir::Instruction::Return {
+                        value: Some(tyra_mir::Operand::Var("id_val".into())),
+                    },
+                ],
+                is_main: false,
+            }],
+            string_constants: vec![],
+            struct_defs: vec![tyra_mir::StructDef {
+                name: "User".into(),
+                fields: vec![("id".into(), tyra_types::Ty::Int)],
+                is_data: true,
+            }],
+        };
+
+        let ir = emit_llvm_ir(&program);
+        assert!(ir.contains("getelementptr %struct.User"), "FieldGet on data must use GEP");
+        assert!(ir.contains("load i64"), "FieldGet on data must load the field");
+        assert!(!ir.contains("extractvalue"), "data FieldGet must not use extractvalue");
+        assert!(ir.contains("define i64 @get_id(ptr %user)"), "data type param must be ptr");
     }
 }
