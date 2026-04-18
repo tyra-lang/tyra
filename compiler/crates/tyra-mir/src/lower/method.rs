@@ -17,8 +17,10 @@ impl super::LowerCtx {
         body: &mut Vec<Instruction>,
     ) {
         if let Some((type_name, field_defs)) = self.resolve_struct_type(obj_expr) {
-            // Field mutation is only allowed on data types (§8.6).
+            // Field mutation via `=` is only valid on data types (§8.6).
             // Value types are immutable — use copy() instead.
+            // The type checker should have rejected this path for value types already;
+            // this return is a defensive guard until exhaustive type checking is complete.
             if !self.data_types.contains(&type_name) {
                 return;
             }

@@ -345,7 +345,12 @@ fn emit_function(
                 field_index,
                 ..
             } => {
-                // Track payload type from the specified field of the ADT struct
+                // Track payload type from the specified field of the ADT struct.
+                // Note: this scan handles primitive/data-type payloads.
+                // The complementary pre_scan_struct_types handles value-type struct payloads.
+                // Both scans are needed: this one populates string_temps/float_temps/bool_temps,
+                // while pre_scan_struct_types populates struct_temps (for value-type structs).
+                // Inserts to string_temps are idempotent, so the overlap is harmless.
                 if let Some(info) = struct_map.get(type_name.as_str()) {
                     if let Some(field_ty) = info.field_types.get(*field_index as usize) {
                         if *field_ty == Ty::String {
@@ -375,6 +380,11 @@ fn emit_function(
                 Ty::Bool => {
                     bool_temps.insert(dest.clone());
                 }
+                // TODO: Ty::Named(name) where name is a data type → add to string_temps.
+                // Required when List<DataType> (e.g. List<User>) is supported.
+                // Without it, ListGet on a data type element would fall through to i64
+                // and miss the ptr tracking, causing the same struct_temps/string_temps
+                // confusion fixed in the FieldGet/Call/AdtPayload paths above.
                 _ => {}
             },
             Instruction::Load { dest, source } => {
@@ -1055,15 +1065,23 @@ fn emit_instruction(
             let info = &ctx.struct_map[type_name.as_str()];
             let llvm_ty = &info.llvm_name;
             if info.is_data {
-                // Data type: heap-allocate via malloc, then GEP+store each field (§8.6)
+                // Data type: heap-allocate via malloc, then GEP+store each field (§8.6).
+                // Follows the same malloc+null-check pattern as StringFormat.
                 writeln!(out, "  %{dest}.size.gep = getelementptr {llvm_ty}, ptr null, i32 1").unwrap();
                 writeln!(out, "  %{dest}.size = ptrtoint ptr %{dest}.size.gep to i64").unwrap();
                 writeln!(out, "  %{dest} = call ptr @malloc(i64 %{dest}.size)").unwrap();
+                // Abort on OOM (consistent with StringFormat)
+                writeln!(out, "  %{dest}.null = icmp eq ptr %{dest}, null").unwrap();
+                writeln!(out, "  br i1 %{dest}.null, label %{dest}.oom, label %{dest}.ok").unwrap();
+                writeln!(out, "{dest}.oom:").unwrap();
+                writeln!(out, "  call void @abort()").unwrap();
+                writeln!(out, "  unreachable").unwrap();
+                writeln!(out, "{dest}.ok:").unwrap();
                 for (i, field_op) in fields.iter().enumerate() {
                     let val = operand_ref(field_op, func);
                     let field_ty = llvm_type_str(&info.field_types[i], ctx.struct_map);
-                    writeln!(out, "  %{dest}.f{i} = getelementptr {llvm_ty}, ptr %{dest}, i32 0, i32 {i}").unwrap();
-                    writeln!(out, "  store {field_ty} {val}, ptr %{dest}.f{i}").unwrap();
+                    writeln!(out, "  %{dest}.f{i}.gep = getelementptr {llvm_ty}, ptr %{dest}, i32 0, i32 {i}").unwrap();
+                    writeln!(out, "  store {field_ty} {val}, ptr %{dest}.f{i}.gep").unwrap();
                 }
             } else if fields.is_empty() {
                 // Zero-field struct: just produce undef
@@ -1130,8 +1148,8 @@ fn emit_instruction(
                 Operand::Var(n) => n.as_str(),
                 _ => "fset",
             };
-            writeln!(out, "  %{obj_name}.f{field_index}.ptr = getelementptr {llvm_ty}, ptr {ptr_val}, i32 0, i32 {field_index}").unwrap();
-            writeln!(out, "  store {field_llvm_ty} {store_val}, ptr %{obj_name}.f{field_index}.ptr").unwrap();
+            writeln!(out, "  %{obj_name}.f{field_index}.gep = getelementptr {llvm_ty}, ptr {ptr_val}, i32 0, i32 {field_index}").unwrap();
+            writeln!(out, "  store {field_llvm_ty} {store_val}, ptr %{obj_name}.f{field_index}.gep").unwrap();
         }
 
         Instruction::StringFormat {
