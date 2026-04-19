@@ -979,4 +979,50 @@ end\n";
             "expected at least 2 AdtPayload extractions for nested ADT match, got {payload_count}"
         );
     }
+
+    #[test]
+    fn while_in_function_has_jump_into_loop_header() {
+        // Regression: the while-loop lowerer used to push the loop header
+        // label without a preceding Jump, leaving the enclosing basic
+        // block (allocas/stores from the function prologue) without a
+        // terminator. LLVM verifier rejected the IR. The fix emits an
+        // explicit Jump to the header before the Label.
+        let source = "\
+fn compute(_ n: Int) -> Int\n\
+  mut sum = 0\n\
+  mut i = 0\n\
+  while i < n\n\
+    sum = sum + i\n\
+    i = i + 1\n\
+  end\n\
+  sum\n\
+end\n";
+        let prog = lower_str(source);
+        let f = prog
+            .functions
+            .iter()
+            .find(|f| f.name == "compute")
+            .unwrap();
+
+        // Find index of the first loop-header Label.
+        let header_idx = f
+            .body
+            .iter()
+            .position(|i| matches!(i, Instruction::Label(name) if name.starts_with("while_")))
+            .expect("expected a while_* label");
+
+        assert!(header_idx > 0, "header label cannot be the first instruction");
+        match &f.body[header_idx - 1] {
+            Instruction::Jump { label } => {
+                let Instruction::Label(header) = &f.body[header_idx] else {
+                    unreachable!()
+                };
+                assert_eq!(
+                    label, header,
+                    "instruction before while header must jump to the header"
+                );
+            }
+            other => panic!("expected Jump into while header, got {other:?}"),
+        }
+    }
 }

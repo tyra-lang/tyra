@@ -345,6 +345,13 @@ impl super::LowerCtx {
                 let loop_label = self.fresh_label("while");
                 let end_label = self.fresh_label("while_end");
 
+                // LLVM basic blocks require an explicit terminator; jump
+                // into the loop header rather than falling through from
+                // the surrounding block (the previous block may end in an
+                // alloca/store sequence with no terminator).
+                body.push(Instruction::Jump {
+                    label: loop_label.clone(),
+                });
                 body.push(Instruction::Label(loop_label.clone()));
                 let cond = self.lower_expr(&w.condition, body);
                 body.push(Instruction::BranchIf {
