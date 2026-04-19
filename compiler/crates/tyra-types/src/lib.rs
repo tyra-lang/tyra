@@ -861,6 +861,108 @@ end
     // See resolver tests for that behavior; no duplicate check needed here.
 
     // ========================================================================
+    // ? operator Into<F> error conversion (§12.2, E0311)
+    // ========================================================================
+
+    fn has_e0311(report: &Report) -> bool {
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code.as_deref() == Some("E0311"))
+    }
+
+    #[test]
+    fn propagate_same_err_type_no_into_required() {
+        // Identity conversion (E == F) is auto-provided; no impl needed.
+        let source = r#"
+type Err = | Bad
+fn inner() -> Result<Int, Err>
+  Err(Err.Bad)
+end
+fn outer() -> Result<Int, Err>
+  let n = inner()?
+  Ok(n)
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0311(&report),
+            "same-type ? should not require Into impl; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn propagate_distinct_err_without_into_errors() {
+        // E != F and no `impl Into<F> for E` → E0311.
+        let source = r#"
+type InnerErr = | BadInput
+type OuterErr = | Wrapped
+fn inner() -> Result<Int, InnerErr>
+  Err(InnerErr.BadInput)
+end
+fn outer() -> Result<Int, OuterErr>
+  let n = inner()?
+  Ok(n)
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0311(&report),
+            "? across distinct error types without Into impl should fire E0311; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn propagate_distinct_err_with_into_ok() {
+        // `impl Into<OuterErr> for InnerErr` satisfies the constraint.
+        // Asserting the report is completely clean (not just free of E0311)
+        // guards against the check being skipped for unrelated reasons.
+        let source = r#"
+type InnerErr = | BadInput
+type OuterErr = | Wrapped
+impl Into<OuterErr> for InnerErr
+  fn into(self) -> OuterErr
+    OuterErr.Wrapped
+  end
+end
+fn inner() -> Result<Int, InnerErr>
+  Err(InnerErr.BadInput)
+end
+fn outer() -> Result<Int, OuterErr>
+  let n = inner()?
+  Ok(n)
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !report.has_errors(),
+            "? with declared Into impl should leave the report clean; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn propagate_into_check_skips_error_cascade() {
+        // If an earlier type error makes inner_ty's err slot Ty::Error, do
+        // not pile on E0311 — the root-cause diagnostic was already emitted.
+        let source = r#"
+type Err = | Bad
+fn outer() -> Result<Int, Err>
+  let n = notafunc()?
+  Ok(n)
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0311(&report),
+            "E0311 should not cascade onto upstream type errors; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    // ========================================================================
     // Trait impl required methods (§8.7, E0500)
     // ========================================================================
 

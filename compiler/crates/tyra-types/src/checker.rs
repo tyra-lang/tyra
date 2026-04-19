@@ -55,6 +55,10 @@ pub struct TypeEnv {
     /// Used to verify trait method bodies and to check that a type has an impl
     /// for a given trait (e.g. Stringable).
     trait_impls: HashMap<(String, String), Vec<String>>,
+    /// Registered `impl Into<To> for From` pairs (§12.2). Used by `?` on
+    /// Result to verify the error-type conversion is available.
+    /// `Into<T> for T` is auto-provided (identity) and not stored here.
+    into_impls: HashSet<(String, String)>,
     /// Named type → abilities granted to that type (§8 auto-derivation rules).
     /// Primitives are seeded in register_prelude; user types are computed from
     /// their fields/variants in collect_top_level_types.
@@ -72,6 +76,7 @@ impl TypeEnv {
             return_type_stack: Vec::new(),
             trait_methods: HashMap::new(),
             trait_impls: HashMap::new(),
+            into_impls: HashSet::new(),
             type_abilities: HashMap::new(),
             user_defined_types: HashSet::new(),
         }
@@ -139,6 +144,20 @@ impl TypeEnv {
     pub fn has_trait_impl(&self, trait_name: &str, type_name: &str) -> bool {
         self.trait_impls
             .contains_key(&(trait_name.to_string(), type_name.to_string()))
+    }
+
+    /// Register `impl Into<to> for from` (§12.2).
+    pub fn register_into_impl(&mut self, from: String, to: String) {
+        self.into_impls.insert((from, to));
+    }
+
+    /// `from` converts to `to` via `Into`? Returns true for the auto-provided
+    /// identity (`Into<T> for T`) as well as any explicitly registered impl.
+    pub fn has_into_conversion(&self, from: &str, to: &str) -> bool {
+        from == to
+            || self
+                .into_impls
+                .contains(&(from.to_string(), to.to_string()))
     }
 
     /// Register the ability set for a named type (§8 auto-derivation).
@@ -304,7 +323,15 @@ fn collect_top_level_types(items: &[Item], env: &mut TypeEnv) {
             Item::ImplDef(i) => {
                 let methods: Vec<String> = i.methods.iter().map(|m| m.name.clone()).collect();
                 if let Some(target_name) = type_expr_name(&i.target_type) {
-                    env.register_impl(i.trait_name.clone(), target_name, methods);
+                    env.register_impl(i.trait_name.clone(), target_name.clone(), methods);
+                    // §12.2: track `impl Into<To> for From` so `?` on Result
+                    // can verify the error conversion exists.
+                    if i.trait_name == "Into"
+                        && i.trait_type_args.len() == 1
+                        && let Some(to_name) = type_expr_name(&i.trait_type_args[0])
+                    {
+                        env.register_into_impl(target_name, to_name);
+                    }
                 }
             }
             _ => {}
@@ -784,8 +811,6 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
 
             // §12.2: the enclosing fn must return the same family (Option/Result).
             // Option<T>? requires fn -> Option<U>; Result<T,E>? requires fn -> Result<U,F>.
-            // The E -> F conversion (Into) is checked at MIR lowering; here we only
-            // check the family compatibility.
             if let (Some(kind), Some(ret)) = (inner_kind, env.current_return_type()) {
                 let ok = match ret {
                     Ty::Generic(name, args) => match kind {
@@ -811,6 +836,46 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                             "change the function's return type to {kind}<...>, or handle the {kind} explicitly."
                         )),
                     );
+                }
+
+                // §12.2: for Result, verify the error-type Into<F> conversion
+                // is available (or identity). E0311 fires when the inner E
+                // differs from the enclosing F and no `impl Into<F> for E`
+                // has been declared.
+                if kind == "Result"
+                    && let Some(inner_e) = inner_ty.result_err_type()
+                    && let Some(ret_e) = ret.result_err_type()
+                    // Skip cascade: if either error slot is already Ty::Error
+                    // the upstream type check has already reported the root
+                    // cause. Avoid chaining a misleading E0311 on top.
+                    && !inner_e.is_error()
+                    && !ret_e.is_error()
+                {
+                    let from = inner_e.monomorphized_name();
+                    let to = ret_e.monomorphized_name();
+                    if !env.has_into_conversion(&from, &to) {
+                        report.add(
+                            Diagnostic::error(format!(
+                                "`?` cannot convert error type {} into {}: no `impl Into<{}> for {}` found",
+                                inner_e.display_name(),
+                                ret_e.display_name(),
+                                ret_e.display_name(),
+                                inner_e.display_name(),
+                            ))
+                            .with_code("E0311")
+                            .with_label(Label::new(
+                                expr.span,
+                                "error type conversion required here",
+                            ))
+                            .with_note(format!(
+                                "declare `impl Into<{}> for {}` with a `fn into(self) -> {}` method, \
+                                 or restructure to return the inner error directly.",
+                                ret_e.display_name(),
+                                inner_e.display_name(),
+                                ret_e.display_name(),
+                            )),
+                        );
+                    }
                 }
             }
             // Top-level `?` is reported as E0211 by the resolver (ADR-0006 Rule 3);
