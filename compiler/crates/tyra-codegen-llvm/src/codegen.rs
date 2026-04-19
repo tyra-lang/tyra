@@ -138,7 +138,10 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare i32 @puts(ptr)").unwrap();
     writeln!(out, "declare i32 @printf(ptr, ...)").unwrap();
     writeln!(out, "declare i32 @snprintf(ptr, i64, ptr, ...)").unwrap();
-    writeln!(out, "declare ptr @malloc(i64)").unwrap();
+    // Boehm GC (libgc): tracing conservative collector. See ADR-0007.
+    // All heap allocations go through GC_malloc; GC_init is called at @main entry.
+    writeln!(out, "declare ptr @GC_malloc(i64)").unwrap();
+    writeln!(out, "declare void @GC_init()").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
     writeln!(out, "declare void @exit(i32)").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();
@@ -215,6 +218,8 @@ fn emit_function(
 
     // Save argc/argv to globals for sys.args()
     if func.is_main {
+        // Initialize Boehm GC before any heap allocation (ADR-0007).
+        writeln!(out, "  call void @GC_init()").unwrap();
         writeln!(out, "  store i32 %argc, ptr @.tyra.argc").unwrap();
         writeln!(out, "  store ptr %argv, ptr @.tyra.argv").unwrap();
     }

@@ -144,13 +144,28 @@ See [spec §3 and §22](docs/spec/ja/language-spec.md) for the full list.
 
 ## Building from source
 
-> Requires Rust 1.85+ and LLVM 21.
+> Requires Rust 1.85+, LLVM 21, and Boehm GC (`bdw-gc`).
+
+Install prerequisites:
+
+```bash
+# macOS
+brew install bdw-gc
+
+# Debian / Ubuntu
+sudo apt install libgc-dev
+```
+
+Then build:
 
 ```bash
 git clone https://github.com/tyra-lang/tyra.git
 cd tyra/compiler
 cargo build --release
 ```
+
+Tyra's reference implementation links against Boehm GC for heap
+reclamation (see [ADR-0007](docs/design/0007-boehm-gc-reference-impl.md)).
 
 The compiler is not yet functional. This builds the skeleton.
 

@@ -293,15 +293,26 @@ pub fn compile_to_binary(source_path: &Path, output_path: &Path) -> CompileResul
         };
     }
 
-    // Compile with clang
-    let clang_result = Command::new("clang")
-        .args([
-            ir_path.to_str().unwrap(),
-            "-o",
-            output_path.to_str().unwrap(),
-            "-O0",
-        ])
-        .output();
+    // Compile with clang, linking Boehm GC (libgc). See ADR-0007.
+    let mut clang_args: Vec<String> = vec![
+        ir_path.to_str().unwrap().into(),
+        "-o".into(),
+        output_path.to_str().unwrap().into(),
+        "-O0".into(),
+    ];
+    // Probe common libgc install prefixes. Homebrew on Apple Silicon and Intel
+    // place libgc under different roots; Linux package managers use the default
+    // search path.
+    for prefix in ["/opt/homebrew/opt/bdw-gc", "/usr/local/opt/bdw-gc"] {
+        let lib_dir = format!("{prefix}/lib");
+        if std::path::Path::new(&lib_dir).is_dir() {
+            clang_args.push(format!("-L{lib_dir}"));
+            break;
+        }
+    }
+    clang_args.push("-lgc".into());
+
+    let clang_result = Command::new("clang").args(&clang_args).output();
 
     // Clean up IR file
     let _ = std::fs::remove_file(&ir_path);
@@ -313,9 +324,22 @@ pub fn compile_to_binary(source_path: &Path, output_path: &Path) -> CompileResul
             } else {
                 let mut report = result.report;
                 let stderr = String::from_utf8_lossy(&output.stderr);
+                // Detect missing libgc and surface an actionable diagnostic
+                // instead of the raw linker error.
+                let msg = if stderr.contains("-lgc") || stderr.contains("library 'gc'")
+                    || stderr.contains("cannot find -lgc")
+                {
+                    format!(
+                        "libgc (Boehm GC) not found. Install with:\n  \
+                         macOS: brew install bdw-gc\n  \
+                         Debian/Ubuntu: apt install libgc-dev\n\n\
+                         Original linker error:\n{stderr}"
+                    )
+                } else {
+                    format!("clang failed: {stderr}")
+                };
                 report.add(
-                    tyra_diagnostics::Diagnostic::error(format!("clang failed: {stderr}"))
-                        .with_code("E0500"),
+                    tyra_diagnostics::Diagnostic::error(msg).with_code("E0500"),
                 );
                 CompileResult {
                     success: false,

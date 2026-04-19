@@ -277,11 +277,13 @@ pub(crate) fn emit_instruction(
             let info = &ctx.struct_map[type_name.as_str()];
             let llvm_ty = &info.llvm_name;
             if info.is_data {
-                // Data type: heap-allocate via malloc, then GEP+store each field (§8.6).
-                // Follows the same malloc+null-check pattern as StringFormat.
+                // Data type: heap-allocate via GC_malloc, then GEP+store each field (§8.6).
+                // Follows the same GC_malloc+null-check pattern as StringFormat.
+                // Note: Boehm GC_malloc never returns NULL (calls GC_oom_func on OOM,
+                // default aborts). The null check is defensive/documentary only.
                 writeln!(out, "  %{dest}.size.gep = getelementptr {llvm_ty}, ptr null, i32 1").unwrap();
                 writeln!(out, "  %{dest}.size = ptrtoint ptr %{dest}.size.gep to i64").unwrap();
-                writeln!(out, "  %{dest} = call ptr @malloc(i64 %{dest}.size)").unwrap();
+                writeln!(out, "  %{dest} = call ptr @GC_malloc(i64 %{dest}.size)").unwrap();
                 // Abort on OOM (consistent with StringFormat)
                 writeln!(out, "  %{dest}.null = icmp eq ptr %{dest}, null").unwrap();
                 writeln!(out, "  br i1 %{dest}.null, label %{dest}.oom, label %{dest}.ok").unwrap();
@@ -369,13 +371,13 @@ pub(crate) fn emit_instruction(
             format_ref,
             args,
         } => {
-            // Heap-allocate a 1024-byte buffer for the formatted string.
-            // Uses malloc so the string survives function return (needed for to_string()).
+            // Heap-allocate a 1024-byte buffer for the formatted string via GC.
             // Strings longer than 1024 bytes are truncated by snprintf.
-            // TODO: GC integration to free these buffers.
+            // TODO(M8+): use GC_malloc_atomic once atomic/non-atomic classification
+            // is implemented — string buffers contain no pointers.
             writeln!(
                 out,
-                "  %{dest} = call ptr @malloc(i64 1024)"
+                "  %{dest} = call ptr @GC_malloc(i64 1024)"
             )
             .unwrap();
             // Abort if malloc returns null (out of memory)

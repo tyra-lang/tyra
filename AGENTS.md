@@ -427,6 +427,7 @@ Read these when working on the corresponding areas:
 | [0004](../docs/design/0004-unify-propagation-operator.md) | `?` for both Result and Option | error handling, parser |
 | [0005](../docs/design/0005-multi-constraint-generics.md) | Up to 2 constraints | generics, type checker |
 | [0006](../docs/design/0006-top-level-expressions.md) | Top-level expressions as implicit main | parser, driver, entry point |
+| [0007](../docs/design/0007-boehm-gc-reference-impl.md) | Boehm GC as v0.1 reference collector | codegen, driver, runtime |
 
 ### Entry-point style guidance (ADR-0006)
 

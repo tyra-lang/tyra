@@ -157,7 +157,7 @@ fn emit_sys_args(out: &mut String, dest: Option<&str>, ctx: &EmitCtx) {
     writeln!(out, "  %{d}.argv = load ptr, ptr @.tyra.argv").unwrap();
     // Malloc data array (argc * 8 bytes for ptr array)
     writeln!(out, "  %{d}.size = mul i64 %{d}.argc64, 8").unwrap();
-    writeln!(out, "  %{d}.data = call ptr @malloc(i64 %{d}.size)").unwrap();
+    writeln!(out, "  %{d}.data = call ptr @GC_malloc(i64 %{d}.size)").unwrap();
     // Copy argv pointers into list data using alloca-based loop
     // (alloca avoids phi predecessor issues in non-entry blocks)
     writeln!(out, "  %{d}.ctr = alloca i64").unwrap();

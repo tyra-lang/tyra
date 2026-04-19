@@ -93,11 +93,11 @@ fn emit_list_init(
                 .unwrap();
             writeln!(out, "  %{dest}.esz = ptrtoint ptr %{dest}.esz_ptr to i64").unwrap();
             writeln!(out, "  %{dest}.tsz = mul i64 {count}, %{dest}.esz").unwrap();
-            writeln!(out, "  %{dest}.ptr = call ptr @malloc(i64 %{dest}.tsz)").unwrap();
+            writeln!(out, "  %{dest}.ptr = call ptr @GC_malloc(i64 %{dest}.tsz)").unwrap();
         } else {
             let elem_size = llvm_elem_size(elem_type);
             let total_size = count * elem_size;
-            writeln!(out, "  %{dest}.ptr = call ptr @malloc(i64 {total_size})").unwrap();
+            writeln!(out, "  %{dest}.ptr = call ptr @GC_malloc(i64 {total_size})").unwrap();
         }
         // Null check + abort on OOM
         writeln!(out, "  %{dest}.null = icmp eq ptr %{dest}.ptr, null").unwrap();

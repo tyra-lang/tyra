@@ -48,6 +48,19 @@ mod tests {
         assert!(ir.contains("define i32 @main(i32 %argc, ptr %argv)"));
         assert!(ir.contains("call"));
         assert!(ir.contains("ret i32 0"));
+        // ADR-0007: main must initialize Boehm GC before any allocation.
+        assert!(
+            ir.contains("call void @GC_init()"),
+            "main must invoke GC_init at entry (ADR-0007)"
+        );
+        assert!(
+            ir.contains("declare void @GC_init()"),
+            "GC_init extern declaration must be emitted"
+        );
+        assert!(
+            ir.contains("declare ptr @GC_malloc(i64)"),
+            "GC_malloc extern declaration must be emitted"
+        );
     }
 
     #[test]
@@ -189,8 +202,8 @@ mod tests {
     }
 
     #[test]
-    fn list_init_emits_malloc_and_stores() {
-        // §11: ListInit should emit malloc, GEP+store per element, insertvalue
+    fn list_init_emits_gc_malloc_and_stores() {
+        // §11: ListInit should emit GC_malloc, GEP+store per element, insertvalue
         let program = tyra_mir::Program {
             functions: vec![tyra_mir::Function {
                 name: "main".into(),
@@ -230,7 +243,7 @@ mod tests {
 
         let ir = emit_llvm_ir(&program);
         assert!(ir.contains("%struct.List__Int = type { ptr, i64 }"));
-        assert!(ir.contains("@malloc(i64 16)")); // 2 elements * 8 bytes
+        assert!(ir.contains("@GC_malloc(i64 16)")); // 2 elements * 8 bytes
         assert!(ir.contains("getelementptr i64"));
         assert!(ir.contains("insertvalue %struct.List__Int"));
     }
@@ -352,7 +365,7 @@ mod tests {
     }
 
     #[test]
-    fn data_type_struct_init_uses_malloc() {
+    fn data_type_struct_init_uses_gc_malloc() {
         // §8.6: data types are heap-allocated reference types
         let program = tyra_mir::Program {
             functions: vec![tyra_mir::Function {
@@ -378,7 +391,7 @@ mod tests {
         };
 
         let ir = emit_llvm_ir(&program);
-        assert!(ir.contains("call ptr @malloc"), "data StructInit must use malloc");
+        assert!(ir.contains("call ptr @GC_malloc"), "data StructInit must use GC_malloc");
         assert!(ir.contains("getelementptr %struct.User"), "must use GEP to init fields");
         assert!(!ir.contains("insertvalue"), "data types must not use insertvalue");
     }

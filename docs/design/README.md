@@ -65,3 +65,4 @@ ADRs are numbered sequentially: `0001`, `0002`, etc. Numbers are never reused. I
 | [0004](0004-unify-propagation-operator.md) | Remove `or return` and extend `?` to Option | Accepted | 2026-04-15 |
 | [0005](0005-multi-constraint-generics.md) | Allow up to two constraints per type parameter | Accepted | 2026-04-15 |
 | [0006](0006-top-level-expressions.md) | Allow top-level expressions as implicit main | Accepted | 2026-04-15 |
+| [0007](0007-boehm-gc-reference-impl.md) | Use Boehm GC as the v0.1 reference garbage collector | Accepted | 2026-04-19 |
