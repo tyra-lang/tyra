@@ -448,15 +448,50 @@ impl super::LowerCtx {
             }
         }
 
-        // Special case: tasks.join_all(list) is identity — return the list directly (§17.1).
-        // With v0.1 synchronous execution, spawn is a no-op so tasks are plain values.
+        // Special case: tasks.join_all(list) (§17.1, M9). If the list elements
+        // are live Task<T> handles (tracked via task_result_types), lower to a
+        // JoinAll instruction so codegen can await every handle in order and
+        // return a List<T> of unboxed results. Otherwise (tasks are plain
+        // values from the async-as-sync stub path) fall back to identity.
         if let ExprKind::FieldAccess(obj, fn_name) = &callee.kind
             && let ExprKind::Ident(module_name) = &obj.kind
             && self.imported_modules.contains(module_name.as_str())
             && fn_name == "join_all"
             && args.len() == 1
         {
-            return self.lower_expr(&args[0].value, body);
+            let list_expr = &args[0].value;
+            // Inspect the list literal elements to recover their task result
+            // type. For non-literal arguments this best-effort lookup falls
+            // back to the identity path.
+            if let ExprKind::ListLit(elements) = &list_expr.kind {
+                // Lower the whole list first (consumes elements).
+                // But we need task_result_types of each element, which we
+                // can only get by inspecting *before* the list is built.
+                let elem_task_ty = elements.first().and_then(|e| {
+                    if let ExprKind::Ident(name) = &e.kind {
+                        self.task_result_types.get(name).cloned()
+                    } else {
+                        None
+                    }
+                });
+                if let Some(elem_ty) = elem_task_ty {
+                    let list_temp = self.lower_expr(list_expr, body);
+                    let dest = self.fresh_temp();
+                    let list_ty =
+                        Ty::Generic("List".into(), vec![elem_ty.clone()]);
+                    self.register_adt_type(&list_ty);
+                    body.push(Instruction::JoinAll {
+                        dest: dest.clone(),
+                        list: Operand::Var(list_temp),
+                        elem_type: elem_ty.clone(),
+                    });
+                    self.generic_var_types.insert(dest.clone(), list_ty.clone());
+                    self.var_types
+                        .insert(dest.clone(), list_ty.monomorphized_name());
+                    return dest;
+                }
+            }
+            return self.lower_expr(list_expr, body);
         }
 
         // Check for module-qualified call: math.square() → math__square() (§13)

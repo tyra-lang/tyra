@@ -512,7 +512,10 @@ pub(crate) fn emit_instruction(
             obj,
             type_name,
         } => {
-            let info = &ctx.struct_map[type_name.as_str()];
+            let info = ctx
+                .struct_map
+                .get(type_name.as_str())
+                .unwrap_or_else(|| panic!("AdtTag: unknown struct {type_name}"));
             let llvm_ty = &info.llvm_name;
             let val = operand_ref(obj, func);
             // Extract tag (field 0, i8) and extend to i64 for comparison
@@ -551,7 +554,270 @@ pub(crate) fn emit_instruction(
         | Instruction::ListGetSafe { .. } => {
             emit_list_instruction(out, inst, func, ctx);
         }
+
+        Instruction::Spawn {
+            dest,
+            func: target_fn,
+            args,
+            arg_types,
+            result_type,
+        } => {
+            emit_spawn(out, dest, target_fn, args, arg_types, result_type, func, ctx);
+        }
+
+        Instruction::Await {
+            dest,
+            task,
+            result_type,
+        } => {
+            emit_await(out, dest, task, result_type, func, ctx);
+        }
+
+        Instruction::JoinAll {
+            dest,
+            list,
+            elem_type,
+        } => {
+            emit_join_all(out, dest, list, elem_type, func, ctx);
+        }
     }
+}
+
+/// Emit inline loop: await every i64 task handle in `list`, load the unboxed
+/// T from each result box, and build a fresh `%struct.List__T` with the
+/// unboxed values. `list` operand type: `{ ptr data, i64 len }` of i64
+/// handles (task handles travel as i64 through the MIR).
+fn emit_join_all(
+    out: &mut String,
+    dest: &str,
+    list: &Operand,
+    elem_type: &tyra_types::Ty,
+    func: &Function,
+    ctx: &EmitCtx,
+) {
+    let list_ref = operand_ref(list, func);
+    let elem_llvm = llvm_type_str(elem_type, ctx.struct_map);
+    // Look up the incoming (handle) list's monomorphized struct name from
+    // the type scan. Falls back to List__Int for bare spawn temps which the
+    // scan does not tag (handles travel as i64). All Tyra lists share the
+    // `{ ptr, i64 }` shape regardless, so the handle-list may legitimately
+    // use a different monomorphization than the result list_ty below.
+    let in_list_ty = if let Operand::Var(name) = list {
+        ctx.struct_temps
+            .get(name)
+            .map(|s| format!("%struct.{s}"))
+            .unwrap_or_else(|| "%struct.List__Int".to_string())
+    } else {
+        "%struct.List__Int".to_string()
+    };
+    writeln!(
+        out,
+        "  %{dest}.in_data = extractvalue {in_list_ty} {list_ref}, 0"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{dest}.n = extractvalue {in_list_ty} {list_ref}, 1"
+    )
+    .unwrap();
+    let list_ty = format!("%struct.List__{}", elem_type.monomorphized_name());
+
+    // Allocate result array.
+    writeln!(
+        out,
+        "  %{dest}.esz_ptr = getelementptr {elem_llvm}, ptr null, i32 1"
+    )
+    .unwrap();
+    writeln!(out, "  %{dest}.esz = ptrtoint ptr %{dest}.esz_ptr to i64").unwrap();
+    writeln!(
+        out,
+        "  %{dest}.tsz = mul i64 %{dest}.n, %{dest}.esz"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{dest}.out_data = call ptr @GC_malloc(i64 %{dest}.tsz)"
+    )
+    .unwrap();
+
+    // Loop counter.
+    writeln!(out, "  %{dest}.ctr = alloca i64").unwrap();
+    writeln!(out, "  store i64 0, ptr %{dest}.ctr").unwrap();
+    writeln!(out, "  br label %{dest}.loop").unwrap();
+    writeln!(out, "{dest}.loop:").unwrap();
+    writeln!(out, "  %{dest}.i = load i64, ptr %{dest}.ctr").unwrap();
+    writeln!(
+        out,
+        "  %{dest}.done = icmp sge i64 %{dest}.i, %{dest}.n"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  br i1 %{dest}.done, label %{dest}.end, label %{dest}.body"
+    )
+    .unwrap();
+    writeln!(out, "{dest}.body:").unwrap();
+    writeln!(
+        out,
+        "  %{dest}.hgep = getelementptr i64, ptr %{dest}.in_data, i64 %{dest}.i"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{dest}.handle = load i64, ptr %{dest}.hgep"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{dest}.tptr = inttoptr i64 %{dest}.handle to ptr"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{dest}.box = call ptr @tyra_task_await(ptr %{dest}.tptr)"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{dest}.val = load {elem_llvm}, ptr %{dest}.box"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{dest}.ogep = getelementptr {elem_llvm}, ptr %{dest}.out_data, i64 %{dest}.i"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  store {elem_llvm} %{dest}.val, ptr %{dest}.ogep"
+    )
+    .unwrap();
+    writeln!(out, "  %{dest}.next = add i64 %{dest}.i, 1").unwrap();
+    writeln!(out, "  store i64 %{dest}.next, ptr %{dest}.ctr").unwrap();
+    writeln!(out, "  br label %{dest}.loop").unwrap();
+    writeln!(out, "{dest}.end:").unwrap();
+
+    // Build the output list struct.
+    writeln!(
+        out,
+        "  %{dest}.s0 = insertvalue {list_ty} undef, ptr %{dest}.out_data, 0"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{dest} = insertvalue {list_ty} %{dest}.s0, i64 %{dest}.n, 1"
+    )
+    .unwrap();
+}
+
+/// Emit `spawn func(args)` — box args into a GC-managed struct, register
+/// a per-site thunk, call `tyra_task_spawn`, and bind the handle to `dest`.
+fn emit_spawn(
+    out: &mut String,
+    dest: &str,
+    target_fn: &str,
+    args: &[Operand],
+    arg_types: &[tyra_types::Ty],
+    result_type: &tyra_types::Ty,
+    func: &Function,
+    ctx: &EmitCtx,
+) {
+    // Reserve a thunk id and register metadata. The thunk body is emitted
+    // after all user functions by emit_spawn_thunk.
+    let id = {
+        let mut thunks = ctx.spawn_thunks.borrow_mut();
+        let id = thunks.len();
+        thunks.push(crate::codegen::SpawnThunk {
+            id,
+            func: target_fn.to_string(),
+            arg_types: arg_types.to_vec(),
+            result_type: result_type.clone(),
+        });
+        id
+    };
+
+    // Pack args into a GC_malloc'd struct if there are any; otherwise pass null.
+    let args_box = if args.is_empty() {
+        "null".into()
+    } else {
+        let args_ty = format!("%struct.__tyra_spawn_args_{id}");
+        // sizeof via GEP(null, 1) trick.
+        writeln!(
+            out,
+            "  %{dest}.asz_ptr = getelementptr {args_ty}, ptr null, i32 1"
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "  %{dest}.asz = ptrtoint ptr %{dest}.asz_ptr to i64"
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "  %{dest}.args = call ptr @GC_malloc(i64 %{dest}.asz)"
+        )
+        .unwrap();
+
+        // Store each arg into its slot via GEP.
+        for (i, (arg, ty)) in args.iter().zip(arg_types.iter()).enumerate() {
+            let val = operand_ref(arg, func);
+            let llvm_ty = llvm_type_str(ty, ctx.struct_map);
+            writeln!(
+                out,
+                "  %{dest}.ap{i} = getelementptr {args_ty}, ptr %{dest}.args, i32 0, i32 {i}"
+            )
+            .unwrap();
+            writeln!(out, "  store {llvm_ty} {val}, ptr %{dest}.ap{i}").unwrap();
+        }
+        format!("%{dest}.args")
+    };
+
+    // Task handle is carried as i64 through the MIR so it can flow through
+    // lists and mixed-type expressions. Codegen round-trips through ptr at
+    // Spawn (out) and Await (in).
+    // SAFETY: ptrtoint/inttoptr assumes 64-bit flat pointers. v0.1 targets
+    // macOS/Linux x86_64 and aarch64; CHERI and 32-bit platforms are out of
+    // scope and will need explicit ptr-valued handles instead of i64.
+    writeln!(
+        out,
+        "  %{dest}.h = call ptr @tyra_task_spawn(ptr @__tyra_spawn_thunk_{id}, ptr {args_box})"
+    )
+    .unwrap();
+    writeln!(out, "  %{dest} = ptrtoint ptr %{dest}.h to i64").unwrap();
+}
+
+/// Emit `dest = task.await` — call runtime, load boxed result.
+fn emit_await(
+    out: &mut String,
+    dest: &str,
+    task: &Operand,
+    result_type: &tyra_types::Ty,
+    func: &Function,
+    ctx: &EmitCtx,
+) {
+    let task_ref = operand_ref(task, func);
+    // Task handle travels as i64 through the MIR; convert back to ptr.
+    writeln!(
+        out,
+        "  %{dest}.tptr = inttoptr i64 {task_ref} to ptr"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{dest}.box = call ptr @tyra_task_await(ptr %{dest}.tptr)"
+    )
+    .unwrap();
+
+    if matches!(result_type, tyra_types::Ty::Unit) {
+        // Unit has no runtime value, but SSA requires `dest` be assigned
+        // somewhere so downstream references type-check. `add i64 0, 0` is
+        // a self-documenting no-op LLVM folds to a constant.
+        writeln!(out, "  %{dest} = add i64 0, 0").unwrap();
+        return;
+    }
+
+    let llvm_ty = llvm_type_str(result_type, ctx.struct_map);
+    writeln!(out, "  %{dest} = load {llvm_ty}, ptr %{dest}.box").unwrap();
 }
 
 /// Emit call arguments using the callee's function signature for type info.

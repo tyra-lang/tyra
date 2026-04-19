@@ -136,6 +136,12 @@ pub fn lower(file: &SourceFile) -> Program {
                 .map(Ty::from_type_expr)
                 .unwrap_or(Ty::Unit);
             ctx.fn_return_types.insert(f.name.clone(), ret_ty);
+            let param_tys: Vec<Ty> = f
+                .params
+                .iter()
+                .map(|p| Ty::from_type_expr(&p.type_annotation))
+                .collect();
+            ctx.fn_param_types.insert(f.name.clone(), param_tys);
             // Store generic function definitions for turbofish monomorphization (§8.4)
             if !f.type_params.is_empty() {
                 ctx.fn_defs.insert(f.name.clone(), f.clone());
@@ -259,6 +265,16 @@ pub(crate) struct LowerCtx {
     pub(crate) pattern_vars: std::collections::HashSet<String>,
     /// Function return type registry: fn_name → return_type (for type inference in interpolation)
     pub(crate) fn_return_types: std::collections::HashMap<String, Ty>,
+    /// Function parameter type registry (M9): fn_name → parameter types in
+    /// declaration order. Populated for ALL functions (unlike fn_defs which
+    /// only stores generics) so `spawn f(args)` can emit typed arg boxes.
+    pub(crate) fn_param_types: std::collections::HashMap<String, Vec<Ty>>,
+    /// Temporaries that hold a live Task<T> handle (M9). `.await` uses this
+    /// to decide whether to emit a real `Await` instruction or treat the
+    /// expression as sync (async-as-sync stub — §14 v0.1). Kept separate
+    /// from `generic_var_types` so downstream code (propagate, match, list
+    /// ops) continues to see the underlying T for type lookups.
+    pub(crate) task_result_types: std::collections::HashMap<String, Ty>,
     /// Impl method registry: (target_type_name, method_name) → mangled_fn_name
     pub(crate) impl_methods: std::collections::HashMap<(String, String), String>,
     /// Imported module names for module-qualified call resolution (§13)
@@ -310,6 +326,8 @@ impl LowerCtx {
             mut_vars: std::collections::HashSet::new(),
             pattern_vars: std::collections::HashSet::new(),
             fn_return_types: std::collections::HashMap::new(),
+            fn_param_types: std::collections::HashMap::new(),
+            task_result_types: std::collections::HashMap::new(),
             imported_modules: std::collections::HashSet::new(),
             impl_methods: std::collections::HashMap::new(),
             self_type: None,
@@ -485,6 +503,10 @@ impl LowerCtx {
                 if let Some(gt) = self.generic_var_types.get(&val).cloned() {
                     self.generic_var_types.insert(s.name.clone(), gt.clone());
                     self.var_types.insert(s.name.clone(), gt.monomorphized_name());
+                }
+                // Propagate M9 task-handle tracking across let-binding copy.
+                if let Some(trt) = self.task_result_types.get(&val).cloned() {
+                    self.task_result_types.insert(s.name.clone(), trt);
                 }
                 body.push(Instruction::Copy {
                     dest: s.name.clone(),

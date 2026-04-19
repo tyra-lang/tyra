@@ -145,6 +145,8 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     // Tyra async runtime (libtyra_runtime.a). See runtime/ crate.
     // tyra_rt_init is invoked at @main entry after GC_init.
     writeln!(out, "declare void @tyra_rt_init()").unwrap();
+    writeln!(out, "declare ptr @tyra_task_spawn(ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_task_await(ptr)").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
     writeln!(out, "declare void @exit(i32)").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();
@@ -165,6 +167,33 @@ pub fn emit_llvm_ir(program: &Program) -> String {
         })
         .collect();
 
+    // Pre-scan all Spawn sites across the program so arg-struct types can be
+    // declared before any function references them (LLVM requires struct
+    // types to be sized at use). Ids are assigned in program order and the
+    // same iteration order is used during function emission, so references
+    // and definitions line up.
+    let spawn_thunks_vec = collect_spawn_thunks(program);
+    for thunk in &spawn_thunks_vec {
+        if !thunk.arg_types.is_empty() {
+            let fields: Vec<String> = thunk
+                .arg_types
+                .iter()
+                .map(|ty| llvm_type_str(ty, &struct_map))
+                .collect();
+            writeln!(
+                out,
+                "%struct.__tyra_spawn_args_{} = type {{ {} }}",
+                thunk.id,
+                fields.join(", ")
+            )
+            .unwrap();
+        }
+    }
+    if !spawn_thunks_vec.is_empty() {
+        writeln!(out).unwrap();
+    }
+    let spawn_thunks: std::cell::RefCell<Vec<SpawnThunk>> = std::cell::RefCell::new(Vec::new());
+
     // Functions
     for func in &program.functions {
         emit_function(
@@ -173,11 +202,124 @@ pub fn emit_llvm_ir(program: &Program) -> String {
             &program.string_constants,
             &struct_map,
             &fn_sigs,
+            &spawn_thunks,
         );
         writeln!(out).unwrap();
     }
 
+    // Emit thunks — the collection appended during function emission must
+    // match the pre-scan one-for-one. A mismatch is always a compiler bug,
+    // not user input, so this is an unconditional assert: a release build
+    // with a broken pre-scan would otherwise reference
+    // `@__tyra_spawn_thunk_N` without ever defining it, yielding a linker
+    // error at best and silent miscompilation at worst.
+    assert_eq!(
+        spawn_thunks.borrow().len(),
+        spawn_thunks_vec.len(),
+        "pre-scan and emission disagree on spawn thunk count"
+    );
+    for thunk in spawn_thunks.borrow().iter() {
+        emit_spawn_thunk(&mut out, thunk, &struct_map);
+        writeln!(&mut out).unwrap();
+    }
+
     out
+}
+
+/// Walk every instruction in program order and return a SpawnThunk descriptor
+/// per `Instruction::Spawn`. Ids are sequential starting at 0 and match the
+/// order in which instruction emission later pushes into `spawn_thunks`.
+fn collect_spawn_thunks(program: &Program) -> Vec<SpawnThunk> {
+    let mut thunks = Vec::new();
+    for f in &program.functions {
+        for inst in &f.body {
+            if let Instruction::Spawn {
+                func,
+                arg_types,
+                result_type,
+                ..
+            } = inst
+            {
+                thunks.push(SpawnThunk {
+                    id: thunks.len(),
+                    func: func.clone(),
+                    arg_types: arg_types.clone(),
+                    result_type: result_type.clone(),
+                });
+            }
+        }
+    }
+    thunks
+}
+
+/// Emit a synthesized `__tyra_spawn_thunk_N(ptr %args) -> ptr` that matches
+/// the C ABI expected by `tyra_task_spawn`. The thunk unpacks the GC-managed
+/// argument struct, calls the target function, boxes the result via
+/// `GC_malloc`, and returns the box pointer. For Unit returns it returns
+/// null.
+fn emit_spawn_thunk(
+    out: &mut String,
+    thunk: &SpawnThunk,
+    struct_map: &std::collections::HashMap<String, StructInfo>,
+) {
+    let id = thunk.id;
+    writeln!(
+        out,
+        "define internal ptr @__tyra_spawn_thunk_{id}(ptr %args) {{"
+    )
+    .unwrap();
+    writeln!(out, "entry:").unwrap();
+
+    // Load each arg from the per-site arg struct.
+    let args_ty = format!("%struct.__tyra_spawn_args_{id}");
+    let mut call_args: Vec<String> = Vec::with_capacity(thunk.arg_types.len());
+    for (i, ty) in thunk.arg_types.iter().enumerate() {
+        let llvm_ty = llvm_type_str(ty, struct_map);
+        writeln!(
+            out,
+            "  %a{i}.ptr = getelementptr {args_ty}, ptr %args, i32 0, i32 {i}"
+        )
+        .unwrap();
+        writeln!(out, "  %a{i} = load {llvm_ty}, ptr %a{i}.ptr").unwrap();
+        call_args.push(format!("{llvm_ty} %a{i}"));
+    }
+
+    let ret_ty = llvm_type_str(&thunk.result_type, struct_map);
+    let call_args_joined = call_args.join(", ");
+
+    // NOTE: large-struct returns (Sys V AMD64 `sret` attribute) are not
+    // emitted by Tyra's current codegen, so this direct `%result = call`
+    // pattern is ABI-safe today. If Tyra ever starts emitting `sret` on
+    // user functions, this thunk call site needs to match.
+    if matches!(thunk.result_type, Ty::Unit) {
+        // Unit-returning fn: call, discard result, return null.
+        writeln!(
+            out,
+            "  call void @{}({})",
+            thunk.func, call_args_joined
+        )
+        .unwrap();
+        writeln!(out, "  ret ptr null").unwrap();
+    } else {
+        writeln!(
+            out,
+            "  %result = call {ret_ty} @{}({})",
+            thunk.func, call_args_joined
+        )
+        .unwrap();
+        // Box the result: GC_malloc(sizeof(result_type)) then store.
+        writeln!(
+            out,
+            "  %box.sz_ptr = getelementptr {ret_ty}, ptr null, i32 1"
+        )
+        .unwrap();
+        writeln!(out, "  %box.sz = ptrtoint ptr %box.sz_ptr to i64").unwrap();
+        writeln!(out, "  %box = call ptr @GC_malloc(i64 %box.sz)").unwrap();
+        writeln!(out, "  store {ret_ty} %result, ptr %box").unwrap();
+        writeln!(out, "  ret ptr %box").unwrap();
+    }
+
+    writeln!(out, "}}").unwrap();
 }
 
 /// Function signature for cross-function type resolution.
@@ -192,6 +334,7 @@ fn emit_function(
     strings: &[String],
     struct_map: &std::collections::HashMap<String, StructInfo>,
     fn_sigs: &std::collections::HashMap<String, FnSig>,
+    spawn_thunks: &std::cell::RefCell<Vec<SpawnThunk>>,
 ) {
     // Pre-scan: collect type metadata for all SSA temps and alloca slots.
     let scan = scan_function_types(func, struct_map, fn_sigs);
@@ -244,6 +387,7 @@ fn emit_function(
         bool_temps: &scan.bool_temps,
         struct_temps: &scan.struct_temps,
         alloca_llvm_types: &scan.alloca_llvm_types,
+        spawn_thunks,
     };
 
     // Emit instructions, skipping dead code after block terminators.
@@ -285,6 +429,20 @@ pub(crate) struct EmitCtx<'a> {
     pub(crate) struct_temps: &'a std::collections::HashMap<String, String>,
     /// Resolved LLVM type for alloca slots (from Store analysis).
     pub(crate) alloca_llvm_types: &'a std::collections::HashMap<String, String>,
+    /// Per-site spawn thunks collected during instruction emission and
+    /// emitted after all user functions (M9).
+    pub(crate) spawn_thunks: &'a std::cell::RefCell<Vec<SpawnThunk>>,
+}
+
+/// Metadata for a synthetic spawn thunk. Codegen emits one per `spawn` site
+/// with a unique id. The thunk unboxes args, calls the target, boxes the
+/// result, and matches the `ThunkFn` C ABI expected by `tyra_task_spawn`.
+#[derive(Debug, Clone)]
+pub(crate) struct SpawnThunk {
+    pub(crate) id: usize,
+    pub(crate) func: String,
+    pub(crate) arg_types: Vec<Ty>,
+    pub(crate) result_type: Ty,
 }
 
 // Extracted modules:

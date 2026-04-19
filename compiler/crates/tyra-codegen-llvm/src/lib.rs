@@ -406,6 +406,89 @@ mod tests {
     }
 
     #[test]
+    fn spawn_emits_thunk_and_runtime_call() {
+        // M9: `spawn f(x)` must (1) register a per-site thunk struct type,
+        // (2) call tyra_task_spawn with the thunk address, and (3) emit
+        // the synthesized thunk function that unboxes args and boxes the
+        // result via GC_malloc. The task handle is carried as i64 through
+        // the MIR so it can flow through lists.
+        let program = tyra_mir::Program {
+            functions: vec![
+                tyra_mir::Function {
+                    name: "double".into(),
+                    params: vec![("x".into(), tyra_types::Ty::Int)],
+                    return_type: tyra_types::Ty::Int,
+                    body: vec![
+                        tyra_mir::Instruction::BinOp {
+                            dest: "_t0".into(),
+                            op: tyra_mir::MirBinOp::MulInt,
+                            lhs: tyra_mir::Operand::Var("x".into()),
+                            rhs: tyra_mir::Operand::Const(tyra_mir::Constant::Int(2)),
+                        },
+                        tyra_mir::Instruction::Return {
+                            value: Some(tyra_mir::Operand::Var("_t0".into())),
+                        },
+                    ],
+                    is_main: false,
+                },
+                tyra_mir::Function {
+                    name: "main".into(),
+                    params: vec![],
+                    return_type: tyra_types::Ty::Unit,
+                    body: vec![
+                        tyra_mir::Instruction::Spawn {
+                            dest: "_t1".into(),
+                            func: "double".into(),
+                            args: vec![tyra_mir::Operand::Const(tyra_mir::Constant::Int(21))],
+                            arg_types: vec![tyra_types::Ty::Int],
+                            result_type: tyra_types::Ty::Int,
+                        },
+                        tyra_mir::Instruction::Await {
+                            dest: "_t2".into(),
+                            task: tyra_mir::Operand::Var("_t1".into()),
+                            result_type: tyra_types::Ty::Int,
+                        },
+                        tyra_mir::Instruction::Return { value: None },
+                    ],
+                    is_main: true,
+                },
+            ],
+            string_constants: vec![],
+            struct_defs: vec![],
+        };
+
+        let ir = emit_llvm_ir(&program);
+        assert!(
+            ir.contains("%struct.__tyra_spawn_args_0 = type { i64 }"),
+            "must declare per-site arg struct type"
+        );
+        assert!(
+            ir.contains("call ptr @tyra_task_spawn(ptr @__tyra_spawn_thunk_0,"),
+            "Spawn must call tyra_task_spawn with the thunk pointer"
+        );
+        assert!(
+            ir.contains("ptrtoint ptr %_t1.h to i64"),
+            "Spawn handle must be carried as i64 through the MIR"
+        );
+        assert!(
+            ir.contains("define internal ptr @__tyra_spawn_thunk_0(ptr %args)"),
+            "must emit the synthesized thunk definition"
+        );
+        assert!(
+            ir.contains("call i64 @double(i64 %a0)"),
+            "thunk must invoke the target function with loaded args"
+        );
+        assert!(
+            ir.contains("inttoptr i64") && ir.contains("to ptr"),
+            "Await must convert the i64 handle back to ptr"
+        );
+        assert!(
+            ir.contains("call ptr @tyra_task_await(ptr "),
+            "Await must call tyra_task_await"
+        );
+    }
+
+    #[test]
     fn data_type_field_get_uses_gep_load() {
         // §8.6: field access on data type uses GEP + load, not extractvalue
         let program = tyra_mir::Program {

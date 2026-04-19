@@ -370,11 +370,84 @@ impl super::LowerCtx {
             ExprKind::Propagate(inner) => self.lower_propagate(inner, body),
 
             ExprKind::Await(inner) => {
-                // .await: simplified, just lower the inner expression
-                self.lower_expr(inner, body)
+                // §14.3 + M9: If the inner expression produces a live Task<T>
+                // handle (tracked via task_result_types), emit a real Await
+                // instruction. Otherwise (async-as-sync stub, §14 v0.1), fall
+                // through to identity — the value is already the final T.
+                //
+                // TODO(M9+): task_result_types is only propagated through
+                // let-binding Copy (see Stmt::Let in mod.rs). `mut t =
+                // spawn f(); ... t.await` currently falls into this sync
+                // fallback and returns the raw i64 handle as the value,
+                // silently miscomputing. Propagate the tracking through
+                // Stmt::Mut / Assign / for-loop bindings as follow-up.
+                let task_temp = self.lower_expr(inner, body);
+                if let Some(result_type) = self.task_result_types.get(&task_temp).cloned() {
+                    let dest = self.fresh_temp();
+                    body.push(Instruction::Await {
+                        dest: dest.clone(),
+                        task: Operand::Var(task_temp),
+                        result_type: result_type.clone(),
+                    });
+                    // Re-register the unboxed value with the underlying type
+                    // so downstream propagate/match see the true ADT.
+                    if matches!(&result_type, Ty::Generic(_, _)) {
+                        self.generic_var_types.insert(dest.clone(), result_type.clone());
+                    }
+                    self.var_types
+                        .insert(dest.clone(), result_type.monomorphized_name());
+                    dest
+                } else {
+                    task_temp
+                }
             }
 
-            ExprKind::Spawn(inner) => self.lower_expr(inner, body),
+            ExprKind::Spawn(inner) => {
+                // §14.4 + M9: `spawn f(args)` submits a task to the runtime
+                // scheduler. The inner expression must be a function call.
+                // Record the arg and return types on the Spawn instruction so
+                // codegen can build per-site thunks and result boxes.
+                if let ExprKind::Call(callee, call_args) = &inner.kind
+                    && let ExprKind::Ident(fn_name) = &callee.kind
+                    && let Some(arg_types) = self.fn_param_types.get(fn_name).cloned()
+                    && let Some(result_type) = self.fn_return_types.get(fn_name).cloned()
+                {
+                    // Nested tasks (spawn f() where f returns Task<T>) are
+                    // not supported in v0.1 — the thunk would box a Task
+                    // handle as the "result" and the outer await would
+                    // silently skip the inner one. Reject at lowering time
+                    // rather than miscompile.
+                    if let Ty::Generic(name, _) = &result_type
+                        && name == "Task"
+                    {
+                        panic!(
+                            "spawn f() where f returns Task<T> is not supported in v0.1 \
+                             (nested tasks). Fn: {fn_name}"
+                        );
+                    }
+                    let args: Vec<Operand> = call_args
+                        .iter()
+                        .map(|a| Operand::Var(self.lower_expr(&a.value, body)))
+                        .collect();
+                    let dest = self.fresh_temp();
+                    body.push(Instruction::Spawn {
+                        dest: dest.clone(),
+                        func: fn_name.clone(),
+                        args,
+                        arg_types,
+                        result_type: result_type.clone(),
+                    });
+                    // Track the Task<T> result type separately from
+                    // generic_var_types so downstream ?/match/list ops still
+                    // see the underlying T when the task is eventually
+                    // awaited. (See task_result_types on LowerCtx.)
+                    self.task_result_types.insert(dest.clone(), result_type);
+                    dest
+                } else {
+                    // Fallback: lower as sync call (pre-M9 behavior).
+                    self.lower_expr(inner, body)
+                }
+            }
 
             ExprKind::FieldAccess(obj, field) => {
                 // Check if this is an ADT constructor: Color.Red or Payment.Cash

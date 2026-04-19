@@ -251,6 +251,41 @@ fn scan_primitive_temps(
                     }
                 }
             }
+            // Task handles returned by `spawn` are carried as i64 in the
+            // MIR so they can flow through lists and generic code uniformly
+            // (§14.4, M9). Codegen ptrtoints the real runtime handle into
+            // the Spawn dest. We therefore do NOT mark Spawn dest as a
+            // string_temp / ptr; it is a plain i64.
+            Instruction::Spawn { .. } => {}
+            // Await result type governs the unbox; for String/data/Task the
+            // dest is a ptr; otherwise fall through to i64/float/bool scans.
+            Instruction::Await {
+                dest, result_type, ..
+            } => match result_type {
+                Ty::String => {
+                    string_temps.insert(dest.clone());
+                }
+                Ty::Float => {
+                    float_temps.insert(dest.clone());
+                }
+                Ty::Bool => {
+                    bool_temps.insert(dest.clone());
+                }
+                Ty::Named(name) => {
+                    if struct_map
+                        .get(name.as_str())
+                        .map(|i| i.is_data)
+                        .unwrap_or(false)
+                    {
+                        string_temps.insert(dest.clone());
+                    }
+                }
+                Ty::Generic(_, _) => {
+                    // Task<Option<..>>/Task<Result<..>> unbox to ADT ptrs.
+                    string_temps.insert(dest.clone());
+                }
+                _ => {}
+            },
             Instruction::ListGet {
                 dest, elem_type, ..
             } => match elem_type {
@@ -498,6 +533,16 @@ fn pre_scan_struct_types(
             Instruction::ListInit {
                 dest, elem_type, ..
             } => {
+                let list_ty = Ty::Generic("List".into(), vec![elem_type.clone()]);
+                let mono = list_ty.monomorphized_name();
+                if struct_map.contains_key(mono.as_str()) {
+                    struct_temps.insert(dest.clone(), mono);
+                }
+            }
+            Instruction::JoinAll {
+                dest, elem_type, ..
+            } => {
+                // JoinAll produces a List<T> struct (M9).
                 let list_ty = Ty::Generic("List".into(), vec![elem_type.clone()]);
                 let mono = list_ty.monomorphized_name();
                 if struct_map.contains_key(mono.as_str()) {

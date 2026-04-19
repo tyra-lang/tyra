@@ -203,6 +203,37 @@ pub enum Instruction {
         index: Operand,
         elem_type: Ty,
     },
+
+    /// `dest = spawn func(args...)` — submit a task to the async runtime (§14.4, M9).
+    /// Codegen emits a synthetic thunk that unboxes args, calls `func`, and boxes
+    /// the result. `arg_types` and `result_type` drive the LLVM layout of the
+    /// per-site argument/result boxes.
+    Spawn {
+        dest: String,
+        func: String,
+        args: Vec<Operand>,
+        arg_types: Vec<Ty>,
+        result_type: Ty,
+    },
+
+    /// `dest = task.await` — block on a task handle, unboxing its result (§14.3, M9).
+    /// `result_type` is the T in `Task<T>` and determines how the boxed result
+    /// produced by the spawn thunk is loaded.
+    Await {
+        dest: String,
+        task: Operand,
+        result_type: Ty,
+    },
+
+    /// `dest = tasks.join_all(list)` — await every task handle in `list` and
+    /// produce a `List<T>` of unboxed results (§17.1, M9). Codegen inlines
+    /// a loop that calls `tyra_task_await` on each handle, loads T from the
+    /// returned box, and builds a fresh result list.
+    JoinAll {
+        dest: String,
+        list: Operand,
+        elem_type: Ty,
+    },
 }
 
 /// A constant value.
