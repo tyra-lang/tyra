@@ -292,8 +292,22 @@ pub(crate) struct LowerCtx {
     pub(crate) current_fn_return_type: Ty,
     /// Collected ADT struct defs (monomorphized Option/Result types)
     pub(crate) adt_struct_defs: std::collections::HashMap<String, Vec<(String, Ty)>>,
-    /// Deferred expressions for the current function (spec §12.3, LIFO execution)
-    pub(crate) deferred_exprs: Vec<Expr>,
+    /// Deferred expressions for the current function (spec §12.3, LIFO
+    /// execution). Each entry pairs the deferred expression with the name
+    /// of a runtime bool alloca that tracks whether the `defer` statement
+    /// was actually reached — emit_deferred only executes expressions whose
+    /// activation flag is `true`. The allocas are created up front at
+    /// function entry (see `collect_defer_sites`) so flags dominate every
+    /// return path.
+    pub(crate) deferred_exprs: Vec<(String, Expr)>,
+    /// Running ordinal that matches `defer` statements with their
+    /// pre-allocated activation flag (`.defer_active_N`). Reset at the
+    /// start of each function; incremented on every `Stmt::Defer` during
+    /// body lowering in the same walk order as `count_defer_sites_in_stmts`.
+    pub(crate) next_defer_index: usize,
+    /// Total number of `.defer_active_*` flags pre-allocated for the
+    /// current function. Used to assert `next_defer_index` stays in bounds.
+    pub(crate) defer_flag_count: usize,
     /// Generic function definitions for monomorphization (§8.4).
     pub(crate) fn_defs: std::collections::HashMap<String, FnDef>,
     /// Monomorphization cache: mangled_name → true.
@@ -337,6 +351,8 @@ impl LowerCtx {
             current_fn_return_type: Ty::Unit,
             adt_struct_defs: std::collections::HashMap::new(),
             deferred_exprs: Vec::new(),
+            next_defer_index: 0,
+            defer_flag_count: 0,
             fn_defs: std::collections::HashMap::new(),
             mono_cache: std::collections::HashSet::new(),
         }
@@ -436,6 +452,27 @@ impl LowerCtx {
         }
 
         let mut body = Vec::new();
+
+        // spec §12.3 (M-defer-fix): pre-allocate one bool-backed activation
+        // flag per `defer` statement in the function body (including nested
+        // if/while/for/match scopes). Flags default to false; a defer
+        // statement at runtime stores true. emit_deferred then only runs
+        // deferred expressions whose flag is true, so a defer inside an
+        // `if` branch that never executes does not fire at function return.
+        let defer_count = count_defer_sites_in_stmts(&f.body);
+        self.defer_flag_count = defer_count;
+        for idx in 0..defer_count {
+            let flag_name = format!(".defer_active_{idx}");
+            body.push(Instruction::Alloca {
+                dest: flag_name.clone(),
+            });
+            body.push(Instruction::Store {
+                dest: flag_name,
+                value: Operand::Const(Constant::Int(0)),
+            });
+        }
+        self.next_defer_index = 0;
+
         let mut last_expr_result = None;
         for stmt in &f.body {
             // Track the result of expression statements for implicit return
@@ -547,9 +584,32 @@ impl LowerCtx {
                 body.push(Instruction::Return { value });
             }
             Stmt::Defer(d) => {
-                // spec §12.3: collect deferred expressions; they are emitted
-                // in LIFO order before every return path.
-                self.deferred_exprs.push(d.expr.clone());
+                // spec §12.3: mark the pre-allocated activation flag as
+                // true so emit_deferred will run this expression in LIFO
+                // order at every return path. Defers inside branches or
+                // loops that never execute leave their flag at false.
+                //
+                // The flag index is allocated up front in lower_fn based
+                // on `count_defer_sites_in_stmts(&f.body)`. A `defer`
+                // encountered during emit_deferred re-lowering (i.e. a
+                // defer syntactically inside another deferred expression)
+                // would drift past the pre-scan count — caught here by
+                // assert so any future grammar change that allows such
+                // nesting surfaces immediately.
+                let idx = self.next_defer_index;
+                assert!(
+                    idx < self.defer_flag_count,
+                    "defer ordinal {idx} exceeds pre-scan count {} — \
+                     nested defer inside a deferred expression is not supported",
+                    self.defer_flag_count
+                );
+                self.next_defer_index += 1;
+                let flag_name = format!(".defer_active_{idx}");
+                body.push(Instruction::Store {
+                    dest: flag_name.clone(),
+                    value: Operand::Const(Constant::Int(1)),
+                });
+                self.deferred_exprs.push((flag_name, d.expr.clone()));
             }
             Stmt::Expr(s) => {
                 self.lower_expr(&s.expr, body);
@@ -635,10 +695,42 @@ impl LowerCtx {
     /// (including multiple ? early returns within a single function) must emit the
     /// full set of deferred expressions. The list is cleared at lower_fn entry.
     fn emit_deferred(&mut self, body: &mut Vec<Instruction>) {
-        // Clone to avoid borrow conflict (deferred_exprs is on self)
-        let exprs: Vec<Expr> = self.deferred_exprs.iter().rev().cloned().collect();
-        for expr in &exprs {
+        // Clone to avoid borrow conflict (deferred_exprs is on self).
+        let entries: Vec<(String, Expr)> =
+            self.deferred_exprs.iter().rev().cloned().collect();
+        for (flag, expr) in &entries {
+            // Runtime check: only execute this deferred expression if its
+            // activation flag was set to true by a reached `defer` stmt.
+            let tmp = self.fresh_temp();
+            body.push(Instruction::Load {
+                dest: tmp.clone(),
+                source: flag.clone(),
+            });
+            let zero = self.fresh_temp();
+            body.push(Instruction::Const {
+                dest: zero.clone(),
+                value: Constant::Int(0),
+            });
+            let active = self.fresh_temp();
+            body.push(Instruction::BinOp {
+                dest: active.clone(),
+                op: MirBinOp::NeqInt,
+                lhs: Operand::Var(tmp),
+                rhs: Operand::Var(zero),
+            });
+            let then_lbl = self.fresh_label("defer_run");
+            let skip_lbl = self.fresh_label("defer_skip");
+            body.push(Instruction::BranchIf {
+                cond: Operand::Var(active),
+                true_label: then_lbl.clone(),
+                false_label: skip_lbl.clone(),
+            });
+            body.push(Instruction::Label(then_lbl));
             self.lower_expr(expr, body);
+            body.push(Instruction::Jump {
+                label: skip_lbl.clone(),
+            });
+            body.push(Instruction::Label(skip_lbl));
         }
     }
 
@@ -737,4 +829,85 @@ pub(crate) fn range_terminates(body: &[Instruction], start: usize) -> bool {
         i,
         Instruction::Return { .. } | Instruction::Jump { .. } | Instruction::BranchIf { .. }
     ))
+}
+
+/// Walk a Stmt slice and count every `Stmt::Defer` reachable through
+/// nested if/while/for/match/block scopes within the SAME function body.
+/// Lambdas are skipped because their defers belong to the lambda's own
+/// frame (lambdas are lowered as separate functions).
+pub(crate) fn count_defer_sites_in_stmts(stmts: &[Stmt]) -> usize {
+    stmts.iter().map(count_defer_sites_in_stmt).sum()
+}
+
+fn count_defer_sites_in_stmt(s: &Stmt) -> usize {
+    match s {
+        Stmt::Defer(_) => 1,
+        Stmt::Let(l) => count_defer_sites_in_expr(&l.value),
+        Stmt::Mut(m) => count_defer_sites_in_expr(&m.value),
+        Stmt::Return(r) => r
+            .value
+            .as_ref()
+            .map(count_defer_sites_in_expr)
+            .unwrap_or(0),
+        Stmt::Expr(e) => count_defer_sites_in_expr(&e.expr),
+    }
+}
+
+/// Traversal order here MUST match body lowering (lower_if/lower_while/
+/// lower_for/lower_match) so `next_defer_index` during lowering aligns
+/// with the ordinal assigned during this pre-scan. Condition/subject
+/// expressions are lowered BEFORE their bodies, so they are counted first.
+///
+/// Note: `defer` is a Stmt, not an Expr, so it cannot syntactically appear
+/// inside a condition/subject today. The ordering still matters as an
+/// invariant in case that grammar ever changes.
+fn count_defer_sites_in_expr(e: &Expr) -> usize {
+    match &e.kind {
+        ExprKind::If(i) => {
+            let mut n = count_defer_sites_in_expr(&i.condition);
+            n += count_defer_sites_in_stmts(&i.then_body);
+            if let Some(else_branch) = &i.else_body {
+                n += count_defer_sites_in_else(else_branch);
+            }
+            n
+        }
+        ExprKind::Match(m) => {
+            count_defer_sites_in_expr(&m.subject)
+                + m.arms
+                    .iter()
+                    .map(|a| count_defer_sites_in_stmts(&a.body))
+                    .sum::<usize>()
+        }
+        ExprKind::While(w) => {
+            // Note on loop semantics: a defer inside a while body is
+            // pre-allocated once; each iteration idempotently re-stores 1
+            // to the same flag, so the deferred expression runs exactly
+            // once at function return regardless of iteration count. This
+            // is the chosen v0.1 semantics and differs from Go's
+            // per-iteration defer stack. Rationale: avoids unbounded
+            // accumulation in long-running loops.
+            count_defer_sites_in_expr(&w.condition)
+                + count_defer_sites_in_stmts(&w.body)
+        }
+        ExprKind::For(f) => {
+            count_defer_sites_in_expr(&f.iter) + count_defer_sites_in_stmts(&f.body)
+        }
+        // Lambdas: defers inside a lambda belong to that frame; skip.
+        ExprKind::Lambda(_) => 0,
+        _ => 0,
+    }
+}
+
+fn count_defer_sites_in_else(eb: &ElseBranch) -> usize {
+    match eb {
+        ElseBranch::Else(stmts) => count_defer_sites_in_stmts(stmts),
+        ElseBranch::ElseIf(i) => {
+            let mut n = count_defer_sites_in_expr(&i.condition);
+            n += count_defer_sites_in_stmts(&i.then_body);
+            if let Some(inner) = &i.else_body {
+                n += count_defer_sites_in_else(inner);
+            }
+            n
+        }
+    }
 }

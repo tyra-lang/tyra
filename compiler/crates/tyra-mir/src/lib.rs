@@ -637,6 +637,89 @@ end\n";
     }
 
     #[test]
+    fn defer_in_if_branch_uses_activation_flag() {
+        // spec §12.3: a defer statement inside an if-branch should only
+        // execute at function return when the if-body actually ran. The
+        // lowerer pre-allocates a bool flag per defer site, initializes
+        // it to false, sets it to true when the defer stmt is reached,
+        // and guards emit_deferred behind a runtime check of that flag.
+        let source = "\
+fn cleanup() -> Unit\n\
+  print(\"inner\")\n\
+end\n\
+fn work(_ flag: Bool) -> Unit\n\
+  if flag\n\
+    defer cleanup()\n\
+    print(\"if-body\")\n\
+  end\n\
+  print(\"after-if\")\n\
+end\n";
+        let prog = lower_str(source);
+        let work_fn = prog.functions.iter().find(|f| f.name == "work").unwrap();
+        // Pre-allocated activation flag alloca at function start.
+        let has_flag_alloca = work_fn
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::Alloca { dest } if dest.starts_with(".defer_active_")));
+        assert!(
+            has_flag_alloca,
+            "expected .defer_active_N alloca at function entry"
+        );
+        // Initial store of 0 into the flag (false).
+        let has_flag_init = work_fn.body.iter().any(|i| {
+            matches!(i, Instruction::Store { dest, value: Operand::Const(Constant::Int(0)) }
+                if dest.starts_with(".defer_active_"))
+        });
+        assert!(has_flag_init, "expected store 0 to .defer_active_N");
+        // Inside the if body, store 1 into the flag to activate the defer.
+        let has_flag_set = work_fn.body.iter().any(|i| {
+            matches!(i, Instruction::Store { dest, value: Operand::Const(Constant::Int(1)) }
+                if dest.starts_with(".defer_active_"))
+        });
+        assert!(has_flag_set, "expected store 1 to .defer_active_N inside if-body");
+        // Runtime guard at emit_deferred: the flag load must feed into a
+        // BranchIf whose cond is a neq-zero compare against that load.
+        // Without this wiring the old broken flat-Vec impl could satisfy
+        // the alloca/store structural asserts above while still emitting
+        // the deferred call unconditionally.
+        let load_pos = work_fn.body.iter().position(|i| {
+            matches!(i, Instruction::Load { source, .. } if source.starts_with(".defer_active_"))
+        });
+        assert!(load_pos.is_some(), "expected load of .defer_active_N");
+        let load_idx = load_pos.unwrap();
+        let Instruction::Load { dest: load_tmp, .. } = &work_fn.body[load_idx] else {
+            unreachable!()
+        };
+        // Next few instructions should be: Const(0), BinOp Neq, BranchIf(active).
+        let cmp = work_fn.body[load_idx + 1..]
+            .iter()
+            .take(5)
+            .find_map(|i| match i {
+                Instruction::BinOp {
+                    dest, op, lhs, rhs, ..
+                } if matches!(op, MirBinOp::NeqInt)
+                    && matches!(lhs, Operand::Var(n) if n == load_tmp)
+                    && matches!(rhs, Operand::Var(_)) =>
+                {
+                    Some(dest.clone())
+                }
+                _ => None,
+            });
+        assert!(
+            cmp.is_some(),
+            "expected NeqInt compare against the flag load"
+        );
+        let cmp_dest = cmp.unwrap();
+        let branched_on_flag = work_fn.body.iter().any(|i| {
+            matches!(i, Instruction::BranchIf { cond: Operand::Var(c), .. } if c == &cmp_dest)
+        });
+        assert!(
+            branched_on_flag,
+            "expected BranchIf using the flag's compare result as cond"
+        );
+    }
+
+    #[test]
     fn propagate_result_with_into_conversion() {
         // spec §12.2: ? on Result<T, E> in fn returning Result<U, F>
         // where E != F calls E__into(err) to convert.
