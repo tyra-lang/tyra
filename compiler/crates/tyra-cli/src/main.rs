@@ -11,6 +11,11 @@
 use std::path::Path;
 use std::process;
 
+// Forces cargo to build the tyra-runtime staticlib (libtyra_runtime.a)
+// alongside this binary so the driver can link it into Tyra programs.
+// The rlib is not used from Rust-side code.
+use tyra_runtime as _;
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 

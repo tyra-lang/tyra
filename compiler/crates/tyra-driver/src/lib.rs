@@ -293,16 +293,19 @@ pub fn compile_to_binary(source_path: &Path, output_path: &Path) -> CompileResul
         };
     }
 
-    // Compile with clang, linking Boehm GC (libgc). See ADR-0007.
+    // Compile with clang, linking Boehm GC (libgc, ADR-0007) and the Tyra
+    // async runtime staticlib (libtyra_runtime.a, M9). The runtime is built
+    // by cargo into the same target/ directory as the `tyra` binary itself,
+    // so we locate it relative to the current executable.
     let mut clang_args: Vec<String> = vec![
         ir_path.to_str().unwrap().into(),
         "-o".into(),
         output_path.to_str().unwrap().into(),
         "-O0".into(),
     ];
-    // Probe common libgc install prefixes. Homebrew on Apple Silicon and Intel
-    // place libgc under different roots; Linux package managers use the default
-    // search path.
+    // libgc: probe common install prefixes. Homebrew on Apple Silicon and
+    // Intel place libgc under different roots; Linux package managers use
+    // the default search path.
     for prefix in ["/opt/homebrew/opt/bdw-gc", "/usr/local/opt/bdw-gc"] {
         let lib_dir = format!("{prefix}/lib");
         if std::path::Path::new(&lib_dir).is_dir() {
@@ -310,7 +313,51 @@ pub fn compile_to_binary(source_path: &Path, output_path: &Path) -> CompileResul
             break;
         }
     }
+    // libtyra_runtime: locate via the running compiler's target dir. The
+    // staticlib is produced by cargo alongside the `tyra` binary (workspace
+    // target/{debug,release}/). If it is missing (e.g. the user installed
+    // only the binary via `cargo install`, or built with
+    // `cargo build -p tyra-cli`), surface an explicit Tyra diagnostic
+    // instead of letting clang emit an unresolved-symbol error.
+    let runtime_lib_path = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|d| d.join("libtyra_runtime.a")));
+    match runtime_lib_path.as_ref() {
+        Some(p) if p.exists() => {
+            clang_args.push(p.to_string_lossy().into_owned());
+        }
+        _ => {
+            let mut report = result.report;
+            report.add(
+                tyra_diagnostics::Diagnostic::error(format!(
+                    "Tyra runtime staticlib not found (expected at {}).\n\
+                     Build the full workspace with `cargo build` (not `-p tyra-cli`).",
+                    runtime_lib_path
+                        .as_deref()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|| "<unknown>".into())
+                ))
+                .with_code("E0502"),
+            );
+            let _ = std::fs::remove_file(&ir_path);
+            return CompileResult {
+                success: false,
+                report,
+                sources: result.sources,
+                llvm_ir: result.llvm_ir,
+            };
+        }
+    }
     clang_args.push("-lgc".into());
+    // The Rust staticlib pulls in std, which on Unix needs pthread + dl.
+    // `cfg!` evaluates against the compiling host's target. v0.1 only
+    // supports host-target compilation; cross-compile will need target-
+    // triple plumbing here.
+    if cfg!(target_os = "linux") {
+        clang_args.push("-lpthread".into());
+        clang_args.push("-ldl".into());
+        clang_args.push("-lm".into());
+    }
 
     let clang_result = Command::new("clang").args(&clang_args).output();
 

@@ -142,6 +142,9 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     // All heap allocations go through GC_malloc; GC_init is called at @main entry.
     writeln!(out, "declare ptr @GC_malloc(i64)").unwrap();
     writeln!(out, "declare void @GC_init()").unwrap();
+    // Tyra async runtime (libtyra_runtime.a). See runtime/ crate.
+    // tyra_rt_init is invoked at @main entry after GC_init.
+    writeln!(out, "declare void @tyra_rt_init()").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
     writeln!(out, "declare void @exit(i32)").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();
@@ -220,6 +223,8 @@ fn emit_function(
     if func.is_main {
         // Initialize Boehm GC before any heap allocation (ADR-0007).
         writeln!(out, "  call void @GC_init()").unwrap();
+        // Initialize Tyra async runtime (scheduler + thread pool). M9.
+        writeln!(out, "  call void @tyra_rt_init()").unwrap();
         writeln!(out, "  store i32 %argc, ptr @.tyra.argc").unwrap();
         writeln!(out, "  store ptr %argv, ptr @.tyra.argv").unwrap();
     }

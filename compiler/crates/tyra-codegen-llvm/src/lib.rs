@@ -61,6 +61,15 @@ mod tests {
             ir.contains("declare ptr @GC_malloc(i64)"),
             "GC_malloc extern declaration must be emitted"
         );
+        // M9: main must also initialize the Tyra async runtime.
+        assert!(
+            ir.contains("call void @tyra_rt_init()"),
+            "main must invoke tyra_rt_init at entry (M9)"
+        );
+        assert!(
+            ir.contains("declare void @tyra_rt_init()"),
+            "tyra_rt_init extern declaration must be emitted"
+        );
     }
 
     #[test]
