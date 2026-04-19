@@ -85,7 +85,12 @@ broader platform matrix.
   (interpolated string buffers, `List<Int>` bodies, etc.). Needs a
   simple type classifier in codegen.
 - Multi-threaded GC registration (`GC_allow_register_threads` /
-  `GC_register_my_thread`) when the async runtime becomes truly
-  concurrent (M9).
+  `GC_register_my_thread`). M9 scaffolds this behind the
+  `tyra-runtime/libgc` Cargo feature: worker threads call
+  `GC_get_stack_base` + `GC_register_my_thread` when the feature is
+  enabled. The feature must be flipped on when the runtime staticlib
+  is linked into a Tyra binary that allocates via `GC_malloc` on
+  worker threads. Until then, the conservative scanner does not see
+  worker stacks and Tyra code must not call `GC_malloc` from thunks.
 - Precise GC via LLVM statepoints once we have the cycles to pay for
   write barriers and stack maps. This ADR does not lock out that path.

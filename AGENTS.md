@@ -175,14 +175,14 @@ When generating code, comments, and identifiers must be in English. When discuss
 ## Build and Test Commands
 
 ```bash
-# Build the compiler
-cd compiler && cargo build
+# Build the compiler and runtime (workspace root: tyra/)
+cargo build
 
-# Run all tests
-cd compiler && cargo test
+# Run all tests (compiler + runtime)
+cargo test
 
 # Run conformance tests only
-cd compiler && cargo test --test conformance
+cargo test --test conformance
 
 # Run a single Tyra program (after build)
 ./target/debug/tyra run examples/hello/main.tyra
@@ -191,7 +191,7 @@ cd compiler && cargo test --test conformance
 ./target/debug/tyra fmt --check stdlib/
 
 # Build release binary
-cd compiler && cargo build --release
+cargo build --release
 ```
 
 When implementing a new feature, **always add a corresponding conformance test** in `tests/conformance/` with a comment referencing the spec section.
