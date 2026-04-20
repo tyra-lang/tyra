@@ -53,6 +53,58 @@ pub(crate) fn emit_builtin_call(
             emit_fs_exists(out, dest.as_deref(), args, func);
             true
         }
+        "__json_parse" => {
+            emit_json_call_ptr_to_i64(out, dest.as_deref(), "tyra_json_parse", args, func);
+            true
+        }
+        "__json_err_msg" => {
+            emit_json_nullary_ptr(out, dest.as_deref(), "tyra_json_err_msg");
+            true
+        }
+        "__json_err_line" => {
+            emit_json_nullary_i64(out, dest.as_deref(), "tyra_json_err_line");
+            true
+        }
+        "__json_err_col" => {
+            emit_json_nullary_i64(out, dest.as_deref(), "tyra_json_err_col");
+            true
+        }
+        "__json_kind" => {
+            emit_json_i64_to_ptr(out, dest.as_deref(), "tyra_json_kind", args, func);
+            true
+        }
+        "__json_is_string" => {
+            emit_json_i64_to_bool(out, dest.as_deref(), "tyra_json_is_string", args, func);
+            true
+        }
+        "__json_is_int" => {
+            emit_json_i64_to_bool(out, dest.as_deref(), "tyra_json_is_int", args, func);
+            true
+        }
+        "__json_is_bool" => {
+            emit_json_i64_to_bool(out, dest.as_deref(), "tyra_json_is_bool", args, func);
+            true
+        }
+        "__json_str" => {
+            emit_json_i64_to_ptr(out, dest.as_deref(), "tyra_json_str", args, func);
+            true
+        }
+        "__json_int" => {
+            emit_json_i64_to_i64(out, dest.as_deref(), "tyra_json_int", args, func);
+            true
+        }
+        "__json_bool" => {
+            emit_json_i64_to_bool(out, dest.as_deref(), "tyra_json_bool", args, func);
+            true
+        }
+        "__json_get" => {
+            emit_json_get(out, dest.as_deref(), args, func);
+            true
+        }
+        "__json_at" => {
+            emit_json_at(out, dest.as_deref(), args, func);
+            true
+        }
         "sys__exit" => {
             // §17.1: core.sys.exit(_ code: Int) -> Never
             if let Some(arg) = args.first() {
@@ -253,6 +305,110 @@ fn emit_fs_exists(
         .unwrap_or_else(|| "null".into());
     writeln!(out, "  %{d}.i32 = call i32 @tyra_fs_exists(ptr {path})").unwrap();
     writeln!(out, "  %{d} = icmp ne i32 %{d}.i32, 0").unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// M10 phase 2: JSON intrinsic emit helpers.
+// Thin wrappers over the `@tyra_json_*` runtime calls. Handles are i64
+// values; 0 is reserved for "error / absent". The stdlib/json.tyra wrapper
+// builds Option/Result on top of these primitives.
+// ---------------------------------------------------------------------------
+
+fn emit_json_call_ptr_to_i64(
+    out: &mut String,
+    dest: Option<&str>,
+    callee: &str,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_json");
+    let arg = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    writeln!(out, "  %{d} = call i64 @{callee}(ptr {arg})").unwrap();
+}
+
+fn emit_json_nullary_ptr(out: &mut String, dest: Option<&str>, callee: &str) {
+    let d = dest.unwrap_or("_json");
+    writeln!(out, "  %{d} = call ptr @{callee}()").unwrap();
+}
+
+fn emit_json_nullary_i64(out: &mut String, dest: Option<&str>, callee: &str) {
+    let d = dest.unwrap_or("_json");
+    writeln!(out, "  %{d} = call i64 @{callee}()").unwrap();
+}
+
+fn emit_json_i64_to_ptr(
+    out: &mut String,
+    dest: Option<&str>,
+    callee: &str,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_json");
+    let arg = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    writeln!(out, "  %{d} = call ptr @{callee}(i64 {arg})").unwrap();
+}
+
+fn emit_json_i64_to_bool(
+    out: &mut String,
+    dest: Option<&str>,
+    callee: &str,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_json");
+    let arg = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    writeln!(out, "  %{d}.i32 = call i32 @{callee}(i64 {arg})").unwrap();
+    writeln!(out, "  %{d} = icmp ne i32 %{d}.i32, 0").unwrap();
+}
+
+fn emit_json_i64_to_i64(
+    out: &mut String,
+    dest: Option<&str>,
+    callee: &str,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_json");
+    let arg = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    writeln!(out, "  %{d} = call i64 @{callee}(i64 {arg})").unwrap();
+}
+
+fn emit_json_get(out: &mut String, dest: Option<&str>, args: &[Operand], func: &Function) {
+    let d = dest.unwrap_or("_json_get");
+    let handle = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    let key = args
+        .get(1)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    writeln!(out, "  %{d} = call i64 @tyra_json_get(i64 {handle}, ptr {key})").unwrap();
+}
+
+fn emit_json_at(out: &mut String, dest: Option<&str>, args: &[Operand], func: &Function) {
+    let d = dest.unwrap_or("_json_at");
+    let handle = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    let index = args
+        .get(1)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    writeln!(out, "  %{d} = call i64 @tyra_json_at(i64 {handle}, i64 {index})").unwrap();
 }
 
 /// parse::<Int>(str) -> Option<Int>

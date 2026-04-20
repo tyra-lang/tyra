@@ -1,5 +1,5 @@
 # 05-json-parsing.tyra
-# JSON parsing with custom error types and Into conversion.
+# JSON parsing with the Tier 2 `json` stdlib and Into conversion.
 # Validates: ADT qualified construction, impl Into<T>, ? with error conversion,
 #            nested match, string escape sequences, top-level statements (§6.1)
 
@@ -7,14 +7,9 @@
 # SPEC_REF: §12.2 — ? requires E: Into<F> for error conversion
 # SPEC_REF: §8.5 — ADTs have data semantics (reference type, GC-managed) per ADR-0001
 # SPEC_REF: §7.3 — escape sequences: \n, \t, \r, \\, \", \0, \u{XXXX}
-# NOTE: json module is Tier 2 stdlib — actual API signatures TBD (§22)
+# SPEC_REF: §22 — json module frozen in M10 phase 2 (parse + Value accessors)
 
 import json
-
-type JsonError =
-  | ParseFailed(message: String)
-  | TypeMismatch(expected: String, got: String)
-  | MissingKey(key: String)
 
 type AppError =
   | Json(inner: JsonError)
@@ -27,7 +22,9 @@ impl Into<AppError> for JsonError
 end
 
 fn parse_name(doc: json.Value) -> Result<String, JsonError>
-  let name_val = doc.get(key: "name").ok_or(JsonError.MissingKey(key: "name"))?
+  let name_val = doc.get(key: "name").ok_or(
+    JsonError.MissingKey(key: "name")
+  )?
   let name = name_val.as_string().ok_or(
     JsonError.TypeMismatch(expected: "string", got: name_val.kind())
   )?
@@ -50,7 +47,7 @@ when Err(Json(inner: MissingKey(key: k)))
   print("missing key: #{k}")
 when Err(Json(inner: TypeMismatch(expected: exp, got: got)))
   print("type error: expected #{exp}, got #{got}")
-when Err(Json(inner: ParseFailed(message: msg)))
+when Err(Json(inner: ParseFailed(message: msg, line: _, col: _)))
   print("parse failed: #{msg}")
 when Err(Io(message: msg))
   print("io error: #{msg}")

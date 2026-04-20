@@ -146,6 +146,48 @@ pub fn lower(file: &SourceFile) -> Program {
     ctx.fn_param_types
         .insert("__fs_exists".into(), vec![Ty::String]);
 
+    // M10 phase 2: json stdlib intrinsics.
+    ctx.fn_return_types.insert("__json_parse".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__json_parse".into(), vec![Ty::String]);
+    ctx.fn_return_types
+        .insert("__json_err_msg".into(), Ty::String);
+    ctx.fn_param_types.insert("__json_err_msg".into(), vec![]);
+    ctx.fn_return_types
+        .insert("__json_err_line".into(), Ty::Int);
+    ctx.fn_param_types.insert("__json_err_line".into(), vec![]);
+    ctx.fn_return_types.insert("__json_err_col".into(), Ty::Int);
+    ctx.fn_param_types.insert("__json_err_col".into(), vec![]);
+    ctx.fn_return_types.insert("__json_kind".into(), Ty::String);
+    ctx.fn_param_types
+        .insert("__json_kind".into(), vec![Ty::Int]);
+    ctx.fn_return_types
+        .insert("__json_is_string".into(), Ty::Bool);
+    ctx.fn_param_types
+        .insert("__json_is_string".into(), vec![Ty::Int]);
+    ctx.fn_return_types.insert("__json_is_int".into(), Ty::Bool);
+    ctx.fn_param_types
+        .insert("__json_is_int".into(), vec![Ty::Int]);
+    ctx.fn_return_types
+        .insert("__json_is_bool".into(), Ty::Bool);
+    ctx.fn_param_types
+        .insert("__json_is_bool".into(), vec![Ty::Int]);
+    ctx.fn_return_types.insert("__json_str".into(), Ty::String);
+    ctx.fn_param_types
+        .insert("__json_str".into(), vec![Ty::Int]);
+    ctx.fn_return_types.insert("__json_int".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__json_int".into(), vec![Ty::Int]);
+    ctx.fn_return_types.insert("__json_bool".into(), Ty::Bool);
+    ctx.fn_param_types
+        .insert("__json_bool".into(), vec![Ty::Int]);
+    ctx.fn_return_types.insert("__json_get".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__json_get".into(), vec![Ty::Int, Ty::String]);
+    ctx.fn_return_types.insert("__json_at".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__json_at".into(), vec![Ty::Int, Ty::Int]);
+
     // Collect function return types and store definitions for monomorphization
     for item in &file.items {
         if let Item::FnDef(f) = item {

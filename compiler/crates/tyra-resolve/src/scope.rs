@@ -146,6 +146,20 @@ const PRELUDE_FUNCTIONS: &[&str] = &[
     "__fs_errno",
     "__fs_write_raw",
     "__fs_exists",
+    // M10 phase 2: json stdlib backing. See runtime/src/stdlib_json.rs.
+    "__json_parse",
+    "__json_err_msg",
+    "__json_err_line",
+    "__json_err_col",
+    "__json_kind",
+    "__json_is_string",
+    "__json_is_int",
+    "__json_is_bool",
+    "__json_str",
+    "__json_int",
+    "__json_bool",
+    "__json_get",
+    "__json_at",
 ];
 
 /// Prelude ADT constructors: unqualified access to Option/Result variants.

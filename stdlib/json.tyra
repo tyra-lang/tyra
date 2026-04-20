@@ -1,27 +1,83 @@
-# stdlib/json.tyra — JSON parsing stub (§22, Tier 2)
-# v0.1: parse() returns Ok with a stub Value; get/as_string/kind are stubs.
-# JsonError must be defined by the caller.
+# stdlib/json.tyra — Tier 2 JSON module (§22). M10 phase 2.
+#
+# v0.1 API (frozen):
+#   json.parse(text)              -> Result<Value, JsonError>
+#   Value.kind()                  -> String  (null|bool|int|string|array|object)
+#   Value.as_string()             -> Option<String>
+#   Value.as_int()                -> Option<Int>
+#   Value.as_bool()               -> Option<Bool>
+#   Value.get(key: String)        -> Option<Value>   (object only)
+#   Value.at(_ index: Int)        -> Option<Value>   (array only)
+#
+# Backed by `__json_*` intrinsics (see runtime/src/stdlib_json.rs).
+# Value carries an opaque runtime handle (Int); handle 0 means "absent".
 
 export data Value
-  _tag: Int
-  _str: String
-  _int: Int
+  _handle: Int
 end
 
+export type JsonError =
+  | ParseFailed(message: String, line: Int, col: Int)
+  | TypeMismatch(expected: String, got: String)
+  | MissingKey(key: String)
+
 export fn parse(_ text: String) -> Result<Value, JsonError>
-  Ok(Value(_tag: 0, _str: text, _int: 0))
+  let h = __json_parse(text)
+  if h == 0
+    Err(JsonError.ParseFailed(
+      message: __json_err_msg(),
+      line: __json_err_line(),
+      col: __json_err_col(),
+    ))
+  else
+    Ok(Value(_handle: h))
+  end
 end
 
 impl ValueOps for Value
-  fn get(self, _ key: String) -> Option<Value>
-    None
+  fn kind(self) -> String
+    __json_kind(self._handle)
   end
 
   fn as_string(self) -> Option<String>
-    Some(self._str)
+    if __json_is_string(self._handle)
+      Some(__json_str(self._handle))
+    else
+      None
+    end
   end
 
-  fn kind(self) -> String
-    "string"
+  fn as_int(self) -> Option<Int>
+    if __json_is_int(self._handle)
+      Some(__json_int(self._handle))
+    else
+      None
+    end
+  end
+
+  fn as_bool(self) -> Option<Bool>
+    if __json_is_bool(self._handle)
+      Some(__json_bool(self._handle))
+    else
+      None
+    end
+  end
+
+  fn get(self, key: String) -> Option<Value>
+    let child = __json_get(self._handle, key)
+    if child == 0
+      None
+    else
+      Some(Value(_handle: child))
+    end
+  end
+
+  fn at(self, _ index: Int) -> Option<Value>
+    let child = __json_at(self._handle, index)
+    if child == 0
+      None
+    else
+      Some(Value(_handle: child))
+    end
   end
 end

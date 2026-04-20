@@ -29,6 +29,15 @@ fn builtin_primitive_return(fname: &str) -> Option<Ty> {
         "__fs_exists" => Some(Ty::Bool),
         // __fs_write_raw returns Unit (no tracking), __fs_errno returns Int
         // (default i64 path — no tracking needed).
+        // M10 phase 2: json stdlib intrinsics.
+        "__json_err_msg" | "__json_kind" | "__json_str" => Some(Ty::String),
+        // Bool-returning intrinsics. `__json_bool` (the value accessor) returns
+        // i32 in the runtime and is widened to i1 by `emit_json_i64_to_bool` —
+        // the codegen path differs from `__json_int`, which stays as i64.
+        "__json_is_string" | "__json_is_int" | "__json_is_bool" | "__json_bool" => Some(Ty::Bool),
+        // Int-returning intrinsics (i64 default path, no tracking needed):
+        //   __json_parse, __json_int, __json_get, __json_at,
+        //   __json_err_line, __json_err_col.
         _ => None,
     }
 }

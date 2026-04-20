@@ -152,6 +152,20 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare i32 @tyra_fs_errno()").unwrap();
     writeln!(out, "declare void @tyra_fs_write(ptr, ptr)").unwrap();
     writeln!(out, "declare i32 @tyra_fs_exists(ptr)").unwrap();
+    // M10 phase 2: json stdlib. See runtime/src/stdlib_json.rs.
+    writeln!(out, "declare i64 @tyra_json_parse(ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_json_err_msg()").unwrap();
+    writeln!(out, "declare i64 @tyra_json_err_line()").unwrap();
+    writeln!(out, "declare i64 @tyra_json_err_col()").unwrap();
+    writeln!(out, "declare ptr @tyra_json_kind(i64)").unwrap();
+    writeln!(out, "declare i32 @tyra_json_is_string(i64)").unwrap();
+    writeln!(out, "declare i32 @tyra_json_is_int(i64)").unwrap();
+    writeln!(out, "declare i32 @tyra_json_is_bool(i64)").unwrap();
+    writeln!(out, "declare ptr @tyra_json_str(i64)").unwrap();
+    writeln!(out, "declare i64 @tyra_json_int(i64)").unwrap();
+    writeln!(out, "declare i32 @tyra_json_bool(i64)").unwrap();
+    writeln!(out, "declare i64 @tyra_json_get(i64, ptr)").unwrap();
+    writeln!(out, "declare i64 @tyra_json_at(i64, i64)").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
     writeln!(out, "declare void @exit(i32)").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();

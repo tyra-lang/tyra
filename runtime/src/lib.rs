@@ -29,6 +29,13 @@ use std::thread;
 mod stdlib_fs;
 pub use stdlib_fs::{tyra_fs_errno, tyra_fs_exists, tyra_fs_read, tyra_fs_write};
 
+mod stdlib_json;
+pub use stdlib_json::{
+    tyra_json_at, tyra_json_bool, tyra_json_err_col, tyra_json_err_line, tyra_json_err_msg,
+    tyra_json_get, tyra_json_int, tyra_json_is_bool, tyra_json_is_int, tyra_json_is_string,
+    tyra_json_kind, tyra_json_parse, tyra_json_str,
+};
+
 /// Thunk signature emitted by codegen for each `spawn` site.
 /// Takes opaque arg pointer, returns opaque result pointer.
 pub type ThunkFn = unsafe extern "C" fn(*mut c_void) -> *mut c_void;

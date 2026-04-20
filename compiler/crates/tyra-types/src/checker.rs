@@ -265,6 +265,60 @@ fn register_prelude(env: &mut TypeEnv) {
         "__fs_exists".to_string(),
         Ty::Fn(vec![Ty::String], Box::new(Ty::Bool)),
     );
+    // M10 phase 2: json stdlib intrinsics. See stdlib/json.tyra.
+    // Handles are opaque Int values (0 = error / absent).
+    env.define(
+        "__json_parse".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__json_err_msg".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::String)),
+    );
+    env.define(
+        "__json_err_line".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__json_err_col".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__json_kind".to_string(),
+        Ty::Fn(vec![Ty::Int], Box::new(Ty::String)),
+    );
+    env.define(
+        "__json_is_string".to_string(),
+        Ty::Fn(vec![Ty::Int], Box::new(Ty::Bool)),
+    );
+    env.define(
+        "__json_is_int".to_string(),
+        Ty::Fn(vec![Ty::Int], Box::new(Ty::Bool)),
+    );
+    env.define(
+        "__json_is_bool".to_string(),
+        Ty::Fn(vec![Ty::Int], Box::new(Ty::Bool)),
+    );
+    env.define(
+        "__json_str".to_string(),
+        Ty::Fn(vec![Ty::Int], Box::new(Ty::String)),
+    );
+    env.define(
+        "__json_int".to_string(),
+        Ty::Fn(vec![Ty::Int], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__json_bool".to_string(),
+        Ty::Fn(vec![Ty::Int], Box::new(Ty::Bool)),
+    );
+    env.define(
+        "__json_get".to_string(),
+        Ty::Fn(vec![Ty::Int, Ty::String], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__json_at".to_string(),
+        Ty::Fn(vec![Ty::Int, Ty::Int], Box::new(Ty::Int)),
+    );
 
     // Prelude ADTs for §10.3 exhaustiveness checking.
     env.register_adt("Option".into(), vec!["Some".into(), "None".into()]);
