@@ -139,6 +139,9 @@ pub fn lower(file: &SourceFile) -> Program {
     ctx.fn_return_types.insert("__fs_errno".into(), Ty::Int);
     ctx.fn_param_types.insert("__fs_errno".into(), vec![]);
     ctx.fn_return_types
+        .insert("__fs_errmsg".into(), Ty::String);
+    ctx.fn_param_types.insert("__fs_errmsg".into(), vec![]);
+    ctx.fn_return_types
         .insert("__fs_write_raw".into(), Ty::Unit);
     ctx.fn_param_types
         .insert("__fs_write_raw".into(), vec![Ty::String, Ty::String]);

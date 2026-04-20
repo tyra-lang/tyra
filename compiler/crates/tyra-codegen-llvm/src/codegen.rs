@@ -150,6 +150,7 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     // M10 phase 1: fs stdlib. See runtime/src/stdlib_fs.rs.
     writeln!(out, "declare ptr @tyra_fs_read(ptr)").unwrap();
     writeln!(out, "declare i32 @tyra_fs_errno()").unwrap();
+    writeln!(out, "declare ptr @tyra_fs_errmsg()").unwrap();
     writeln!(out, "declare void @tyra_fs_write(ptr, ptr)").unwrap();
     writeln!(out, "declare i32 @tyra_fs_exists(ptr)").unwrap();
     // M10 phase 2: json stdlib. See runtime/src/stdlib_json.rs.

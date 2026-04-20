@@ -27,7 +27,9 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 
 mod stdlib_fs;
-pub use stdlib_fs::{tyra_fs_errno, tyra_fs_exists, tyra_fs_read, tyra_fs_write};
+pub use stdlib_fs::{
+    tyra_fs_errmsg, tyra_fs_errno, tyra_fs_exists, tyra_fs_read, tyra_fs_write,
+};
 
 mod stdlib_json;
 pub use stdlib_json::{

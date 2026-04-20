@@ -1,4 +1,4 @@
-# stdlib/fs.tyra — Tier 2 file system module (§22). M10 phase 1.
+# stdlib/fs.tyra — Tier 2 file system module (§17.3.1). M10 phase 1 + errmsg.
 #
 # v0.1 API (frozen):
 #   fs.read_to_string(path)          -> Result<String, FsError>
@@ -24,9 +24,7 @@ export fn read_to_string(_ path: String) -> Result<String, FsError>
   when 2
     Err(FsError.PermissionDenied(path: path))
   when _
-    # TODO phase 1b: replace with tyra_fs_errmsg() once runtime exposes the
-    # underlying io::Error message.
-    Err(FsError.IoError(message: "io error"))
+    Err(FsError.IoError(message: __fs_errmsg()))
   end
 end
 
@@ -41,7 +39,7 @@ export fn write_string(_ path: String, _ contents: String) -> Result<Unit, FsErr
   when 2
     Err(FsError.PermissionDenied(path: path))
   when _
-    Err(FsError.IoError(message: "io error"))
+    Err(FsError.IoError(message: __fs_errmsg()))
   end
 end
 

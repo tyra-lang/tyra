@@ -45,6 +45,10 @@ pub(crate) fn emit_builtin_call(
             emit_fs_errno(out, dest.as_deref());
             true
         }
+        "__fs_errmsg" => {
+            emit_fs_errmsg(out, dest.as_deref());
+            true
+        }
         "__fs_write_raw" => {
             emit_fs_write_raw(out, args, func);
             true
@@ -273,6 +277,14 @@ fn emit_fs_errno(out: &mut String, dest: Option<&str>) {
     let d = dest.unwrap_or("_fs_errno");
     writeln!(out, "  %{d}.i32 = call i32 @tyra_fs_errno()").unwrap();
     writeln!(out, "  %{d} = sext i32 %{d}.i32 to i64").unwrap();
+}
+
+/// Follow-up: `__fs_errmsg() -> String`.
+/// Delegates to `@tyra_fs_errmsg`; returns a caller-owned C string
+/// describing the last IoError (empty for other errno codes).
+fn emit_fs_errmsg(out: &mut String, dest: Option<&str>) {
+    let d = dest.unwrap_or("_fs_errmsg");
+    writeln!(out, "  %{d} = call ptr @tyra_fs_errmsg()").unwrap();
 }
 
 /// M10 phase 1b: `__fs_write_raw(path: String, contents: String) -> Unit`.

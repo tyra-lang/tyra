@@ -1,4 +1,4 @@
-# stdlib/json.tyra — Tier 2 JSON module (§22). M10 phase 2.
+# stdlib/json.tyra — Tier 2 JSON module (§17.3.2). M10 phase 2.
 #
 # v0.1 API (frozen):
 #   json.parse(text)              -> Result<Value, JsonError>

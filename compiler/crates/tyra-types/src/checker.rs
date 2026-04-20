@@ -258,6 +258,10 @@ fn register_prelude(env: &mut TypeEnv) {
         Ty::Fn(vec![], Box::new(Ty::Int)),
     );
     env.define(
+        "__fs_errmsg".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::String)),
+    );
+    env.define(
         "__fs_write_raw".to_string(),
         Ty::Fn(vec![Ty::String, Ty::String], Box::new(Ty::Unit)),
     );
