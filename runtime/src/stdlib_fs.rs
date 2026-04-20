@@ -89,6 +89,53 @@ pub extern "C" fn tyra_fs_errno() -> c_int {
     FS_ERRNO.with(|e| e.get())
 }
 
+/// Write `contents` to `path`, creating or truncating the file.
+///
+/// Sets errno to 0 on success or 1/2/3 on failure (same mapping as
+/// `tyra_fs_read`). Returns void — callers read the errno separately,
+/// matching the read-side contract.
+///
+/// # Safety
+/// Both pointers must be null-terminated UTF-8 strings.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_fs_write(path: *const c_char, contents: *const c_char) {
+    if path.is_null() || contents.is_null() {
+        set_errno(3);
+        return;
+    }
+    let path_str = match unsafe { CStr::from_ptr(path) }.to_str() {
+        Ok(s) => s,
+        Err(_) => {
+            set_errno(3);
+            return;
+        }
+    };
+    let bytes = unsafe { CStr::from_ptr(contents) }.to_bytes();
+    match fs::write(path_str, bytes) {
+        Ok(()) => set_errno(0),
+        Err(e) => set_errno(map_io_error(e.kind())),
+    }
+}
+
+/// Return 1 if `path` refers to an existing filesystem entry, 0 otherwise.
+///
+/// Does not distinguish file vs directory, nor does it touch errno — callers
+/// wanting diagnostic detail should use `tyra_fs_read` and inspect errno.
+///
+/// # Safety
+/// `path` must be a null-terminated UTF-8 string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_fs_exists(path: *const c_char) -> c_int {
+    if path.is_null() {
+        return 0;
+    }
+    let path_str = match unsafe { CStr::from_ptr(path) }.to_str() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    if std::path::Path::new(path_str).exists() { 1 } else { 0 }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,6 +166,28 @@ mod tests {
         let path = cstr("/definitely/does/not/exist/tyra-fs-test");
         let _ = unsafe { tyra_fs_read(path.as_ptr()) };
         assert_eq!(tyra_fs_errno(), 1);
+    }
+
+    #[test]
+    fn write_then_read_roundtrip() {
+        let tmp = tempfile_path("tyra_fs_write_ok");
+        let path = cstr(tmp.to_str().unwrap());
+        let body = cstr("written by tyra");
+        unsafe { tyra_fs_write(path.as_ptr(), body.as_ptr()) };
+        assert_eq!(tyra_fs_errno(), 0);
+        let got = std::fs::read_to_string(&tmp).unwrap();
+        assert_eq!(got, "written by tyra");
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn exists_reports_presence() {
+        let tmp = tempfile_path("tyra_fs_exists_ok");
+        let path = cstr(tmp.to_str().unwrap());
+        assert_eq!(unsafe { tyra_fs_exists(path.as_ptr()) }, 0);
+        std::fs::write(&tmp, b"x").unwrap();
+        assert_eq!(unsafe { tyra_fs_exists(path.as_ptr()) }, 1);
+        let _ = std::fs::remove_file(&tmp);
     }
 
     fn tempfile_path(name: &str) -> std::path::PathBuf {

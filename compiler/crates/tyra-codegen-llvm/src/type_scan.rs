@@ -26,6 +26,9 @@ fn builtin_primitive_return(fname: &str) -> Option<Ty> {
     match fname {
         // M10 phase 1: fs stdlib intrinsics.
         "__fs_read_raw" => Some(Ty::String),
+        "__fs_exists" => Some(Ty::Bool),
+        // __fs_write_raw returns Unit (no tracking), __fs_errno returns Int
+        // (default i64 path — no tracking needed).
         _ => None,
     }
 }

@@ -45,6 +45,14 @@ pub(crate) fn emit_builtin_call(
             emit_fs_errno(out, dest.as_deref());
             true
         }
+        "__fs_write_raw" => {
+            emit_fs_write_raw(out, args, func);
+            true
+        }
+        "__fs_exists" => {
+            emit_fs_exists(out, dest.as_deref(), args, func);
+            true
+        }
         "sys__exit" => {
             // §17.1: core.sys.exit(_ code: Int) -> Never
             if let Some(arg) = args.first() {
@@ -213,6 +221,38 @@ fn emit_fs_errno(out: &mut String, dest: Option<&str>) {
     let d = dest.unwrap_or("_fs_errno");
     writeln!(out, "  %{d}.i32 = call i32 @tyra_fs_errno()").unwrap();
     writeln!(out, "  %{d} = sext i32 %{d}.i32 to i64").unwrap();
+}
+
+/// M10 phase 1b: `__fs_write_raw(path: String, contents: String) -> Unit`.
+/// Delegates to `@tyra_fs_write`; caller reads `__fs_errno()` afterward to
+/// discriminate success vs failure.
+fn emit_fs_write_raw(out: &mut String, args: &[Operand], func: &Function) {
+    let path = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    let contents = args
+        .get(1)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    writeln!(out, "  call void @tyra_fs_write(ptr {path}, ptr {contents})").unwrap();
+}
+
+/// M10 phase 1b: `__fs_exists(path: String) -> Bool`.
+/// Delegates to `@tyra_fs_exists`; truncates the i32 return to i1.
+fn emit_fs_exists(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_fs_exists");
+    let path = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    writeln!(out, "  %{d}.i32 = call i32 @tyra_fs_exists(ptr {path})").unwrap();
+    writeln!(out, "  %{d} = icmp ne i32 %{d}.i32, 0").unwrap();
 }
 
 /// parse::<Int>(str) -> Option<Int>

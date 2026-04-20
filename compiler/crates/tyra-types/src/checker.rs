@@ -257,6 +257,14 @@ fn register_prelude(env: &mut TypeEnv) {
         "__fs_errno".to_string(),
         Ty::Fn(vec![], Box::new(Ty::Int)),
     );
+    env.define(
+        "__fs_write_raw".to_string(),
+        Ty::Fn(vec![Ty::String, Ty::String], Box::new(Ty::Unit)),
+    );
+    env.define(
+        "__fs_exists".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(Ty::Bool)),
+    );
 
     // Prelude ADTs for §10.3 exhaustiveness checking.
     env.register_adt("Option".into(), vec!["Some".into(), "None".into()]);

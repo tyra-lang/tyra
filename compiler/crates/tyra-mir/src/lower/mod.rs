@@ -138,6 +138,13 @@ pub fn lower(file: &SourceFile) -> Program {
         .insert("__fs_read_raw".into(), vec![Ty::String]);
     ctx.fn_return_types.insert("__fs_errno".into(), Ty::Int);
     ctx.fn_param_types.insert("__fs_errno".into(), vec![]);
+    ctx.fn_return_types
+        .insert("__fs_write_raw".into(), Ty::Unit);
+    ctx.fn_param_types
+        .insert("__fs_write_raw".into(), vec![Ty::String, Ty::String]);
+    ctx.fn_return_types.insert("__fs_exists".into(), Ty::Bool);
+    ctx.fn_param_types
+        .insert("__fs_exists".into(), vec![Ty::String]);
 
     // Collect function return types and store definitions for monomorphization
     for item in &file.items {

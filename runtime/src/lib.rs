@@ -27,7 +27,7 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 
 mod stdlib_fs;
-pub use stdlib_fs::{tyra_fs_errno, tyra_fs_read};
+pub use stdlib_fs::{tyra_fs_errno, tyra_fs_exists, tyra_fs_read, tyra_fs_write};
 
 /// Thunk signature emitted by codegen for each `spawn` site.
 /// Takes opaque arg pointer, returns opaque result pointer.

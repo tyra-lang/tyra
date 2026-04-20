@@ -144,6 +144,8 @@ const PRELUDE_FUNCTIONS: &[&str] = &[
     // needing an `import` (which would create a circular dependency).
     "__fs_read_raw",
     "__fs_errno",
+    "__fs_write_raw",
+    "__fs_exists",
 ];
 
 /// Prelude ADT constructors: unqualified access to Option/Result variants.

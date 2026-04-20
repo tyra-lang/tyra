@@ -1,9 +1,11 @@
 # stdlib/fs.tyra — Tier 2 file system module (§22). M10 phase 1.
 #
-# v0.1 API (frozen for read_to_string; write_string/exists land in later phases):
-#   fs.read_to_string(path) -> Result<String, FsError>
+# v0.1 API (frozen):
+#   fs.read_to_string(path)          -> Result<String, FsError>
+#   fs.write_string(path, contents)  -> Result<Unit, FsError>
+#   fs.exists(path)                  -> Bool
 #
-# Backed by `__fs_read_raw` / `__fs_errno` intrinsics (see runtime/src/stdlib_fs.rs).
+# Backed by `__fs_*` intrinsics (see runtime/src/stdlib_fs.rs).
 # Errno codes: 0=Ok, 1=NotFound, 2=PermissionDenied, 3=IoError.
 
 export type FsError =
@@ -23,8 +25,26 @@ export fn read_to_string(_ path: String) -> Result<String, FsError>
     Err(FsError.PermissionDenied(path: path))
   when _
     # TODO phase 1b: replace with tyra_fs_errmsg() once runtime exposes the
-    # underlying io::Error message. For now the path is the most useful
-    # diagnostic we have for catch-all io failures.
+    # underlying io::Error message.
     Err(FsError.IoError(message: "io error"))
   end
+end
+
+export fn write_string(_ path: String, _ contents: String) -> Result<Unit, FsError>
+  __fs_write_raw(path, contents)
+  let code = __fs_errno()
+  match code
+  when 0
+    Ok(())
+  when 1
+    Err(FsError.NotFound(path: path))
+  when 2
+    Err(FsError.PermissionDenied(path: path))
+  when _
+    Err(FsError.IoError(message: "io error"))
+  end
+end
+
+export fn exists(_ path: String) -> Bool
+  __fs_exists(path)
 end
