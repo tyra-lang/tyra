@@ -924,8 +924,8 @@ end
 
 ```tyra
 fn handle() -> Result<Unit, AppError>
-  let file = fs.open("app.log")?
-  defer file.close()
+  let conn = db.connect()?
+  defer conn.close()
   ...
 end
 ```
@@ -1183,9 +1183,9 @@ ADT バリアント:
 - `string` — 文字列操作 (split, trim, contains, replace 等)
 - `collections` — `List`, `Map`, `Set` のメソッド (sort_by, min_by, max_by, map, filter 等)
 - `float` — Float の比較関数 (eq, approx_eq, is_nan 等。ADR-0002 参照)
-- `json` — JSON パース・生成
+- `json` — JSON パース (§17.3 で v0.1 API 凍結)
 - `http` — HTTP サーバ・クライアント
-- `fs` — ファイルシステム操作
+- `fs` — ファイルシステム操作 (§17.3 で v0.1 API 凍結)
 - `time` — 時刻・期間
 - `test` — テストフレームワーク
 - `log` — ロギング
@@ -1194,6 +1194,63 @@ ADT バリアント:
 
 - 実務でよく使うものは標準に含める
 - 依存選定の自由より再現性を優先する
+
+### 17.3 v0.1 で凍結する Tier 2 API
+
+M10 で `fs` と `json` の最小 API を言語仕様として凍結する。他の Tier 2
+モジュール (http 等) は M11 以降に別途確定する。
+
+#### 17.3.1 fs
+
+```tyra
+export fn fs.read_to_string(_ path: String) -> Result<String, fs.FsError>
+export fn fs.write_string(_ path: String, _ contents: String) -> Result<Unit, fs.FsError>
+export fn fs.exists(_ path: String) -> Bool
+
+export type fs.FsError =
+  | NotFound(path: String)
+  | PermissionDenied(path: String)
+  | IoError(message: String)
+```
+
+- `read_to_string` / `write_string` はファイル全体を読み書きする。
+  大容量や streaming が必要な用途は v0.1 のスコープ外 (M11+)。
+- `exists` はファイル・ディレクトリを区別しない。
+- `FsError.IoError` は `NotFound` / `PermissionDenied` 以外すべてを吸収する
+  catch-all バリアント。詳細な errno 列挙は v0.1 では提供しない。
+
+#### 17.3.2 json
+
+```tyra
+export data json.Value
+  _handle: Int
+end
+
+export type json.JsonError =
+  | ParseFailed(message: String, line: Int, col: Int)
+  | TypeMismatch(expected: String, got: String)
+  | MissingKey(key: String)
+
+export fn json.parse(_ text: String) -> Result<json.Value, json.JsonError>
+
+impl ValueOps for json.Value
+  fn kind(self) -> String                # "null" | "bool" | "int" | "string" | "array" | "object"
+  fn as_string(self) -> Option<String>
+  fn as_int(self) -> Option<Int>
+  fn as_bool(self) -> Option<Bool>
+  fn get(self, key: String) -> Option<json.Value>      # object 限定
+  fn at(self, _ index: Int) -> Option<json.Value>      # array 限定
+end
+```
+
+- 数値は `Int` のみ対応。JSON 浮動小数点値は `ParseFailed` を返す
+  (`Float` accessor は v0.2 以降)。
+- 文字列の `\uXXXX` エスケープは BMP とサロゲートペア (RFC 8259 §7)
+  に対応する。
+- `TypeMismatch` / `MissingKey` は stdlib からは返さない (`as_*` / `get`
+  は `None` を返す)。呼出側がユーザ Error として利用するための ADT。
+- `json.Value` は GC 管理の opaque ハンドルを持つ。v0.1 ではノードは
+  `Box::leak` され、プロセス終了まで生存する。
 
 ---
 
@@ -1366,7 +1423,7 @@ end
 - structured concurrency
 - `break` / `continue`
 - モジュールレベルの初期化セマンティクス (`let`/`mut` のモジュールスコープ)
-- Tier 2 標準ライブラリ API の詳細 (http, fs, json, string, collections, time, test, log, float)
+- Tier 2 標準ライブラリ API の詳細 (http, string, collections, time, test, log, float) — `fs` と `json` は §17.3 で v0.1 凍結済
 
 ---
 

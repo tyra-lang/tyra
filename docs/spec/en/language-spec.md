@@ -928,8 +928,8 @@ Rules:
 
 ```tyra
 fn handle() -> Result<Unit, AppError>
-  let file = fs.open("app.log")?
-  defer file.close()
+  let conn = db.connect()?
+  defer conn.close()
   ...
 end
 ```
@@ -1187,9 +1187,9 @@ These modules are practically important but do not affect language semantics. Th
 - `string` — string operations (split, trim, contains, replace, etc.)
 - `collections` — methods on `List`, `Map`, `Set` (sort_by, min_by, max_by, map, filter, etc.)
 - `float` — Float comparison functions (eq, approx_eq, is_nan, etc.; see ADR-0002)
-- `json` — JSON parsing and serialization
+- `json` — JSON parsing (v0.1 API frozen in §17.3)
 - `http` — HTTP server and client
-- `fs` — file system operations
+- `fs` — file system operations (v0.1 API frozen in §17.3)
 - `time` — time and duration
 - `test` — testing framework
 - `log` — logging
@@ -1198,6 +1198,65 @@ Principles:
 
 - Things commonly used in production are in the standard library
 - Reproducibility is preferred over freedom of dependency choice
+
+### 17.3 Tier 2 APIs frozen in v0.1
+
+M10 freezes minimal APIs for `fs` and `json` as part of the language
+specification. Other Tier 2 modules (http, etc.) will be finalized in
+M11 and beyond.
+
+#### 17.3.1 fs
+
+```tyra
+export fn fs.read_to_string(_ path: String) -> Result<String, fs.FsError>
+export fn fs.write_string(_ path: String, _ contents: String) -> Result<Unit, fs.FsError>
+export fn fs.exists(_ path: String) -> Bool
+
+export type fs.FsError =
+  | NotFound(path: String)
+  | PermissionDenied(path: String)
+  | IoError(message: String)
+```
+
+- `read_to_string` / `write_string` read or write a file in full.
+  Large-file or streaming workloads are out of scope for v0.1 (M11+).
+- `exists` does not distinguish files from directories.
+- `FsError.IoError` is a catch-all for every failure that is not
+  `NotFound` or `PermissionDenied`; v0.1 does not expose a detailed
+  errno enumeration.
+
+#### 17.3.2 json
+
+```tyra
+export data json.Value
+  _handle: Int
+end
+
+export type json.JsonError =
+  | ParseFailed(message: String, line: Int, col: Int)
+  | TypeMismatch(expected: String, got: String)
+  | MissingKey(key: String)
+
+export fn json.parse(_ text: String) -> Result<json.Value, json.JsonError>
+
+impl ValueOps for json.Value
+  fn kind(self) -> String                # "null" | "bool" | "int" | "string" | "array" | "object"
+  fn as_string(self) -> Option<String>
+  fn as_int(self) -> Option<Int>
+  fn as_bool(self) -> Option<Bool>
+  fn get(self, key: String) -> Option<json.Value>      # object only
+  fn at(self, _ index: Int) -> Option<json.Value>      # array only
+end
+```
+
+- Numbers are parsed as `Int` only. JSON floating-point literals surface
+  as `ParseFailed` (a `Float` accessor is deferred to v0.2+).
+- String `\uXXXX` escapes support BMP and surrogate pairs (RFC 8259 §7).
+- `TypeMismatch` / `MissingKey` are never returned by the stdlib itself
+  (`as_*` / `get` / `at` return `None`). They are ADT variants provided
+  for callers to use as their own error types.
+- `json.Value` carries a GC-managed opaque handle. In v0.1, nodes are
+  allocated via `Box::leak` and live until process exit.
 
 ---
 
@@ -1370,7 +1429,7 @@ The following are postponed for later specification:
 - structured concurrency
 - `break` / `continue`
 - Module-level initialization semantics (`let`/`mut` at module scope)
-- Detailed APIs for Tier 2 standard library modules (http, fs, json, string, collections, time, test, log, float)
+- Detailed APIs for Tier 2 standard library modules (http, string, collections, time, test, log, float) — `fs` and `json` are frozen in §17.3
 
 ---
 
