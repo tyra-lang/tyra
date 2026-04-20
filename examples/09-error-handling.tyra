@@ -7,7 +7,7 @@
 # SPEC_REF: §12.2 — ? requires E: Into<F>; Into<T> for T auto-provided
 # SPEC_REF: §12.1 — panic(_ message: String) -> Never; function, not macro
 # SPEC_REF: §10.1 — and, or, not keywords; both operands must be Bool
-# SPEC_REF: §22 — fs.read_to_string frozen in M10 phase 1
+# SPEC_REF: §17.3.1 — fs.read_to_string frozen in M10 phase 1
 
 import fs
 

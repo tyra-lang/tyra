@@ -924,8 +924,8 @@ end
 
 ```tyra
 fn handle() -> Result<Unit, AppError>
-  let conn = db.connect()?
-  defer conn.close()
+  defer print("handler exited")
+  let text = fs.read_to_string("app.conf")?
   ...
 end
 ```
@@ -1202,12 +1202,16 @@ M10 で `fs` と `json` の最小 API を言語仕様として凍結する。他
 
 #### 17.3.1 fs
 
-```tyra
-export fn fs.read_to_string(_ path: String) -> Result<String, fs.FsError>
-export fn fs.write_string(_ path: String, _ contents: String) -> Result<Unit, fs.FsError>
-export fn fs.exists(_ path: String) -> Bool
+呼出側は `import fs` の上で `fs.read_to_string(...)` のようにモジュール
+修飾して呼ぶ。以下は `stdlib/fs.tyra` の宣言抜粋。
 
-export type fs.FsError =
+```tyra
+# stdlib/fs.tyra
+export fn read_to_string(_ path: String) -> Result<String, FsError>
+export fn write_string(_ path: String, _ contents: String) -> Result<Unit, FsError>
+export fn exists(_ path: String) -> Bool
+
+export type FsError =
   | NotFound(path: String)
   | PermissionDenied(path: String)
   | IoError(message: String)
@@ -1221,25 +1225,29 @@ export type fs.FsError =
 
 #### 17.3.2 json
 
+呼出側は `import json` の上で `json.parse(...)` / `json.Value` のように
+モジュール修飾する。以下は `stdlib/json.tyra` の宣言抜粋。
+
 ```tyra
-export data json.Value
+# stdlib/json.tyra
+export data Value
   _handle: Int
 end
 
-export type json.JsonError =
+export type JsonError =
   | ParseFailed(message: String, line: Int, col: Int)
   | TypeMismatch(expected: String, got: String)
   | MissingKey(key: String)
 
-export fn json.parse(_ text: String) -> Result<json.Value, json.JsonError>
+export fn parse(_ text: String) -> Result<Value, JsonError>
 
-impl ValueOps for json.Value
+impl ValueOps for Value
   fn kind(self) -> String                # "null" | "bool" | "int" | "string" | "array" | "object"
   fn as_string(self) -> Option<String>
   fn as_int(self) -> Option<Int>
   fn as_bool(self) -> Option<Bool>
-  fn get(self, key: String) -> Option<json.Value>      # object 限定
-  fn at(self, _ index: Int) -> Option<json.Value>      # array 限定
+  fn get(self, key: String) -> Option<Value>      # object 限定
+  fn at(self, _ index: Int) -> Option<Value>      # array 限定
 end
 ```
 
@@ -1249,8 +1257,9 @@ end
   に対応する。
 - `TypeMismatch` / `MissingKey` は stdlib からは返さない (`as_*` / `get`
   は `None` を返す)。呼出側がユーザ Error として利用するための ADT。
-- `json.Value` は GC 管理の opaque ハンドルを持つ。v0.1 ではノードは
-  `Box::leak` され、プロセス終了まで生存する。
+- `json.Value` は GC 管理の opaque ハンドルとして振る舞う (§8.5)。
+  v0.1 ではパース済みツリーはプロセス終了まで生存する (明示的解放は
+  サポートしない)。実装詳細は `runtime/src/stdlib_json.rs` 参照。
 
 ---
 

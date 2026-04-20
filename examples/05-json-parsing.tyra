@@ -7,7 +7,7 @@
 # SPEC_REF: §12.2 — ? requires E: Into<F> for error conversion
 # SPEC_REF: §8.5 — ADTs have data semantics (reference type, GC-managed) per ADR-0001
 # SPEC_REF: §7.3 — escape sequences: \n, \t, \r, \\, \", \0, \u{XXXX}
-# SPEC_REF: §22 — json module frozen in M10 phase 2 (parse + Value accessors)
+# SPEC_REF: §17.3.2 — json module frozen in M10 phase 2 (parse + Value accessors)
 
 import json
 

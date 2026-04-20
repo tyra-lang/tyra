@@ -928,8 +928,8 @@ Rules:
 
 ```tyra
 fn handle() -> Result<Unit, AppError>
-  let conn = db.connect()?
-  defer conn.close()
+  defer print("handler exited")
+  let text = fs.read_to_string("app.conf")?
   ...
 end
 ```
@@ -1207,12 +1207,17 @@ M11 and beyond.
 
 #### 17.3.1 fs
 
-```tyra
-export fn fs.read_to_string(_ path: String) -> Result<String, fs.FsError>
-export fn fs.write_string(_ path: String, _ contents: String) -> Result<Unit, fs.FsError>
-export fn fs.exists(_ path: String) -> Bool
+Callers `import fs` and use the module-qualified form
+`fs.read_to_string(...)`. The declarations below are excerpted from
+`stdlib/fs.tyra`.
 
-export type fs.FsError =
+```tyra
+# stdlib/fs.tyra
+export fn read_to_string(_ path: String) -> Result<String, FsError>
+export fn write_string(_ path: String, _ contents: String) -> Result<Unit, FsError>
+export fn exists(_ path: String) -> Bool
+
+export type FsError =
   | NotFound(path: String)
   | PermissionDenied(path: String)
   | IoError(message: String)
@@ -1227,25 +1232,30 @@ export type fs.FsError =
 
 #### 17.3.2 json
 
+Callers `import json` and use the module-qualified form
+`json.parse(...)` / `json.Value`. The declarations below are excerpted
+from `stdlib/json.tyra`.
+
 ```tyra
-export data json.Value
+# stdlib/json.tyra
+export data Value
   _handle: Int
 end
 
-export type json.JsonError =
+export type JsonError =
   | ParseFailed(message: String, line: Int, col: Int)
   | TypeMismatch(expected: String, got: String)
   | MissingKey(key: String)
 
-export fn json.parse(_ text: String) -> Result<json.Value, json.JsonError>
+export fn parse(_ text: String) -> Result<Value, JsonError>
 
-impl ValueOps for json.Value
+impl ValueOps for Value
   fn kind(self) -> String                # "null" | "bool" | "int" | "string" | "array" | "object"
   fn as_string(self) -> Option<String>
   fn as_int(self) -> Option<Int>
   fn as_bool(self) -> Option<Bool>
-  fn get(self, key: String) -> Option<json.Value>      # object only
-  fn at(self, _ index: Int) -> Option<json.Value>      # array only
+  fn get(self, key: String) -> Option<Value>      # object only
+  fn at(self, _ index: Int) -> Option<Value>      # array only
 end
 ```
 
@@ -1255,8 +1265,10 @@ end
 - `TypeMismatch` / `MissingKey` are never returned by the stdlib itself
   (`as_*` / `get` / `at` return `None`). They are ADT variants provided
   for callers to use as their own error types.
-- `json.Value` carries a GC-managed opaque handle. In v0.1, nodes are
-  allocated via `Box::leak` and live until process exit.
+- `json.Value` behaves as a GC-managed opaque handle (§8.5). In v0.1 a
+  parsed tree lives for the duration of the process (explicit
+  deallocation is not supported). See `runtime/src/stdlib_json.rs` for
+  implementation notes.
 
 ---
 
