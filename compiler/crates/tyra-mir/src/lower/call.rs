@@ -456,7 +456,7 @@ impl super::LowerCtx {
         if let ExprKind::FieldAccess(obj, fn_name) = &callee.kind
             && let ExprKind::Ident(module_name) = &obj.kind
             && self.imported_modules.contains(module_name.as_str())
-            && fn_name == "join_all"
+            && (fn_name == "join_all" || fn_name == "select")
             && args.len() == 1
         {
             let list_expr = &args[0].value;
@@ -477,19 +477,57 @@ impl super::LowerCtx {
                 if let Some(elem_ty) = elem_task_ty {
                     let list_temp = self.lower_expr(list_expr, body);
                     let dest = self.fresh_temp();
-                    let list_ty =
-                        Ty::Generic("List".into(), vec![elem_ty.clone()]);
-                    self.register_adt_type(&list_ty);
-                    body.push(Instruction::JoinAll {
-                        dest: dest.clone(),
-                        list: Operand::Var(list_temp),
-                        elem_type: elem_ty.clone(),
-                    });
-                    self.generic_var_types.insert(dest.clone(), list_ty.clone());
-                    self.var_types
-                        .insert(dest.clone(), list_ty.monomorphized_name());
+                    if fn_name == "join_all" {
+                        let list_ty =
+                            Ty::Generic("List".into(), vec![elem_ty.clone()]);
+                        self.register_adt_type(&list_ty);
+                        body.push(Instruction::JoinAll {
+                            dest: dest.clone(),
+                            list: Operand::Var(list_temp),
+                            elem_type: elem_ty.clone(),
+                        });
+                        self.generic_var_types.insert(dest.clone(), list_ty.clone());
+                        self.var_types
+                            .insert(dest.clone(), list_ty.monomorphized_name());
+                    } else {
+                        // tasks.select(tasks) -> Task<T>. The dest is an i64
+                        // task handle; register task_result_types so a
+                        // downstream .await unboxes T. Mirror join_all by
+                        // also recording a var_types entry so downstream
+                        // passes that query type by temp name find a
+                        // meaningful string rather than None.
+                        let task_ty =
+                            Ty::Generic("Task".into(), vec![elem_ty.clone()]);
+                        body.push(Instruction::Select {
+                            dest: dest.clone(),
+                            list: Operand::Var(list_temp),
+                            elem_type: elem_ty.clone(),
+                        });
+                        self.task_result_types
+                            .insert(dest.clone(), elem_ty.clone());
+                        self.var_types
+                            .insert(dest.clone(), task_ty.monomorphized_name());
+                    }
                     return dest;
                 }
+            }
+            // Non-literal list argument (e.g. `tasks.select(my_list)`): we
+            // cannot recover `Task<T>`'s T from the elements, so the special
+            // lowering would emit either a silent identity (returning the
+            // list itself) or an unawaitable handle. Both are miscompiles.
+            // v0.1 requires the arg to be a list literal of task handles;
+            // reject at lowering time with a clear message.
+            //
+            // TODO: when task type inference flows through list-typed vars
+            // (e.g. `let ts: List<Task<Int>> = [...]` → lookup Task<Int>
+            // from the declared type), remove this restriction.
+            if fn_name == "select" {
+                panic!(
+                    "tasks.select in v0.1 requires a list literal of task \
+                     handles, e.g. `tasks.select([a, b, c])`. Dynamic lists \
+                     (`tasks.select(my_list)`) are not yet supported — \
+                     bind the spawns to locals and pass a literal."
+                );
             }
             return self.lower_expr(list_expr, body);
         }

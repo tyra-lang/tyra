@@ -234,6 +234,17 @@ pub enum Instruction {
         list: Operand,
         elem_type: Ty,
     },
+
+    /// `dest = tasks.select(list)` — dispatch to `tyra_task_select`, which
+    /// returns a new `Task<T>` handle that resolves with the first source
+    /// task's result (§17.1). The dest is an i64 task handle; downstream
+    /// `.await` unboxes T as usual. `elem_type` is the T the caller's
+    /// `.await` will extract from the winning task's result box.
+    Select {
+        dest: String,
+        list: Operand,
+        elem_type: Ty,
+    },
 }
 
 /// A constant value.

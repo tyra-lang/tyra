@@ -580,7 +580,62 @@ pub(crate) fn emit_instruction(
         } => {
             emit_join_all(out, dest, list, elem_type, func, ctx);
         }
+
+        Instruction::Select {
+            dest,
+            list,
+            // elem_type is captured on the MIR instruction for symmetry
+            // with JoinAll and to keep lowering/codegen round-trip faithful.
+            // Codegen does not need it: the runtime returns a new Task
+            // handle and the downstream `.await` consults `task_result_types`
+            // (populated in call.rs) to drive the unbox. If a future
+            // codegen change demands verification of T against the MIR
+            // record, plumb it through here.
+            elem_type: _,
+        } => {
+            emit_select(out, dest, list, func, ctx);
+        }
     }
+}
+
+/// Emit the runtime call `tyra_task_select(handles, n)` → new Task handle.
+/// The incoming list carries task handles as i64; we hand its raw `ptr`
+/// straight to the runtime (the layout `{ ptr data, i64 len }` matches
+/// `*const *const Task + i64` on LP64).
+fn emit_select(
+    out: &mut String,
+    dest: &str,
+    list: &Operand,
+    func: &Function,
+    ctx: &EmitCtx,
+) {
+    let list_ref = operand_ref(list, func);
+    let in_list_ty = if let Operand::Var(name) = list {
+        ctx.struct_temps
+            .get(name)
+            .map(|s| format!("%struct.{s}"))
+            .unwrap_or_else(|| "%struct.List__Int".to_string())
+    } else {
+        "%struct.List__Int".to_string()
+    };
+    writeln!(
+        out,
+        "  %{dest}.in_data = extractvalue {in_list_ty} {list_ref}, 0"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{dest}.n = extractvalue {in_list_ty} {list_ref}, 1"
+    )
+    .unwrap();
+    // tyra_task_select returns *const Task; cast to i64 so it flows as a
+    // plain task handle through the MIR (same convention as Spawn).
+    writeln!(
+        out,
+        "  %{dest}.tptr = call ptr @tyra_task_select(ptr %{dest}.in_data, i64 %{dest}.n)"
+    )
+    .unwrap();
+    writeln!(out, "  %{dest} = ptrtoint ptr %{dest}.tptr to i64").unwrap();
 }
 
 /// Emit inline loop: await every i64 task handle in `list`, load the unboxed
