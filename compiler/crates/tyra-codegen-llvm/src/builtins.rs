@@ -109,6 +109,26 @@ pub(crate) fn emit_builtin_call(
             emit_json_at(out, dest.as_deref(), args, func);
             true
         }
+        "__http_get" => {
+            emit_http_get(out, dest.as_deref(), args, func);
+            true
+        }
+        "__http_status" => {
+            emit_http_i64_to_i64(out, dest.as_deref(), "tyra_http_status", args, func);
+            true
+        }
+        "__http_body" => {
+            emit_http_body(out, dest.as_deref(), args, func);
+            true
+        }
+        "__http_errno" => {
+            emit_http_errno(out, dest.as_deref());
+            true
+        }
+        "__http_errmsg" => {
+            emit_http_errmsg(out, dest.as_deref());
+            true
+        }
         "sys__exit" => {
             // §17.1: core.sys.exit(_ code: Int) -> Never
             if let Some(arg) = args.first() {
@@ -421,6 +441,54 @@ fn emit_json_at(out: &mut String, dest: Option<&str>, args: &[Operand], func: &F
         .map(|a| operand_ref(a, func))
         .unwrap_or_else(|| "0".into());
     writeln!(out, "  %{d} = call i64 @tyra_json_at(i64 {handle}, i64 {index})").unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// M11 phase 1: http client emit helpers.
+// ---------------------------------------------------------------------------
+
+fn emit_http_get(out: &mut String, dest: Option<&str>, args: &[Operand], func: &Function) {
+    let d = dest.unwrap_or("_http_get");
+    let url = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    writeln!(out, "  %{d} = call i64 @tyra_http_get(ptr {url})").unwrap();
+}
+
+fn emit_http_i64_to_i64(
+    out: &mut String,
+    dest: Option<&str>,
+    callee: &str,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_http");
+    let arg = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    writeln!(out, "  %{d} = call i64 @{callee}(i64 {arg})").unwrap();
+}
+
+fn emit_http_body(out: &mut String, dest: Option<&str>, args: &[Operand], func: &Function) {
+    let d = dest.unwrap_or("_http_body");
+    let arg = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    writeln!(out, "  %{d} = call ptr @tyra_http_body(i64 {arg})").unwrap();
+}
+
+fn emit_http_errno(out: &mut String, dest: Option<&str>) {
+    let d = dest.unwrap_or("_http_errno");
+    writeln!(out, "  %{d}.i32 = call i32 @tyra_http_errno()").unwrap();
+    writeln!(out, "  %{d} = sext i32 %{d}.i32 to i64").unwrap();
+}
+
+fn emit_http_errmsg(out: &mut String, dest: Option<&str>) {
+    let d = dest.unwrap_or("_http_errmsg");
+    writeln!(out, "  %{d} = call ptr @tyra_http_errmsg()").unwrap();
 }
 
 /// parse::<Int>(str) -> Option<Int>

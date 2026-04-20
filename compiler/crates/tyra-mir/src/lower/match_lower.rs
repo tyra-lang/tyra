@@ -436,29 +436,35 @@ impl super::LowerCtx {
                         value: Operand::Var(payload),
                     });
 
-                    // Track the type of the bound variable
-                    if let Some(subject_ty) = self.generic_var_types.get(&subject) {
-                        if let Some(inner) = subject_ty.option_inner() {
-                            match inner {
+                    // Track the type of the bound variable. For Named inner
+                    // types we register both `pattern_vars` (so Ident Load
+                    // through the alloca stays ptr-typed) and `var_types`
+                    // so downstream `resolve_struct_type` can locate the
+                    // struct's field definitions for FieldGet lowering.
+                    if let Some(subject_ty) = self.generic_var_types.get(&subject).cloned() {
+                        let inner_ty = if variant_name == "Ok" {
+                            subject_ty.result_ok_type().cloned()
+                        } else if variant_name == "Err" {
+                            subject_ty.result_err_type().cloned()
+                        } else {
+                            subject_ty.option_inner().cloned()
+                        };
+                        if let Some(inner) = inner_ty {
+                            match &inner {
                                 Ty::String => { self.string_vars.insert(bind_name.clone()); }
                                 Ty::Float => { self.float_vars.insert(bind_name.clone()); }
+                                Ty::Named(n) => {
+                                    self.var_types.insert(bind_name.clone(), n.clone());
+                                }
+                                Ty::Generic(_, _) => {
+                                    self.generic_var_types
+                                        .insert(bind_name.clone(), inner.clone());
+                                    self.var_types.insert(
+                                        bind_name.clone(),
+                                        inner.monomorphized_name(),
+                                    );
+                                }
                                 _ => {}
-                            }
-                        } else if variant_name == "Ok" {
-                            if let Some(ok_ty) = subject_ty.result_ok_type() {
-                                match ok_ty {
-                                    Ty::String => { self.string_vars.insert(bind_name.clone()); }
-                                    Ty::Float => { self.float_vars.insert(bind_name.clone()); }
-                                    _ => {}
-                                }
-                            }
-                        } else if variant_name == "Err" {
-                            if let Some(err_ty) = subject_ty.result_err_type() {
-                                match err_ty {
-                                    Ty::String => { self.string_vars.insert(bind_name.clone()); }
-                                    Ty::Float => { self.float_vars.insert(bind_name.clone()); }
-                                    _ => {}
-                                }
                             }
                         }
                     }

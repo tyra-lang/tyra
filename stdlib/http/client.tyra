@@ -1,14 +1,54 @@
-# stdlib/http/client.tyra — HTTP client stub (§22, Tier 2)
-# client.get(url) returns Ok with a stub response.
+# stdlib/http/client.tyra — Tier 2 HTTP client (§17.3.3). M11 phase 1.
+#
+# v0.1 API (frozen):
+#   http.client.get(url) -> Result<Response, FetchError>
+#
+# Any HTTP status (2xx / 4xx / 5xx) from a reachable server is returned as
+# Ok — callers inspect `resp.status`. Only transport failures (DNS,
+# connection refused, TLS, timeout) become FetchError.
+#
+# Backed by `__http_*` intrinsics (see runtime/src/stdlib_http.rs).
+# Errno codes: 0=Ok, 1=Timeout, 2=NetworkError (catch-all).
+#
+# Caveats for v0.1:
+# - TLS trust anchors are Mozilla's CA bundle (webpki-roots), not the
+#   system trust store. Enterprise / private CAs are not trusted. A
+#   future feature flag may expose `native-tls` for system-CA behavior.
+# - Response bodies are capped at 10 MiB and decoded as UTF-8. Binary
+#   payloads containing NUL bytes are truncated at the first NUL
+#   (Tyra String is C-string-backed in v0.1).
+# - One response is leaked per successful request (opaque handle). Safe
+#   for CLI / one-shot tools; avoid tight polling loops in long-running
+#   programs until GC_malloc integration lands.
 
 export data Response
   status: Int
   body: String
 end
 
-# FetchError must be defined by the caller; referenced here by name only.
-# Callers must define: type FetchError = | NetworkError(message: String) | Timeout | NotFound
+export type FetchError =
+  | NetworkError(message: String)
+  | Timeout(message: String)
 
 export fn get(_ url: String) -> Result<Response, FetchError>
-  Ok(Response(status: 200, body: "stub response"))
+  let h = __http_get(url)
+  if h == 0
+    let code = __http_errno()
+    # Bind errmsg once and reuse across match arms. The runtime leaks
+    # one allocation per transport error and returns a stable pointer,
+    # so this message remains valid even if the caller stores the
+    # FetchError and retries.
+    let msg = __http_errmsg()
+    match code
+    when 1
+      Err(FetchError.Timeout(message: msg))
+    when _
+      Err(FetchError.NetworkError(message: msg))
+    end
+  else
+    Ok(Response(
+      status: __http_status(h),
+      body: __http_body(h),
+    ))
+  end
 end

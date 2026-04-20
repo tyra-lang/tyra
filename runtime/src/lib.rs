@@ -38,6 +38,11 @@ pub use stdlib_json::{
     tyra_json_kind, tyra_json_parse, tyra_json_str,
 };
 
+mod stdlib_http;
+pub use stdlib_http::{
+    tyra_http_body, tyra_http_errmsg, tyra_http_errno, tyra_http_get, tyra_http_status,
+};
+
 /// Thunk signature emitted by codegen for each `spawn` site.
 /// Takes opaque arg pointer, returns opaque result pointer.
 pub type ThunkFn = unsafe extern "C" fn(*mut c_void) -> *mut c_void;

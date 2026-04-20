@@ -27,6 +27,9 @@ fn builtin_primitive_return(fname: &str) -> Option<Ty> {
         // M10 phase 1: fs stdlib intrinsics.
         "__fs_read_raw" | "__fs_errmsg" => Some(Ty::String),
         "__fs_exists" => Some(Ty::Bool),
+        // M11 phase 1: http client intrinsics.
+        "__http_body" | "__http_errmsg" => Some(Ty::String),
+        // __http_get / __http_status / __http_errno return Int (default path).
         // __fs_write_raw returns Unit (no tracking), __fs_errno returns Int
         // (default i64 path — no tracking needed).
         // M10 phase 2: json stdlib intrinsics.

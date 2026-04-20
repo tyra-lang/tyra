@@ -168,6 +168,12 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare i32 @tyra_json_bool(i64)").unwrap();
     writeln!(out, "declare i64 @tyra_json_get(i64, ptr)").unwrap();
     writeln!(out, "declare i64 @tyra_json_at(i64, i64)").unwrap();
+    // M11 phase 1: http client. See runtime/src/stdlib_http.rs.
+    writeln!(out, "declare i64 @tyra_http_get(ptr)").unwrap();
+    writeln!(out, "declare i64 @tyra_http_status(i64)").unwrap();
+    writeln!(out, "declare ptr @tyra_http_body(i64)").unwrap();
+    writeln!(out, "declare i32 @tyra_http_errno()").unwrap();
+    writeln!(out, "declare ptr @tyra_http_errmsg()").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
     writeln!(out, "declare void @exit(i32)").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();

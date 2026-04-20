@@ -1,22 +1,25 @@
 # 08-async-tasks.tyra
 # Concurrent task spawning and coordination with join_all.
 # Validates: spawn, Task<T>, .await?, core.tasks.join_all,
-#            multi-line list literal, for loop
+#            multi-line list literal, for loop, stdlib http.client
 
 # SPEC_REF: §14.4 — spawn accepts function calls only, returns Task<T>
 # SPEC_REF: §14.3 — .await? parses as (expr.await)?
 # SPEC_REF: §17.1 — core.tasks.join_all and core.tasks.select
 # SPEC_REF: §5.4 — newlines inside [...] are not statement separators
 # SPEC_REF: §11 — items[index] panics on OOB
-# NOTE: http module is Tier 2 stdlib — actual API signatures TBD (§22)
+# SPEC_REF: §17.3.3 — http.client.get frozen in M11 phase 1
+#
+# `import http.client` brings all exported names (`get`, `Response`,
+# `FetchError`) into this module's top-level scope. `FetchError` is
+# therefore referenced unqualified below, matching the pattern example 05
+# uses with `json.JsonError`.
+#
+# Requires network access to reach the fetched URLs. Running with
+# `TYRA_HTTP_OFFLINE=1` skips the actual HTTP calls (future work).
 
 import http.client
 import core.tasks
-
-type FetchError =
-  | NetworkError(message: String)
-  | Timeout
-  | NotFound
 
 async fn fetch(_ url: String) -> Result<String, FetchError>
   let resp = client.get(url).await?
@@ -40,10 +43,15 @@ async fn fetch_all(_ urls: List<String>) -> Result<List<String>, FetchError>
 end
 
 async fn main() -> Result<Unit, FetchError>
+  # IANA-reserved example.com is always reachable and returns stable HTML.
+  # A real program would hit three distinct endpoints; the same URL is
+  # used here so the example runs offline-adjacent (single DNS / TLS
+  # handshake via the pooled agent) and still exercises the parallel
+  # spawn + join_all path.
   let urls = [
-    "https://api.example.com/a",
-    "https://api.example.com/b",
-    "https://api.example.com/c",
+    "https://example.com/",
+    "https://example.com/",
+    "https://example.com/",
   ]
 
   let results = fetch_all(urls).await?

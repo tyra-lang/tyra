@@ -20,5 +20,10 @@ crate-type = ["staticlib", "rlib"]
 
 [dependencies]
 crossbeam-channel = "0.5"
+# ureq: small blocking HTTP client with rustls TLS. Chosen over libcurl FFI
+# to keep the system-library surface consistent with the rest of Tyra's
+# runtime (pure Rust), at the cost of ~200 transitive crates. rustls-tls
+# avoids the native OpenSSL / SecureTransport dependency.
+ureq = { version = ">=2.12, <3", default-features = false, features = ["tls"] }
 
 [dev-dependencies]

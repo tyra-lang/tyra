@@ -1136,6 +1136,84 @@ end
         );
     }
 
+    /// M11 fix: `when Ok(xs)` where the Ok inner is a Named data type
+    /// must register `var_types[xs]` so that downstream field access
+    /// (`xs.field`) resolves to a proper FieldGet. Previously the arm
+    /// populated only string_vars/float_vars, leaving Named / Generic
+    /// payloads without a type, which produced bogus IR like
+    /// `%t = add i64 %xs.field, 0`.
+    #[test]
+    fn match_ok_named_payload_registers_var_types() {
+        let source = "\
+data User
+  id: Int
+  name: String
+end
+fn fetch() -> Result<User, String>
+  Ok(User(id: 1, name: \"alice\"))
+end
+fn run() -> Int
+  match fetch()
+  when Ok(u)
+    u.id
+  when Err(_)
+    0
+  end
+end
+";
+        let prog = lower_str(source);
+        let run = prog.functions.iter().find(|f| f.name == "run").unwrap();
+        // The critical assertion: a FieldGet is emitted for u.id. Before
+        // the fix, lowering fell through to a bogus Copy `{obj}.{field}`.
+        let has_field_get = run.body.iter().any(|i| {
+            matches!(
+                i,
+                Instruction::FieldGet { type_name, field_index: 0, .. }
+                    if type_name == "User"
+            )
+        });
+        assert!(
+            has_field_get,
+            "expected FieldGet for u.id after match-Ok-Named binding;\n\
+             body = {:#?}",
+            run.body
+        );
+    }
+
+    /// Matching a Generic inner (List<Int> here) must also register the
+    /// pattern-bound variable in generic_var_types so list operations
+    /// like `xs[0]` / iteration see the proper element type.
+    #[test]
+    fn match_ok_generic_payload_registers_generic_var_types() {
+        let source = "\
+fn items() -> Result<List<Int>, String>
+  Ok([1, 2, 3])
+end
+fn run() -> Int
+  match items()
+  when Ok(xs)
+    xs[0]
+  when Err(_)
+    0
+  end
+end
+";
+        let prog = lower_str(source);
+        let run = prog.functions.iter().find(|f| f.name == "run").unwrap();
+        // ListGet is the proper lowering; without generic_var_types,
+        // Index would fall back to a plain i64 default.
+        let has_list_get = run
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::ListGet { .. }));
+        assert!(
+            has_list_get,
+            "expected ListGet for xs[0] after match-Ok-List<Int> binding;\n\
+             body = {:#?}",
+            run.body
+        );
+    }
+
     /// Regression guard for Assign-over-mut-task-handle: `mut t = spawn f();
     /// t = spawn g(); t.await` should still unbox via Await. Without
     /// propagation in ExprKind::Assign, the second spawn's tracking would

@@ -149,6 +149,23 @@ pub fn lower(file: &SourceFile) -> Program {
     ctx.fn_param_types
         .insert("__fs_exists".into(), vec![Ty::String]);
 
+    // M11 phase 1: http client intrinsics.
+    ctx.fn_return_types.insert("__http_get".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__http_get".into(), vec![Ty::String]);
+    ctx.fn_return_types.insert("__http_status".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__http_status".into(), vec![Ty::Int]);
+    ctx.fn_return_types
+        .insert("__http_body".into(), Ty::String);
+    ctx.fn_param_types
+        .insert("__http_body".into(), vec![Ty::Int]);
+    ctx.fn_return_types.insert("__http_errno".into(), Ty::Int);
+    ctx.fn_param_types.insert("__http_errno".into(), vec![]);
+    ctx.fn_return_types
+        .insert("__http_errmsg".into(), Ty::String);
+    ctx.fn_param_types.insert("__http_errmsg".into(), vec![]);
+
     // M10 phase 2: json stdlib intrinsics.
     ctx.fn_return_types.insert("__json_parse".into(), Ty::Int);
     ctx.fn_param_types

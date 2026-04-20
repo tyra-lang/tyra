@@ -147,6 +147,12 @@ const PRELUDE_FUNCTIONS: &[&str] = &[
     "__fs_errmsg",
     "__fs_write_raw",
     "__fs_exists",
+    // M11 phase 1: http client backing. See runtime/src/stdlib_http.rs.
+    "__http_get",
+    "__http_status",
+    "__http_body",
+    "__http_errno",
+    "__http_errmsg",
     // M10 phase 2: json stdlib backing. See runtime/src/stdlib_json.rs.
     "__json_parse",
     "__json_err_msg",

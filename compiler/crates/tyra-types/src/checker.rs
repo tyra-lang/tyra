@@ -269,6 +269,27 @@ fn register_prelude(env: &mut TypeEnv) {
         "__fs_exists".to_string(),
         Ty::Fn(vec![Ty::String], Box::new(Ty::Bool)),
     );
+    // M11 phase 1: http client intrinsics. See stdlib/http/client.tyra.
+    env.define(
+        "__http_get".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__http_status".to_string(),
+        Ty::Fn(vec![Ty::Int], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__http_body".to_string(),
+        Ty::Fn(vec![Ty::Int], Box::new(Ty::String)),
+    );
+    env.define(
+        "__http_errno".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__http_errmsg".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::String)),
+    );
     // M10 phase 2: json stdlib intrinsics. See stdlib/json.tyra.
     // Handles are opaque Int values (0 = error / absent).
     env.define(
