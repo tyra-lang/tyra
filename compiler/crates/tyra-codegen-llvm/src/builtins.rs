@@ -37,6 +37,14 @@ pub(crate) fn emit_builtin_call(
             emit_parse_int(out, dest.as_deref(), args, func, ctx);
             true
         }
+        "__fs_read_raw" => {
+            emit_fs_read_raw(out, dest.as_deref(), args, func);
+            true
+        }
+        "__fs_errno" => {
+            emit_fs_errno(out, dest.as_deref());
+            true
+        }
         "sys__exit" => {
             // §17.1: core.sys.exit(_ code: Int) -> Never
             if let Some(arg) = args.first() {
@@ -179,6 +187,32 @@ fn emit_sys_args(out: &mut String, dest: Option<&str>, ctx: &EmitCtx) {
     // Build List struct {ptr, i64}
     writeln!(out, "  %{d}.s0 = insertvalue {list_ty} undef, ptr %{d}.data, 0").unwrap();
     writeln!(out, "  %{d} = insertvalue {list_ty} %{d}.s0, i64 %{d}.argc64, 1").unwrap();
+}
+
+/// M10 phase 1: `__fs_read_raw(path: String) -> String`.
+/// Delegates to `@tyra_fs_read` in the runtime. Returns empty C string on
+/// error; the caller is expected to check `__fs_errno()` to discriminate.
+fn emit_fs_read_raw(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_fs_read");
+    let path = if let Some(arg) = args.first() {
+        operand_ref(arg, func)
+    } else {
+        "null".to_string()
+    };
+    writeln!(out, "  %{d} = call ptr @tyra_fs_read(ptr {path})").unwrap();
+}
+
+/// M10 phase 1: `__fs_errno() -> Int`.
+/// Delegates to `@tyra_fs_errno`; widens i32 return to i64.
+fn emit_fs_errno(out: &mut String, dest: Option<&str>) {
+    let d = dest.unwrap_or("_fs_errno");
+    writeln!(out, "  %{d}.i32 = call i32 @tyra_fs_errno()").unwrap();
+    writeln!(out, "  %{d} = sext i32 %{d}.i32 to i64").unwrap();
 }
 
 /// parse::<Int>(str) -> Option<Int>

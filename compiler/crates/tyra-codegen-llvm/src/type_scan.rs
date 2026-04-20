@@ -12,6 +12,24 @@ use tyra_types::Ty;
 
 use crate::codegen::{FnSig, StructInfo};
 
+/// Return the primitive return type of a builtin intrinsic, if any.
+///
+/// Covers intrinsics that are matched by name in `builtins::emit_builtin_call`
+/// but are not user-visible functions (no entry in `Program.functions` or
+/// `fn_sigs`). Keeping the list centralized prevents string/float/bool tracking
+/// from drifting each time a new intrinsic lands.
+///
+/// Returns `None` for intrinsics whose return is `Int`/`Unit` (default LLVM
+/// `i64`/`void` — no temp-map tracking needed) or whose return is a struct
+/// type (handled by `pre_scan_struct_types` instead, e.g. `parse__Int`).
+fn builtin_primitive_return(fname: &str) -> Option<Ty> {
+    match fname {
+        // M10 phase 1: fs stdlib intrinsics.
+        "__fs_read_raw" => Some(Ty::String),
+        _ => None,
+    }
+}
+
 /// All type metadata computed by pre-scan for a single function.
 /// Consumed by emit_instruction (indirectly via EmitCtx).
 pub(crate) struct ScanResult {
@@ -175,6 +193,21 @@ fn scan_primitive_temps(
                 func: fname,
                 ..
             } => {
+                // Builtins with primitive return types that are not part of
+                // fn_sigs (not emitted as user-visible functions). Centralized
+                // here so new intrinsics only need one line.
+                match builtin_primitive_return(fname.as_str()) {
+                    Some(Ty::String) => {
+                        string_temps.insert(dest.clone());
+                    }
+                    Some(Ty::Float) => {
+                        float_temps.insert(dest.clone());
+                    }
+                    Some(Ty::Bool) => {
+                        bool_temps.insert(dest.clone());
+                    }
+                    _ => {}
+                }
                 // Track return type from function signatures
                 if let Some(sig) = fn_sigs.get(fname.as_str()) {
                     match &sig.return_type {

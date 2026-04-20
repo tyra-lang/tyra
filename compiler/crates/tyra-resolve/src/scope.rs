@@ -132,7 +132,19 @@ impl Default for ScopeStack {
 // -- Prelude definitions (§17.1) --
 
 /// Prelude functions: auto-imported, no `import` needed.
-const PRELUDE_FUNCTIONS: &[&str] = &["print", "println", "eprint", "eprintln", "panic", "parse"];
+const PRELUDE_FUNCTIONS: &[&str] = &[
+    "print",
+    "println",
+    "eprint",
+    "eprintln",
+    "panic",
+    "parse",
+    // M10 phase 1: intrinsic stdlib backing. Not intended for user code,
+    // but exposed at the prelude so `stdlib/fs.tyra` can call them without
+    // needing an `import` (which would create a circular dependency).
+    "__fs_read_raw",
+    "__fs_errno",
+];
 
 /// Prelude ADT constructors: unqualified access to Option/Result variants.
 const PRELUDE_CONSTRUCTORS: &[&str] = &["Some", "None", "Ok", "Err"];

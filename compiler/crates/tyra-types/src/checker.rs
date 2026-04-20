@@ -248,6 +248,15 @@ fn register_prelude(env: &mut TypeEnv) {
         "parse".to_string(),
         Ty::Fn(vec![Ty::Error], Box::new(Ty::Error)),
     );
+    // M10 phase 1: fs stdlib intrinsics. See stdlib/fs.tyra.
+    env.define(
+        "__fs_read_raw".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(Ty::String)),
+    );
+    env.define(
+        "__fs_errno".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::Int)),
+    );
 
     // Prelude ADTs for §10.3 exhaustiveness checking.
     env.register_adt("Option".into(), vec!["Some".into(), "None".into()]);

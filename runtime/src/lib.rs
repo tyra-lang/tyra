@@ -26,6 +26,9 @@ use std::ptr;
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 
+mod stdlib_fs;
+pub use stdlib_fs::{tyra_fs_errno, tyra_fs_read};
+
 /// Thunk signature emitted by codegen for each `spawn` site.
 /// Takes opaque arg pointer, returns opaque result pointer.
 pub type ThunkFn = unsafe extern "C" fn(*mut c_void) -> *mut c_void;

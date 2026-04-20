@@ -7,7 +7,7 @@
 # SPEC_REF: §12.2 — ? requires E: Into<F>; Into<T> for T auto-provided
 # SPEC_REF: §12.1 — panic(_ message: String) -> Never; function, not macro
 # SPEC_REF: §10.1 — and, or, not keywords; both operands must be Bool
-# NOTE: fs module is Tier 2 stdlib — actual API signatures TBD (§22)
+# SPEC_REF: §22 — fs.read_to_string frozen in M10 phase 1
 
 import fs
 
@@ -26,23 +26,14 @@ impl Into<AppError> for ConfigError
   end
 end
 
-# Assumes fs.open returns Result<fs.File, fs.FsError>.
+# fs.read_to_string returns Result<String, fs.FsError>.
 # We map the error manually since we don't control FsError.
 fn read_config(_ path: String) -> Result<String, ConfigError>
-  let file = match fs.open(path)
-  when Ok(f)
-    f
-  when Err(_)
-    return Err(ConfigError.FileNotFound(path: path))
-  end
-
-  defer file.close()
-
-  match file.read_all()
+  match fs.read_to_string(path)
   when Ok(content)
     Ok(content)
   when Err(_)
-    Err(ConfigError.ParseError(message: "read failed"))
+    Err(ConfigError.FileNotFound(path: path))
   end
 end
 
@@ -63,6 +54,9 @@ fn start_server(_ port: Int) -> Result<Unit, AppError>
   if port == 0
     panic("port must not be zero")
   end
+  # §12.3: defer fires on scope exit in LIFO order — useful for cleanup
+  # such as closing connections or releasing resources.
+  defer print("server stopped")
   print("starting server on port #{port}")
   Ok(())
 end

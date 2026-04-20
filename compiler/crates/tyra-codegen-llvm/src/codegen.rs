@@ -147,6 +147,9 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare void @tyra_rt_init()").unwrap();
     writeln!(out, "declare ptr @tyra_task_spawn(ptr, ptr)").unwrap();
     writeln!(out, "declare ptr @tyra_task_await(ptr)").unwrap();
+    // M10 phase 1: fs stdlib. See runtime/src/stdlib_fs.rs.
+    writeln!(out, "declare ptr @tyra_fs_read(ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_fs_errno()").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
     writeln!(out, "declare void @exit(i32)").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();

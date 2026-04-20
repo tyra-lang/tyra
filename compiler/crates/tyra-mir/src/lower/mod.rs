@@ -122,10 +122,22 @@ pub fn lower(file: &SourceFile) -> Program {
                 ctx.fn_return_types
                     .insert("sys__exit".into(), Ty::Never);
             }
+            // M10 phase 1: __fs_read_raw / __fs_errno are registered below
+            // (outside the import loop) since they are prelude-level, not
+            // tied to any module import.
             // core.tasks: tasks.join_all is handled as identity in call lowering.
             // No fn_return_types entry needed; the list arg type is propagated directly.
         }
     }
+
+    // M10 phase 1: fs stdlib intrinsics. Registered unconditionally so that
+    // `stdlib/fs.tyra` can call them without an `import` (no circularity).
+    ctx.fn_return_types
+        .insert("__fs_read_raw".into(), Ty::String);
+    ctx.fn_param_types
+        .insert("__fs_read_raw".into(), vec![Ty::String]);
+    ctx.fn_return_types.insert("__fs_errno".into(), Ty::Int);
+    ctx.fn_param_types.insert("__fs_errno".into(), vec![]);
 
     // Collect function return types and store definitions for monomorphization
     for item in &file.items {
