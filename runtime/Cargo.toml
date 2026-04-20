@@ -11,13 +11,12 @@ name = "tyra_runtime"
 # and rlib (so Rust tests can exercise the API directly).
 crate-type = ["staticlib", "rlib"]
 
-[features]
-default = []
-# Enable Boehm GC thread registration (GC_register_my_thread / GC_get_stack_base
-# / GC_unregister_my_thread). Required when the staticlib is linked into a
-# Tyra binary that allocates via GC_malloc. Disabled for cargo-test so the
-# rlib does not carry unresolved libgc symbols.
-libgc = []
+# Boehm GC thread registration is always compiled in (ADR-0007); build.rs
+# arranges for `-lgc` to be passed at link time for both the staticlib and
+# any downstream consumer (Rust tests and the tyra binary alike).
+# No `links = "gc"` because libgc is also linked directly by the Tyra
+# driver when producing user binaries, and Cargo disallows duplicate
+# `links` claims across the workspace.
 
 [dependencies]
 crossbeam-channel = "0.5"

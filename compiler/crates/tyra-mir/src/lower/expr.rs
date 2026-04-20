@@ -93,6 +93,11 @@ impl super::LowerCtx {
                     if self.float_vars.contains(name.as_str()) {
                         self.float_vars.insert(temp.clone());
                     }
+                    // M9 follow-up: propagate Task<T> tracking through load
+                    // so `mut t = spawn f(); ... t.await` unboxes correctly.
+                    if let Some(trt) = self.task_result_types.get(name.as_str()).cloned() {
+                        self.task_result_types.insert(temp.clone(), trt);
+                    }
                     temp
                 } else {
                     name.clone()
@@ -179,6 +184,12 @@ impl super::LowerCtx {
                             }
                             if self.float_vars.contains(&val) {
                                 self.float_vars.insert(name.clone());
+                            }
+                            // Propagate Task<T> handle tracking on reassignment
+                            // so `mut t = spawn f(); t = spawn g(); t.await`
+                            // unboxes correctly (M9 follow-up).
+                            if let Some(trt) = self.task_result_types.get(&val).cloned() {
+                                self.task_result_types.insert(name.clone(), trt);
                             }
                         } else {
                             body.push(Instruction::Copy {
@@ -382,12 +393,14 @@ impl super::LowerCtx {
                 // instruction. Otherwise (async-as-sync stub, §14 v0.1), fall
                 // through to identity — the value is already the final T.
                 //
-                // TODO(M9+): task_result_types is only propagated through
-                // let-binding Copy (see Stmt::Let in mod.rs). `mut t =
-                // spawn f(); ... t.await` currently falls into this sync
-                // fallback and returns the raw i64 handle as the value,
-                // silently miscomputing. Propagate the tracking through
-                // Stmt::Mut / Assign / for-loop bindings as follow-up.
+                // Tracking is propagated through:
+                //   - let-binding Copy          (Stmt::Let, mod.rs)
+                //   - mut-binding Alloca/Store  (Stmt::Mut, mod.rs)
+                //   - mut reassignment          (ExprKind::Assign above)
+                //   - Ident Load from alloca    (ExprKind::Ident above)
+                // For-loop `for t in tasks` and match-pattern bindings
+                // are still unsupported — callers that need to await an
+                // element should index the list or use `tasks.join_all`.
                 let task_temp = self.lower_expr(inner, body);
                 if let Some(result_type) = self.task_result_types.get(&task_temp).cloned() {
                     let dest = self.fresh_temp();

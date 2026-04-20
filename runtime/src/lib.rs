@@ -14,11 +14,11 @@
 //! thread and the awaiter, so neither side can free the task prematurely.
 //! Handles crossing the C ABI are `Arc::into_raw` / `Arc::from_raw` pairs.
 //!
-//! Boehm GC integration is gated by the `libgc` Cargo feature. When enabled
-//! (the staticlib build used for Tyra binaries), worker threads register
-//! with the collector via `GC_register_my_thread` so their stacks are
-//! included in conservative scans. Cargo-test builds leave the feature off
-//! to avoid requiring libgc at test link time.
+//! Boehm GC integration is unconditional: worker threads register with
+//! the collector via `GC_register_my_thread` so their stacks are included
+//! in conservative scans (ADR-0007). The runtime's `build.rs` arranges
+//! for `-lgc` to be passed at link time for both the staticlib and any
+//! downstream Rust test binary, so no Cargo feature toggling is needed.
 
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use std::os::raw::c_void;
@@ -121,12 +121,12 @@ fn default_worker_count() -> usize {
 }
 
 // ---------------------------------------------------------------------------
-// Boehm GC thread registration (feature-gated).
+// Boehm GC thread registration.
 // ---------------------------------------------------------------------------
 
-#[cfg(feature = "libgc")]
 mod gc {
     use std::os::raw::c_void;
+    use std::sync::Once;
 
     #[repr(C)]
     struct GCStackBase {
@@ -135,9 +135,26 @@ mod gc {
     }
 
     unsafe extern "C" {
+        fn GC_init();
+        fn GC_allow_register_threads();
         fn GC_get_stack_base(sb: *mut GCStackBase) -> i32;
         fn GC_register_my_thread(sb: *const GCStackBase) -> i32;
         fn GC_unregister_my_thread() -> i32;
+    }
+
+    static INIT: Once = Once::new();
+
+    /// Idempotent libgc initialization. Tyra-compiled binaries call
+    /// `GC_init` from their generated main (ADR-0007), but Rust-side
+    /// consumers (runtime unit tests) never enter that main. Calling
+    /// `GC_init` here is safe — libgc documents it as idempotent — and
+    /// `GC_allow_register_threads` is required before the scheduler's
+    /// worker threads can register via `GC_register_my_thread`.
+    pub(super) fn init() {
+        INIT.call_once(|| unsafe {
+            GC_init();
+            GC_allow_register_threads();
+        });
     }
 
     pub(super) fn register_this_thread() {
@@ -146,6 +163,10 @@ mod gc {
                 mem_base: std::ptr::null_mut(),
                 reg_base: std::ptr::null_mut(),
             };
+            // GC_get_stack_base returns 0 on success (GC_SUCCESS); any
+            // other value (typically GC_UNIMPLEMENTED = 2) means the
+            // platform cannot report a stack base and conservative scans
+            // will rely on whatever default libgc computed.
             if GC_get_stack_base(&mut sb) == 0 {
                 GC_register_my_thread(&sb);
             }
@@ -159,20 +180,28 @@ mod gc {
     }
 }
 
-#[cfg(not(feature = "libgc"))]
-mod gc {
-    pub(super) fn register_this_thread() {}
-    pub(super) fn unregister_this_thread() {}
-}
-
 // ---------------------------------------------------------------------------
 // C ABI
 // ---------------------------------------------------------------------------
 
-/// Initialize the scheduler. Idempotent; second call is a no-op.
-/// Must be invoked from `main` before any `tyra_task_spawn`.
+/// Initialize the runtime. Idempotent; second call is a no-op.
+///
+/// Must be invoked from `main` before any `tyra_task_spawn`. The call
+/// order inside this function is load-bearing:
+///   1. `gc::init()` — runs `GC_init` + `GC_allow_register_threads` via
+///      a `Once` guard. `GC_allow_register_threads` must run before any
+///      thread that will later call `GC_register_my_thread` is spawned.
+///   2. Scheduler construction spawns worker threads; each worker's
+///      first action is `GC_register_my_thread`. Reversing (1) and (2)
+///      would race the workers against libgc's thread-registration
+///      allowlist — undefined behavior per the Boehm GC spec.
+///
+/// Thread-safety: concurrent calls are safe. Both `gc::init`'s `Once`
+/// and the scheduler's `OnceLock` block redundant callers until the
+/// first one finishes, providing a happens-before to all observers.
 #[unsafe(no_mangle)]
 pub extern "C" fn tyra_rt_init() {
+    gc::init();
     let _ = SCHEDULER.get_or_init(|| Scheduler::new(default_worker_count()));
 }
 
@@ -185,6 +214,14 @@ pub extern "C" fn tyra_rt_init() {
 pub extern "C" fn tyra_rt_shutdown() {}
 
 /// Submit a task for execution. Returns an opaque Task handle.
+///
+/// # Preconditions
+/// `tyra_rt_init` must have been called first. This establishes two
+/// invariants the scheduler relies on:
+///   - the scheduler `OnceLock` is initialized (enforced: `scheduler()`
+///     panics otherwise);
+///   - libgc has seen `GC_allow_register_threads`, so the new worker
+///     thread can legally call `GC_register_my_thread` (ADR-0007).
 ///
 /// # Safety
 /// `thunk` must be a valid function pointer; `arg` must be valid for the

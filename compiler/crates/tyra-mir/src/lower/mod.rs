@@ -628,6 +628,11 @@ impl LowerCtx {
                 if let Some(stype) = struct_type {
                     self.var_types.insert(s.name.clone(), stype);
                 }
+                // M9 follow-up: propagate Task<T> handle tracking across
+                // `mut t = spawn ...` so `t.await` later unboxes correctly.
+                if let Some(trt) = self.task_result_types.get(&val).cloned() {
+                    self.task_result_types.insert(s.name.clone(), trt);
+                }
                 // Mutable locals use alloca+store for SSA-compatible mutation
                 body.push(Instruction::Alloca {
                     dest: s.name.clone(),

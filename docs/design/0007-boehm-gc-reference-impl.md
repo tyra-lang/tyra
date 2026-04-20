@@ -84,13 +84,14 @@ broader platform matrix.
 - `GC_malloc_atomic` for allocations known to contain no pointers
   (interpolated string buffers, `List<Int>` bodies, etc.). Needs a
   simple type classifier in codegen.
-- Multi-threaded GC registration (`GC_allow_register_threads` /
-  `GC_register_my_thread`). M9 scaffolds this behind the
-  `tyra-runtime/libgc` Cargo feature: worker threads call
-  `GC_get_stack_base` + `GC_register_my_thread` when the feature is
-  enabled. The feature must be flipped on when the runtime staticlib
-  is linked into a Tyra binary that allocates via `GC_malloc` on
-  worker threads. Until then, the conservative scanner does not see
-  worker stacks and Tyra code must not call `GC_malloc` from thunks.
+- ~~Multi-threaded GC registration~~ **(delivered in M9 follow-up)**.
+  `tyra_rt_init` calls `GC_init` + `GC_allow_register_threads` via a
+  `Once` guard before the scheduler spawns worker threads; each worker
+  calls `GC_get_stack_base` + `GC_register_my_thread` as its first
+  action, so worker stacks are included in conservative scans. The
+  original `tyra-runtime/libgc` Cargo feature was removed along with
+  the no-op fallback; `runtime/build.rs` now links `-lgc`
+  unconditionally. `pkg-config --libs-only-L bdw-gc` is probed for
+  Linux/custom prefixes, with Homebrew prefixes as the macOS fallback.
 - Precise GC via LLVM statepoints once we have the cycles to pay for
   write barriers and stack maps. This ADR does not lock out that path.

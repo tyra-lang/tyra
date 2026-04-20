@@ -1108,4 +1108,57 @@ end\n";
             other => panic!("expected Jump into while header, got {other:?}"),
         }
     }
+
+    /// Regression guard for the M9 follow-up: `mut t = spawn f(); t.await`
+    /// must emit an `Await` instruction. Without `task_result_types`
+    /// propagation through Stmt::Mut + Ident-Load, `.await` silently
+    /// fell through to identity and returned the raw task handle as the
+    /// value — silent miscompilation (see lower/expr.rs).
+    #[test]
+    fn mut_spawn_await_lowers_with_await_instruction() {
+        let source = "\
+fn double(_ n: Int) -> Int
+  n * 2
+end
+fn run() -> Int
+  mut t = spawn double(21)
+  t.await
+end
+";
+        let prog = lower_str(source);
+        let run = prog.functions.iter().find(|f| f.name == "run").unwrap();
+        let has_await = run.body.iter().any(|i| matches!(i, Instruction::Await { .. }));
+        assert!(
+            has_await,
+            "expected an Instruction::Await in run() body — task_result_types\n\
+             propagation regressed? body = {:#?}",
+            run.body
+        );
+    }
+
+    /// Regression guard for Assign-over-mut-task-handle: `mut t = spawn f();
+    /// t = spawn g(); t.await` should still unbox via Await. Without
+    /// propagation in ExprKind::Assign, the second spawn's tracking would
+    /// be lost.
+    #[test]
+    fn mut_spawn_reassign_await_still_unboxes() {
+        let source = "\
+fn double(_ n: Int) -> Int
+  n * 2
+end
+fn run() -> Int
+  mut t = spawn double(1)
+  t = spawn double(21)
+  t.await
+end
+";
+        let prog = lower_str(source);
+        let run = prog.functions.iter().find(|f| f.name == "run").unwrap();
+        let has_await = run.body.iter().any(|i| matches!(i, Instruction::Await { .. }));
+        assert!(
+            has_await,
+            "expected Await after reassign; body = {:#?}",
+            run.body
+        );
+    }
 }
