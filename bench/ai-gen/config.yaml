@@ -7,9 +7,10 @@ seeds: 1
 
 generators:
   claude:
-    model: "claude-opus-4-7"
-    max_tokens: 2048
-    temperature: 0.2
+    # Leave `model` unset to let `claude -p` pick its configured
+    # default. Set to a specific model id (e.g. "claude-opus-4-7",
+    # "claude-sonnet-4-6") to pin one for the benchmark.
+    model: null
   codex:
     # The codex CLI chooses its own model; we just record what it
     # reports via `codex --version` / result metadata.

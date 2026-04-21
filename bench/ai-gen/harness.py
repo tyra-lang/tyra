@@ -59,14 +59,8 @@ def load_prompts(patterns: List[str]) -> List[Dict[str, Any]]:
 def make_generators(names: List[str], config: Dict[str, Any]):
     out = []
     if "claude" in names:
-        gcfg = config["generators"]["claude"]
-        out.append(
-            ClaudeGenerator(
-                model=gcfg.get("model", "claude-opus-4-7"),
-                max_tokens=gcfg.get("max_tokens", 2048),
-                temperature=gcfg.get("temperature", 0.2),
-            )
-        )
+        gcfg = config["generators"].get("claude", {})
+        out.append(ClaudeGenerator(model=gcfg.get("model")))
     if "codex" in names:
         gcfg = config["generators"].get("codex", {})
         out.append(CodexGenerator(extra_args=gcfg.get("extra_args", [])))

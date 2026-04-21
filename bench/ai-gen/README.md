@@ -32,7 +32,7 @@ bench/ai-gen/
   prompts/            one YAML per prompt (schema below)
   generators/
     base.py           abstract Generator
-    claude.py         Anthropic Messages API
+    claude.py         `claude -p` CLI subprocess wrapper
     codex.py          `codex exec` subprocess wrapper
   runners/
     base.py           abstract Runner (compile + execute)
@@ -72,8 +72,9 @@ spontaneously produces.
 ```sh
 cd bench/ai-gen
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY=...              # for generators/claude.py
-# codex CLI reads its own auth; see `codex auth`
+# Both generators authenticate via the installed CLI's own config.
+# - claude: `claude /login` first if not already logged in
+# - codex:  `codex auth` first if not already logged in
 python3 harness.py --languages tyra,ruby --generators claude
 python3 report.py > results/SUMMARY.md
 ```
