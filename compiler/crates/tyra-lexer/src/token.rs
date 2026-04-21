@@ -88,6 +88,8 @@ pub enum TokenKind {
     Star,
     /// `/`
     Slash,
+    /// `%`
+    Percent,
     /// `=`
     Eq,
     /// `==`

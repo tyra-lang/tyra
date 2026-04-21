@@ -948,6 +948,7 @@ pub(crate) fn ast_binop_to_mir(op: BinOp, is_float: bool) -> MirBinOp {
         (BinOp::Mul, true) => MirBinOp::MulFloat,
         (BinOp::Div, false) => MirBinOp::DivInt,
         (BinOp::Div, true) => MirBinOp::DivFloat,
+        (BinOp::Rem, _) => MirBinOp::RemInt,
         (BinOp::Eq, _) => MirBinOp::EqInt,
         (BinOp::NotEq, _) => MirBinOp::NeqInt,
         (BinOp::Lt, false) => MirBinOp::LtInt,

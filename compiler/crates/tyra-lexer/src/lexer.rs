@@ -151,6 +151,10 @@ fn scan_token(cursor: &mut Cursor, source_id: SourceId, report: &mut Report) -> 
             cursor.advance();
             Some(TokenKind::Slash)
         }
+        '%' => {
+            cursor.advance();
+            Some(TokenKind::Percent)
+        }
         '.' => {
             cursor.advance();
             Some(TokenKind::Dot)
@@ -660,12 +664,13 @@ mod tests {
     #[test]
     fn operators() {
         assert_eq!(
-            kinds("+ - * / = == != < <= > >= -> . : :: ? |"),
+            kinds("+ - * / % = == != < <= > >= -> . : :: ? |"),
             vec![
                 TokenKind::Plus,
                 TokenKind::Minus,
                 TokenKind::Star,
                 TokenKind::Slash,
+                TokenKind::Percent,
                 TokenKind::Eq,
                 TokenKind::EqEq,
                 TokenKind::BangEq,

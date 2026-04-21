@@ -692,6 +692,32 @@ Tyra is expression-oriented.
 - `while` and `for` are statements with value `Unit`
 - The value of a block is the value of its last expression
 
+#### Arithmetic operators
+
+Five infix arithmetic operators: `+`, `-`, `*`, `/`, `%`. Both
+operands must have the same numeric type: `Int` × `Int` or
+`Float` × `Float` (`%` is `Int` × `Int` only). Mixed-type
+arithmetic must go through an explicit `Into<F>` conversion
+(§12.2).
+
+```tyra
+let a = 10 + 3       # 13
+let b = 10 - 3       # 7
+let c = 10 * 3       # 30
+let d = 10 / 3       # 3  (Int division truncates toward zero)
+let e = 10 % 3       # 1  (Int remainder; sign follows the dividend)
+```
+
+- `/` truncates toward zero for `Int` × `Int`, and uses IEEE 754
+  division for `Float` × `Float`.
+- `%` is `Int` × `Int` only. The sign of the result follows the
+  dividend (LLVM `srem`, same as C99). Float remainder is not
+  provided in v0.1.
+- Division or remainder by zero is implementation-defined (LLVM
+  `sdiv` / `srem` semantics, typically an abnormal process
+  termination). Checking against zero is the caller's
+  responsibility.
+
 #### Logical operators
 
 Logical operators use the keywords `and`, `or`, and `not`.

@@ -1158,6 +1158,24 @@ fn infer_binop(
                 Ty::Error
             }
         }
+        // Remainder: Int-only. Float remainder is out of scope for v0.1
+        // (no std library math surface; callers can compute via fmod later).
+        BinOp::Rem => {
+            if matches!(left, Ty::Int) && matches!(right, Ty::Int) {
+                Ty::Int
+            } else {
+                report.add(
+                    Diagnostic::error(format!(
+                        "`%` requires Int operands, found {} and {}",
+                        left.display_name(),
+                        right.display_name()
+                    ))
+                    .with_code("E0305")
+                    .with_label(Label::new(span, "type mismatch")),
+                );
+                Ty::Error
+            }
+        }
         // Equality: same type with Eq ability -> Bool
         BinOp::Eq | BinOp::NotEq => {
             // §7.2: Float does NOT have Eq (ADR-0002)

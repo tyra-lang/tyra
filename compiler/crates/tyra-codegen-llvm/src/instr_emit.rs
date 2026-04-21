@@ -84,6 +84,7 @@ pub(crate) fn emit_instruction(
                 MirBinOp::SubInt => format!("sub i64 {l}, {r}"),
                 MirBinOp::MulInt => format!("mul i64 {l}, {r}"),
                 MirBinOp::DivInt => format!("sdiv i64 {l}, {r}"),
+                MirBinOp::RemInt => format!("srem i64 {l}, {r}"),
                 MirBinOp::AddFloat => format!("fadd double {l}, {r}"),
                 MirBinOp::SubFloat => format!("fsub double {l}, {r}"),
                 MirBinOp::MulFloat => format!("fmul double {l}, {r}"),

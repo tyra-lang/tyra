@@ -303,6 +303,7 @@ pub fn kind_name(kind: &TokenKind) -> &'static str {
         TokenKind::Minus => "`-`",
         TokenKind::Star => "`*`",
         TokenKind::Slash => "`/`",
+        TokenKind::Percent => "`%`",
         TokenKind::Eq => "`=`",
         TokenKind::EqEq => "`==`",
         TokenKind::BangEq => "`!=`",

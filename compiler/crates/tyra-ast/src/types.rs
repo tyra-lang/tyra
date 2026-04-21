@@ -337,6 +337,7 @@ pub enum BinOp {
     Sub, // -
     Mul, // *
     Div, // /
+    Rem, // % (integer remainder, truncated toward zero per LLVM srem)
     // Comparison
     Eq,    // ==
     NotEq, // !=

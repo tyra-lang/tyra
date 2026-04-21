@@ -32,7 +32,7 @@ fn infix_precedence(kind: &TokenKind) -> Option<Prec> {
         TokenKind::EqEq | TokenKind::BangEq | TokenKind::EqEqEq => Some(Prec::Equality),
         TokenKind::Lt | TokenKind::LtEq | TokenKind::Gt | TokenKind::GtEq => Some(Prec::Comparison),
         TokenKind::Plus | TokenKind::Minus => Some(Prec::Term),
-        TokenKind::Star | TokenKind::Slash => Some(Prec::Factor),
+        TokenKind::Star | TokenKind::Slash | TokenKind::Percent => Some(Prec::Factor),
         // Postfix operators are handled separately in parse_postfix
         _ => None,
     }
@@ -44,6 +44,7 @@ fn token_to_binop(kind: &TokenKind) -> Option<BinOp> {
         TokenKind::Minus => Some(BinOp::Sub),
         TokenKind::Star => Some(BinOp::Mul),
         TokenKind::Slash => Some(BinOp::Div),
+        TokenKind::Percent => Some(BinOp::Rem),
         TokenKind::EqEq => Some(BinOp::Eq),
         TokenKind::BangEq => Some(BinOp::NotEq),
         TokenKind::Lt => Some(BinOp::Lt),

@@ -274,6 +274,7 @@ pub enum MirBinOp {
     SubInt,
     MulInt,
     DivInt,
+    RemInt,
     AddFloat,
     SubFloat,
     MulFloat,
