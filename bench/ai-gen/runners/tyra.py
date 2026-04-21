@@ -20,10 +20,14 @@ class TyraRunner(Runner):
         src = workdir / "main.tyra"
         # tyra build <src> currently emits `a.out` next to the source.
         # Use `tyra build` so type checking + codegen both run.
+        # The workdir sits under /tmp so the compiler's default stdlib
+        # walk-up search won't find the repo's stdlib/. Point at it
+        # explicitly via TYRA_STDLIB so `import io` etc. resolve.
         res = Runner.run_cmd(
             [str(self._binary()), "build", str(src)],
             cwd=workdir,
             timeout_s=self.config["timeouts"]["compile_seconds"],
+            env={"TYRA_STDLIB": str(self.repo_root / "stdlib")},
         )
         return res
 

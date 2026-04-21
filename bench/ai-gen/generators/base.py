@@ -21,9 +21,16 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _load_tyra_context() -> str:
-    """Return the Tyra spec + all example programs as a single string.
+    """Return the Tyra spec + examples + stdlib modules as one blob.
 
     Cached on the module so we pay the disk read once per process.
+
+    Previous iterations of this function included only the spec and
+    example programs. That left the model guessing at stdlib APIs —
+    it would reach for `import string` (which does not exist) or call
+    `.trim()` on String (which is not provided). Including the stdlib
+    source gives the model the authoritative module list and exact
+    function signatures, cutting out hallucinated imports.
     """
     cached = getattr(_load_tyra_context, "_cache", None)
     if cached is not None:
@@ -35,6 +42,14 @@ def _load_tyra_context() -> str:
         example_blocks.append(
             f"### {path.name}\n\n```tyra\n{path.read_text()}\n```"
         )
+    stdlib_dir = _REPO_ROOT / "stdlib"
+    stdlib_blocks: list[str] = []
+    # Recurse so http/client.tyra and http/server.tyra are picked up too.
+    for path in sorted(stdlib_dir.rglob("*.tyra")):
+        rel = path.relative_to(stdlib_dir)
+        stdlib_blocks.append(
+            f"### stdlib/{rel}\n\n```tyra\n{path.read_text()}\n```"
+        )
     context = (
         "# Tyra language spec\n\n"
         f"{spec}\n\n"
@@ -42,6 +57,12 @@ def _load_tyra_context() -> str:
         "The following programs are canonical Tyra examples. Use them "
         "as a syntax reference when generating code.\n\n"
         + "\n\n".join(example_blocks)
+        + "\n\n# Standard library (authoritative module list)\n\n"
+        "These are the ONLY stdlib modules available in Tyra v0.1. "
+        "Do not import modules that are not listed here — in particular "
+        "there is no `string`, `collections`, or `core.io` module. "
+        "Call functions exactly as they are exported below.\n\n"
+        + "\n\n".join(stdlib_blocks)
     )
     _load_tyra_context._cache = context  # type: ignore[attr-defined]
     return context
