@@ -174,6 +174,13 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare ptr @tyra_http_body(i64)").unwrap();
     writeln!(out, "declare i32 @tyra_http_errno()").unwrap();
     writeln!(out, "declare ptr @tyra_http_errmsg()").unwrap();
+    // M11 phase 2: http server. The Server handle is declared as `ptr`
+    // so LLVM's IR-level type semantics match the Rust-side `*const
+    // Server`. Tyra's `AppServer._handle` is typed `Int` (i64), so the
+    // builtin emit helpers ptrtoint/inttoptr across the boundary.
+    writeln!(out, "declare ptr @tyra_http_server_new()").unwrap();
+    writeln!(out, "declare void @tyra_http_server_route(ptr, ptr, ptr, ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_http_server_listen(ptr, i64)").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
     writeln!(out, "declare void @exit(i32)").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();

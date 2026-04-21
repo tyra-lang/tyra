@@ -110,8 +110,16 @@ pub fn lower(file: &SourceFile) -> Program {
                 .unwrap_or("_unknown");
             ctx.imported_modules.insert(local_name.to_string());
 
-            // Register built-in module types
+            // Register the canonical module path too so aliased imports
+            // (e.g. `import http.server as srv`) can still be recognized
+            // by passes that care about the underlying module identity
+            // (the M11 phase 2 http.server safety gate is the current
+            // consumer). Inserting both the alias and the dotted path is
+            // cheap and avoids a separate set.
             let module_key: String = imp.path.join(".");
+            ctx.imported_modules.insert(module_key.clone());
+
+            // Register built-in module types
             if module_key == "core.sys" {
                 // sys.args() -> List<String>
                 let list_string = Ty::Generic("List".into(), vec![Ty::String]);
@@ -165,6 +173,20 @@ pub fn lower(file: &SourceFile) -> Program {
     ctx.fn_return_types
         .insert("__http_errmsg".into(), Ty::String);
     ctx.fn_param_types.insert("__http_errmsg".into(), vec![]);
+    // M11 phase 2: http server intrinsics.
+    ctx.fn_return_types
+        .insert("__http_server_new".into(), Ty::Int);
+    ctx.fn_param_types.insert("__http_server_new".into(), vec![]);
+    ctx.fn_return_types
+        .insert("__http_server_route".into(), Ty::Unit);
+    ctx.fn_param_types.insert(
+        "__http_server_route".into(),
+        vec![Ty::Int, Ty::String, Ty::String, Ty::String],
+    );
+    ctx.fn_return_types
+        .insert("__http_server_listen".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__http_server_listen".into(), vec![Ty::Int, Ty::Int]);
 
     // M10 phase 2: json stdlib intrinsics.
     ctx.fn_return_types.insert("__json_parse".into(), Ty::Int);
@@ -344,6 +366,19 @@ pub(crate) struct LowerCtx {
     /// Tracks pattern-bound variables (alloca-backed but semantically immutable).
     /// Kept separate from mut_vars so future immutability checks are not confused.
     pub(crate) pattern_vars: std::collections::HashSet<String>,
+    /// Tracks EVERY local binding name introduced in the current function,
+    /// regardless of the binding's type (Int/Bool/Unit for-loop induction
+    /// vars would otherwise fall through the type-keyed maps above). Used
+    /// as the authoritative "is this Ident a local shadow?" signal for
+    /// the M11 phase 2 http.server handler gate. Populated by:
+    ///   - function parameters (in `lower_fn`);
+    ///   - the synthesized `self` on impl methods (conditional in
+    ///     `lower_fn` when `self_type.is_some()`);
+    ///   - `Stmt::Let` and `Stmt::Mut` bindings;
+    ///   - match pattern bindings (alongside `pattern_vars.insert`);
+    ///   - for-loop induction variables (both list-iter and fallback paths).
+    /// Anything that introduces a local name must also insert here.
+    pub(crate) local_binding_names: std::collections::HashSet<String>,
     /// Function return type registry: fn_name → return_type (for type inference in interpolation)
     pub(crate) fn_return_types: std::collections::HashMap<String, Ty>,
     /// Function parameter type registry (M9): fn_name → parameter types in
@@ -420,6 +455,7 @@ impl LowerCtx {
             string_vars: std::collections::HashSet::new(),
             mut_vars: std::collections::HashSet::new(),
             pattern_vars: std::collections::HashSet::new(),
+            local_binding_names: std::collections::HashSet::new(),
             fn_return_types: std::collections::HashMap::new(),
             fn_param_types: std::collections::HashMap::new(),
             task_result_types: std::collections::HashMap::new(),
@@ -487,6 +523,7 @@ impl LowerCtx {
         self.string_vars.clear();
         self.mut_vars.clear();
         self.pattern_vars.clear();
+        self.local_binding_names.clear();
         self.generic_var_types.clear();
         self.deferred_exprs.clear();
 
@@ -506,7 +543,24 @@ impl LowerCtx {
         // Ensure ADT struct defs are registered for the return type
         self.register_adt_type(&return_type);
 
-        // Register parameter types for correct type resolution
+        // Register parameter types for correct type resolution. Parameters
+        // are also local bindings from the safety-gate's perspective — a
+        // user writing `fn setup(_ my_handler: String)` must not have the
+        // handler-slot gate mistake the parameter for a top-level function
+        // of the same name. Track every param name here regardless of type.
+        for (name, _) in &params {
+            self.local_binding_names.insert(name.clone());
+        }
+        // `self` is synthesized by `lower_impl_method` AFTER this function
+        // returns (via `func.params.insert(0, ("self", ...))`), so it's
+        // absent from `params` above. Keep the local-binding invariant
+        // complete by tracking it here when we're lowering an impl method
+        // (signaled by `self_type` being set). `self` is a reserved
+        // identifier and cannot match a top-level fn name, so this is
+        // defense-in-depth rather than a fix for a known exploit.
+        if self.self_type.is_some() {
+            self.local_binding_names.insert("self".into());
+        }
         for (name, ty) in &params {
             // Register ADT struct defs for generic parameter types
             self.register_adt_type(ty);
@@ -600,6 +654,11 @@ impl LowerCtx {
     fn lower_stmt(&mut self, stmt: &Stmt, body: &mut Vec<Instruction>) {
         match stmt {
             Stmt::Let(s) => {
+                // Record the binding name first so even Int/Bool/Unit lets
+                // (which don't populate any type-keyed map) appear in
+                // local_binding_names. This keeps the M11 phase 2 safety
+                // gate correct for shadows of any type.
+                self.local_binding_names.insert(s.name.clone());
                 let is_float = self.is_float_expr(&s.value);
                 let is_string = self.is_string_expr(&s.value);
                 let struct_type = self.expr_struct_type(&s.value);
@@ -632,6 +691,7 @@ impl LowerCtx {
                 });
             }
             Stmt::Mut(s) => {
+                self.local_binding_names.insert(s.name.clone());
                 let is_float = self.is_float_expr(&s.value);
                 let is_string = self.is_string_expr(&s.value);
                 let struct_type = self.expr_struct_type(&s.value);

@@ -1214,6 +1214,325 @@ end
         );
     }
 
+    /// M11 phase 2 safety gate: passing a non-function value to
+    /// `app.get` / `app.post` produces UB at request dispatch, because
+    /// the stdlib types the handler slot as `String` (ptr) and the
+    /// runtime casts that pointer to a function signature. The lowering
+    /// must reject anything other than a known-function Ident.
+    #[test]
+    #[should_panic(expected = "http.server get() handler must be a top-level function name")]
+    fn app_get_rejects_string_literal_handler() {
+        // `import http.server` activates the safety gate. The stdlib
+        // module body is not loaded by lower_str, but the import record
+        // is enough to set imported_modules[\"server\"].
+        let source = "\
+import http.server
+data AppServer
+  _handle: Int
+end
+impl AppServerOps for AppServer
+  fn get(self, _ path: String, _ handler: String) -> Unit
+    ()
+  end
+end
+fn main() -> Int
+  let app = AppServer(_handle: 0)
+  app.get(\"/foo\", \"not-a-function\")
+  0
+end
+";
+        let _ = lower_str(source);
+    }
+
+    #[test]
+    #[should_panic(expected = "http.server get() handler must be a top-level function name")]
+    fn app_get_rejects_shadowed_function_name() {
+        // HIGH-severity regression guard from the phase 2 review: a
+        // `let my_handler = "..."` that shadows a top-level fn of the
+        // same name would previously pass the gate because
+        // fn_return_types.contains_key(\"my_handler\") is true. The gate
+        // now also checks var_types / mut_vars / pattern_vars.
+        let source = "\
+import http.server
+data Request
+  path: String
+end
+data Response
+  status: Int
+  body: String
+end
+data AppServer
+  _handle: Int
+end
+impl AppServerOps for AppServer
+  fn get(self, _ path: String, _ handler: String) -> Unit
+    ()
+  end
+end
+fn my_handler(_ req: Request) -> Response
+  Response(status: 200, body: \"ok\")
+end
+fn main() -> Int
+  let app = AppServer(_handle: 0)
+  let my_handler = \"shadow\"
+  app.get(\"/foo\", my_handler)
+  0
+end
+";
+        let _ = lower_str(source);
+    }
+
+    #[test]
+    fn app_get_accepts_function_identifier_handler() {
+        // Negative control: a bare function name resolves fine.
+        let source = "\
+import http.server
+data Request
+  path: String
+end
+data Response
+  status: Int
+  body: String
+end
+data AppServer
+  _handle: Int
+end
+impl AppServerOps for AppServer
+  fn get(self, _ path: String, _ handler: String) -> Unit
+    ()
+  end
+end
+fn my_handler(_ req: Request) -> Response
+  Response(status: 200, body: \"ok\")
+end
+fn main() -> Int
+  let app = AppServer(_handle: 0)
+  app.get(\"/foo\", my_handler)
+  0
+end
+";
+        // Must not panic.
+        let _ = lower_str(source);
+    }
+
+    /// Layout cross-check — Tyra side. The runtime's `stdlib_http_server.rs`
+    /// pins `TyraRequest` / `TyraResponse` Rust layouts with `offset_of!`;
+    /// this test is the authoritative Tyra counterpart. Read the real
+    /// `stdlib/http/server.tyra` file, scan for the `data Request` and
+    /// `data Response` blocks, and assert declaration order. A maintainer
+    /// reordering stdlib fields (e.g. `body, path, method`) trips this
+    /// test before the runtime silently reads swapped pointers.
+    #[test]
+    fn http_server_tyra_struct_field_order() {
+        // Read the real stdlib/http/server.tyra file and scan its
+        // `data Request` / `data Response` blocks for field order. A
+        // maintainer editing the stdlib file to reorder fields must
+        // update this test, which forces synchronous review of the
+        // runtime-side TyraRequest/TyraResponse layout.
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let stdlib_path = std::path::Path::new(manifest_dir)
+            .join("../../../stdlib/http/server.tyra");
+        let src = std::fs::read_to_string(&stdlib_path).unwrap_or_else(|e| {
+            panic!(
+                "cannot read {}: {e} — layout test requires the real stdlib file",
+                stdlib_path.display()
+            )
+        });
+
+        let req_fields = extract_data_fields(&src, "Request");
+        assert_eq!(
+            req_fields,
+            vec!["method", "path", "body"],
+            "stdlib/http/server.tyra `data Request` field order must match \
+             runtime TyraRequest {{ method, path, body }}"
+        );
+        let resp_fields = extract_data_fields(&src, "Response");
+        assert_eq!(
+            resp_fields,
+            vec!["status", "body"],
+            "stdlib/http/server.tyra `data Response` field order must match \
+             runtime TyraResponse {{ status, body }}"
+        );
+    }
+
+    /// Minimal scanner that pulls field names in declaration order out
+    /// of a `data TypeName ... end` block. Assumes a well-formed stdlib
+    /// file (no nested blocks, no multi-line field decls).
+    ///
+    /// Defenses:
+    /// - Prefix false-match: walks `data ` occurrences and requires the
+    ///   following word to equal `type_name` exactly, so a future
+    ///   `data RequestBody` would not match a search for `Request`.
+    /// - Comment-line skip: if a `#` appears anywhere in the line
+    ///   before `abs`, the match is inside a comment (whether leading
+    ///   or trailing). Skipped.
+    fn extract_data_fields(src: &str, type_name: &str) -> Vec<String> {
+        let mut search_pos = 0;
+        let start = loop {
+            let remaining = &src[search_pos..];
+            let rel = remaining
+                .find("data ")
+                .unwrap_or_else(|| panic!("data block `{type_name}` not found"));
+            let abs = search_pos + rel;
+            let after = &src[abs + 5..]; // skip "data "
+            let word_end = after
+                .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                .unwrap_or(after.len());
+            let word = &after[..word_end];
+            // Reject matches inside a comment — detected by a `#`
+            // appearing on the same line before `abs` (covers both
+            // leading-comment and trailing-comment cases).
+            let line_start = src[..abs].rfind('\n').map_or(0, |i| i + 1);
+            let line_prefix = &src[line_start..abs];
+            let in_comment = line_prefix.contains('#');
+            if word == type_name && !in_comment {
+                break abs;
+            }
+            search_pos = abs + 5 + word_end;
+        };
+        let rest = &src[start + 5 + type_name.len()..];
+        let end_rel = rest
+            .find("\nend")
+            .unwrap_or_else(|| panic!("missing `end` after data {type_name}"));
+        let block = &rest[..end_rel];
+        block
+            .lines()
+            .filter_map(|line| {
+                let trimmed = line.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') {
+                    return None;
+                }
+                trimmed.split_once(':').map(|(n, _)| n.trim().to_string())
+            })
+            .collect()
+    }
+
+    /// Aliased `import http.server as srv` must still activate the gate;
+    /// the canonical path `"http.server"` is recorded alongside the
+    /// alias in imported_modules for exactly this reason.
+    #[test]
+    #[should_panic(expected = "http.server get() handler must be a top-level function name")]
+    fn app_get_gate_fires_under_aliased_import() {
+        let source = "\
+import http.server as srv
+data AppServer
+  _handle: Int
+end
+impl AppServerOps for AppServer
+  fn get(self, _ path: String, _ handler: String) -> Unit
+    ()
+  end
+end
+fn main() -> Int
+  let app = AppServer(_handle: 0)
+  app.get(\"/foo\", \"not-a-fn\")
+  0
+end
+";
+        let _ = lower_str(source);
+    }
+
+    /// Function parameter shadow: `fn setup(_ my_handler: String)` must
+    /// not let a param name of the same shape as a top-level fn slip
+    /// through the gate. Params are registered in `local_binding_names`
+    /// at `lower_fn` entry for exactly this reason.
+    #[test]
+    #[should_panic(expected = "http.server get() handler must be a top-level function name")]
+    fn app_get_rejects_function_param_shadow() {
+        let source = "\
+import http.server
+data Request
+  path: String
+end
+data Response
+  status: Int
+  body: String
+end
+data AppServer
+  _handle: Int
+end
+impl AppServerOps for AppServer
+  fn get(self, _ path: String, _ handler: String) -> Unit
+    ()
+  end
+end
+fn my_handler(_ req: Request) -> Response
+  Response(status: 200, body: \"ok\")
+end
+fn register(_ app: AppServer, _ my_handler: String) -> Unit
+  app.get(\"/foo\", my_handler)
+end
+fn main() -> Int
+  let app = AppServer(_handle: 0)
+  register(app, \"shadow-value\")
+  0
+end
+";
+        let _ = lower_str(source);
+    }
+
+    /// For-loop induction variable with Int element type: a shadow must
+    /// still be rejected even though `Ty::Int` doesn't populate any
+    /// type-keyed tracking map (we maintain `local_binding_names` as the
+    /// authoritative shadow set).
+    #[test]
+    #[should_panic(expected = "http.server get() handler must be a top-level function name")]
+    fn app_get_rejects_for_loop_int_shadow() {
+        let source = "\
+import http.server
+data Request
+  path: String
+end
+data Response
+  status: Int
+  body: String
+end
+data AppServer
+  _handle: Int
+end
+impl AppServerOps for AppServer
+  fn get(self, _ path: String, _ handler: String) -> Unit
+    ()
+  end
+end
+fn my_handler(_ req: Request) -> Response
+  Response(status: 200, body: \"ok\")
+end
+fn main() -> Int
+  let app = AppServer(_handle: 0)
+  for my_handler in [1, 2, 3]
+    app.get(\"/foo\", my_handler)
+  end
+  0
+end
+";
+        let _ = lower_str(source);
+    }
+
+    #[test]
+    fn app_get_gate_skipped_when_http_server_not_imported() {
+        // User defines their own unrelated AppServer with get(String, String)
+        // signature. Should compile fine — the gate must not fire because
+        // http.server is not imported.
+        let source = "\
+data AppServer
+  _handle: Int
+end
+impl UserOps for AppServer
+  fn get(self, _ key: String, _ val: String) -> Unit
+    ()
+  end
+end
+fn main() -> Int
+  let app = AppServer(_handle: 0)
+  app.get(\"key\", \"val\")
+  0
+end
+";
+        // Must not panic — no http.server import, so the gate is dormant.
+        let _ = lower_str(source);
+    }
+
     /// Regression guard for Assign-over-mut-task-handle: `mut t = spawn f();
     /// t = spawn g(); t.await` should still unbox via Await. Without
     /// propagation in ExprKind::Assign, the second spawn's tracking would

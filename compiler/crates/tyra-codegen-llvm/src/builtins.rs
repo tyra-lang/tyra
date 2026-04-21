@@ -129,6 +129,18 @@ pub(crate) fn emit_builtin_call(
             emit_http_errmsg(out, dest.as_deref());
             true
         }
+        "__http_server_new" => {
+            emit_http_server_new(out, dest.as_deref());
+            true
+        }
+        "__http_server_route" => {
+            emit_http_server_route(out, dest.as_deref(), args, func);
+            true
+        }
+        "__http_server_listen" => {
+            emit_http_server_listen(out, dest.as_deref(), args, func);
+            true
+        }
         "sys__exit" => {
             // §17.1: core.sys.exit(_ code: Int) -> Never
             if let Some(arg) = args.first() {
@@ -489,6 +501,100 @@ fn emit_http_errno(out: &mut String, dest: Option<&str>) {
 fn emit_http_errmsg(out: &mut String, dest: Option<&str>) {
     let d = dest.unwrap_or("_http_errmsg");
     writeln!(out, "  %{d} = call ptr @tyra_http_errmsg()").unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// M11 phase 2: http server emit helpers.
+// ---------------------------------------------------------------------------
+
+fn emit_http_server_new(out: &mut String, dest: Option<&str>) {
+    let d = dest.unwrap_or("_srv_new");
+    // Runtime returns ptr; Tyra stores the handle as Int. ptrtoint here
+    // so downstream MIR sees an i64 consistently with AppServer._handle.
+    //
+    // TODO(v0.2): the ptrtoint/inttoptr round-trip through AppServer._handle
+    // strips LLVM pointer provenance. Safe today because the handle is
+    // never dereferenced in Tyra IR (only passed back to opaque extern
+    // calls that LLVM cannot alias-analyze). If provenance-based
+    // optimizations ever break this, typing `_handle` as a true opaque
+    // `ptr` in Tyra would eliminate the round-trip. Tracked under the
+    // "opaque handle types" spec follow-up.
+    writeln!(out, "  %{d}.ptr = call ptr @tyra_http_server_new()").unwrap();
+    writeln!(out, "  %{d} = ptrtoint ptr %{d}.ptr to i64").unwrap();
+}
+
+/// `__http_server_route(srv, method, path, handler)` — srv is Int in
+/// the MIR (handle); cast back to ptr for the call. handler is emitted
+/// as ptr (Tyra function identifier resolves to an LLVM function symbol);
+/// the runtime casts it to the expected `fn(*Request)->*Response` sig.
+///
+/// Intermediate SSA temp name is keyed by `dest` (the Call's dest temp,
+/// allocated by lower_expr's `fresh_temp`). `dest` is always unique
+/// across calls in the same function, so this avoids the name-collision
+/// that a handler-operand-derived tag would hit when the same handler
+/// expression is used in two distinct calls within a single function.
+fn emit_http_server_route(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+) {
+    // The `.sptr` intermediate SSA temp is keyed off `dest`, which must
+    // be a per-call `fresh_temp()`. `lower_call` always emits one today.
+    // Assert defensively so a future refactor that drops dest for void
+    // returns fails loudly here rather than producing invalid LLVM IR
+    // (duplicate `%_srv_route.sptr` definitions).
+    let d = dest.expect(
+        "emit_http_server_route requires a fresh dest temp for its .sptr \
+         intermediate; a `dest: None` void call would collide on repeat \
+         invocations within the same function",
+    );
+    let srv = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    let method = args
+        .get(1)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    let path = args
+        .get(2)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    let handler = args
+        .get(3)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    writeln!(out, "  %{d}.sptr = inttoptr i64 {srv} to ptr").unwrap();
+    writeln!(
+        out,
+        "  call void @tyra_http_server_route(ptr %{d}.sptr, ptr {method}, ptr {path}, ptr {handler})"
+    )
+    .unwrap();
+}
+
+fn emit_http_server_listen(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_srv_listen");
+    let srv = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    let port = args
+        .get(1)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    writeln!(out, "  %{d}.sptr = inttoptr i64 {srv} to ptr").unwrap();
+    writeln!(
+        out,
+        "  %{d}.i32 = call i32 @tyra_http_server_listen(ptr %{d}.sptr, i64 {port})"
+    )
+    .unwrap();
+    writeln!(out, "  %{d} = sext i32 %{d}.i32 to i64").unwrap();
 }
 
 /// parse::<Int>(str) -> Option<Int>

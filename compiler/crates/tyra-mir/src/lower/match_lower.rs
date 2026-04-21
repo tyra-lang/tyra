@@ -586,6 +586,7 @@ impl super::LowerCtx {
                             if !self.mut_vars.contains(name) && !self.pattern_vars.contains(name) {
                                 body.push(Instruction::Alloca { dest: name.clone() });
                                 self.pattern_vars.insert(name.clone());
+                                self.local_binding_names.insert(name.clone());
                             }
                         }
                         PatternKind::Constructor(_, _) => {

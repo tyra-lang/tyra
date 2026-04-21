@@ -401,6 +401,72 @@ impl super::LowerCtx {
         if let ExprKind::FieldAccess(obj, method) = &callee.kind {
             match self.resolve_impl_method(obj, method) {
                 super::ImplMethodResult::Resolved(mangled_name) => {
+                    // M11 phase 2 safety gate: `AppServer__get` / `_post`
+                    // pass the handler through as a ptr, but the stdlib
+                    // types it as `String` (Tyra lacks a first-class Fn
+                    // type in v0.1). Without this check, a user writing
+                    // `app.get("/p", "literal")` or `app.get("/p", some_str)`
+                    // would type-check and then call through a non-
+                    // function pointer at request time (UB).
+                    //
+                    // Gate conditions (all must hold):
+                    //   (a) the caller imported `http.server` — prevents
+                    //       false positives on user types named
+                    //       AppServer that happen to have a two-string
+                    //       `get`/`post` method. NOTE: a user who
+                    //       imports `http.server` AND defines their own
+                    //       `impl X for AppServer fn get(...)` will see
+                    //       the mangled name collide (`AppServer__get`)
+                    //       and their method will share this gate;
+                    //       advise against reusing the name.
+                    //   (b) the handler argument is a bare Ident.
+                    //   (c) that Ident resolves to a top-level function
+                    //       name AND is NOT shadowed by a local binding
+                    //       recorded in `local_binding_names`
+                    //       (let / mut / pattern / for-loop / params).
+                    //
+                    // KNOWN LIMITATION: `fn_return_types` also contains
+                    // intrinsic names (`__http_server_new` etc.). A
+                    // direct pass like `app.get("/p", __http_server_new)`
+                    // would pass this gate textually; the resolver's
+                    // rule that `__*` identifiers are stdlib-only (see
+                    // PRELUDE_FUNCTIONS) is what keeps user code from
+                    // reaching the call site. If that rule is ever
+                    // relaxed, this gate needs a "user-defined fn only"
+                    // predicate.
+                    if (mangled_name == "AppServer__get"
+                        || mangled_name == "AppServer__post")
+                        && args.len() == 2
+                        && self.imported_modules.contains("http.server")
+                    {
+                        let handler_expr = &args[1].value;
+                        let is_valid_fn = match &handler_expr.kind {
+                            ExprKind::Ident(name) => {
+                                // Known top-level function AND not shadowed
+                                // by any local binding (`let` / `mut` /
+                                // pattern / for-loop induction) recorded in
+                                // `local_binding_names`. The single-set
+                                // check replaces the earlier seven type-
+                                // keyed maps so Int / Bool / Unit shadows
+                                // can't slip through.
+                                self.fn_return_types.contains_key(name)
+                                    && !self.local_binding_names.contains(name.as_str())
+                            }
+                            _ => false,
+                        };
+                        if !is_valid_fn {
+                            panic!(
+                                "http.server {}() handler must be a top-level \
+                                 function name, not an arbitrary expression \
+                                 or a shadowing local. Tyra v0.1 lacks a \
+                                 first-class Fn type, so the stdlib types the \
+                                 handler slot as `String`; anything other \
+                                 than a bare function identifier here would \
+                                 produce undefined behavior at dispatch time.",
+                                if mangled_name == "AppServer__get" { "get" } else { "post" }
+                            );
+                        }
+                    }
                     let self_val = self.lower_expr(obj, body);
                     let mut arg_operands = vec![Operand::Var(self_val)];
                     for a in args {

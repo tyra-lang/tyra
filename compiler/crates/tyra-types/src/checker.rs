@@ -290,6 +290,26 @@ fn register_prelude(env: &mut TypeEnv) {
         "__http_errmsg".to_string(),
         Ty::Fn(vec![], Box::new(Ty::String)),
     );
+    // M11 phase 2: http server intrinsics.
+    // Server handles, handler function pointers, and the opaque AppServer
+    // ADT are all represented as Int (i64) at the intrinsic boundary.
+    // handler is typed `String` (ptr) — codegen resolves fn-ident args
+    // directly to the LLVM symbol.
+    env.define(
+        "__http_server_new".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__http_server_route".to_string(),
+        Ty::Fn(
+            vec![Ty::Int, Ty::String, Ty::String, Ty::String],
+            Box::new(Ty::Unit),
+        ),
+    );
+    env.define(
+        "__http_server_listen".to_string(),
+        Ty::Fn(vec![Ty::Int, Ty::Int], Box::new(Ty::Int)),
+    );
     // M10 phase 2: json stdlib intrinsics. See stdlib/json.tyra.
     // Handles are opaque Int values (0 = error / absent).
     env.define(

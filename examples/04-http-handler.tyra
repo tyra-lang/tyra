@@ -1,36 +1,39 @@
 # 04-http-handler.tyra
 # HTTP server with multiple route handlers.
-# Validates: async fn, .await?, import, Task<T>, match on Option for early return
+# Validates: import, data types, impl methods, function identifiers as
+#            values (first-class fn refs for handler registration)
 
 # SPEC_REF: §21.3 — HTTP server entry point pattern
-# SPEC_REF: §14.3 — .await? parses as (expr.await)?
-# SPEC_REF: §14.2 — async fn f() -> T call result is Task<T>
-# NOTE: http module is Tier 2 stdlib — actual API signatures TBD (§22)
+# SPEC_REF: §17.3.3 — http.server frozen in M11 phase 2
+#
+# v0.1 notes:
+# - Handlers are synchronous: `fn(Request) -> Response`. Async handler
+#   dispatch is deferred to a later M11 sub-phase.
+# - Listen blocks forever; example is not exercised by the CI `run` loop
+#   (would hang). Build-only verification validates that the example
+#   type-checks and compiles.
+# - `async fn` + `.await?` HTTP semantics are exercised by example 08
+#   (http.client) — no coverage gap from this file's synchronous shape.
 
 import http.server
 
-type AppError =
-  | ServerError(message: String)
-  | HandlerError(message: String)
-
-async fn health_handler(_ req: server.Request) -> Result<server.Response, AppError>
-  Ok(server.Response(status: 200, body: "ok"))
+fn health_handler(_ req: Request) -> Response
+  Response(status: 200, body: "ok")
 end
 
-async fn greet_handler(_ req: server.Request) -> Result<server.Response, AppError>
-  # Without or return, use match to handle the Option from query()
-  let name = match req.query(key: "name")
-  when Some(n)
-    n
-  when None
-    return Ok(server.Response(status: 400, body: "missing name"))
+fn greet_handler(_ req: Request) -> Response
+  # Request.body carries the raw request body for POST; GET requests use
+  # it as the query (no dedicated query accessor in v0.1).
+  if req.body == ""
+    Response(status: 400, body: "missing body")
+  else
+    Response(status: 200, body: "hello, #{req.body}")
   end
-  Ok(server.Response(status: 200, body: "hello, #{name}"))
 end
 
-async fn main() -> Result<Unit, AppError>
+fn main() -> Result<Unit, String>
   let app = server.new()
   app.get("/health", health_handler)
-  app.get("/greet", greet_handler)
-  app.listen(port: 8080).await?
+  app.post("/greet", greet_handler)
+  app.listen(8080)
 end

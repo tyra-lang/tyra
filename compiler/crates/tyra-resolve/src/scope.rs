@@ -153,6 +153,10 @@ const PRELUDE_FUNCTIONS: &[&str] = &[
     "__http_body",
     "__http_errno",
     "__http_errmsg",
+    // M11 phase 2: http server backing. See runtime/src/stdlib_http_server.rs.
+    "__http_server_new",
+    "__http_server_route",
+    "__http_server_listen",
     // M10 phase 2: json stdlib backing. See runtime/src/stdlib_json.rs.
     "__json_parse",
     "__json_err_msg",

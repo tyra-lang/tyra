@@ -43,6 +43,11 @@ pub use stdlib_http::{
     tyra_http_body, tyra_http_errmsg, tyra_http_errno, tyra_http_get, tyra_http_status,
 };
 
+mod stdlib_http_server;
+pub use stdlib_http_server::{
+    tyra_http_server_listen, tyra_http_server_new, tyra_http_server_route,
+};
+
 /// Thunk signature emitted by codegen for each `spawn` site.
 /// Takes opaque arg pointer, returns opaque result pointer.
 pub type ThunkFn = unsafe extern "C" fn(*mut c_void) -> *mut c_void;
@@ -170,14 +175,14 @@ mod gc {
     /// `GC_init` here is safe — libgc documents it as idempotent — and
     /// `GC_allow_register_threads` is required before the scheduler's
     /// worker threads can register via `GC_register_my_thread`.
-    pub(super) fn init() {
+    pub(crate) fn init() {
         INIT.call_once(|| unsafe {
             GC_init();
             GC_allow_register_threads();
         });
     }
 
-    pub(super) fn register_this_thread() {
+    pub(crate) fn register_this_thread() {
         unsafe {
             let mut sb = GCStackBase {
                 mem_base: std::ptr::null_mut(),
@@ -193,7 +198,7 @@ mod gc {
         }
     }
 
-    pub(super) fn unregister_this_thread() {
+    pub(crate) fn unregister_this_thread() {
         unsafe {
             GC_unregister_my_thread();
         }

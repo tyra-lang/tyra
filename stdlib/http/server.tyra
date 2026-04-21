@@ -1,5 +1,38 @@
-# stdlib/http/server.tyra — HTTP server stub (§22, Tier 2)
-# v0.1: listen() returns Ok immediately (no actual socket binding).
+# stdlib/http/server.tyra — Tier 2 HTTP server (§17.3.3). M11 phase 2.
+#
+# v0.1 API (frozen):
+#   server.new()                         -> AppServer
+#   app.get(path, handler)               -> Unit
+#   app.post(path, handler)              -> Unit
+#   app.listen(_ port: Int)              -> Result<Unit, String>
+#
+# Handler signature:
+#   fn(req: Request) -> Response
+#
+# Handlers are synchronous in v0.1 (no async fn). Return a Response
+# directly; failure cases should be represented as non-2xx status codes
+# in the Response body itself, not via Result.
+#
+# Backed by `__http_server_*` intrinsics (see runtime/src/stdlib_http_server.rs).
+#
+# Caveats for v0.1:
+# - Blocking single-threaded accept loop. One in-flight request at a
+#   time. Adequate for dev tools, health checks, and local RPC. Upgrade
+#   path: dispatch handlers onto the M9 task runtime.
+# - Exact-path routing only. Wildcards and URL parameters are deferred.
+#   Registering the same (method, path) twice silently overwrites the
+#   previous handler (with an `eprintln!` warning from the runtime).
+# - Request.body is captured raw and capped at 1 MiB. Headers, cookies,
+#   and query parameters are not accessible from Tyra in this phase.
+# - No TLS. Terminate HTTPS with a reverse proxy (nginx, caddy).
+# - Handler panics abort the process (Tyra `panic()` is abort-not-unwind
+#   in v0.1), killing the whole server. Wrap risky logic in match /
+#   Result and return a 5xx Response instead. A future Tyra unwinding
+#   panic mode may enable per-request isolation in the runtime.
+# - `listen` returns `Result<Unit, String>`, but the `Ok` arm is
+#   unreachable in v0.1: the accept loop only exits on bind failure.
+#   Pattern-match `Err(msg)` for bind diagnostics; the `Ok(_)` case is
+#   there for future shutdown support.
 
 export data Request
   method: String
@@ -13,27 +46,32 @@ export data Response
 end
 
 export data AppServer
-  _port: Int
+  _handle: Int
 end
 
 export fn new() -> AppServer
-  AppServer(_port: 0)
-end
-
-impl RequestOps for Request
-  fn query(self, _ key: String) -> Option<String>
-    None
-  end
+  AppServer(_handle: __http_server_new())
 end
 
 impl AppServerOps for AppServer
-  # handler is typed as String (ptr) for LLVM compatibility with function pointers
+  # handler is typed String (= ptr in codegen). Tyra function identifiers
+  # resolve to their LLVM symbol, so `app.get("/path", my_handler)` passes
+  # the function pointer. The runtime casts it to
+  # `fn(*const Request) -> *const Response` and invokes it.
   fn get(self, _ path: String, _ handler: String) -> Unit
-    ()
+    __http_server_route(self._handle, "GET", path, handler)
   end
 
-  # AppError is defined by the caller; Ok(()) means listen succeeds immediately
-  fn listen(self, _ port: Int) -> Result<Unit, AppError>
-    Ok(())
+  fn post(self, _ path: String, _ handler: String) -> Unit
+    __http_server_route(self._handle, "POST", path, handler)
+  end
+
+  fn listen(self, _ port: Int) -> Result<Unit, String>
+    let code = __http_server_listen(self._handle, port)
+    if code == 0
+      Ok(())
+    else
+      Err("bind failed on port #{port}")
+    end
   end
 end

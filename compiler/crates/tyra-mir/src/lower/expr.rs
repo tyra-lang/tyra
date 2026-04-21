@@ -290,13 +290,33 @@ impl super::LowerCtx {
                         index: Operand::Var(cur_idx.clone()),
                         elem_type: elem_type.clone(),
                     });
-                    // Track element type for codegen (Bool tracked in codegen pre-scan)
+                    // Record the for-loop induction variable as a local
+                    // binding regardless of its element type. The type-
+                    // keyed maps below only track String / Float / Named /
+                    // Generic; Int / Bool / Unit bindings would otherwise
+                    // leak through shadow detection.
+                    self.local_binding_names.insert(f.binding.clone());
+                    // Track element type for codegen (Bool tracked in codegen pre-scan).
+                    // Named/Generic bindings must also register in var_types /
+                    // generic_var_types so subsequent `binding.field` /
+                    // `binding[i]` accesses resolve.
                     match &elem_type {
                         Ty::String => {
                             self.string_vars.insert(f.binding.clone());
                         }
                         Ty::Float => {
                             self.float_vars.insert(f.binding.clone());
+                        }
+                        Ty::Named(n) => {
+                            self.var_types.insert(f.binding.clone(), n.clone());
+                        }
+                        Ty::Generic(_, _) => {
+                            self.generic_var_types
+                                .insert(f.binding.clone(), elem_type.clone());
+                            self.var_types.insert(
+                                f.binding.clone(),
+                                elem_type.monomorphized_name(),
+                            );
                         }
                         _ => {}
                     }
@@ -335,6 +355,7 @@ impl super::LowerCtx {
                     body.push(Instruction::Label(end_label));
                 } else {
                     // Non-list iteration: keep current stub behavior
+                    self.local_binding_names.insert(f.binding.clone());
                     body.push(Instruction::Copy {
                         dest: f.binding.clone(),
                         source: iter_val,
