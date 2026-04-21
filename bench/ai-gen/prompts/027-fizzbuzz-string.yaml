@@ -1,0 +1,23 @@
+id: "027-fizzbuzz-string"
+title: "FizzBuzz without modulo"
+description: |
+  Print the classic FizzBuzz output for integers 1 through 15
+  inclusive, one per line. Rule: "Fizz" on multiples of 3, "Buzz"
+  on multiples of 5, "FizzBuzz" on multiples of both, otherwise
+  the integer itself.
+
+  IMPORTANT: Do not use the remainder or modulo operator. Track
+  divisibility with a counter that resets every 3 (or every 5)
+  iterations, or with any other integer-arithmetic technique.
+
+  Exit with status 0.
+tags: [loops, arithmetic, no_modulo]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "FizzBuzz"
+    - "Fizz"
+    - "Buzz"
+    - "14"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

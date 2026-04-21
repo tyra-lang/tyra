@@ -1,0 +1,27 @@
+id: "037-tree-depth"
+title: "Depth of a binary tree ADT"
+description: |
+  Define a recursive sum type `Tree` with two variants:
+
+    - Leaf (no payload)
+    - Node holding two child Trees (left, right)
+
+  Write `depth(tree)` that returns the depth as an integer:
+  depth(Leaf) = 0, depth(Node(l, r)) = 1 + max(depth(l), depth(r)).
+
+  In `main`, construct this tree
+
+      Node(
+        Node(Leaf, Node(Leaf, Leaf)),
+        Leaf
+      )
+
+  compute its depth, and print exactly "depth=3" on a single line.
+  Exit with status 0.
+tags: [adt, recursion, trees]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "depth=3"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

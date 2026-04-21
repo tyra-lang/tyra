@@ -1,0 +1,15 @@
+id: "028-range-sum"
+title: "Sum 1..=N"
+description: |
+  Read a single non-negative integer N from standard input. Compute
+  the sum of all integers from 1 to N inclusive (use a loop, a
+  fold, or the closed-form formula — any correct approach).
+
+  Print exactly "sum=S" on one line. Exit with status 0.
+tags: [arithmetic, loops]
+execution:
+  stdin: "100\n"
+  stdout_must_contain:
+    - "sum=5050"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

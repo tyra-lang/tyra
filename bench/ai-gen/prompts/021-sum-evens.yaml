@@ -1,0 +1,16 @@
+id: "021-sum-evens"
+title: "Sum of even integers"
+description: |
+  Read whitespace-separated integers from standard input until
+  end-of-file. Compute the sum of only the even integers (where
+  "even" means the integer is divisible by 2, including zero and
+  negative evens).
+
+  Print exactly "sum_even=S" on one line. Exit with status 0.
+tags: [collections, filter, arithmetic]
+execution:
+  stdin: "1 2 3 4 5 6 7 8 9 10\n"
+  stdout_must_contain:
+    - "sum_even=30"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

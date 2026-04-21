@@ -1,0 +1,17 @@
+id: "025-average"
+title: "Average of a list (integer division)"
+description: |
+  Read whitespace-separated integers from standard input (at
+  least one, until end-of-file). Compute their average using
+  integer division (truncating toward zero, like C / Rust / Go's
+  int division).
+
+  Print exactly "avg=A" on one line where A is the integer
+  average. Exit with status 0.
+tags: [arithmetic, reduce]
+execution:
+  stdin: "10 20 30 40\n"
+  stdout_must_contain:
+    - "avg=25"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

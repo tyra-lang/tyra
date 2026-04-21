@@ -1,0 +1,17 @@
+id: "035-string-length"
+title: "String length in bytes"
+description: |
+  Read a single line of text from standard input (without the
+  trailing newline). Print the number of bytes in the line as
+  "len=N" followed by a newline. For ASCII input this equals the
+  character count; do not worry about multi-byte characters for
+  this prompt — byte length is what is being measured.
+
+  Exit with status 0.
+tags: [strings, length]
+execution:
+  stdin: "hello\n"
+  stdout_must_contain:
+    - "len=5"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

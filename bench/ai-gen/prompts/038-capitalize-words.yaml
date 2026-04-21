@@ -1,0 +1,21 @@
+id: "038-capitalize-words"
+title: "Capitalize first letter of each word"
+description: |
+  Read a single line of text from standard input (without the
+  trailing newline). For each whitespace-separated word, uppercase
+  its first ASCII letter (leaving the rest of the word unchanged,
+  and leaving words that start with a non-letter character
+  unchanged). Rejoin the words with a single space separator.
+
+  Print the transformed string followed by a newline. Exit with
+  status 0.
+
+  Example: "hello world from tyra" must produce "Hello World From
+  Tyra".
+tags: [strings, mapping]
+execution:
+  stdin: "hello world from tyra\n"
+  stdout_must_contain:
+    - "Hello World From Tyra"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

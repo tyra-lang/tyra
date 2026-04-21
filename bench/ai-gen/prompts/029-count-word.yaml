@@ -1,0 +1,18 @@
+id: "029-count-word"
+title: "Count occurrences of a target word"
+description: |
+  Read the first line from standard input; it is a target word T.
+  Read the remainder of standard input to end-of-file as the body.
+
+  Count how many whitespace-separated tokens in the body are
+  exactly equal to T (case-sensitive, full-token match only; do
+  not count substrings).
+
+  Print exactly "count=N" on a single line. Exit with status 0.
+tags: [strings, stdin, counting]
+execution:
+  stdin: "cat\nthe cat sat on the mat and another cat watched the first cat\n"
+  stdout_must_contain:
+    - "count=3"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

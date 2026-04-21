@@ -1,0 +1,28 @@
+id: "040-person-record"
+title: "Construct and display a record"
+description: |
+  Define a record (struct / data class / object) `Person` with
+  three fields:
+
+    - name: String
+    - age: Int
+    - email: String
+
+  Construct an instance with name="Alice", age=30,
+  email="alice@example.com". Then print the following three lines
+  in order:
+
+    name=Alice
+    age=30
+    email=alice@example.com
+
+  Exit with status 0.
+tags: [records, data_modeling]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "name=Alice"
+    - "age=30"
+    - "email=alice@example.com"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

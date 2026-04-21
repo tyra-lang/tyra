@@ -1,0 +1,25 @@
+id: "034-group-even-odd"
+title: "Partition a list into even and odd"
+description: |
+  Read whitespace-separated integers from standard input to
+  end-of-file. Split them into two groups: evens (divisible by 2,
+  including zero and negative evens) and odds.
+
+  Print exactly two lines, preserving original relative order
+  within each group:
+
+    evens=<space-separated evens>
+    odds=<space-separated odds>
+
+  If a group is empty, print the prefix with no values after it
+  (e.g. "evens=" on its own line).
+
+  Exit with status 0.
+tags: [collections, partition]
+execution:
+  stdin: "7 4 1 2 9 6 3 8\n"
+  stdout_must_contain:
+    - "evens=4 2 6 8"
+    - "odds=7 1 9 3"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

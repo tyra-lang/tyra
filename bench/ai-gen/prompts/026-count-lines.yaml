@@ -1,0 +1,16 @@
+id: "026-count-lines"
+title: "Count lines from stdin"
+description: |
+  Read all of standard input until end-of-file. Count the number
+  of newline-terminated lines in the input. An input ending
+  without a final newline still counts its last partial line as
+  one line.
+
+  Print exactly "lines=N" on a single line. Exit with status 0.
+tags: [stdin, counting]
+execution:
+  stdin: "a\nb\nc\n"
+  stdout_must_contain:
+    - "lines=3"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

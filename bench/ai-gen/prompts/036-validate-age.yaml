@@ -1,0 +1,23 @@
+id: "036-validate-age"
+title: "Validate age with error message"
+description: |
+  Define a function `validate_age(age)` that returns Result /
+  Either (OK with the age on success, Err with a diagnostic
+  string on failure). Rules:
+
+    - Age < 0 -> Err("negative")
+    - Age > 150 -> Err("too-large")
+    - Otherwise -> Ok(age)
+
+  In `main`, call validate_age on each of -1, 25, 200 in that
+  order. Print one line per call, either "ok=<age>" or
+  "err=<message>". Exit with status 0.
+tags: [result, validation, error_handling]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "err=negative"
+    - "ok=25"
+    - "err=too-large"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

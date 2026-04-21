@@ -1,0 +1,16 @@
+id: "024-uppercase-ascii"
+title: "Uppercase ASCII letters"
+description: |
+  Read a single line of text from standard input. Convert every
+  ASCII lowercase letter (a-z) to its uppercase form (A-Z). Leave
+  every other character (digits, punctuation, non-ASCII) unchanged.
+
+  Print the converted line followed by a newline. Exit with status
+  0.
+tags: [strings, mapping]
+execution:
+  stdin: "Hello, World! 123\n"
+  stdout_must_contain:
+    - "HELLO, WORLD! 123"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

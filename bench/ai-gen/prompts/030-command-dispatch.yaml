@@ -1,0 +1,34 @@
+id: "030-command-dispatch"
+title: "Command dispatch via ADT"
+description: |
+  Define a sum type `Command` with three variants:
+
+    - Ping (no payload)
+    - Greet holding a name (string)
+    - Add holding two integers (x, y)
+
+  Write an `execute(cmd)` function that, based on the variant,
+  prints one of:
+
+    - "pong" for Ping
+    - "hello, <name>" for Greet
+    - "sum=<x+y>" for Add
+
+  In `main`, execute in order: Ping, Greet("tyra"), Add(7, 35).
+
+  Expected output (three lines):
+
+    pong
+    hello, tyra
+    sum=42
+
+  Exit with status 0.
+tags: [adt, match, dispatch]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "pong"
+    - "hello, tyra"
+    - "sum=42"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

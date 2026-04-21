@@ -1,0 +1,26 @@
+id: "031-nested-option"
+title: "Nested option unwrap via chaining"
+description: |
+  Build a small record type `User` with fields `id: Int` and
+  `nickname: Option<String>` (or the language's equivalent
+  nullable / Maybe type). Populate a list of three users:
+
+    - id=1, nickname=Some("alpha")
+    - id=2, nickname=None
+    - id=3, nickname=Some("gamma")
+
+  For each user in order, print one line:
+
+    - If the user has a nickname, print "id=<id>,nick=<nickname>"
+    - Otherwise print "id=<id>,nick=<anonymous>"
+
+  Exit with status 0.
+tags: [option, records, collections]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "id=1,nick=alpha"
+    - "id=2,nick=<anonymous>"
+    - "id=3,nick=gamma"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

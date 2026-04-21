@@ -1,0 +1,21 @@
+id: "022-linear-search"
+title: "Linear search returning index or none"
+description: |
+  Read a single line containing a whitespace-separated list of
+  integers, then read a second line containing a single integer
+  target.
+
+  Search the first list for the target. If found, print "index=I"
+  where I is the zero-based index of the first occurrence. If the
+  target is not present, print exactly "not_found".
+
+  Use the language's idiomatic Option / Maybe / nullable return
+  style for the search function. Exit with status 0 in either case.
+tags: [algorithms, option, stdin]
+execution:
+  stdin: "10 20 30 40 50\n30\n"
+  stdout_must_contain:
+    - "index=2"
+  stdout_must_not_contain:
+    - "not_found"
+  timeout_seconds: 10

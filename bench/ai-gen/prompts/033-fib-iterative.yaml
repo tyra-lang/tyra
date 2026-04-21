@@ -1,0 +1,16 @@
+id: "033-fib-iterative"
+title: "Iterative Fibonacci"
+description: |
+  Read a non-negative integer N from standard input. Compute the
+  Nth Fibonacci number using an iterative (loop-based, O(N))
+  algorithm — NOT plain recursion. fib(0) = 0, fib(1) = 1,
+  fib(n) = fib(n-1) + fib(n-2).
+
+  Print exactly "fib=F" on a single line. Exit with status 0.
+tags: [recursion, loops, integers]
+execution:
+  stdin: "20\n"
+  stdout_must_contain:
+    - "fib=6765"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

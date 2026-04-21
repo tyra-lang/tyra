@@ -1,0 +1,24 @@
+id: "032-divide-safe"
+title: "Division with explicit error type"
+description: |
+  Define an error sum type `DivError` with at least two variants:
+
+    - DivByZero
+    - Overflow (for this prompt, never actually returned — but
+      the variant must exist so match arms can be exhaustive)
+
+  Write `safe_div(a, b)` returning Result<Int, DivError> (or the
+  language's equivalent) that returns Err(DivByZero) when b is
+  zero and Ok(a / b) otherwise. Use integer division.
+
+  In `main`, call safe_div(42, 7) and safe_div(10, 0). For each
+  call print either "ok=<value>" or "err=<variant name>" (the
+  literal string "DivByZero" or "Overflow"). Exit with status 0.
+tags: [result, error_types, exhaustive_match]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "ok=6"
+    - "err=DivByZero"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

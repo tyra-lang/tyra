@@ -1,0 +1,16 @@
+id: "039-sum-digits"
+title: "Sum of decimal digits"
+description: |
+  Read a single non-negative integer N from standard input.
+  Compute the sum of its decimal digits. For example, for
+  N = 12345 the answer is 1+2+3+4+5 = 15.
+
+  Print exactly "digit_sum=S" on a single line. Exit with
+  status 0.
+tags: [arithmetic, loops]
+execution:
+  stdin: "12345\n"
+  stdout_must_contain:
+    - "digit_sum=15"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

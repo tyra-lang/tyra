@@ -1,0 +1,17 @@
+id: "023-repeat-string"
+title: "Repeat a string N times"
+description: |
+  Read two lines from standard input. The first line is a string
+  S (without its trailing newline). The second line is a
+  non-negative integer N.
+
+  Print the string formed by concatenating S with itself N times,
+  followed by a single newline. If N is zero, print just the
+  newline. Exit with status 0.
+tags: [strings, stdin]
+execution:
+  stdin: "ab\n3\n"
+  stdout_must_contain:
+    - "ababab"
+  stdout_must_not_contain: []
+  timeout_seconds: 10
