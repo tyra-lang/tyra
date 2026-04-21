@@ -2,6 +2,72 @@
 
 Running log of observations that raw counts in `SUMMARY.md` hide.
 
+## Run 7 (2026-04-21) — spec injection v2: +io stdlib + TYRA_STDLIB + stdlib in context
+
+Three stacked improvements on top of Run 5:
+
+1. **`io` stdlib shipped** (`386aa5a`) — `io.read_line()` and
+   `io.read_to_end()` backed by new runtime intrinsics. Closes the
+   single largest Run 5 bucket (28 `import io` failures).
+2. **`TYRA_STDLIB` env var** in runners/tyra.py — the bench runs
+   the compiler from a `/tmp` workdir so the default walk-up
+   search never resolved the repo's `stdlib/`. Pinned via env.
+3. **Stdlib source included in the spec-injection context**
+   (`26dd58c`) — Run 5's context was spec + examples only.
+   Including every `stdlib/**/*.tyra` file with an explicit "these
+   are the ONLY modules" note cut hallucinated imports
+   (`string`, `core.io`, `collections`) sharply.
+
+### Result progression
+
+| run | setup | pass / 100 |
+| --- | ----- | ---------: |
+| Run 4 baseline | no spec | **0** |
+| Run 5 | +spec + examples | **16** |
+| Run 6 | +io stdlib + TYRA_STDLIB | 14 (noise; blocker moved to `string`) |
+| **Run 7** | **+ stdlib source in context** | **26** |
+
+### Final failure taxonomy (Run 7)
+
+```
+E0500 LLVM codegen type error             26   (biggest bucket)
+E0308                                      8
+no-code (parser panic-adjacent)            8
+E0101 expected newline / EOF               7
+E0200 cannot import ...                    6
+E0305 arithmetic / type mismatch           4
+E0002                                      4
+E0102 / E0104                              4
+```
+
+`import string` is down from 28 (Run 6) to 6. The cliff is now
+E0500 — the Tyra compiler lets invalid programs through the type
+checker and clang refuses the emitted LLVM IR. These are real
+compiler bugs the benchmark surfaces.
+
+### What this means
+
+- **Strategy §4.1 thesis: still provisionally supported.** Claude
+  writes syntactically valid Tyra when given spec + stdlib.
+- **The bench is no longer bottlenecked on missing stdlib.** It is
+  bottlenecked on compiler-side holes (E0500) and a small tail of
+  hallucinated modules.
+- **Each stdlib addition has diminishing returns** by itself
+  because Claude's programs typically need multiple pieces
+  (io + string + collections). The Run 7 jump came from giving
+  Claude ground truth about what exists, not from adding more
+  stdlib.
+
+### Remaining cheap wins
+
+1. Fix Tyra compiler type-check holes producing E0500. The 26
+   cases probably collapse to 3–5 root causes.
+2. Add a minimal `string` module (split / trim / split_whitespace)
+   or tighten the anti-hallucination note. 6 remaining
+   `import string` failures show the current note works but leaks.
+3. Polish §10 arithmetic / iteration prose so `else if` + `while`
+   idioms are unambiguous (a few E0101 / E0305).
+
 ## Run 5 (2026-04-21) — spec-injection experiment (Tyra only, claude)
 
 Controlled test of the strategy §4.1 design-quality claim. The
@@ -256,3 +322,12 @@ failures.
   80 compile_fails are E0200 "import io not found" — all stdlib,
   not syntax. Strategy §4.1 provisionally supported: design works,
   stdlib is the wall.
+- **Run 6** (2026-04-21) — tyra+spec re-sweep after io stdlib
+  landed. 14/100 pass; blocker moved from `import io` to
+  `import string`. Demonstrates that stdlib additions alone have
+  diminishing returns because Claude's programs need multiple
+  pieces.
+- **Run 7** (2026-04-21) — tyra+spec + stdlib source included in
+  the injected context + TYRA_STDLIB env. 26/100 pass. The
+  remaining cliff is now E0500 (Tyra compiler bug surface), not
+  stdlib holes.
