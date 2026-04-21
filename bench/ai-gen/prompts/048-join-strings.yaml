@@ -1,0 +1,16 @@
+id: "048-join-strings"
+title: "Join a list of strings with a separator"
+description: |
+  Build the list of strings ["red", "green", "blue"] inline.
+  Join them into a single string using ", " (comma-space) as the
+  separator and print the result on one line followed by a
+  newline.
+
+  Expected output: "red, green, blue". Exit with status 0.
+tags: [strings, collections, join]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "red, green, blue"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

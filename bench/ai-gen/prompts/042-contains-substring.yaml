@@ -1,0 +1,18 @@
+id: "042-contains-substring"
+title: "Substring presence check"
+description: |
+  Read two lines from standard input: the first is a haystack
+  string, the second is a needle string. Each line excludes its
+  terminating newline.
+
+  Print exactly "YES" if the needle appears anywhere inside the
+  haystack (contiguous substring, case-sensitive) or "NO"
+  otherwise. Exit with status 0.
+tags: [strings, contains]
+execution:
+  stdin: "the quick brown fox\nbrown\n"
+  stdout_must_contain:
+    - "YES"
+  stdout_must_not_contain:
+    - "NO"
+  timeout_seconds: 10

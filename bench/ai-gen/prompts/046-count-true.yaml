@@ -1,0 +1,15 @@
+id: "046-count-true"
+title: "Count true in a boolean list"
+description: |
+  Build the boolean list [true, false, true, true, false, true,
+  false] inline in the program. Count how many elements are true
+  (using whatever boolean type and iteration the language offers).
+
+  Print exactly "trues=4" on a single line. Exit with status 0.
+tags: [collections, booleans]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "trues=4"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

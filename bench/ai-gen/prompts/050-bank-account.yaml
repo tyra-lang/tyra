@@ -1,0 +1,31 @@
+id: "050-bank-account"
+title: "Bank account with deposit / withdraw / overdraft"
+description: |
+  Model a bank account with a non-negative integer balance. Write
+  a function or type that supports deposit and withdraw
+  operations. Withdrawing more than the current balance must NOT
+  succeed; signal failure via Result / Either / Option (whichever
+  idiom the language prefers), not by throwing an unchecked
+  exception.
+
+  In `main`, start with balance=100. Execute this sequence:
+
+    1. deposit 50  (-> balance=150)
+    2. withdraw 30 (-> balance=120)
+    3. withdraw 500 (-> failure; balance unchanged, still 120)
+
+  After the sequence, print exactly two lines:
+
+    final_balance=120
+    last_status=overdraft
+
+  where "last_status" is "ok" if the last operation succeeded or
+  "overdraft" if it failed. Exit with status 0.
+tags: [records, result, state, error_handling]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "final_balance=120"
+    - "last_status=overdraft"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

@@ -1,0 +1,20 @@
+id: "055-two-sum"
+title: "Two-sum (first pair found)"
+description: |
+  Read a line of whitespace-separated integers from standard
+  input, then a second line containing a single integer target T.
+
+  Find the first pair of indices (i, j) with i < j such that
+  list[i] + list[j] == T. If found, print "found=i,j" using
+  zero-based indices. If no pair sums to T, print exactly
+  "none".
+
+  Exit with status 0 either way.
+tags: [algorithms, collections, option]
+execution:
+  stdin: "2 7 11 15\n9\n"
+  stdout_must_contain:
+    - "found=0,1"
+  stdout_must_not_contain:
+    - "none"
+  timeout_seconds: 10

@@ -1,0 +1,23 @@
+id: "045-minmax-both"
+title: "Return min and max together"
+description: |
+  Write a function `min_max(xs)` that takes a non-empty list of
+  integers and returns both the minimum and the maximum in a
+  single value. Use whichever mechanism is idiomatic in the
+  language (tuple, record, two-field struct).
+
+  In `main`, call min_max on the list [5, 1, 9, 3, 7, 2] and
+  print the result as two lines:
+
+    min=1
+    max=9
+
+  Exit with status 0.
+tags: [collections, tuples, records]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "min=1"
+    - "max=9"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

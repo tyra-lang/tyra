@@ -1,0 +1,19 @@
+id: "049-count-chars"
+title: "Count occurrences of a character"
+description: |
+  Read two lines from standard input. The first line is the
+  haystack text. The second line is a single ASCII character
+  (the needle).
+
+  Count how many times the needle character appears in the
+  haystack line (case-sensitive). Print exactly "count=N" on a
+  single line.
+
+  Exit with status 0.
+tags: [strings, counting]
+execution:
+  stdin: "mississippi\ns\n"
+  stdout_must_contain:
+    - "count=4"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

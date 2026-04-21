@@ -1,0 +1,18 @@
+id: "054-line-numbers"
+title: "Prefix each line with its 1-based line number"
+description: |
+  Read all lines from standard input until end-of-file. For each
+  line, print it back with a 1-based line-number prefix in the
+  exact form "<N>: <original line content>" (no leading zeros,
+  single space after the colon), followed by a newline.
+
+  Exit with status 0.
+tags: [stdin, strings, loops]
+execution:
+  stdin: "alpha\nbeta\ngamma\n"
+  stdout_must_contain:
+    - "1: alpha"
+    - "2: beta"
+    - "3: gamma"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

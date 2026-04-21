@@ -1,0 +1,17 @@
+id: "051-list-reverse"
+title: "Reverse a list of integers"
+description: |
+  Read a single line of whitespace-separated integers from
+  standard input. Produce the list in reverse order. Print the
+  reversed list as space-separated integers on one line, followed
+  by a newline.
+
+  Example: for input "1 2 3 4 5\n" the output must contain
+  "5 4 3 2 1" on its own line. Exit with status 0.
+tags: [collections, reverse]
+execution:
+  stdin: "1 2 3 4 5\n"
+  stdout_must_contain:
+    - "5 4 3 2 1"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

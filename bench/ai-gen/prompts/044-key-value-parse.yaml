@@ -1,0 +1,24 @@
+id: "044-key-value-parse"
+title: "Parse KEY=VALUE lines from stdin"
+description: |
+  Read standard input line by line until end-of-file. Each line
+  has the form "KEY=VALUE" where KEY is a non-empty run of
+  non-`=` characters and VALUE is the remainder of the line after
+  the first `=`.
+
+  Lines that do not contain an `=` must be silently skipped.
+
+  For every successfully-parsed line, print one line of the form
+  "<KEY>:<VALUE>" preserving the original input order. Exit with
+  status 0.
+tags: [strings, parsing, stdin]
+execution:
+  stdin: "host=localhost\nport=8080\n# a comment line\nname=tyra\n"
+  stdout_must_contain:
+    - "host:localhost"
+    - "port:8080"
+    - "name:tyra"
+  stdout_must_not_contain:
+    - "# a comment line"
+    - ":# a comment"
+  timeout_seconds: 10

@@ -1,0 +1,23 @@
+id: "047-clamp"
+title: "Clamp an integer"
+description: |
+  Write a function `clamp(x, lo, hi)` that returns x if lo <= x
+  <= hi, lo if x < lo, and hi if x > hi.
+
+  In `main`, call clamp on three sample inputs and print one
+  line each:
+
+    clamp(-5, 0, 10) -> "clamp=0"
+    clamp(7, 0, 10) -> "clamp=7"
+    clamp(42, 0, 10) -> "clamp=10"
+
+  Exit with status 0.
+tags: [arithmetic, control_flow]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "clamp=0"
+    - "clamp=7"
+    - "clamp=10"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

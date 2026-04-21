@@ -1,0 +1,23 @@
+id: "058-traffic-transition"
+title: "Traffic light from stdin transitions"
+description: |
+  Model a traffic light with three states: Red, Green, Yellow.
+  Start at Red. Read a single line of whitespace-separated
+  tokens from standard input, each token being the literal string
+  "next".
+
+  For each "next" token (in input order), advance the state in
+  the cycle Red -> Green -> Yellow -> Red. After processing all
+  tokens, print exactly one line with the final state name
+  capitalized (e.g. "Yellow").
+
+  Exit with status 0.
+tags: [adt, match, state_machine, stdin]
+execution:
+  stdin: "next next next next\n"
+  stdout_must_contain:
+    - "Green"
+  stdout_must_not_contain:
+    - "Red"
+    - "Yellow"
+  timeout_seconds: 10

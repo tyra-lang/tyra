@@ -1,0 +1,29 @@
+id: "060-shopping-total"
+title: "Shopping cart total with discount"
+description: |
+  Define a record `Item` with fields `name: String` and
+  `price: Int` (price is in cents to avoid floats). Build a
+  shopping cart with these three items:
+
+    apple   120
+    bread   300
+    cheese  480
+
+  Compute the subtotal. Then apply a discount: if the subtotal
+  is at least 500 cents, subtract 100 cents; otherwise no
+  discount.
+
+  Print exactly two lines:
+
+    subtotal=900
+    total=800
+
+  Exit with status 0.
+tags: [records, collections, conditionals]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "subtotal=900"
+    - "total=800"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

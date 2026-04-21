@@ -1,0 +1,22 @@
+id: "052-three-grade"
+title: "Grade from score"
+description: |
+  Read a single integer score from standard input. Classify it:
+
+    - score >= 90  -> "A"
+    - 75 <= score < 90 -> "B"
+    - 60 <= score < 75 -> "C"
+    - score < 60 -> "F"
+
+  Use any conditional or match idiom. Print exactly the grade
+  letter followed by a newline. Exit with status 0.
+tags: [control_flow, conditionals]
+execution:
+  stdin: "82\n"
+  stdout_must_contain:
+    - "B"
+  stdout_must_not_contain:
+    - "A"
+    - "C"
+    - "F"
+  timeout_seconds: 10

@@ -1,0 +1,18 @@
+id: "059-is-sorted"
+title: "Check if a list is non-decreasing"
+description: |
+  Read a single line of whitespace-separated integers from
+  standard input. Determine whether the sequence is
+  non-decreasing (every element is >= the previous one).
+
+  Print exactly "YES" if it is sorted non-decreasingly, "NO"
+  otherwise, followed by a newline. An empty or single-element
+  list is considered sorted. Exit with status 0.
+tags: [collections, predicate]
+execution:
+  stdin: "1 2 2 3 5 8\n"
+  stdout_must_contain:
+    - "YES"
+  stdout_must_not_contain:
+    - "NO"
+  timeout_seconds: 10

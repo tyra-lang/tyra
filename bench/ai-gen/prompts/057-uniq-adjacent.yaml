@@ -1,0 +1,21 @@
+id: "057-uniq-adjacent"
+title: "Collapse adjacent duplicates"
+description: |
+  Read a single line of whitespace-separated integers from
+  standard input. Produce the list obtained by collapsing every
+  run of consecutive equal integers down to a single occurrence
+  (like the classic Unix `uniq` command, without sorting).
+
+  Print the result as space-separated integers on one line,
+  followed by a newline.
+
+  Example: input "1 1 2 3 3 3 2 2 4" -> output "1 2 3 2 4".
+
+  Exit with status 0.
+tags: [collections, stream, dedupe]
+execution:
+  stdin: "1 1 2 3 3 3 2 2 4\n"
+  stdout_must_contain:
+    - "1 2 3 2 4"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

@@ -1,0 +1,26 @@
+id: "041-sum-pairs"
+title: "Sum pairs from two lines"
+description: |
+  Read exactly two lines from standard input. Each line contains
+  a whitespace-separated list of integers; the two lines are
+  guaranteed to have the same length.
+
+  Pair them up element-wise and print the sum of each pair, one
+  pair per line, in the form "i+j=s" where i is from line 1, j is
+  from line 2, and s is their sum.
+
+  Example for input
+      1 2 3
+      10 20 30
+  the output must contain "1+10=11", "2+20=22", "3+30=33".
+
+  Exit with status 0.
+tags: [stdin, collections, zip]
+execution:
+  stdin: "1 2 3\n10 20 30\n"
+  stdout_must_contain:
+    - "1+10=11"
+    - "2+20=22"
+    - "3+30=33"
+  stdout_must_not_contain: []
+  timeout_seconds: 10
