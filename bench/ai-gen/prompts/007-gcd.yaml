@@ -1,0 +1,18 @@
+id: "007-gcd"
+title: "Greatest common divisor"
+description: |
+  Read two non-negative integers A and B separated by whitespace
+  from standard input. Compute the greatest common divisor of A
+  and B using the Euclidean algorithm (or any correct method).
+
+  Print one line in the form "gcd=G" where G is the result. Exit
+  with status 0.
+
+  Example: for input "48 18" the output must contain "gcd=6".
+tags: [arithmetic, stdin, loops]
+execution:
+  stdin: "48 18\n"
+  stdout_must_contain:
+    - "gcd=6"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

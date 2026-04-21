@@ -1,0 +1,18 @@
+id: "009-palindrome"
+title: "Palindrome check"
+description: |
+  Read a single line of text from standard input (without the
+  trailing newline). Determine whether the string is a palindrome
+  (reads the same forwards and backwards). Comparison is
+  case-sensitive and considers every character, including spaces.
+
+  Print exactly "YES" if the string is a palindrome or "NO"
+  otherwise, followed by a newline. Exit with status 0.
+tags: [strings, control_flow]
+execution:
+  stdin: "racecar\n"
+  stdout_must_contain:
+    - "YES"
+  stdout_must_not_contain:
+    - "NO"
+  timeout_seconds: 10

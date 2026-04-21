@@ -1,0 +1,23 @@
+id: "016-expr-eval"
+title: "Arithmetic expression tree eval"
+description: |
+  Define a recursive sum type `Expr` with at least these three
+  variants:
+
+    - Num holding an integer
+    - Add holding two child expressions
+    - Mul holding two child expressions
+
+  Write an `eval(expr)` function that reduces an Expr to an
+  integer.
+
+  In `main`, construct the expression (2 + 3) * (4 + 5), evaluate
+  it, and print the single line "result=45" followed by a newline.
+  Exit with status 0.
+tags: [adt, recursion, match]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "result=45"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

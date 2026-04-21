@@ -1,0 +1,16 @@
+id: "008-reverse-string"
+title: "Reverse a string"
+description: |
+  Read a single line of text from standard input (without the
+  trailing newline). Produce the reversed version of that line
+  and print it followed by a newline. No other output.
+
+  Example: for input "hello world\n" the output must be
+  "dlrow olleh\n".
+tags: [strings, stdin]
+execution:
+  stdin: "hello world\n"
+  stdout_must_contain:
+    - "dlrow olleh"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

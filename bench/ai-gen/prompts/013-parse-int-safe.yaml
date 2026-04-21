@@ -1,0 +1,19 @@
+id: "013-parse-int-safe"
+title: "Safe integer parsing"
+description: |
+  Read a single line of text from standard input. Attempt to parse
+  the line as an integer. If parsing succeeds, print "OK=N" where
+  N is the parsed integer. If parsing fails (the line is not a
+  valid integer), print exactly "ERR" with no other tokens.
+
+  Use whatever the language's idiomatic failable-parsing mechanism
+  is (Option, Result, Maybe, try/catch, etc.). The program must
+  exit with status 0 in BOTH the success and the failure case.
+tags: [parsing, option_result, error_handling]
+execution:
+  stdin: "not-a-number\n"
+  stdout_must_contain:
+    - "ERR"
+  stdout_must_not_contain:
+    - "OK="
+  timeout_seconds: 10

@@ -1,0 +1,24 @@
+id: "020-echo-args"
+title: "Echo each input line with prefix"
+description: |
+  Read all lines from standard input until end-of-file. For each
+  line (not counting a trailing empty line from a final newline),
+  print a line in the form "[i] <line>" where i is a zero-based
+  index (0, 1, 2, ...) and <line> is the original line content
+  without its terminating newline.
+
+  Example: for input
+      alpha
+      beta
+      gamma
+  the output must contain the substring "[0] alpha", "[1] beta",
+  and "[2] gamma" each on its own line. Exit with status 0.
+tags: [stdin, strings, loops]
+execution:
+  stdin: "alpha\nbeta\ngamma\n"
+  stdout_must_contain:
+    - "[0] alpha"
+    - "[1] beta"
+    - "[2] gamma"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

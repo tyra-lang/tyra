@@ -1,0 +1,27 @@
+id: "014-result-chain"
+title: "Result propagation chain"
+description: |
+  Define two failable functions:
+
+    - `double_positive(n)` returns the Ok variant containing 2*n
+      when n > 0, and the Err variant with a string message
+      "non-positive" otherwise.
+    - `add_ten(n)` always succeeds and returns Ok(n + 10).
+
+  In `main`, compose the two calls for the input 5: first call
+  double_positive, then on success pass the result through
+  add_ten. Print "result=20" on success, or "error=<message>" on
+  failure.
+
+  Then do the same for input -3 and print either result or error.
+
+  Use whatever idiomatic Result / Either / error-propagation
+  mechanism the language offers. Exit with status 0.
+tags: [result, composition, error_handling]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "result=20"
+    - "error=non-positive"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

@@ -1,0 +1,28 @@
+id: "015-shape-area"
+title: "Shape area (ADT + dispatch)"
+description: |
+  Define a sum type `Shape` with two variants:
+
+    - Circle with a radius field (integer)
+    - Rectangle with width and height fields (both integer)
+
+  Write a function `area(shape)` that returns the area as an
+  integer. For Circle, use the approximation pi ≈ 3 (integer
+  multiplication, no floats required): area = 3 * radius * radius.
+  For Rectangle: area = width * height.
+
+  In `main`, construct one Circle with radius=4 and one Rectangle
+  with width=5, height=6. Print two lines:
+
+    circle=48
+    rect=30
+
+  Exit with status 0.
+tags: [adt, match, arithmetic]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "circle=48"
+    - "rect=30"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

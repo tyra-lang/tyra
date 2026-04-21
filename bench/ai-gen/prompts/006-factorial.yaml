@@ -1,0 +1,17 @@
+id: "006-factorial"
+title: "Factorial (recursive)"
+description: |
+  Implement a function `factorial(n)` that returns n! (the factorial
+  of a non-negative integer n). Use recursion or any idiomatic
+  approach.
+
+  In `main`, read one non-negative integer N from standard input,
+  compute factorial(N), and print a single line "N!=X" where X is
+  the integer result. Exit with status 0.
+tags: [recursion, integers, stdin]
+execution:
+  stdin: "6\n"
+  stdout_must_contain:
+    - "6!=720"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

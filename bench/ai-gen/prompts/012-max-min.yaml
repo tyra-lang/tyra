@@ -1,0 +1,17 @@
+id: "012-max-min"
+title: "Max and min of a list"
+description: |
+  Read whitespace-separated integers from standard input (at least
+  one, read until end-of-file). Determine the maximum and minimum
+  value.
+
+  Print exactly two lines: first "max=M" where M is the maximum,
+  then "min=N" where N is the minimum. Exit with status 0.
+tags: [collections, reduce]
+execution:
+  stdin: "7 3 9 -2 4 8\n"
+  stdout_must_contain:
+    - "max=9"
+    - "min=-2"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

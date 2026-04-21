@@ -1,0 +1,28 @@
+id: "017-key-value-lookup"
+title: "Key-value lookup with fallback"
+description: |
+  Build an in-memory mapping of at least these three string keys
+  to integer values:
+
+    "one" -> 1
+    "two" -> 2
+    "three" -> 3
+
+  Read a single key from standard input (one line, no trailing
+  newline).
+
+  Look the key up in the mapping:
+
+    - If the key exists, print "value=N" where N is the mapped
+      integer.
+    - If the key is not present, print exactly "missing".
+
+  Exit with status 0 in both cases.
+tags: [collections, option, fallback]
+execution:
+  stdin: "two\n"
+  stdout_must_contain:
+    - "value=2"
+  stdout_must_not_contain:
+    - "missing"
+  timeout_seconds: 10

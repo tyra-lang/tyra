@@ -1,0 +1,16 @@
+id: "010-count-vowels"
+title: "Count vowels"
+description: |
+  Read a single line of text from standard input. Count how many
+  vowels the line contains. A vowel is any of the ASCII characters
+  a, e, i, o, u (lowercase only — uppercase vowels do NOT count).
+
+  Print exactly "vowels=N" on one line, where N is the integer
+  count. Exit with status 0.
+tags: [strings, counting]
+execution:
+  stdin: "hello world\n"
+  stdout_must_contain:
+    - "vowels=3"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

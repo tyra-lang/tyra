@@ -1,0 +1,19 @@
+id: "019-first-non-empty"
+title: "First non-empty line"
+description: |
+  Read all lines from standard input until end-of-file. Find the
+  first line that, after stripping leading and trailing ASCII
+  whitespace, is not empty. Print that trimmed line followed by a
+  newline.
+
+  If no such line exists, print exactly "(none)" followed by a
+  newline. Exit with status 0 in either case.
+tags: [stdin, strings, option]
+execution:
+  stdin: "\n   \n\thello\n\nworld\n"
+  stdout_must_contain:
+    - "hello"
+  stdout_must_not_contain:
+    - "world"
+    - "(none)"
+  timeout_seconds: 10
