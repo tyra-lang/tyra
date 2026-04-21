@@ -215,7 +215,7 @@ docs/api/
 benchmarks/results/
 bench/ai-gen/results/*.json
 bench/ai-gen/results/*.csv
-bench/ai-gen/results/SUMMARY.md
+# SUMMARY.md IS committed — it is the headline published output.
 *.bench.json
 criterion/
 
