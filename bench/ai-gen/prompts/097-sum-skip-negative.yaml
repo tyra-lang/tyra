@@ -1,0 +1,19 @@
+id: "097-sum-skip-negative"
+title: "Sum until first negative"
+description: |
+  Read a single line of whitespace-separated integers from
+  standard input. Iterate in order and accumulate a running sum,
+  but STOP (without including the current element) the moment
+  you encounter an element strictly less than zero.
+
+  Print exactly "partial=P" on one line where P is the sum
+  accumulated up to (but not including) the first negative.
+  If there is no negative, the sum is over the whole list. Exit
+  with status 0.
+tags: [collections, early_exit]
+execution:
+  stdin: "4 7 2 -1 10 20\n"
+  stdout_must_contain:
+    - "partial=13"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

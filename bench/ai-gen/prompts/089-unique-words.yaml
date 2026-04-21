@@ -1,0 +1,15 @@
+id: "089-unique-words"
+title: "Unique word count"
+description: |
+  Read all text from standard input to end-of-file. Split on
+  whitespace into tokens (case-sensitive). Count the number of
+  distinct tokens.
+
+  Print exactly "unique=N" on a single line. Exit with status 0.
+tags: [strings, collections, counting]
+execution:
+  stdin: "the cat sat on the mat the cat sat on the mat\n"
+  stdout_must_contain:
+    - "unique=6"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

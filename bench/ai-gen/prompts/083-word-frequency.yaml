@@ -1,0 +1,18 @@
+id: "083-word-frequency"
+title: "Word frequency top-1"
+description: |
+  Read all text from standard input to end-of-file. Split it on
+  whitespace into tokens (case-sensitive; "Cat" and "cat" are
+  distinct). Count each distinct token's occurrences. Find the
+  token with the highest frequency; if multiple tie, keep the
+  one that first appeared.
+
+  Print exactly "top=<token>=<count>" on a single line. Exit
+  with status 0.
+tags: [strings, collections, counting]
+execution:
+  stdin: "the cat sat on the mat and the cat watched the cat\n"
+  stdout_must_contain:
+    - "top=the=4"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

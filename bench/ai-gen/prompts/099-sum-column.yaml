@@ -1,0 +1,16 @@
+id: "099-sum-column"
+title: "Sum the second whitespace-separated column"
+description: |
+  Read standard input to end-of-file. Each line contains at
+  least two whitespace-separated tokens. The first token is a
+  label (ignore it), the second token is an integer.
+
+  Sum every second-column integer across all lines (skip blank
+  lines). Print exactly "sum=S" on one line. Exit with status 0.
+tags: [stdin, parsing, reduce]
+execution:
+  stdin: "alpha 10\nbeta 25\ngamma 7\ndelta -3\n"
+  stdout_must_contain:
+    - "sum=39"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

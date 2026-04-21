@@ -1,0 +1,27 @@
+id: "093-option-map"
+title: "Map over an Option"
+description: |
+  Write two functions:
+
+    - `double_opt(opt)` takes an Option<Int> and returns
+      Option<Int>: if opt is Some(x), return Some(2*x); if None,
+      return None.
+    - `show_opt(opt)` returns a string: "some=<value>" for
+      Some, exactly "none" for None.
+
+  In `main`, call double_opt on Some(21) and on None. For each
+  result, print show_opt's output on its own line. Expected
+  output (two lines):
+
+    some=42
+    none
+
+  Exit with status 0.
+tags: [option, map, function]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "some=42"
+    - "none"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

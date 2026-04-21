@@ -1,0 +1,23 @@
+id: "088-histogram"
+title: "ASCII histogram of digit counts"
+description: |
+  Read a single line of text from standard input. Count how many
+  times each decimal digit character ('0' through '9') appears.
+
+  For each digit 0..9 in ascending order, print a line in the
+  form "<digit>: <count of '#' characters>" where the number of
+  '#' characters equals the count (zero count produces zero
+  '#'s, i.e., just "<digit>: "). Exit with status 0.
+
+  Example: input "3141592653589793" gives these lines (among
+  others): "1: ##", "3: ###", "5: ###", "9: ##".
+tags: [strings, counting, collections]
+execution:
+  stdin: "3141592653589793\n"
+  stdout_must_contain:
+    - "1: ##"
+    - "3: ###"
+    - "5: ###"
+    - "9: ##"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

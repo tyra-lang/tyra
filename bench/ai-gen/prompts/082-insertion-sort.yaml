@@ -1,0 +1,18 @@
+id: "082-insertion-sort"
+title: "Insertion sort integers"
+description: |
+  Read a single line of whitespace-separated integers from
+  standard input. Sort them in non-decreasing order using
+  insertion sort (or any correct comparison-based sort —
+  insertion is specified for clarity, but correctness is what is
+  checked, not the algorithm choice).
+
+  Print the sorted list as space-separated integers on one line
+  followed by a newline. Exit with status 0.
+tags: [algorithms, sort]
+execution:
+  stdin: "5 2 8 1 9 3 7 4 6\n"
+  stdout_must_contain:
+    - "1 2 3 4 5 6 7 8 9"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

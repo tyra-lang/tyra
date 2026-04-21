@@ -1,0 +1,20 @@
+id: "091-top-k"
+title: "Top-K largest from a list"
+description: |
+  Read two lines from standard input. The first is a whitespace-
+  separated list of integers. The second is a single positive
+  integer K.
+
+  Produce the K largest integers in descending order. If K is
+  larger than the list length, produce the whole list sorted
+  descending. Ties are allowed to appear in either order.
+
+  Print the K integers on one line, space-separated, followed by
+  a newline. Exit with status 0.
+tags: [algorithms, sort, select]
+execution:
+  stdin: "3 1 4 1 5 9 2 6 5 3 5\n3\n"
+  stdout_must_contain:
+    - "9 6 5"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

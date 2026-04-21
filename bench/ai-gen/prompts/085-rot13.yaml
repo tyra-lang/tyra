@@ -1,0 +1,19 @@
+id: "085-rot13"
+title: "ROT-13 on ASCII letters"
+description: |
+  Read a single line of text from standard input. Apply the
+  ROT-13 cipher: each ASCII letter is rotated 13 positions
+  through its alphabet (a-z for lowercase, A-Z for uppercase).
+  Non-letter characters are unchanged.
+
+  Print the transformed line followed by a newline. Exit with
+  status 0.
+
+  Example: "Hello, World!" -> "Uryyb, Jbeyq!"
+tags: [strings, mapping]
+execution:
+  stdin: "Hello, World!\n"
+  stdout_must_contain:
+    - "Uryyb, Jbeyq!"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

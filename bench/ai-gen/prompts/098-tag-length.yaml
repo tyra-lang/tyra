@@ -1,0 +1,23 @@
+id: "098-tag-length"
+title: "Categorize strings by length"
+description: |
+  Read all lines from standard input to end-of-file. For each
+  non-empty line, print a classification line of the form
+  "<line> -> <category>" where category is:
+
+    - "short" if the line length (in bytes) is <= 3
+    - "medium" if 4..=7
+    - "long" if >= 8
+
+  Skip empty lines entirely. Preserve input order. Exit with
+  status 0.
+tags: [strings, stdin, control_flow]
+execution:
+  stdin: "hi\nhello\n\ngoodmorning\nok\n"
+  stdout_must_contain:
+    - "hi -> short"
+    - "hello -> medium"
+    - "goodmorning -> long"
+    - "ok -> short"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

@@ -1,0 +1,18 @@
+id: "081-binary-search"
+title: "Binary search on sorted list"
+description: |
+  Read two lines from standard input. The first is a
+  whitespace-separated list of integers guaranteed to be sorted
+  non-decreasingly. The second is a single integer target T.
+
+  Use binary search (O(log n)) to locate T in the list. If T is
+  found, print "index=I" with any valid index of an occurrence
+  of T. If not, print exactly "not_found". Exit with status 0.
+tags: [algorithms, search, option]
+execution:
+  stdin: "1 3 5 7 9 11 13 15 17 19\n13\n"
+  stdout_must_contain:
+    - "index=6"
+  stdout_must_not_contain:
+    - "not_found"
+  timeout_seconds: 10

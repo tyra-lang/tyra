@@ -1,0 +1,21 @@
+id: "100-pipeline"
+title: "Multi-stage pipeline: filter, map, sum"
+description: |
+  Read a single line of whitespace-separated integers from
+  standard input. Then in order:
+
+    1. Keep only the positive elements (strictly greater than 0).
+    2. Double each remaining element.
+    3. Sum them.
+
+  Print exactly "result=R" on one line. Exit with status 0.
+
+  Example: for input "1 -2 3 -4 5" the positives are [1, 3, 5],
+  doubled [2, 6, 10], summed = 18.
+tags: [collections, pipeline, filter, map, fold]
+execution:
+  stdin: "1 -2 3 -4 5\n"
+  stdout_must_contain:
+    - "result=18"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

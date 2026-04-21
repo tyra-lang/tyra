@@ -1,0 +1,26 @@
+id: "096-rate-limit"
+title: "Token bucket rate limiting"
+description: |
+  Maintain a token bucket starting with 3 tokens. Each call to
+  `allow()` checks the bucket: if tokens >= 1, consume one and
+  return true; otherwise return false.
+
+  In `main`, call allow() five times in a row and print one
+  line per call, either "ALLOW" or "DENY". Expected output:
+
+    ALLOW
+    ALLOW
+    ALLOW
+    DENY
+    DENY
+
+  Use any mutable-state mechanism the language offers. Exit
+  with status 0.
+tags: [state, control_flow]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "ALLOW"
+    - "DENY"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

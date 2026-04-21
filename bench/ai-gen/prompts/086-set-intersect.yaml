@@ -1,0 +1,18 @@
+id: "086-set-intersect"
+title: "Set intersection (unique, sorted)"
+description: |
+  Read two lines from standard input, each a whitespace-separated
+  list of integers (possibly with duplicates). Compute the
+  intersection as a sorted list of integers with no duplicates.
+
+  Print the intersection as space-separated integers on one line
+  followed by a newline. If the intersection is empty, print a
+  line containing just "empty" and a newline. Exit with status 0.
+tags: [collections, set_ops]
+execution:
+  stdin: "4 1 3 5 2 3\n3 6 1 7 1 4\n"
+  stdout_must_contain:
+    - "1 3 4"
+  stdout_must_not_contain:
+    - "empty"
+  timeout_seconds: 10

@@ -1,0 +1,19 @@
+id: "090-balanced-parens"
+title: "Balanced parentheses check"
+description: |
+  Read a single line of text from standard input. Determine
+  whether the round parentheses `(` and `)` in the string are
+  balanced: every opening paren has a matching closing paren
+  later, and no closing paren appears with no preceding open.
+  Other characters are irrelevant.
+
+  Print exactly "YES" if balanced, "NO" otherwise, on a single
+  line. Exit with status 0.
+tags: [strings, stack, predicate]
+execution:
+  stdin: "a (b (c) d) e (f) g\n"
+  stdout_must_contain:
+    - "YES"
+  stdout_must_not_contain:
+    - "NO"
+  timeout_seconds: 10

@@ -1,0 +1,17 @@
+id: "094-last-line"
+title: "Print only the last non-empty line"
+description: |
+  Read standard input to end-of-file. Find the last line that is
+  not empty after stripping trailing whitespace. Print that line
+  (unstripped content) followed by a newline.
+
+  If no such line exists, print exactly "(none)" on its own line.
+  Exit with status 0.
+tags: [stdin, strings]
+execution:
+  stdin: "alpha\nbeta\ngamma\n\n"
+  stdout_must_contain:
+    - "gamma"
+  stdout_must_not_contain:
+    - "(none)"
+  timeout_seconds: 10

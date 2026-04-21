@@ -1,0 +1,16 @@
+id: "095-flatmap-tokens"
+title: "Flat-map: duplicate each token"
+description: |
+  Read a single line of whitespace-separated tokens from standard
+  input. Produce a new list that duplicates each token: for input
+  "a b c", output "a a b b c c". Print the tokens space-separated
+  on one line followed by a newline.
+
+  Exit with status 0.
+tags: [strings, collections, flatmap]
+execution:
+  stdin: "red green blue\n"
+  stdout_must_contain:
+    - "red red green green blue blue"
+  stdout_must_not_contain: []
+  timeout_seconds: 10
