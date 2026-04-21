@@ -48,11 +48,16 @@ impl TokenStream {
     }
 
     /// Advance past the current token and return it.
+    ///
+    /// Clamps at the last token (Eof in well-formed streams) so a parser
+    /// that keeps advancing past end never panics. It will keep seeing
+    /// Eof and should terminate normally.
     pub fn advance(&mut self) -> Token {
         self.skip_non_significant_newlines();
-        let token = self.tokens[self.pos].clone();
+        let idx = self.pos.min(self.tokens.len().saturating_sub(1));
+        let token = self.tokens[idx].clone();
         self.track_brackets(&token.kind);
-        self.pos += 1;
+        self.pos = idx + 1;
         token
     }
 
@@ -190,8 +195,10 @@ impl TokenStream {
     // -- Internal helpers --
 
     /// Peek at the raw current token without skipping newlines.
+    /// Clamps at end-of-stream to avoid panic on overrun.
     fn raw_peek(&self) -> &TokenKind {
-        &self.tokens[self.pos].kind
+        let idx = self.pos.min(self.tokens.len().saturating_sub(1));
+        &self.tokens[idx].kind
     }
 
     /// Skip newlines that are non-significant (inside brackets).
@@ -206,6 +213,12 @@ impl TokenStream {
     }
 
     /// Peek, skipping non-significant newlines. Returns (kind, index).
+    ///
+    /// If the cursor runs off the end (e.g., caller advanced past Eof on
+    /// a malformed program, or tokens vector is pathological), clamp to
+    /// the last token so we never panic with index-out-of-bounds. The
+    /// lexer always appends an Eof terminator, so the clamp lands on it
+    /// in well-formed streams.
     fn peek_skip_newlines(&self) -> (&TokenKind, usize) {
         let mut i = self.pos;
         while self.bracket_depth > 0 && i < self.tokens.len() {
@@ -215,7 +228,8 @@ impl TokenStream {
                 break;
             }
         }
-        (&self.tokens[i].kind, i)
+        let idx = i.min(self.tokens.len().saturating_sub(1));
+        (&self.tokens[idx].kind, idx)
     }
 
     /// Peek past any newline tokens to see what follows.
@@ -225,7 +239,8 @@ impl TokenStream {
         while i < self.tokens.len() && self.tokens[i].kind == TokenKind::Newline {
             i += 1;
         }
-        &self.tokens[i].kind
+        let idx = i.min(self.tokens.len().saturating_sub(1));
+        &self.tokens[idx].kind
     }
 
     /// Current raw position in the token stream (for progress tracking).

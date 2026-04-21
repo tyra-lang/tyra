@@ -523,4 +523,29 @@ print("hello")
         );
         assert!(matches!(ast.items[0], Item::ValueDef(_)));
     }
+
+    #[test]
+    fn malformed_input_does_not_panic_on_eof_overrun() {
+        // Rust-flavored source fed to the Tyra parser used to panic in
+        // token_stream with index-out-of-bounds at peek/advance after
+        // the cursor overran the trailing Eof token. The parser must
+        // instead emit a diagnostic and return. Regression for the
+        // ai-gen benchmark (bench/ai-gen) where the model frequently
+        // produces garbage-by-our-standards syntax.
+        let garbled = "fn main() {\n    let mut input = String::new();\n}\n";
+        let (_ast, report) = parse_str(garbled);
+        assert!(
+            report.has_errors(),
+            "malformed input should produce diagnostics, not parse clean"
+        );
+    }
+
+    #[test]
+    fn unclosed_bracket_does_not_panic() {
+        // Unmatched opening bracket leaves bracket_depth > 0, which in
+        // the old token_stream code caused peek_skip_newlines to walk
+        // past Eof and index-out-of-bounds panic.
+        let (_ast, report) = parse_str("let xs = [1, 2, 3\n");
+        assert!(report.has_errors());
+    }
 }
