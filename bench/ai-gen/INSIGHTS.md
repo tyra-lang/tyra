@@ -2,6 +2,71 @@
 
 Running log of observations that raw counts in `SUMMARY.md` hide.
 
+## Run 8 (2026-04-21) — spec injection v3: anti-hallucination method guide
+
+Added a final block to the injected context enumerating common
+Rust-/Scala-isms that Claude reaches for but Tyra v0.1 does not
+ship (`.unwrap_or`, `.ok_or`, `.trim()`, `.split()`,
+`int.to_string()`, `1..=n` ranges, etc.) with the match-based
+rewrites that ARE supported.
+
+### Result
+
+| metric | Run 7 | Run 8 | delta |
+| --- | ---: | ---: | ---: |
+| pass | 26 | 25 | -1 |
+| check_fail | 5 | 14 | **+9** |
+| exec_fail | 2 | 1 | -1 |
+| **compile_pass (pass + check_fail + exec_fail)** | **33** | **40** | **+7** |
+| compile_fail | 67 | 59 | -8 |
+
+The headline pass rate is flat within noise (25 vs 26), but the
+more informative metric — **compiler-accepts-the-program** — rose
+from 33 → 40. The extra 9 check_fails are programs where the
+compiler did its job, the program ran, and the program produced
+wrong output (semantic mistake by the model). That shift moves
+failures from "compiler / stdlib gap" into "just wrong".
+
+### Remaining compile_fails (59)
+
+```
+E0500 LLVM codegen                     22  (-4 vs Run 7)
+E0200 cannot import ...                15  (up — but only core.io
+                                             repeats; the rest are
+                                             cascaded errors from
+                                             prior failures in the
+                                             same file)
+no-code                                 9
+E0101 expected newline                  4
+E0308 type mismatch                     3
+E0002 / E0104 / E0102 / E0100           6
+```
+
+### Run history progression
+
+| run | setup | pass | compile_pass |
+| --- | ----- | ---: | -----------: |
+| Run 4 baseline | no spec | 0 | 0 |
+| Run 5 | +spec + examples | 16 | 16 |
+| Run 6 | +io + TYRA_STDLIB | 14 | 15 |
+| Run 7 | +stdlib in context | 26 | 33 |
+| **Run 8** | **+anti-hallucination guide** | 25 | **40** |
+
+From 0 → 40 on "compiler accepts Claude's Tyra" in one afternoon,
+purely via context engineering and minimal stdlib additions. The
+design-quality thesis survives every iteration: when Claude
+writes Tyra it sees, the compiler accepts it.
+
+### Where we stop here
+
+Further bench improvements need either:
+- Tyra compiler defense (type-check method existence → reject
+  `.unwrap_or` at type time, not LLVM time)
+- A tiny `string` stdlib (split / trim / chars)
+
+Both are real compiler / stdlib work, not context tweaks. This is
+a reasonable snapshot to pause on.
+
 ## Run 7 (2026-04-21) — spec injection v2: +io stdlib + TYRA_STDLIB + stdlib in context
 
 Three stacked improvements on top of Run 5:
@@ -328,6 +393,12 @@ failures.
   diminishing returns because Claude's programs need multiple
   pieces.
 - **Run 7** (2026-04-21) — tyra+spec + stdlib source included in
-  the injected context + TYRA_STDLIB env. 26/100 pass. The
-  remaining cliff is now E0500 (Tyra compiler bug surface), not
-  stdlib holes.
+  the injected context + TYRA_STDLIB env. 26/100 pass, 33/100
+  compile_pass. The remaining cliff is now E0500 (Tyra compiler
+  bug surface), not stdlib holes.
+- **Run 8** (2026-04-21) — tyra+spec + anti-hallucination method
+  guide in context. 25/100 pass, **40/100 compile_pass**. Pass
+  rate flat within noise but 9 extra programs moved from
+  compile_fail → check_fail (compiler accepted, logic wrong).
+  Trajectory from Run 4 baseline: compile_pass 0 → 16 → 15 → 33
+  → 40 in a single afternoon purely via context + minimal stdlib.

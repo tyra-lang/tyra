@@ -63,6 +63,26 @@ def _load_tyra_context() -> str:
         "there is no `string`, `collections`, or `core.io` module. "
         "Call functions exactly as they are exported below.\n\n"
         + "\n\n".join(stdlib_blocks)
+        + "\n\n# v0.1 method hallucinations to avoid\n\n"
+        "The following methods DO NOT exist in Tyra v0.1 — using them "
+        "generates invalid LLVM IR. If you catch yourself reaching for "
+        "one, rewrite with the listed alternative:\n\n"
+        "- `opt.unwrap_or(default)` — use `match opt when Some(x) x "
+        "when None default end` instead.\n"
+        "- `opt.ok_or(err)` / `opt.ok_or_else(...)` — use `match opt "
+        "when Some(x) Ok(x) when None Err(err) end`.\n"
+        "- `result.unwrap_or(default)` — use `match result when Ok(x) "
+        "x when Err(_) default end`.\n"
+        "- `str.trim()` / `str.split(...)` / `str.split_whitespace()` / "
+        "`str.chars()` / `str.runes()` / `str.len()` — there is no "
+        "String method API in v0.1. For stdin parsing, use `io.read_line()` "
+        "then operate on the raw String using string interpolation or "
+        "character-by-character iteration in pattern matches.\n"
+        "- `int.to_string()` — use interpolation `\"#{n}\"`.\n"
+        "- The `?` operator works ONLY on `Option<T>` / `Result<T, E>` "
+        "return positions; do not chain it after arbitrary calls.\n"
+        "- `for x in 1..=n` — use `while` with a counter; Tyra v0.1 does "
+        "not have numeric ranges as values.\n"
     )
     _load_tyra_context._cache = context  # type: ignore[attr-defined]
     return context
