@@ -1,0 +1,21 @@
+id: "076-running-max"
+title: "Running maximum"
+description: |
+  Read a single line of whitespace-separated integers from
+  standard input. Produce a list of the same length where the
+  i-th element is the maximum of the input elements at positions
+  0..=i (inclusive).
+
+  Print the result as space-separated integers on one line
+  followed by a newline.
+
+  Example: input "3 1 4 1 5 9 2 6" -> output "3 3 4 4 5 9 9 9".
+
+  Exit with status 0.
+tags: [collections, fold, prefix_scan]
+execution:
+  stdin: "3 1 4 1 5 9 2 6\n"
+  stdout_must_contain:
+    - "3 3 4 4 5 9 9 9"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

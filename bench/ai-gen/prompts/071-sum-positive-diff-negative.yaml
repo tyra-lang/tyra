@@ -1,0 +1,16 @@
+id: "071-sum-positive-diff-negative"
+title: "Sum of positives minus sum of negatives"
+description: |
+  Read a single line of whitespace-separated integers from
+  standard input. Compute P = sum of elements > 0 and N = sum of
+  elements < 0 (zeros are ignored). The answer is P - N (which,
+  because N is negative, ends up being P + |N|).
+
+  Print exactly "r=R" on one line. Exit with status 0.
+tags: [collections, arithmetic, partition]
+execution:
+  stdin: "5 -3 2 -8 4 -1 7\n"
+  stdout_must_contain:
+    - "r=30"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

@@ -1,0 +1,18 @@
+id: "069-max-positive"
+title: "Max of positive elements or none"
+description: |
+  Read a single line of whitespace-separated integers from
+  standard input. Find the maximum value among the elements that
+  are strictly greater than zero.
+
+  If there is at least one positive element, print "max=M" on
+  one line. If there is no positive element, print exactly
+  "none". Exit with status 0.
+tags: [collections, filter, option, reduce]
+execution:
+  stdin: "-3 -1 -5 7 -2 4\n"
+  stdout_must_contain:
+    - "max=7"
+  stdout_must_not_contain:
+    - "none"
+  timeout_seconds: 10

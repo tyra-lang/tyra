@@ -1,0 +1,17 @@
+id: "072-min-abs"
+title: "Minimum absolute value"
+description: |
+  Read a single line of whitespace-separated integers from
+  standard input (at least one). Find the element with the
+  smallest absolute value. If multiple elements tie (e.g. 3 and
+  -3), keep the one that appeared first in the input.
+
+  Print exactly "min_abs=V" on one line where V is the signed
+  original value. Exit with status 0.
+tags: [collections, reduce, arithmetic]
+execution:
+  stdin: "-7 3 -2 5 2 -4\n"
+  stdout_must_contain:
+    - "min_abs=-2"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

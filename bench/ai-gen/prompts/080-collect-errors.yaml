@@ -1,0 +1,37 @@
+id: "080-collect-errors"
+title: "Collect multiple validation errors"
+description: |
+  Write a function `validate(name, age)` that takes a String name
+  and an Int age. Collect all applicable errors into a list of
+  string messages:
+
+    - If name is empty, add "empty-name"
+    - If age is < 0, add "negative-age"
+    - If age > 150, add "too-old"
+
+  If the list is empty, the inputs are valid.
+
+  In `main`, call validate for these three cases in order:
+
+    1. name="",  age=-5
+    2. name="Alice", age=30
+    3. name="Bob", age=200
+
+  For each call, print either "ok" if there were no errors, or
+  "errors=<comma-separated list preserving the order above>".
+  The output for the three calls, in order, must be:
+
+    errors=empty-name,negative-age
+    ok
+    errors=too-old
+
+  Exit with status 0.
+tags: [result, validation, collections]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "errors=empty-name,negative-age"
+    - "ok"
+    - "errors=too-old"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

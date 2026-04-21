@@ -1,0 +1,19 @@
+id: "074-string-chars"
+title: "Print each ASCII character on its own line"
+description: |
+  Read a single line of text from standard input (without the
+  trailing newline). Assume the input is plain ASCII. Print each
+  character of the input on its own line, in order.
+
+  Example: input "abc" -> three output lines "a", "b", "c".
+
+  Exit with status 0.
+tags: [strings, loops]
+execution:
+  stdin: "abc\n"
+  stdout_must_contain:
+    - "a"
+    - "b"
+    - "c"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

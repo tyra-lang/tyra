@@ -1,0 +1,17 @@
+id: "077-words-by-length"
+title: "Longest word on a single line"
+description: |
+  Read a single line of text from standard input. Split it on
+  whitespace into words. Find the word with the greatest length
+  (in characters). If multiple words tie for length, keep the
+  one that appeared first.
+
+  Print exactly "longest=W" on one line where W is that word.
+  Exit with status 0.
+tags: [strings, collections, reduce]
+execution:
+  stdin: "the quick brown fox jumps over the lazy dog\n"
+  stdout_must_contain:
+    - "longest=quick"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

@@ -1,0 +1,22 @@
+id: "061-power"
+title: "Integer power"
+description: |
+  Write a function `power(base, exp)` that returns base raised to
+  exp for non-negative integer exp. Use any method (loop, fast
+  exponentiation, recursion).
+
+  In `main`, compute power(2, 10) and power(3, 4) and print two
+  lines:
+
+    pow2_10=1024
+    pow3_4=81
+
+  Exit with status 0.
+tags: [arithmetic, recursion]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "pow2_10=1024"
+    - "pow3_4=81"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

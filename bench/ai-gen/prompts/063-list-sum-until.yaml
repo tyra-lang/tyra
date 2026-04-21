@@ -1,0 +1,18 @@
+id: "063-list-sum-until"
+title: "Sum while under a threshold"
+description: |
+  Read a single line of whitespace-separated positive integers
+  from standard input. Iterate in order and accumulate a running
+  sum. Stop adding as soon as adding the next element would push
+  the running sum strictly above 100 (the element that would
+  overflow is NOT included).
+
+  Print exactly "total=T" on one line where T is the running
+  sum that was accumulated. Exit with status 0.
+tags: [collections, loops, early_exit]
+execution:
+  stdin: "10 20 30 40 50 60 70\n"
+  stdout_must_contain:
+    - "total=100"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

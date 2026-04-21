@@ -1,0 +1,42 @@
+id: "075-order-status"
+title: "Order lifecycle ADT with transitions"
+description: |
+  Define a sum type `OrderStatus` with these variants:
+
+    - Pending
+    - Paid
+    - Shipped
+    - Delivered
+    - Cancelled
+
+  Write a function `next(status, event)` where event is a string.
+  Rules:
+
+    - Pending + "pay"      -> Paid
+    - Paid + "ship"        -> Shipped
+    - Shipped + "deliver"  -> Delivered
+    - any + "cancel"       -> Cancelled
+    - any other combo      -> unchanged
+
+  In `main`, start at Pending and apply this event sequence:
+  "pay", "ship", "unknown", "deliver". Print the resulting
+  status name (capitalized) on its own line after every event.
+
+  Expected output (four lines):
+
+    Paid
+    Shipped
+    Shipped
+    Delivered
+
+  Exit with status 0.
+tags: [adt, match, state_machine]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "Paid"
+    - "Shipped"
+    - "Delivered"
+  stdout_must_not_contain:
+    - "Cancelled"
+  timeout_seconds: 10

@@ -1,0 +1,25 @@
+id: "064-count-down"
+title: "Count down from N"
+description: |
+  Read a single non-negative integer N from standard input. Print
+  one integer per line counting down from N to 0 inclusive. After
+  reaching 0, print a final line "done" and exit with status 0.
+
+  Example: for N=3 the output is
+
+    3
+    2
+    1
+    0
+    done
+tags: [loops, stdin]
+execution:
+  stdin: "3\n"
+  stdout_must_contain:
+    - "3"
+    - "2"
+    - "1"
+    - "0"
+    - "done"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

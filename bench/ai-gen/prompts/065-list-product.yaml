@@ -1,0 +1,17 @@
+id: "065-list-product"
+title: "Product of a list"
+description: |
+  Read a single line of whitespace-separated integers from
+  standard input. Compute their product.
+
+  Print exactly "product=P" on a single line. Exit with status 0.
+  An empty input (no integers on the line) should produce
+  "product=1" by the usual convention that the product of the
+  empty sequence is 1.
+tags: [collections, fold]
+execution:
+  stdin: "2 3 5 7\n"
+  stdout_must_contain:
+    - "product=210"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

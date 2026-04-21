@@ -1,0 +1,18 @@
+id: "066-square-list"
+title: "Map: square each element"
+description: |
+  Read a single line of whitespace-separated integers from
+  standard input. Produce a new list where each element is the
+  square of the corresponding input element. Print the new list
+  as space-separated integers on one line followed by a newline.
+
+  Example: input "1 2 3 4" -> output "1 4 9 16".
+
+  Exit with status 0.
+tags: [collections, map]
+execution:
+  stdin: "1 2 3 4 5\n"
+  stdout_must_contain:
+    - "1 4 9 16 25"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

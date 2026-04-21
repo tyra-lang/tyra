@@ -1,0 +1,30 @@
+id: "070-roman"
+title: "Roman numeral from small integer"
+description: |
+  Write a function `to_roman(n)` that converts a positive integer
+  1..=39 into its canonical Roman numeral string (I, V, X, L,
+  using subtractive notation as usual: IV=4, IX=9, XL=40-not-in-
+  range, etc.). Handling numbers outside this range is not
+  required.
+
+  In `main`, print the Roman numeral for 4, 9, 27, and 39, one
+  per line, with no extra punctuation.
+
+  Expected output (exactly four lines, in this order):
+
+    IV
+    IX
+    XXVII
+    XXXIX
+
+  Exit with status 0.
+tags: [strings, conditionals, integers]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "IV"
+    - "IX"
+    - "XXVII"
+    - "XXXIX"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

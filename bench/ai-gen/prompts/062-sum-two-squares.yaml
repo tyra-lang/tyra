@@ -1,0 +1,15 @@
+id: "062-sum-two-squares"
+title: "Sum of two squared integers"
+description: |
+  Read two integers A and B separated by whitespace from standard
+  input. Compute A*A + B*B.
+
+  Print exactly "r=R" on one line where R is the result. Exit
+  with status 0.
+tags: [arithmetic, stdin]
+execution:
+  stdin: "3 4\n"
+  stdout_must_contain:
+    - "r=25"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

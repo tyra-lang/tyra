@@ -1,0 +1,19 @@
+id: "067-filter-greater"
+title: "Filter elements greater than threshold"
+description: |
+  Read a single line of whitespace-separated integers, then a
+  second line containing a single integer threshold T.
+
+  Filter the list to keep only elements strictly greater than T,
+  preserving their original order. Print the filtered list as
+  space-separated integers on one line followed by a newline.
+
+  If the filtered list is empty, print an empty line (just a
+  newline). Exit with status 0.
+tags: [collections, filter, stdin]
+execution:
+  stdin: "1 5 2 8 3 10 4\n4\n"
+  stdout_must_contain:
+    - "5 8 10"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

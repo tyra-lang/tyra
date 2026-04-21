@@ -1,0 +1,20 @@
+id: "073-select-even-index"
+title: "Elements at even indices"
+description: |
+  Read a single line of whitespace-separated integers from
+  standard input. Produce the sublist containing only the
+  elements at even indices (0, 2, 4, ...), preserving order.
+
+  Print the sublist as space-separated integers on one line
+  followed by a newline.
+
+  Example: input "10 20 30 40 50 60 70" -> output "10 30 50 70".
+
+  Exit with status 0.
+tags: [collections, index, filter]
+execution:
+  stdin: "10 20 30 40 50 60 70\n"
+  stdout_must_contain:
+    - "10 30 50 70"
+  stdout_must_not_contain: []
+  timeout_seconds: 10
