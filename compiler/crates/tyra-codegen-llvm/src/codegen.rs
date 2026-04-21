@@ -181,6 +181,10 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare ptr @tyra_http_server_new()").unwrap();
     writeln!(out, "declare void @tyra_http_server_route(ptr, ptr, ptr, ptr)").unwrap();
     writeln!(out, "declare i32 @tyra_http_server_listen(ptr, i64)").unwrap();
+    // stdin stdlib. See runtime/src/stdlib_io.rs.
+    writeln!(out, "declare ptr @tyra_io_read_line()").unwrap();
+    writeln!(out, "declare ptr @tyra_io_read_to_end()").unwrap();
+    writeln!(out, "declare i32 @tyra_io_eof()").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
     writeln!(out, "declare void @exit(i32)").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();

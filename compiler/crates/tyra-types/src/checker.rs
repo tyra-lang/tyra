@@ -364,6 +364,19 @@ fn register_prelude(env: &mut TypeEnv) {
         "__json_at".to_string(),
         Ty::Fn(vec![Ty::Int, Ty::Int], Box::new(Ty::Int)),
     );
+    // stdin intrinsics. See stdlib/io.tyra.
+    env.define(
+        "__io_read_line".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::String)),
+    );
+    env.define(
+        "__io_read_to_end".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::String)),
+    );
+    env.define(
+        "__io_eof".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::Bool)),
+    );
 
     // Prelude ADTs for §10.3 exhaustiveness checking.
     env.register_adt("Option".into(), vec!["Some".into(), "None".into()]);

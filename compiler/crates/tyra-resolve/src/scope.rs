@@ -171,6 +171,10 @@ const PRELUDE_FUNCTIONS: &[&str] = &[
     "__json_bool",
     "__json_get",
     "__json_at",
+    // stdin backing. See runtime/src/stdlib_io.rs.
+    "__io_read_line",
+    "__io_read_to_end",
+    "__io_eof",
 ];
 
 /// Prelude ADT constructors: unqualified access to Option/Result variants.

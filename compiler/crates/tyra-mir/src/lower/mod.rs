@@ -230,6 +230,17 @@ pub fn lower(file: &SourceFile) -> Program {
     ctx.fn_param_types
         .insert("__json_at".into(), vec![Ty::Int, Ty::Int]);
 
+    // stdin intrinsics. See runtime/src/stdlib_io.rs.
+    ctx.fn_return_types
+        .insert("__io_read_line".into(), Ty::String);
+    ctx.fn_param_types.insert("__io_read_line".into(), vec![]);
+    ctx.fn_return_types
+        .insert("__io_read_to_end".into(), Ty::String);
+    ctx.fn_param_types
+        .insert("__io_read_to_end".into(), vec![]);
+    ctx.fn_return_types.insert("__io_eof".into(), Ty::Bool);
+    ctx.fn_param_types.insert("__io_eof".into(), vec![]);
+
     // Collect function return types and store definitions for monomorphization
     for item in &file.items {
         if let Item::FnDef(f) = item {

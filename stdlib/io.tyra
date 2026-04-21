@@ -1,0 +1,34 @@
+# stdlib/io.tyra — Tier 2 standard input module.
+#
+# v0.1 API:
+#   io.read_line()    -> Option<String>
+#     Reads one line from stdin, without the trailing newline. Returns
+#     Some(line) on a successful read, None on end-of-file.
+#   io.read_to_end()  -> String
+#     Reads all remaining stdin as UTF-8 and returns it.
+#
+# Backed by `__io_*` intrinsics (see runtime/src/stdlib_io.rs).
+#
+# Caveats for v0.1:
+# - UTF-8 only. Binary stdin is truncated at the first interior NUL byte.
+# - `read_line` returns `Some("")` for a genuinely empty line (a lone
+#   '\n'); only actual end-of-file produces `None`. Callers that care
+#   about the distinction should match on the variant, not compare the
+#   string to "".
+# - One allocation is leaked per read in v0.1 (opaque ptr handed to
+#   Tyra, not freed). Fine for CLI / one-shot programs; avoid hot
+#   polling loops in long-lived processes until GC_malloc integration
+#   lands.
+
+export fn read_line() -> Option<String>
+  let line = __io_read_line()
+  if __io_eof()
+    None
+  else
+    Some(line)
+  end
+end
+
+export fn read_to_end() -> String
+  __io_read_to_end()
+end

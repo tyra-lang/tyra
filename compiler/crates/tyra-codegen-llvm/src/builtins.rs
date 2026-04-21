@@ -141,6 +141,22 @@ pub(crate) fn emit_builtin_call(
             emit_http_server_listen(out, dest.as_deref(), args, func);
             true
         }
+        "__io_read_line" => {
+            let d = dest.as_deref().unwrap_or("_io_read_line");
+            writeln!(out, "  %{d} = call ptr @tyra_io_read_line()").unwrap();
+            true
+        }
+        "__io_read_to_end" => {
+            let d = dest.as_deref().unwrap_or("_io_read_to_end");
+            writeln!(out, "  %{d} = call ptr @tyra_io_read_to_end()").unwrap();
+            true
+        }
+        "__io_eof" => {
+            let d = dest.as_deref().unwrap_or("_io_eof");
+            writeln!(out, "  %{d}.i32 = call i32 @tyra_io_eof()").unwrap();
+            writeln!(out, "  %{d} = trunc i32 %{d}.i32 to i1").unwrap();
+            true
+        }
         "sys__exit" => {
             // §17.1: core.sys.exit(_ code: Int) -> Never
             if let Some(arg) = args.first() {

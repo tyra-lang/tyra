@@ -48,6 +48,9 @@ pub use stdlib_http_server::{
     tyra_http_server_listen, tyra_http_server_new, tyra_http_server_route,
 };
 
+mod stdlib_io;
+pub use stdlib_io::{tyra_io_eof, tyra_io_read_line, tyra_io_read_to_end};
+
 /// Thunk signature emitted by codegen for each `spawn` site.
 /// Takes opaque arg pointer, returns opaque result pointer.
 pub type ThunkFn = unsafe extern "C" fn(*mut c_void) -> *mut c_void;

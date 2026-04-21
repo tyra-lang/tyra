@@ -41,6 +41,9 @@ fn builtin_primitive_return(fname: &str) -> Option<Ty> {
         // Int-returning intrinsics (i64 default path, no tracking needed):
         //   __json_parse, __json_int, __json_get, __json_at,
         //   __json_err_line, __json_err_col.
+        // stdin intrinsics.
+        "__io_read_line" | "__io_read_to_end" => Some(Ty::String),
+        "__io_eof" => Some(Ty::Bool),
         _ => None,
     }
 }
