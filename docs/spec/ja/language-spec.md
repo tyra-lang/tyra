@@ -1184,7 +1184,7 @@ ADT バリアント:
 - `collections` — `List`, `Map`, `Set` のメソッド (sort_by, min_by, max_by, map, filter 等)
 - `float` — Float の比較関数 (eq, approx_eq, is_nan 等。ADR-0002 参照)
 - `json` — JSON パース (§17.3 で v0.1 API 凍結)
-- `http` — HTTP サーバ・クライアント
+- `http` — HTTP サーバ・クライアント (§17.3 で v0.1 API 凍結)
 - `fs` — ファイルシステム操作 (§17.3 で v0.1 API 凍結)
 - `time` — 時刻・期間
 - `test` — テストフレームワーク
@@ -1197,8 +1197,10 @@ ADT バリアント:
 
 ### 17.3 v0.1 で凍結する Tier 2 API
 
-M10 で `fs` と `json` の最小 API を言語仕様として凍結する。他の Tier 2
-モジュール (http 等) は M11 以降に別途確定する。
+M10 で `fs` と `json`、M11 で `http.client` / `http.server` の最小 API
+を言語仕様として凍結する。残る Tier 2 モジュール (`string`,
+`collections`, `time`, `test`, `log`, `float`) は以降のマイルストーンで
+別途確定する。
 
 #### 17.3.1 fs
 
@@ -1260,6 +1262,95 @@ end
 - `json.Value` は GC 管理の opaque ハンドルとして振る舞う (§8.5)。
   v0.1 ではパース済みツリーはプロセス終了まで生存する (明示的解放は
   サポートしない)。実装詳細は `runtime/src/stdlib_json.rs` 参照。
+
+#### 17.3.3 http
+
+呼出側は `import http.client` / `import http.server` の上で
+`http.client.get(...)` や `http.server.new()` のようにモジュール修飾
+する。以下は `stdlib/http/client.tyra` および `stdlib/http/server.tyra`
+の宣言抜粋。
+
+```tyra
+# stdlib/http/client.tyra
+export data Response
+  status: Int
+  body: String
+end
+
+export type FetchError =
+  | NetworkError(message: String)
+  | Timeout(message: String)
+
+export fn get(_ url: String) -> Result<Response, FetchError>
+```
+
+```tyra
+# stdlib/http/server.tyra
+export data Request
+  method: String
+  path: String
+  body: String
+end
+
+export data Response
+  status: Int
+  body: String
+end
+
+export data AppServer
+  _handle: Int
+end
+
+export fn new() -> AppServer
+
+impl AppServerOps for AppServer
+  fn get(self, _ path: String, _ handler: String) -> Unit
+  fn post(self, _ path: String, _ handler: String) -> Unit
+  fn listen(self, _ port: Int) -> Result<Unit, String>
+end
+```
+
+**`http.client` の意味論 (v0.1):**
+
+- 到達可能なサーバから得た 2xx / 4xx / 5xx レスポンスはすべて
+  `Ok(Response)` となる。呼出側は `resp.status` を検査して分岐する。
+  `FetchError` はトランスポート層の失敗 (DNS, 接続拒否, TLS, タイムアウト)
+  のみを表す。
+- `FetchError.NetworkError` は catch-all バリアント、`Timeout` は
+  v0.1 で唯一の個別バリアント。
+- TLS の信頼ルートは Mozilla `webpki-roots` であり、システムの CA
+  トラストストアは参照しない。社内 CA / プライベート CA は v0.1 では
+  非対応。
+- レスポンスボディは 10 MiB で打ち切り、UTF-8 として解釈する。
+  Tyra `String` は C 文字列互換なので、内部 NUL 以降は切り捨てられる。
+- 公開されるのは `GET` のみ。`POST` / `PUT` / `DELETE`、ヘッダ、
+  クエリの操作は将来のマイルストーンに繰延。
+- 成功した `get` 呼び出しごとに内部レスポンス確保が 1 回リークする
+  (v0.1 の opaque ハンドル設計、§17.3.2 の `json` と同じトレードオフ)。
+  CLI / 単発ツール用途では問題にならないが、長寿命プロセスでの高頻度
+  ポーリングは避けること。
+
+**`http.server` の意味論 (v0.1):**
+
+- ハンドラは同期 `fn(Request) -> Response` である。失敗は非 2xx の
+  `Response` として表現する。ハンドラは `Result` を返さない。
+- accept ループはシングルスレッドのブロッキング。同時処理は 1 リクエスト
+  のみ。M9 タスクランタイムへのディスパッチは将来のマイルストーンに繰延。
+- ルーティングは完全一致のみ。ワイルドカード / URL パラメータは未対応。
+  同一 `(method, path)` の重複登録は、後から登録した側で上書きされる
+  (ランタイムが警告をログする)。
+- `Request.body` は生データを最大 1 MiB でキャプチャする。ヘッダ、
+  クッキー、クエリ文字列は v0.1 では Tyra 側から参照できない。
+- TLS は非搭載。HTTPS はリバースプロキシ (nginx, caddy 等) で終端する。
+- ハンドラが `panic()` するとプロセス全体が異常終了する (§12 の
+  abort-not-unwind セマンティクスに従う)。リスクのあるロジックは
+  `match` / `Result` でラップして 5xx を返すこと。
+- `listen` の戻り値は `Result<Unit, String>` だが、v0.1 では `Ok` は
+  構造上到達しない (bind 失敗時のみ `Err(msg)` が返る)。`Err(msg)` で
+  診断を取得し、`Ok(_)` は将来のシャットダウン API 用の予約とする。
+- `AppServer._handle` は GC 管理の opaque ハンドル (§8.5)。実装詳細は
+  `runtime/src/stdlib_http.rs` および `runtime/src/stdlib_http_server.rs`
+  を参照。
 
 ---
 
@@ -1432,7 +1523,7 @@ end
 - structured concurrency
 - `break` / `continue`
 - モジュールレベルの初期化セマンティクス (`let`/`mut` のモジュールスコープ)
-- Tier 2 標準ライブラリ API の詳細 (http, string, collections, time, test, log, float) — `fs` と `json` は §17.3 で v0.1 凍結済
+- Tier 2 標準ライブラリ API の詳細 (string, collections, time, test, log, float) — `fs`, `json`, `http` は §17.3 で v0.1 凍結済
 
 ---
 

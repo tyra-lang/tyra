@@ -1188,7 +1188,7 @@ These modules are practically important but do not affect language semantics. Th
 - `collections` — methods on `List`, `Map`, `Set` (sort_by, min_by, max_by, map, filter, etc.)
 - `float` — Float comparison functions (eq, approx_eq, is_nan, etc.; see ADR-0002)
 - `json` — JSON parsing (v0.1 API frozen in §17.3)
-- `http` — HTTP server and client
+- `http` — HTTP server and client (v0.1 API frozen in §17.3)
 - `fs` — file system operations (v0.1 API frozen in §17.3)
 - `time` — time and duration
 - `test` — testing framework
@@ -1201,9 +1201,10 @@ Principles:
 
 ### 17.3 Tier 2 APIs frozen in v0.1
 
-M10 freezes minimal APIs for `fs` and `json` as part of the language
-specification. Other Tier 2 modules (http, etc.) will be finalized in
-M11 and beyond.
+M10 freezes minimal APIs for `fs` and `json`, and M11 freezes
+`http.client` / `http.server`, as part of the language specification.
+The remaining Tier 2 modules (`string`, `collections`, `time`, `test`,
+`log`, `float`) will be finalized in later milestones.
 
 #### 17.3.1 fs
 
@@ -1269,6 +1270,98 @@ end
   parsed tree lives for the duration of the process (explicit
   deallocation is not supported). See `runtime/src/stdlib_json.rs` for
   implementation notes.
+
+#### 17.3.3 http
+
+Callers `import http.client` / `import http.server` and use the
+module-qualified forms `http.client.get(...)` or `http.server.new()`.
+The declarations below are excerpted from `stdlib/http/client.tyra`
+and `stdlib/http/server.tyra`.
+
+```tyra
+# stdlib/http/client.tyra
+export data Response
+  status: Int
+  body: String
+end
+
+export type FetchError =
+  | NetworkError(message: String)
+  | Timeout(message: String)
+
+export fn get(_ url: String) -> Result<Response, FetchError>
+```
+
+```tyra
+# stdlib/http/server.tyra
+export data Request
+  method: String
+  path: String
+  body: String
+end
+
+export data Response
+  status: Int
+  body: String
+end
+
+export data AppServer
+  _handle: Int
+end
+
+export fn new() -> AppServer
+
+impl AppServerOps for AppServer
+  fn get(self, _ path: String, _ handler: String) -> Unit
+  fn post(self, _ path: String, _ handler: String) -> Unit
+  fn listen(self, _ port: Int) -> Result<Unit, String>
+end
+```
+
+**`http.client` semantics (v0.1):**
+
+- Any 2xx / 4xx / 5xx response from a reachable server is returned as
+  `Ok(Response)`; callers inspect `resp.status` to branch. `FetchError`
+  only represents transport-layer failures (DNS, connection refused,
+  TLS, timeout).
+- `FetchError.NetworkError` is a catch-all variant; `Timeout` is the
+  sole distinct variant in v0.1.
+- TLS trust anchors come from Mozilla `webpki-roots` and do **not**
+  consult the system CA trust store. Enterprise / private CAs are
+  unsupported in v0.1.
+- Response bodies are capped at 10 MiB and decoded as UTF-8. Because
+  Tyra `String` is C-string-backed, payloads containing interior NUL
+  bytes are truncated at the first NUL.
+- Only `GET` is exposed. `POST` / `PUT` / `DELETE`, header, and query
+  manipulation are deferred to later milestones.
+- Each successful `get` leaks one internal response allocation for
+  the lifetime of the process (v0.1 opaque-handle design, matching
+  the `json` trade-off in §17.3.2). Fine for CLI / one-shot tools;
+  avoid high-frequency polling loops in long-lived processes.
+
+**`http.server` semantics (v0.1):**
+
+- Handlers are synchronous `fn(Request) -> Response`. Failures are
+  encoded as non-2xx `Response` values rather than `Result`.
+- The accept loop is single-threaded and blocking; only one request
+  is in flight at a time. Dispatching handlers onto the M9 task
+  runtime is deferred.
+- Routing is exact-path only. Wildcards and URL parameters are not
+  supported. Registering the same `(method, path)` twice overwrites
+  the previous handler (the runtime emits a warning).
+- `Request.body` is captured raw and capped at 1 MiB. Headers,
+  cookies, and query strings are not accessible from Tyra in v0.1.
+- No built-in TLS. Terminate HTTPS at a reverse proxy (nginx, caddy).
+- A handler that calls `panic()` aborts the whole process (§12
+  abort-not-unwind semantics). Wrap risky logic in `match` /
+  `Result` and return a 5xx `Response` instead.
+- `listen` returns `Result<Unit, String>`, but the `Ok` arm is
+  structurally unreachable in v0.1 (only bind failure returns, as
+  `Err(msg)`). Pattern-match `Err(msg)` for diagnostics; `Ok(_)` is
+  reserved for a future shutdown API.
+- `AppServer._handle` is a GC-managed opaque handle (§8.5). See
+  `runtime/src/stdlib_http.rs` and `runtime/src/stdlib_http_server.rs`
+  for implementation notes.
 
 ---
 
@@ -1441,7 +1534,7 @@ The following are postponed for later specification:
 - structured concurrency
 - `break` / `continue`
 - Module-level initialization semantics (`let`/`mut` at module scope)
-- Detailed APIs for Tier 2 standard library modules (http, string, collections, time, test, log, float) — `fs` and `json` are frozen in §17.3
+- Detailed APIs for Tier 2 standard library modules (string, collections, time, test, log, float) — `fs`, `json`, and `http` are frozen in §17.3
 
 ---
 
