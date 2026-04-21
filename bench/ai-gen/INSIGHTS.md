@@ -2,9 +2,28 @@
 
 Running log of observations that raw counts in `SUMMARY.md` hide.
 
+## Run 4 (2026-04-21) — full 100 prompts × 5 languages × claude
+
+| language | claude pass% | codex pass% (adj) | codex raw% |
+| -------- | -----------: | ----------------: | ---------: |
+| ruby     | 99.0 (99/100) | 95.2 (20/21) | 40.8 |
+| crystal  | 96.0 (96/100) | 83.3 (10/12) | 25.0 |
+| v        | 49.0 (49/100) | 66.7 (8/12)  | 20.0 |
+| gleam    | 37.0 (37/100) | 54.5 (6/11)  | 15.0 |
+| tyra     |  0.0 (0/100)  | 16.7 (3/18)  |  6.1 |
+
+The claude column is the first complete 100-prompt dataset. Every
+prior partial conclusion survived: ranking ruby > crystal > v >
+gleam > tyra is unchanged, zero-corpus Tyra is 0/100, and claude
+never times out (500 runs, zero generator_fail). The codex column
+is capped at ~40 prompts because the CLI hit its rate window
+partway through the sweep (see Run 3 notes); adjusted rate still
+applies.
+
 ## Run 3 (2026-04-21) — 40 prompts × 5 languages × {codex, claude}
 
-### Headline
+Superseded by Run 4 for the claude column. Kept here for the codex
+comparison, which is the most complete codex data we have.
 
 | language | claude pass% | codex pass% (adj) | codex raw% |
 | -------- | -----------: | ----------------: | ---------: |
@@ -54,19 +73,23 @@ meaningful once Tyra has a published corpus (docs, examples,
 tutorials, GitHub presence). Until then the test mostly measures
 "did Claude's fallback guess land on Tyra-compatible syntax."
 
-### Compiler bug uncovered
+### Compiler bug uncovered (FIXED in `e788b4a`)
 
-In a majority of Tyra compile_fails, the compiler panics with
+Most Run 3 Tyra compile_fails had the compiler panicking with
 
     thread 'main' panicked at
-    compiler/crates/tyra-parser/src/token_stream.rs:218:22:
-    index out of bounds: the len is N but the index is N
+    compiler/crates/tyra-parser/src/token_stream.rs: index out of bounds
 
-rather than emitting a diagnostic. The input files are
-garbled-by-the-model Rust/Gleam/etc., but the parser should reject
-them cleanly, not crash. Candidate fix: bounds-check the token
-pointer advance in token_stream.rs:218 and return a synthetic
-diagnostic on EOF overrun. Worth a separate small ticket.
+rather than emitting a diagnostic. Root cause: `peek_skip_newlines`,
+`peek_past_newlines`, `raw_peek`, and `advance` all indexed
+`self.tokens[pos]` without bounds check. On unmatched brackets
+(bracket_depth > 0) or after advance past Eof, pos could reach
+len and panic. Fix clamps every cursor read to
+`pos.min(len.saturating_sub(1))`, so the cursor lands on Eof
+forever past end instead of panicking. Two regression tests added
+in tyra-parser.
+
+All 100 Run 4 Tyra compile_fails are now clean diagnostics.
 
 ### Stdlib-gap observations (from codex run 2)
 
@@ -145,3 +168,7 @@ failures.
 - **Run 3** (2026-04-21) — 40 prompts × 5 langs × claude. Clean,
   no timeouts. Revealed zero-corpus Tyra + token_stream parser
   panic.
+- **Run 4** (2026-04-21) — full 100 prompts × 5 langs × claude.
+  500 runs, zero timeouts. Ruby 99/100, Crystal 96/100, V 49/100,
+  Gleam 37/100, Tyra 0/100. Parser panic fixed beforehand
+  (`e788b4a`) so all 100 Tyra compile_fails are clean.
