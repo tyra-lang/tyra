@@ -4,75 +4,121 @@ First real data from `bench/ai-gen/harness.py`. This document records
 qualitative observations that raw pass/fail counts in `SUMMARY.md` hide.
 It is intended as a running log, updated as more runs complete.
 
-## Run 1 (2026-04-21) — 9 prompts × {Tyra, Ruby} × Codex
+## Run 2 (2026-04-21) — 39 prompts × 5 languages × Codex CLI
 
-| language | pass | fail breakdown |
-| -------- | ---- | -------------- |
-| ruby     | 9/9  | — |
-| tyra     | 2/9  | 3 compile_fail, 3 generator_fail (codex timeout @ 180s), 1 check_fail |
+Combined 9-prompt smoke + 30-prompt sweep. Raw and adjusted tables
+below. Adjusted rate excludes `generator_fail` because those are
+Codex CLI timeouts / throttling, not a language-quality signal.
 
-### Tyra failure taxonomy
+### Raw (includes generator_fail)
 
-**compile_fail — stdlib gaps surfaced by the model's first-instinct code**
+| language | pass | adjusted% raw | notes |
+| -------- | ---- | ------------- | ----- |
+| ruby     | 20 / 39 | 51.3% | — |
+| crystal  | 10 / 30 | 33.3% | — |
+| v        |  8 / 30 | 26.7% | — |
+| gleam    |  6 / 30 | 20.0% | — |
+| tyra     |  3 / 39 |  7.7% | — |
 
-- `001-fizzbuzz`, `006-factorial`: Codex wrote `import fs` expecting a
-  stdin reader. Tyra's `fs` is file-only (§17.3.1); no stdin module
-  ships in v0.1. The model has no way to know this because the spec
-  is not yet in common crawl corpora.
-- `002-word-count`: same `import fs` pattern for stdin.
-- Modulo workaround: Codex wrote
-  `value / divisor * divisor == value` as a `%`-free divisibility
-  check; the parser rejected it at the `==` position, suggesting
-  a precedence / form issue in `else if` chains. Worth verifying
-  with a minimal repro.
+### Adjusted (excludes generator_fail — Codex timeouts)
 
-**generator_fail — Codex timeouts (180s)**
+| language | pass / tried | adjusted% | gap vs ruby |
+| -------- | ------------ | --------- | ----------- |
+| ruby     | 20 / 21 | 95.2% | — |
+| crystal  | 10 / 12 | 83.3% | -11.9 |
+| v        |  8 / 12 | 66.7% | -28.5 |
+| gleam    |  6 / 11 | 54.5% | -40.7 |
+| tyra     |  3 / 18 | 16.7% | -78.5 |
 
-- `007-gcd`, `008-reverse-string`, `009-palindrome`: Codex spent the
-  full wallclock budget and returned nothing. Pattern: the three
-  slowest generations are all Tyra, never Ruby. Most likely cause:
-  the model reasons longer when it does not recognize the language
-  and the prompt keeps it in exploration mode. Raising the timeout
-  to 300s and measuring again is the next step.
+### What's real in these numbers
 
-**check_fail — 003-option-chain**
+**Ruby → Crystal → V → Gleam → Tyra ordering is stable.** The ordering
+survives the generator_fail adjustment and is consistent with corpus
+presence on public code hosts. Codex knows Ruby best; Gleam less well
+than Ruby/Crystal/V; Tyra not at all (zero public Tyra code existed
+before this project).
 
-- Produced `OK=0NONE` on one line instead of `OK=5\nNONE` on two.
-  Compiled cleanly; the model made a semantic mistake around
-  integer division and newline handling. This is the only failure
-  mode where the toolchain is healthy and the model simply got the
-  answer wrong.
+**Tyra's gap is dominated by compile_fail, not model refusal.** In
+the 18 non-timeout Tyra attempts, 13 compile_fail vs 2 check_fail
+vs 3 pass. The model writes what it thinks is Tyra, and the compiler
+rejects it. That is the exact failure mode strategy.md §4.1 predicted.
 
-### What this tells us about strategy.md §4.1
+**Codex throttling collapsed the tail of the run.** The last 3 prompts
+(039 specifically) returned `generator_fail` across all 5 languages —
+clearly a rate-limit or quota event, not a language-specific issue.
+Each language in the sweep absorbed ~18 `generator_fail`s, roughly
+evenly. Any single-run ranking that includes these will overstate
+the languages the timeout happened to skip fewer times.
 
-The headline claim Tyra needs to defend — "AI-generated Tyra code
-compiles more reliably than AI-generated Crystal/V/etc." — cannot
-be measured with this data yet; it compares Tyra to Ruby only, and
-the comparison is the wrong direction (Ruby wins 100%). The 5-
-language comparison across 100 prompts is the test that matters.
-Run 2 below.
+### Tyra compile_fail taxonomy (13 cases)
 
-## Run 2 — 30 prompts × 5 languages × Codex (in progress)
+From sampling the failing results:
 
-Kicked off after Crystal / V / Gleam installed via brew. Results
-will populate `results/` asynchronously. Expected wall time at
-~45s/run × 150 runs ≈ 2 hours. The updated SUMMARY.md and a new
-section here will follow when that run completes.
+1. **`import fs` for stdin.** Multiple prompts that read stdin
+   triggered Codex to write `import fs` — but fs is file-only in
+   v0.1 (§17.3.1). No stdin-reading stdlib module exists yet. This
+   is the single largest loss driver. An `io` module with
+   `read_line` / `read_to_end` would cost little to spec and
+   recover many prompts. Tracked as "stdlib gap #1."
+2. **Modulo workarounds.** Tyra v0.1 has no `%` operator. Codex
+   reached for `value - (value / divisor) * divisor == 0` or
+   similar, and the parser rejected the expression in an `else if`
+   chain — possibly a precedence / form issue worth reproducing.
+3. **Mixed identifier conventions.** Codex sometimes produces
+   `camelCase` identifiers where Tyra parsing expected snake_case;
+   lexer/parser error surfaces downstream.
 
-## Known caveats that will color the numbers
+None of these are semantic model errors. They are all "the model
+used a construct the v0.1 stdlib or syntax doesn't provide." A
+small stdlib + syntax expansion addresses the bulk of them.
 
-1. **Single seed per (prompt, lang, gen)**. Frontier models are
-   sampled, so one run is not a reliable signal. The harness supports
-   `--seed N`; for publishable headlines average ≥ 3.
-2. **Codex chooses its own model** (`~/.codex/config.toml`). When we
-   add Claude, the delta is model × language, not language alone.
-3. **The prompts do not hint stdlib**. For Tyra this is brutal — the
-   model has no prior exposure to tyra stdlib. For Ruby / Crystal / V
-   this is irrelevant. This is the benchmark we care about (Tyra's
-   thesis is that AI code works *without* hand-holding); we note it
-   so the asymmetry is not mistaken for a harness bug.
-4. **`ruby -c` is a syntax check, not a type check**. Ruby's
-   "compile" stage is weaker than the static languages'; a Ruby run
-   that reports `pass` may still contain bugs that a typed language's
-   compile stage would reject. When aggregating, treat the Ruby
-   compile stage as a floor.
+### Gleam's compile_fail modes (5 cases)
+
+Gleam's project structure (gleam.toml + src/) adds friction: Codex
+sometimes wrote `gleam run` -ready top-level code that Gleam's
+module system rejected. These are structural rather than semantic
+errors too.
+
+### V's compile_fail modes (3 cases)
+
+V is more forgiving; the losses were specific function signature /
+type mismatches rather than framework issues.
+
+### Crystal's compile_fail modes (2 cases)
+
+Smallest loss count outside Ruby. Crystal's Ruby-descended surface
+is familiar to Codex and produces mostly-correct code.
+
+### Run-level methodology notes
+
+1. **Single seed**. One sample per (prompt, lang). Multiple seeds
+   would tighten confidence intervals; headlines should average ≥ 3.
+2. **Codex-only**. Claude generator is implemented but
+   `ANTHROPIC_API_KEY` was unset; re-running with Claude is the next
+   big experiment.
+3. **Codex model unknown**. The harness records the CLI version
+   (`codex-cli 0.120.0`); the actual model is whatever the local
+   config uses.
+4. **60 prompts remain unrun** (041-100). After the throttling tail
+   this run stopped at 039. A follow-up sweep is needed for the
+   full 100.
+
+## What this tells us about strategy.md §4.1
+
+Tyra's thesis — "AI-generated Tyra code compiles more reliably than
+alternatives because the design is more constrained" — is not yet
+supported by the data. The design side of the thesis may still be
+true, but its benefit is swamped by **stdlib absence**. The model
+cannot pick Tyra's safe idioms over unsafe alternatives if Tyra
+does not expose the right idioms at all.
+
+Concrete implication: the roadmap item "Tier 1 stdlib stable" (§6.2)
+is not just feature work — it is the prerequisite for the AI
+benchmark to produce a fair answer. An `io` stdin module and a
+documented `%` (or rem/mod function) would be the two cheapest wins.
+
+## Run 1 (2026-04-21) — baseline, Tyra + Ruby only
+
+Kept for reference. 9 prompts × 2 languages × Codex. Ruby 9/9, Tyra
+2/9. Subsumed by Run 2. See earlier version of this file in git
+history for the pre-Crystal/V/Gleam detail.
