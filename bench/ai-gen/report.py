@@ -41,7 +41,12 @@ def aggregate(
         lambda: {o: 0 for o in OUTCOMES}
     )
     for r in results:
-        key = (r.get("language", "?"), r.get("generator", "?"))
+        # Show spec-injected runs on their own row so the baseline is
+        # never averaged together with the RAG experiment.
+        lang = r.get("language", "?")
+        if r.get("inject_tyra_spec"):
+            lang = f"{lang}+spec"
+        key = (lang, r.get("generator", "?"))
         outcome = r.get("overall", "harness_error")
         buckets[key][outcome] = buckets[key].get(outcome, 0) + 1
     return buckets

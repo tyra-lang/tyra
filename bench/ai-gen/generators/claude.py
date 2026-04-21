@@ -39,9 +39,14 @@ class ClaudeGenerator(Generator):
             self._version_cache = "claude (version probe failed)"
         return self._version_cache
 
-    def generate(self, prompt_description: str, language: str) -> GenerateResult:
+    def generate(
+        self,
+        prompt_description: str,
+        language: str,
+        inject_tyra_spec: bool = False,
+    ) -> GenerateResult:
         t0 = time.time()
-        system = Generator.system_prompt(language)
+        system = Generator.system_prompt(language, inject_tyra_spec=inject_tyra_spec)
         # `--disallowedTools` takes space-separated tool names in the
         # same argv slot (each as its own argv element). Harden: refuse
         # every interactive tool so the model has no way to do anything

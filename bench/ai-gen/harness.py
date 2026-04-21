@@ -94,6 +94,7 @@ def run_one(
     runner_cls,
     config: Dict[str, Any],
     seed: int,
+    inject_tyra_spec: bool = False,
 ) -> Dict[str, Any]:
     runner = runner_cls(config=config, repo_root=REPO_ROOT)
     result: Dict[str, Any] = {
@@ -102,6 +103,7 @@ def run_one(
         "generator": generator.name,
         "seed": seed,
         "timestamp": int(time.time()),
+        "inject_tyra_spec": bool(inject_tyra_spec and language == "tyra"),
     }
 
     if not runner.compiler_available():
@@ -109,7 +111,9 @@ def run_one(
         result["stages"] = {}
         return result
 
-    gen = generator.generate(prompt["description"], language)
+    gen = generator.generate(
+        prompt["description"], language, inject_tyra_spec=inject_tyra_spec
+    )
     result["model"] = gen.model
     result["stages"] = {
         "generate": {
@@ -185,6 +189,13 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument(
+        "--inject-tyra-spec",
+        action="store_true",
+        help="Append the Tyra spec + examples to the system prompt when the "
+        "target language is Tyra. Runs are written with a '+spec' suffix so "
+        "they do not clobber baseline results.",
+    )
+    ap.add_argument(
         "--results-dir",
         default=str(HERE / "results"),
         help="Directory to write per-run JSON into",
@@ -230,7 +241,17 @@ def main() -> int:
             runner_cls = ALL_RUNNERS[language]
             for generator in generators:
                 completed += 1
-                key = f"{prompt['id']}__{language}__{generator.name}__s{args.seed}"
+                # Suffix spec-injected Tyra runs so they sit side by side
+                # with the zero-corpus baseline rather than overwriting it.
+                spec_suffix = (
+                    "+spec"
+                    if args.inject_tyra_spec and language == "tyra"
+                    else ""
+                )
+                key = (
+                    f"{prompt['id']}__{language}{spec_suffix}"
+                    f"__{generator.name}__s{args.seed}"
+                )
                 print(f"[{completed}] {key}", file=sys.stderr)
                 try:
                     result = run_one(
@@ -240,6 +261,7 @@ def main() -> int:
                         runner_cls=runner_cls,
                         config=config,
                         seed=args.seed,
+                        inject_tyra_spec=args.inject_tyra_spec,
                     )
                 except Exception as e:
                     result = {

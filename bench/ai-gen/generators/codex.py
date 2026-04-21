@@ -39,9 +39,14 @@ class CodexGenerator(Generator):
             self._version_cache = "codex (version probe failed)"
         return self._version_cache
 
-    def generate(self, prompt_description: str, language: str) -> GenerateResult:
+    def generate(
+        self,
+        prompt_description: str,
+        language: str,
+        inject_tyra_spec: bool = False,
+    ) -> GenerateResult:
         t0 = time.time()
-        system = Generator.system_prompt(language)
+        system = Generator.system_prompt(language, inject_tyra_spec=inject_tyra_spec)
         full_prompt = f"{system}\n\n---\n\n{prompt_description}"
         with tempfile.NamedTemporaryFile(
             "r+", suffix=".txt", delete=False
