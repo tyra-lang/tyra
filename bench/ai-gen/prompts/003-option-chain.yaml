@@ -1,0 +1,22 @@
+id: "003-option-chain"
+title: "Option / Result chain"
+description: |
+  Define a function `safe_divide(a, b)` that returns an Option (or
+  equivalent nullable / maybe type in the language's idiom) that is
+  None when b == 0 and Some(a / b) otherwise.
+
+  In `main`, call `safe_divide(10, 2)` and `safe_divide(10, 0)`,
+  then print one line for each call:
+
+    - for the first call, print "OK=5"
+    - for the second call, print "NONE"
+
+  Use integer division. The program must exit with status 0.
+tags: [option, control_flow]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "OK=5"
+    - "NONE"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

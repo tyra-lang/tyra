@@ -1,0 +1,23 @@
+id: "001-fizzbuzz"
+title: "FizzBuzz"
+description: |
+  Read a single positive integer N from standard input. For each
+  integer i from 1 to N inclusive, print one of the following on
+  its own line, in order:
+
+    - "FizzBuzz" if i is a multiple of both 3 and 5
+    - "Fizz" if i is a multiple of 3 only
+    - "Buzz" if i is a multiple of 5 only
+    - the integer i itself otherwise
+
+  The program must exit with status 0 on success.
+tags: [loops, stdin, integers]
+execution:
+  stdin: "15\n"
+  stdout_must_contain:
+    - "FizzBuzz"
+    - "Fizz"
+    - "Buzz"
+    - "14"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

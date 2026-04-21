@@ -1,0 +1,50 @@
+# bench/ai-gen/config.yaml — harness configuration.
+#
+# Overridable on the command line via harness.py flags. Everything
+# here is treated as a default, not a hard requirement.
+
+seeds: 1
+
+generators:
+  claude:
+    model: "claude-opus-4-7"
+    max_tokens: 2048
+    temperature: 0.2
+  codex:
+    # The codex CLI chooses its own model; we just record what it
+    # reports via `codex --version` / result metadata.
+    extra_args: []
+
+languages:
+  tyra:
+    enabled: true
+    # Resolved relative to the repo root.
+    compile_cmd: ["target/debug/tyra", "build", "{src}"]
+    run_cmd: ["./{bin}"]
+    source_ext: ".tyra"
+  crystal:
+    enabled: true
+    compile_cmd: ["crystal", "build", "--no-color", "-o", "{bin}", "{src}"]
+    run_cmd: ["./{bin}"]
+    source_ext: ".cr"
+  v:
+    enabled: true
+    compile_cmd: ["v", "-o", "{bin}", "{src}"]
+    run_cmd: ["./{bin}"]
+    source_ext: ".v"
+  gleam:
+    enabled: true
+    # Runner handles the template project; these are informational.
+    source_ext: ".gleam"
+  ruby:
+    enabled: true
+    # Ruby has no AOT compile. Runner uses `ruby -c` to stand in for
+    # a compile/type-check stage, then `ruby` for execute.
+    check_cmd: ["ruby", "-c", "{src}"]
+    run_cmd: ["ruby", "{src}"]
+    source_ext: ".rb"
+
+timeouts:
+  generate_seconds: 60
+  compile_seconds: 60
+  execute_seconds_default: 10

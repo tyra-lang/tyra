@@ -1,0 +1,29 @@
+id: "004-state-machine"
+title: "Traffic light state machine"
+description: |
+  Model a traffic light with three states: Red, Green, Yellow.
+  Define a `next` function (or method) that advances the state in
+  the order Red -> Green -> Yellow -> Red.
+
+  In `main`, start at Red and call `next` three times, printing the
+  current state before each call AND after the final call, each on
+  its own line. Print the state name capitalized (e.g. "Red",
+  "Green", "Yellow") with no extra punctuation.
+
+  Expected output (exactly 4 lines):
+
+    Red
+    Green
+    Yellow
+    Red
+
+  Exit with status 0.
+tags: [adt, match, control_flow]
+execution:
+  stdin: ""
+  stdout_must_contain:
+    - "Red"
+    - "Green"
+    - "Yellow"
+  stdout_must_not_contain: []
+  timeout_seconds: 10

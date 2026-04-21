@@ -1,0 +1,15 @@
+id: "002-word-count"
+title: "Word count"
+description: |
+  Read all of standard input until end-of-file as a text document.
+  Count the number of whitespace-separated words in the input (a
+  "word" is a maximal non-whitespace run). Print a single line
+  containing the integer count followed by a newline. No other
+  output.
+tags: [stdin, strings]
+execution:
+  stdin: "the quick brown fox jumps over the lazy dog\n"
+  stdout_must_contain:
+    - "9"
+  stdout_must_not_contain: []
+  timeout_seconds: 10
