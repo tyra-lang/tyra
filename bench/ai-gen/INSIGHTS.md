@@ -102,6 +102,13 @@ is familiar to Codex and produces mostly-correct code.
 4. **60 prompts remain unrun** (041-100). After the throttling tail
    this run stopped at 039. A follow-up sweep is needed for the
    full 100.
+5. **Codex rate limit persistence.** An immediate follow-up attempt
+   on prompts 040-049 × 5 languages (50 runs) after Run 2 returned
+   100% `generator_fail`. Codex's per-user token window resets on
+   an unknown cadence (presumably daily or hourly). Lesson: do
+   NOT kick off a follow-up sweep right after a long run finishes;
+   wait for the window to reset or the next sweep wastes wallclock
+   without producing data.
 
 ## What this tells us about strategy.md §4.1
 
