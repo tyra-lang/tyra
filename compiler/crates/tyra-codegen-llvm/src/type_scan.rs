@@ -44,6 +44,14 @@ fn builtin_primitive_return(fname: &str) -> Option<Ty> {
         // stdin intrinsics.
         "__io_read_line" | "__io_read_to_end" => Some(Ty::String),
         "__io_eof" => Some(Ty::Bool),
+        // §17.3.4: string stdlib intrinsics.
+        "__string_trim" | "__string_to_upper" | "__string_to_lower" => Some(Ty::String),
+        "__string_is_empty"
+        | "__string_contains"
+        | "__string_starts_with"
+        | "__string_ends_with" => Some(Ty::Bool),
+        // __string_len / __string_parse_int / __string_parse_errno return
+        // Int (default i64 path — no tracking needed).
         _ => None,
     }
 }

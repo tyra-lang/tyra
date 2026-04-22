@@ -51,6 +51,13 @@ pub use stdlib_http_server::{
 mod stdlib_io;
 pub use stdlib_io::{tyra_io_eof, tyra_io_read_line, tyra_io_read_to_end};
 
+mod stdlib_string;
+pub use stdlib_string::{
+    tyra_string_contains, tyra_string_ends_with, tyra_string_is_empty, tyra_string_len,
+    tyra_string_parse_errno, tyra_string_parse_int, tyra_string_starts_with,
+    tyra_string_to_lower, tyra_string_to_upper, tyra_string_trim,
+};
+
 /// Thunk signature emitted by codegen for each `spawn` site.
 /// Takes opaque arg pointer, returns opaque result pointer.
 pub type ThunkFn = unsafe extern "C" fn(*mut c_void) -> *mut c_void;

@@ -175,6 +175,17 @@ const PRELUDE_FUNCTIONS: &[&str] = &[
     "__io_read_line",
     "__io_read_to_end",
     "__io_eof",
+    // §17.3.4: string stdlib backing. See runtime/src/stdlib_string.rs.
+    "__string_len",
+    "__string_is_empty",
+    "__string_trim",
+    "__string_to_upper",
+    "__string_to_lower",
+    "__string_contains",
+    "__string_starts_with",
+    "__string_ends_with",
+    "__string_parse_int",
+    "__string_parse_errno",
 ];
 
 /// Prelude ADT constructors: unqualified access to Option/Result variants.

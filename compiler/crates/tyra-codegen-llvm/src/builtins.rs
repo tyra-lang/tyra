@@ -157,6 +157,49 @@ pub(crate) fn emit_builtin_call(
             writeln!(out, "  %{d} = trunc i32 %{d}.i32 to i1").unwrap();
             true
         }
+        // §17.3.4: string stdlib intrinsics.
+        "__string_len" => {
+            emit_string_ptr_to_i64(out, dest.as_deref(), "tyra_string_len", args, func);
+            true
+        }
+        "__string_is_empty" => {
+            emit_string_ptr_to_bool(out, dest.as_deref(), "tyra_string_is_empty", args, func);
+            true
+        }
+        "__string_trim" => {
+            emit_string_ptr_to_ptr(out, dest.as_deref(), "tyra_string_trim", args, func);
+            true
+        }
+        "__string_to_upper" => {
+            emit_string_ptr_to_ptr(out, dest.as_deref(), "tyra_string_to_upper", args, func);
+            true
+        }
+        "__string_to_lower" => {
+            emit_string_ptr_to_ptr(out, dest.as_deref(), "tyra_string_to_lower", args, func);
+            true
+        }
+        "__string_contains" => {
+            emit_string_ptr2_to_bool(out, dest.as_deref(), "tyra_string_contains", args, func);
+            true
+        }
+        "__string_starts_with" => {
+            emit_string_ptr2_to_bool(out, dest.as_deref(), "tyra_string_starts_with", args, func);
+            true
+        }
+        "__string_ends_with" => {
+            emit_string_ptr2_to_bool(out, dest.as_deref(), "tyra_string_ends_with", args, func);
+            true
+        }
+        "__string_parse_int" => {
+            emit_string_ptr_to_i64(out, dest.as_deref(), "tyra_string_parse_int", args, func);
+            true
+        }
+        "__string_parse_errno" => {
+            let d = dest.as_deref().unwrap_or("_string_parse_errno");
+            writeln!(out, "  %{d}.i32 = call i32 @tyra_string_parse_errno()").unwrap();
+            writeln!(out, "  %{d} = sext i32 %{d}.i32 to i64").unwrap();
+            true
+        }
         "sys__exit" => {
             // §17.1: core.sys.exit(_ code: Int) -> Never
             if let Some(arg) = args.first() {
@@ -611,6 +654,77 @@ fn emit_http_server_listen(
     )
     .unwrap();
     writeln!(out, "  %{d} = sext i32 %{d}.i32 to i64").unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// §17.3.4: string stdlib emit helpers. All operate on ptr-typed String
+// operands and either return a primitive (i64/bool) or a new ptr.
+// ---------------------------------------------------------------------------
+
+fn emit_string_ptr_to_i64(
+    out: &mut String,
+    dest: Option<&str>,
+    callee: &str,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_string");
+    let s = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    writeln!(out, "  %{d} = call i64 @{callee}(ptr {s})").unwrap();
+}
+
+fn emit_string_ptr_to_ptr(
+    out: &mut String,
+    dest: Option<&str>,
+    callee: &str,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_string");
+    let s = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    writeln!(out, "  %{d} = call ptr @{callee}(ptr {s})").unwrap();
+}
+
+fn emit_string_ptr_to_bool(
+    out: &mut String,
+    dest: Option<&str>,
+    callee: &str,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_string");
+    let s = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    writeln!(out, "  %{d}.i32 = call i32 @{callee}(ptr {s})").unwrap();
+    writeln!(out, "  %{d} = icmp ne i32 %{d}.i32, 0").unwrap();
+}
+
+fn emit_string_ptr2_to_bool(
+    out: &mut String,
+    dest: Option<&str>,
+    callee: &str,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_string");
+    let a = args
+        .first()
+        .map(|x| operand_ref(x, func))
+        .unwrap_or_else(|| "null".into());
+    let b = args
+        .get(1)
+        .map(|x| operand_ref(x, func))
+        .unwrap_or_else(|| "null".into());
+    writeln!(out, "  %{d}.i32 = call i32 @{callee}(ptr {a}, ptr {b})").unwrap();
+    writeln!(out, "  %{d} = icmp ne i32 %{d}.i32, 0").unwrap();
 }
 
 /// parse::<Int>(str) -> Option<Int>

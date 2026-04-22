@@ -1,0 +1,67 @@
+# stdlib/string.tyra — Tier 2 string module (§17.3.4).
+#
+# v0.1 API (frozen):
+#   string.len(s)                    -> Int        (UTF-8 byte length)
+#   string.is_empty(s)               -> Bool
+#   string.trim(s)                   -> String     (ASCII whitespace only)
+#   string.to_upper(s)               -> String     (ASCII only)
+#   string.to_lower(s)               -> String     (ASCII only)
+#   string.contains(s, needle)       -> Bool
+#   string.starts_with(s, prefix)    -> Bool
+#   string.ends_with(s, suffix)      -> Bool
+#   string.parse_int(s)              -> Option<Int>
+#
+# Backed by `__string_*` intrinsics (see runtime/src/stdlib_string.rs).
+#
+# v0.1 caveats:
+# - All length / index operations work in UTF-8 bytes, not Unicode code
+#   points. `len("あ")` returns 3.
+# - trim / to_upper / to_lower handle ASCII only. Non-ASCII whitespace
+#   (e.g. U+3000) is not trimmed; non-ASCII letters are left unchanged by
+#   the case-mapping functions.
+# - parse_int accepts optional leading `+`/`-` and ASCII decimal digits.
+#   Leading / trailing whitespace is rejected — trim first if needed.
+# - split / split_whitespace are intentionally deferred to a later phase
+#   (requires intrinsic → List<String> construction plumbing); §22.
+
+export fn len(_ s: String) -> Int
+  __string_len(s)
+end
+
+export fn is_empty(_ s: String) -> Bool
+  __string_is_empty(s)
+end
+
+export fn trim(_ s: String) -> String
+  __string_trim(s)
+end
+
+export fn to_upper(_ s: String) -> String
+  __string_to_upper(s)
+end
+
+export fn to_lower(_ s: String) -> String
+  __string_to_lower(s)
+end
+
+export fn contains(_ s: String, _ needle: String) -> Bool
+  __string_contains(s, needle)
+end
+
+export fn starts_with(_ s: String, _ prefix: String) -> Bool
+  __string_starts_with(s, prefix)
+end
+
+export fn ends_with(_ s: String, _ suffix: String) -> Bool
+  __string_ends_with(s, suffix)
+end
+
+export fn parse_int(_ s: String) -> Option<Int>
+  let n = __string_parse_int(s)
+  let code = __string_parse_errno()
+  if code == 0
+    Some(n)
+  else
+    None
+  end
+end

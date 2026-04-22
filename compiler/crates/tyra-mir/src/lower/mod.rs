@@ -241,6 +241,47 @@ pub fn lower(file: &SourceFile) -> Program {
     ctx.fn_return_types.insert("__io_eof".into(), Ty::Bool);
     ctx.fn_param_types.insert("__io_eof".into(), vec![]);
 
+    // §17.3.4: string stdlib intrinsics.
+    ctx.fn_return_types.insert("__string_len".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__string_len".into(), vec![Ty::String]);
+    ctx.fn_return_types
+        .insert("__string_is_empty".into(), Ty::Bool);
+    ctx.fn_param_types
+        .insert("__string_is_empty".into(), vec![Ty::String]);
+    ctx.fn_return_types
+        .insert("__string_trim".into(), Ty::String);
+    ctx.fn_param_types
+        .insert("__string_trim".into(), vec![Ty::String]);
+    ctx.fn_return_types
+        .insert("__string_to_upper".into(), Ty::String);
+    ctx.fn_param_types
+        .insert("__string_to_upper".into(), vec![Ty::String]);
+    ctx.fn_return_types
+        .insert("__string_to_lower".into(), Ty::String);
+    ctx.fn_param_types
+        .insert("__string_to_lower".into(), vec![Ty::String]);
+    ctx.fn_return_types
+        .insert("__string_contains".into(), Ty::Bool);
+    ctx.fn_param_types
+        .insert("__string_contains".into(), vec![Ty::String, Ty::String]);
+    ctx.fn_return_types
+        .insert("__string_starts_with".into(), Ty::Bool);
+    ctx.fn_param_types
+        .insert("__string_starts_with".into(), vec![Ty::String, Ty::String]);
+    ctx.fn_return_types
+        .insert("__string_ends_with".into(), Ty::Bool);
+    ctx.fn_param_types
+        .insert("__string_ends_with".into(), vec![Ty::String, Ty::String]);
+    ctx.fn_return_types
+        .insert("__string_parse_int".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__string_parse_int".into(), vec![Ty::String]);
+    ctx.fn_return_types
+        .insert("__string_parse_errno".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__string_parse_errno".into(), vec![]);
+
     // Collect function return types and store definitions for monomorphization
     for item in &file.items {
         if let Item::FnDef(f) = item {

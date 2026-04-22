@@ -185,6 +185,17 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare ptr @tyra_io_read_line()").unwrap();
     writeln!(out, "declare ptr @tyra_io_read_to_end()").unwrap();
     writeln!(out, "declare i32 @tyra_io_eof()").unwrap();
+    // §17.3.4: string stdlib. See runtime/src/stdlib_string.rs.
+    writeln!(out, "declare i64 @tyra_string_len(ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_string_is_empty(ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_string_trim(ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_string_to_upper(ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_string_to_lower(ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_string_contains(ptr, ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_string_starts_with(ptr, ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_string_ends_with(ptr, ptr)").unwrap();
+    writeln!(out, "declare i64 @tyra_string_parse_int(ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_string_parse_errno()").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
     writeln!(out, "declare void @exit(i32)").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();

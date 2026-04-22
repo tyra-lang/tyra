@@ -377,6 +377,47 @@ fn register_prelude(env: &mut TypeEnv) {
         "__io_eof".to_string(),
         Ty::Fn(vec![], Box::new(Ty::Bool)),
     );
+    // §17.3.4: string stdlib intrinsics. See stdlib/string.tyra.
+    env.define(
+        "__string_len".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__string_is_empty".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(Ty::Bool)),
+    );
+    env.define(
+        "__string_trim".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(Ty::String)),
+    );
+    env.define(
+        "__string_to_upper".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(Ty::String)),
+    );
+    env.define(
+        "__string_to_lower".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(Ty::String)),
+    );
+    env.define(
+        "__string_contains".to_string(),
+        Ty::Fn(vec![Ty::String, Ty::String], Box::new(Ty::Bool)),
+    );
+    env.define(
+        "__string_starts_with".to_string(),
+        Ty::Fn(vec![Ty::String, Ty::String], Box::new(Ty::Bool)),
+    );
+    env.define(
+        "__string_ends_with".to_string(),
+        Ty::Fn(vec![Ty::String, Ty::String], Box::new(Ty::Bool)),
+    );
+    env.define(
+        "__string_parse_int".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__string_parse_errno".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::Int)),
+    );
 
     // Prelude ADTs for §10.3 exhaustiveness checking.
     env.register_adt("Option".into(), vec!["Some".into(), "None".into()]);

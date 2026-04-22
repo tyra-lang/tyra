@@ -1210,7 +1210,7 @@ Operator correspondences:
 
 These modules are practically important but do not affect language semantics. Their APIs are defined separately in `docs/stdlib/`.
 
-- `string` — string operations (split, trim, contains, replace, etc.)
+- `string` — string operations (len, trim, contains, starts_with, etc.; v0.1 API frozen in §17.3.4)
 - `collections` — methods on `List`, `Map`, `Set` (sort_by, min_by, max_by, map, filter, etc.)
 - `float` — Float comparison functions (eq, approx_eq, is_nan, etc.; see ADR-0002)
 - `json` — JSON parsing (v0.1 API frozen in §17.3)
@@ -1227,10 +1227,11 @@ Principles:
 
 ### 17.3 Tier 2 APIs frozen in v0.1
 
-M10 freezes minimal APIs for `fs` and `json`, and M11 freezes
-`http.client` / `http.server`, as part of the language specification.
-The remaining Tier 2 modules (`string`, `collections`, `time`, `test`,
-`log`, `float`) will be finalized in later milestones.
+M10 freezes minimal APIs for `fs` and `json`, M11 freezes
+`http.client` / `http.server`, and a minimal `string` API is also
+frozen, as part of the language specification. The remaining Tier 2
+modules (`collections`, `time`, `test`, `log`, `float`) will be
+finalized in later milestones.
 
 #### 17.3.1 fs
 
@@ -1388,6 +1389,43 @@ end
 - `AppServer._handle` is a GC-managed opaque handle (§8.5). See
   `runtime/src/stdlib_http.rs` and `runtime/src/stdlib_http_server.rs`
   for implementation notes.
+
+#### 17.3.4 string
+
+Callers `import string` and use the module-qualified form
+`string.trim(...)` / `string.len(...)`. The declarations below are
+excerpted from `stdlib/string.tyra`.
+
+```tyra
+# stdlib/string.tyra
+export fn len(_ s: String) -> Int
+export fn is_empty(_ s: String) -> Bool
+export fn trim(_ s: String) -> String
+export fn to_upper(_ s: String) -> String
+export fn to_lower(_ s: String) -> String
+export fn contains(_ s: String, _ needle: String) -> Bool
+export fn starts_with(_ s: String, _ prefix: String) -> Bool
+export fn ends_with(_ s: String, _ suffix: String) -> Bool
+export fn parse_int(_ s: String) -> Option<Int>
+```
+
+- `len` returns the UTF-8 byte length, not the Unicode code-point
+  count (`len("あ")` is `3`). A code-point-based length is out of
+  scope for v0.1.
+- `trim` strips **ASCII whitespace only** from both ends (non-ASCII
+  whitespace such as U+3000 is not trimmed). `to_upper` / `to_lower`
+  case-map ASCII letters only; other characters pass through
+  unchanged. Full Unicode support is deferred to v0.2+.
+- `contains` / `starts_with` / `ends_with` perform byte-level
+  substring matching.
+- `parse_int` accepts an optional leading `+` / `-` followed by ASCII
+  decimal digits. Leading or trailing whitespace is rejected (trim
+  first if needed). Parse failure returns `None`. Radix selection is
+  deferred to v0.2+.
+- `split` / `split_whitespace` / `replace` / `join` are NOT part of
+  this freeze (they require intrinsic → `List<String>` construction
+  plumbing that lands in a later milestone). Tracked in §22 as
+  "extended `string` API".
 
 ---
 
@@ -1560,7 +1598,8 @@ The following are postponed for later specification:
 - structured concurrency
 - `break` / `continue`
 - Module-level initialization semantics (`let`/`mut` at module scope)
-- Detailed APIs for Tier 2 standard library modules (string, collections, time, test, log, float) — `fs`, `json`, and `http` are frozen in §17.3
+- Detailed APIs for Tier 2 standard library modules (collections, time, test, log, float) — `fs`, `json`, `http`, and `string` are frozen in §17.3
+- Extended `string` API (split, split_whitespace, replace, join, char_at, regex) — the nine functions frozen in §17.3.4 are the only v0.1 surface
 
 ---
 
