@@ -2,19 +2,43 @@
 
 Prompts observed: 100
 
-| language | generator | pass | check_fail | exec_fail | compile_fail | generator_fail | harness_error | skipped | total | pass% |
-| -------- | --------- | ---- | ---------- | --------- | ------------ | -------------- | ------------- | ------- | ----- | ----- |
-| crystal | claude | 96 | 1 | 0 | 3 | 0 | 0 | 0 | 100 | 96.0% |
-| crystal | codex | 10 | 0 | 0 | 2 | 28 | 0 | 0 | 40 | 25.0% |
-| gleam | claude | 37 | 0 | 6 | 57 | 0 | 0 | 0 | 100 | 37.0% |
-| gleam | codex | 6 | 0 | 0 | 5 | 29 | 0 | 0 | 40 | 15.0% |
-| ruby | claude | 99 | 1 | 0 | 0 | 0 | 0 | 0 | 100 | 99.0% |
-| ruby | codex | 20 | 0 | 1 | 0 | 28 | 0 | 0 | 49 | 40.8% |
-| tyra | claude | 0 | 0 | 0 | 100 | 0 | 0 | 0 | 100 | 0.0% |
-| tyra | codex | 3 | 2 | 0 | 13 | 31 | 0 | 0 | 49 | 6.1% |
-| tyra+spec | claude | 25 | 14 | 1 | 59 | 1 | 0 | 0 | 100 | 25.0% |
-| v | claude | 49 | 1 | 0 | 50 | 0 | 0 | 0 | 100 | 49.0% |
-| v | codex | 8 | 1 | 0 | 3 | 28 | 0 | 0 | 40 | 20.0% |
+Latest sweep: **Run 9** (`tyra+spec × claude × 100`, 2026-04-22) after
+shipping the v0.1 `string` stdlib (§17.3.4).
 
-`pass%` is computed against non-skipped runs so a missing compiler does not depress the headline number.
+| language  | generator | pass | check_fail | exec_fail | compile_fail | generator_fail | harness_error | skipped | total | pass% |
+| --------- | --------- | ---- | ---------- | --------- | ------------ | -------------- | ------------- | ------- | ----- | ----- |
+| tyra+spec | claude    | 32   | 8          | 0         | 52           | 8              | 0             | 0       | 100   | 32.0% |
 
+Historical passes on 100-prompt × tyra+spec × claude sweeps:
+
+| Run | date       | pass | compile_pass | top failure cluster                  |
+| --- | ---------- | ---- | ------------ | ------------------------------------ |
+| 5   | 2026-04-21 | 16   | 16           | `import string` rejected             |
+| 6   | 2026-04-21 | 14   | 15           | string method hallucinations         |
+| 7   | 2026-04-21 | 26   | 33           | mixed E0500 / E0104                  |
+| 8   | 2026-04-21 | 25   | 40           | E0104 (42) / E0200 (38) / E0101 (24) |
+| 9   | 2026-04-22 | 32   | 40           | E0500 (28) / E0104 (10) / E0200 (8)  |
+
+Run 9 error distribution (100 prompts):
+
+| code  | count | typical cause                                 |
+| ----- | ----- | --------------------------------------------- |
+| E0500 | 28    | LLVM codegen type mismatch / recursive ADT    |
+| E0104 | 10    | parser: reserved word used as identifier      |
+| E0200 | 8     | fabricated intrinsic (5× `__string_byte_at`) |
+| E0305 | 8     | —                                             |
+| E0100 | 4     | parser                                        |
+| E0304 | 4     | —                                             |
+| E0308 | 2     | type mismatch                                 |
+
+Run 8 → Run 9 deltas:
+
+- E0104 42 → 10 (−32)
+- E0200 38 → 8 (−30)
+- E0101 24 → 0 (−24)
+- E0308 15 → 2 (−13)
+- E0500 22 → 28 (+6; more programs survive earlier phases and now hit
+  the real codegen bugs)
+
+`pass%` is computed against non-skipped runs so a missing compiler does
+not depress the headline number.
