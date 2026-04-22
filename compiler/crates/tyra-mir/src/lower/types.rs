@@ -356,6 +356,12 @@ impl super::LowerCtx {
                     Some(Ty::String)
                 } else if self.generic_var_types.contains_key(name) {
                     self.generic_var_types.get(name).cloned()
+                } else if let Some(type_name) = self.var_types.get(name) {
+                    // value / data type binding (e.g. `acc: Account`).
+                    // Used by `.copy()` inference so `Ok(acc.copy(...))`
+                    // constructs Result<Account, E> rather than defaulting
+                    // to Result<Int, E>.
+                    Some(Ty::Named(type_name.clone()))
                 } else {
                     // Cannot determine type from tracking alone; caller should
                     // handle None (e.g., by falling back to function return type).
@@ -403,6 +409,16 @@ impl super::LowerCtx {
                         if self.struct_fields.contains_key(variant.as_str()) {
                             return Some(Ty::Named(variant.clone()));
                         }
+                    }
+                    // .copy() on a value type preserves the receiver's type
+                    // (§8.6). Without this, expressions like
+                    // `Ok(acc.copy(balance: acc.balance + amount))` fall
+                    // through to the Ty::Int fallback in the Ok/Err
+                    // constructor lowering and produce a bogus
+                    // `Result<Int, E>` — failing LLVM type check at the
+                    // insertvalue step.
+                    if variant == "copy" {
+                        return self.infer_expr_type(obj);
                     }
                     None
                 } else {

@@ -137,7 +137,7 @@ impl super::LowerCtx {
             // If no labels, assume positional order.
             let mut field_operands = Vec::with_capacity(field_defs.len());
             let mut used_args: std::collections::HashSet<usize> = std::collections::HashSet::new();
-            for (fname, _fty) in &field_defs {
+            for (fname, fty) in &field_defs {
                 // First try label match
                 let labeled = args.iter().enumerate().find(|(idx, a)| {
                     !used_args.contains(idx) && a.label.as_deref() == Some(fname)
@@ -158,7 +158,24 @@ impl super::LowerCtx {
                     }
                 };
                 if let Some(a) = resolved {
+                    // Propagate the declared field type so that a bare
+                    // `None` / `Some(x)` / `Ok(x)` / `Err(e)` argument
+                    // (whose type isn't observable from the expression
+                    // alone) is lowered as the expected Option<T> /
+                    // Result<T, E> rather than falling back to Option<Int>.
+                    // Uses `current_fn_return_type` as the one-slot hint,
+                    // matching the existing Ident "None" lookup path
+                    // (lower/expr.rs lower_expr ExprKind::Ident).
+                    let saved = self.current_fn_return_type.clone();
+                    if fty.is_option() || fty.is_result() {
+                        self.current_fn_return_type = fty.clone();
+                        // Register the generic type so its monomorphized
+                        // struct definition exists when the field store
+                        // emits.
+                        self.register_adt_type(fty);
+                    }
                     let val = self.lower_expr(&a.value, body);
+                    self.current_fn_return_type = saved;
                     field_operands.push(Operand::Var(val));
                 } else {
                     // Missing field — emit unit as placeholder

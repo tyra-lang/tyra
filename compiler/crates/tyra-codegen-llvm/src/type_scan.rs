@@ -357,11 +357,22 @@ fn scan_primitive_temps(
                 Ty::Bool => {
                     bool_temps.insert(dest.clone());
                 }
-                // TODO: Ty::Named(name) where name is a data type → add to string_temps.
-                // Required when List<DataType> (e.g. List<User>) is supported.
-                // Without it, ListGet on a data type element would fall through to i64
-                // and miss the ptr tracking, causing the same struct_temps/string_temps
-                // confusion fixed in the FieldGet/Call/AdtPayload paths above.
+                Ty::Named(n) => {
+                    // Data types (§8.6) are GC-heap ptrs; track as string_temps
+                    // so Copy / Store use the ptr round-trip path rather
+                    // than the default `add i64` that would smuggle the
+                    // pointer through an i64 register (for List<User> etc.).
+                    // Value types stay untracked here — pre_scan_struct_types
+                    // places them into struct_temps with the full type name
+                    // for llvm_type resolution in Copy / Store emit.
+                    if struct_map
+                        .get(n.as_str())
+                        .map(|i| i.is_data)
+                        .unwrap_or(false)
+                    {
+                        string_temps.insert(dest.clone());
+                    }
+                }
                 _ => {}
             },
             _ => {}
