@@ -19,6 +19,12 @@ pub struct StructDef {
     pub fields: Vec<(String, Ty)>,
     /// true = data type (reference semantics, §8.6); false = value type or ADT
     pub is_data: bool,
+    /// Per-field "is a recursive self-reference" flag. Only meaningful for
+    /// ADT structs. A true entry means the field's declared type is (or
+    /// transitively contains) this ADT itself; codegen emits such fields
+    /// as a boxed GC-heap `ptr` to avoid the otherwise-infinite LLVM
+    /// struct layout. The vector length matches `fields`.
+    pub recursive_fields: Vec<bool>,
 }
 
 /// A complete MIR program.

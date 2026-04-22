@@ -144,6 +144,7 @@ mod tests {
                     ("y".into(), tyra_types::Ty::Float),
                 ],
                 is_data: false,
+                recursive_fields: vec![],
             }],
         };
 
@@ -199,6 +200,7 @@ mod tests {
                     ("second".into(), tyra_types::Ty::Int),
                 ],
                 is_data: false,
+                recursive_fields: vec![],
             }],
         };
 
@@ -247,6 +249,7 @@ mod tests {
                     ("len".into(), tyra_types::Ty::Int),
                 ],
                 is_data: false,
+                recursive_fields: vec![],
             }],
         };
 
@@ -297,6 +300,7 @@ mod tests {
                     ("len".into(), tyra_types::Ty::Int),
                 ],
                 is_data: false,
+                recursive_fields: vec![],
             }],
         };
 
@@ -396,6 +400,7 @@ mod tests {
                 name: "User".into(),
                 fields: vec![("id".into(), tyra_types::Ty::Int)],
                 is_data: true,
+                recursive_fields: vec![],
             }],
         };
 
@@ -514,6 +519,7 @@ mod tests {
                 name: "User".into(),
                 fields: vec![("id".into(), tyra_types::Ty::Int)],
                 is_data: true,
+                recursive_fields: vec![],
             }],
         };
 

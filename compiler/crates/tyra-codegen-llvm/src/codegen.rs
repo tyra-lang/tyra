@@ -28,6 +28,11 @@ pub(crate) struct StructInfo {
     pub(crate) is_adt: bool,
     /// true = data type, heap-allocated and passed as ptr (§8.6 reference semantics).
     pub(crate) is_data: bool,
+    /// Per-field "recursive self-reference" flag for ADTs. A true entry
+    /// instructs codegen to emit the field as an opaque `ptr` (GC-heap
+    /// box) rather than the structural LLVM type. Non-ADT structs have
+    /// this vector zero-filled and can ignore it.
+    pub(crate) recursive_fields: Vec<bool>,
 }
 
 /// Generate LLVM IR text from a MIR program.
@@ -45,6 +50,7 @@ pub fn emit_llvm_ir(program: &Program) -> String {
                 field_types: sd.fields.iter().map(|(_, ty)| ty.clone()).collect(),
                 is_adt,
                 is_data: sd.is_data,
+                recursive_fields: sd.recursive_fields.clone(),
             };
             (sd.name.clone(), info)
         })
@@ -71,6 +77,14 @@ pub fn emit_llvm_ir(program: &Program) -> String {
                 // ADT tag field (field 0) is i8 in LLVM regardless of MIR type
                 if info.is_adt && i == 0 {
                     "i8".into()
+                } else if info
+                    .recursive_fields
+                    .get(i)
+                    .copied()
+                    .unwrap_or(false)
+                {
+                    // Recursive self-reference: boxed as GC-heap ptr.
+                    "ptr".into()
                 } else {
                     let ty_str = llvm_type_str(ty, &struct_map);
                     // Unit (void) is not valid as a struct field; use i64 placeholder

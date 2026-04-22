@@ -432,15 +432,26 @@ pub fn lower(file: &SourceFile) -> Program {
             name: name.clone(),
             fields: fields.clone(),
             is_data: ctx.data_types.contains(name),
+            recursive_fields: vec![false; fields.len()],
         })
         .collect();
 
-    // Add ADT struct defs (monomorphized Option/Result types)
+    // Add ADT struct defs (monomorphized Option/Result types).
+    //
+    // An ADT field is "recursive" when its declared type is the same
+    // named ADT as the enclosing struct. Recursive fields are boxed as
+    // GC-heap ptrs by codegen to avoid an otherwise-infinite LLVM
+    // struct layout (§8.5 recursive ADTs — Tree / Expr / IntList).
     for (name, fields) in &ctx.adt_struct_defs {
+        let recursive_fields: Vec<bool> = fields
+            .iter()
+            .map(|(_, ty)| matches!(ty, Ty::Named(n) if n == name))
+            .collect();
         struct_defs.push(crate::ir::StructDef {
             name: name.clone(),
             fields: fields.clone(),
             is_data: false, // ADTs are not data types
+            recursive_fields,
         });
     }
 
@@ -935,6 +946,30 @@ impl LowerCtx {
         }
     }
 
+    /// Lower a statement block and return the name of the last
+    /// expression's SSA value when the block's tail is a `Stmt::Expr`.
+    /// Captures the result of bare-Ident tails such as `if cond a else
+    /// b end` which would otherwise be invisible in the MIR instruction
+    /// stream (Ident lookups on non-alloca bindings don't emit an
+    /// instruction — they just return the binding name).
+    fn lower_block_collect_tail(
+        &mut self,
+        stmts: &[Stmt],
+        body: &mut Vec<Instruction>,
+    ) -> Option<String> {
+        let mut tail = None;
+        for (i, stmt) in stmts.iter().enumerate() {
+            if i + 1 == stmts.len() {
+                if let Stmt::Expr(s) = stmt {
+                    tail = Some(self.lower_expr(&s.expr, body));
+                    continue;
+                }
+            }
+            self.lower_stmt(stmt, body);
+        }
+        tail
+    }
+
     fn lower_if(&mut self, if_expr: &IfExpr, body: &mut Vec<Instruction>) -> String {
         let cond = self.lower_expr(&if_expr.condition, body);
         let then_label = self.fresh_label("then");
@@ -956,12 +991,17 @@ impl LowerCtx {
         // Then branch
         body.push(Instruction::Label(then_label));
         let then_start = body.len();
-        for stmt in &if_expr.then_body {
-            self.lower_stmt(stmt, body);
-        }
+        let then_tail = self.lower_block_collect_tail(&if_expr.then_body, body);
         if !range_terminates(body, then_start) {
             if !block_ends_with_assignment(body, then_start) {
-                if let Some(last) = self.last_temp_in_range(body, then_start) {
+                // Prefer the value returned by the last `Stmt::Expr` —
+                // that captures bare-Ident arms (`if c then a else b end`)
+                // which don't emit their own MIR instruction. Fall back to
+                // `last_temp_in_range` for statement-shaped arms whose
+                // tail happens to produce a MIR value (Const / BinOp /
+                // Call / etc.).
+                let last = then_tail.or_else(|| self.last_temp_in_range(body, then_start));
+                if let Some(last) = last {
                     body.push(Instruction::Store {
                         dest: result_slot.clone(),
                         value: Operand::Var(last),
@@ -976,20 +1016,19 @@ impl LowerCtx {
         // Else branch
         body.push(Instruction::Label(else_label));
         let else_start = body.len();
-        match &if_expr.else_body {
+        let else_tail: Option<String> = match &if_expr.else_body {
             Some(ElseBranch::Else(stmts)) => {
-                for stmt in stmts {
-                    self.lower_stmt(stmt, body);
-                }
+                self.lower_block_collect_tail(stmts, body)
             }
             Some(ElseBranch::ElseIf(inner)) => {
-                self.lower_if(inner, body);
+                Some(self.lower_if(inner, body))
             }
-            None => {}
-        }
+            None => None,
+        };
         if !range_terminates(body, else_start) {
             if !block_ends_with_assignment(body, else_start) {
-                if let Some(last) = self.last_temp_in_range(body, else_start) {
+                let last = else_tail.or_else(|| self.last_temp_in_range(body, else_start));
+                if let Some(last) = last {
                     body.push(Instruction::Store {
                         dest: result_slot.clone(),
                         value: Operand::Var(last),

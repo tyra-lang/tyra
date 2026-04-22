@@ -456,8 +456,20 @@ pub(crate) fn emit_instruction(
             // Fill remaining fields from the fields vector, zero-filling extras
             for fi in 1..num_fields {
                 let raw_ty = llvm_type_str(&info.field_types[fi], ctx.struct_map);
-                // Unit (void) is stored as i64 in struct fields
-                let field_ty_str = if raw_ty == "void" { "i64".into() } else { raw_ty };
+                let is_recursive = info
+                    .recursive_fields
+                    .get(fi)
+                    .copied()
+                    .unwrap_or(false);
+                // Unit (void) is stored as i64 in struct fields.
+                // Recursive self-reference is boxed as GC-heap ptr.
+                let field_ty_str = if is_recursive {
+                    "ptr".to_string()
+                } else if raw_ty == "void" {
+                    "i64".into()
+                } else {
+                    raw_ty
+                };
                 let is_last = fi + 1 == num_fields;
                 let step_dest = if is_last {
                     format!("%{dest}")
@@ -467,6 +479,55 @@ pub(crate) fn emit_instruction(
 
                 let field_idx = fi - 1; // fields[0] → struct field 1, etc.
                 if let Some(field_op) = fields.get(field_idx) {
+                    if is_recursive {
+                        // Box the incoming self-typed value onto the GC
+                        // heap and insert the resulting `ptr`. The
+                        // recursive field's MIR operand is a fully-formed
+                        // ADT struct SSA value; we allocate sizeof(struct)
+                        // bytes and store it, then pass the ptr to
+                        // insertvalue. Using a zero-literal (placeholder
+                        // for an absent field in a different variant)
+                        // yields a null ptr instead.
+                        if matches!(field_op, Operand::Const(Constant::Int(0))) {
+                            writeln!(
+                                out,
+                                "  {step_dest} = insertvalue {llvm_ty} {current}, ptr null, {fi}"
+                            )
+                            .unwrap();
+                        } else {
+                            let v = operand_ref(field_op, func);
+                            let size_gep = format!("%{dest}.r{fi}.sg");
+                            let size_int = format!("%{dest}.r{fi}.sz");
+                            let box_ptr = format!("%{dest}.r{fi}.box");
+                            writeln!(
+                                out,
+                                "  {size_gep} = getelementptr {llvm_ty}, ptr null, i32 1"
+                            )
+                            .unwrap();
+                            writeln!(
+                                out,
+                                "  {size_int} = ptrtoint ptr {size_gep} to i64"
+                            )
+                            .unwrap();
+                            writeln!(
+                                out,
+                                "  {box_ptr} = call ptr @GC_malloc(i64 {size_int})"
+                            )
+                            .unwrap();
+                            writeln!(
+                                out,
+                                "  store {llvm_ty} {v}, ptr {box_ptr}"
+                            )
+                            .unwrap();
+                            writeln!(
+                                out,
+                                "  {step_dest} = insertvalue {llvm_ty} {current}, ptr {box_ptr}, {fi}"
+                            )
+                            .unwrap();
+                        }
+                        current = step_dest;
+                        continue;
+                    }
                     // Check for zero placeholder on non-integer fields
                     let val = match field_op {
                         Operand::Const(Constant::Int(0)) if field_ty_str == "ptr" => {
@@ -541,11 +602,33 @@ pub(crate) fn emit_instruction(
             let info = &ctx.struct_map[type_name.as_str()];
             let llvm_ty = &info.llvm_name;
             let val = operand_ref(obj, func);
-            writeln!(
-                out,
-                "  %{dest} = extractvalue {llvm_ty} {val}, {field_index}"
-            )
-            .unwrap();
+            let idx = *field_index as usize;
+            let is_recursive = info
+                .recursive_fields
+                .get(idx)
+                .copied()
+                .unwrap_or(false);
+            if is_recursive {
+                // Extract the boxed `ptr` and load the referenced ADT
+                // struct back into an SSA value the rest of codegen treats
+                // uniformly with inline variants.
+                writeln!(
+                    out,
+                    "  %{dest}.box = extractvalue {llvm_ty} {val}, {field_index}"
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "  %{dest} = load {llvm_ty}, ptr %{dest}.box"
+                )
+                .unwrap();
+            } else {
+                writeln!(
+                    out,
+                    "  %{dest} = extractvalue {llvm_ty} {val}, {field_index}"
+                )
+                .unwrap();
+            }
         }
 
         // List instructions are handled by list_codegen delegation above
