@@ -348,8 +348,23 @@ pub fn lower(file: &SourceFile) -> Program {
         }
     }
 
-    // Lower top-level statements into an implicit main (§6.1)
+    // Lower top-level statements into an implicit main (§6.1).
+    // The per-function state populated by prior `lower_fn` calls (match
+    // pattern_vars, mut_vars, string/float trackers, etc.) must be
+    // reset first — otherwise a pattern-bound name from a user function
+    // (e.g. `when Rectangle(width: w, height: h)` inside `fn area`)
+    // leaks into top-level scope, and a `let w = ...` at main level is
+    // mis-classified as alloca-backed. Ident references then emit spurious
+    // `Load i64, ptr %w` against the already-Copy'd struct SSA, tripping
+    // E0500 `'%X' defined with type 'struct.Y' but expected 'ptr'`.
     if has_top_level_stmts {
+        ctx.var_types.clear();
+        ctx.float_vars.clear();
+        ctx.string_vars.clear();
+        ctx.mut_vars.clear();
+        ctx.pattern_vars.clear();
+        ctx.local_binding_names.clear();
+        ctx.generic_var_types.clear();
         ctx.deferred_exprs.clear();
         let mut body = Vec::new();
         for item in &file.items {

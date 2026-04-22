@@ -485,8 +485,23 @@ impl super::LowerCtx {
                                 .copied()
                                 .unwrap_or(1); // fallback: first payload slot
                             for (fi, pf) in fields.iter().enumerate() {
-                                // Skip wildcard bindings
-                                if pf.field_name == "_" {
+                                // §8.5: `when Card(last4)` is sugar for
+                                // `when Card(last4: last4)`. The parser
+                                // desugars so pf.field_name is the ADT
+                                // field name; the actual binding name
+                                // lives in pf.pattern (PatternKind::Ident)
+                                // and may differ from the field name, e.g.
+                                // `when Rectangle(width: w, height: h)`.
+                                // Extract the binding name here so the
+                                // Store target (and the string/float
+                                // tracking maps) key on the user binding,
+                                // not on the ADT field label.
+                                let bind_name = match &pf.pattern.kind {
+                                    tyra_ast::PatternKind::Ident(name) => name.clone(),
+                                    tyra_ast::PatternKind::Wildcard => continue,
+                                    _ => pf.field_name.clone(),
+                                };
+                                if bind_name == "_" {
                                     continue;
                                 }
                                 let field_index = (variant_offset + fi) as u32;
@@ -499,17 +514,17 @@ impl super::LowerCtx {
                                 });
                                 // Store into the pre-allocated alloca for this variable
                                 body.push(Instruction::Store {
-                                    dest: pf.field_name.clone(),
+                                    dest: bind_name.clone(),
                                     value: Operand::Var(payload.clone()),
                                 });
                                 // Track field type
                                 if let Some((_, fty)) = vfields.get(fi) {
                                     match fty {
                                         Ty::String => {
-                                            self.string_vars.insert(pf.field_name.clone());
+                                            self.string_vars.insert(bind_name.clone());
                                         }
                                         Ty::Float => {
-                                            self.float_vars.insert(pf.field_name.clone());
+                                            self.float_vars.insert(bind_name.clone());
                                         }
                                         _ => {}
                                     }

@@ -617,6 +617,30 @@ fn pre_scan_struct_types(
                     struct_temps.insert(dest.clone(), mono);
                 }
             }
+            // ListGet on an element that is itself a struct (nested List,
+            // Option/Result/user value-type) needs struct_temps tracking so
+            // downstream Copy / Store uses the struct-aware codegen path.
+            // Without this, `for row in matrix` (List<List<Int>>) lowered
+            // the outer Copy to `add i64` and tripped E0500.
+            // Data types remain `ptr` and are tracked by the caller scan.
+            Instruction::ListGet {
+                dest, elem_type, ..
+            } => match elem_type {
+                Ty::Named(n) => {
+                    if let Some(info) = struct_map.get(n.as_str()) {
+                        if !info.is_data {
+                            struct_temps.insert(dest.clone(), n.clone());
+                        }
+                    }
+                }
+                Ty::Generic(_, _) => {
+                    let mono = elem_type.monomorphized_name();
+                    if struct_map.contains_key(mono.as_str()) {
+                        struct_temps.insert(dest.clone(), mono);
+                    }
+                }
+                _ => {}
+            },
             Instruction::Copy { dest, source } => {
                 if let Some(stype) = struct_temps.get(source).cloned() {
                     struct_temps.insert(dest.clone(), stype);
