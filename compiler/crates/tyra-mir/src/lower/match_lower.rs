@@ -530,18 +530,24 @@ impl super::LowerCtx {
             let arm_terminates = super::range_terminates(body, arm_body_start);
 
             if !arm_terminates {
-                // Store arm result into the alloca'd slot (scan only this arm's instructions)
-                if let Some(last) = self.last_temp_in_range(body, arm_body_start) {
-                    if self.string_vars.contains(&last) {
-                        result_slot_is_string = true;
+                // Store arm result into the alloca'd slot (scan only this arm's instructions).
+                // Skip when the arm's tail is a user assignment (`x = e`) — Tyra spec
+                // makes that a Unit-typed statement, not the value of `e`. Spilling
+                // `e` into the match-result slot would mistype it and surface as
+                // E0500 in LLVM codegen (same reasoning as `lower_if`).
+                if !super::block_ends_with_assignment(body, arm_body_start) {
+                    if let Some(last) = self.last_temp_in_range(body, arm_body_start) {
+                        if self.string_vars.contains(&last) {
+                            result_slot_is_string = true;
+                        }
+                        if self.float_vars.contains(&last) {
+                            result_slot_is_float = true;
+                        }
+                        body.push(Instruction::Store {
+                            dest: result_slot.clone(),
+                            value: Operand::Var(last),
+                        });
                     }
-                    if self.float_vars.contains(&last) {
-                        result_slot_is_float = true;
-                    }
-                    body.push(Instruction::Store {
-                        dest: result_slot.clone(),
-                        value: Operand::Var(last),
-                    });
                 }
 
                 body.push(Instruction::Jump {

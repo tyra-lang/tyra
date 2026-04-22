@@ -840,11 +840,13 @@ impl LowerCtx {
             self.lower_stmt(stmt, body);
         }
         if !range_terminates(body, then_start) {
-            if let Some(last) = self.last_temp_in_range(body, then_start) {
-                body.push(Instruction::Store {
-                    dest: result_slot.clone(),
-                    value: Operand::Var(last),
-                });
+            if !block_ends_with_assignment(body, then_start) {
+                if let Some(last) = self.last_temp_in_range(body, then_start) {
+                    body.push(Instruction::Store {
+                        dest: result_slot.clone(),
+                        value: Operand::Var(last),
+                    });
+                }
             }
             body.push(Instruction::Jump {
                 label: end_label.clone(),
@@ -866,11 +868,13 @@ impl LowerCtx {
             None => {}
         }
         if !range_terminates(body, else_start) {
-            if let Some(last) = self.last_temp_in_range(body, else_start) {
-                body.push(Instruction::Store {
-                    dest: result_slot.clone(),
-                    value: Operand::Var(last),
-                });
+            if !block_ends_with_assignment(body, else_start) {
+                if let Some(last) = self.last_temp_in_range(body, else_start) {
+                    body.push(Instruction::Store {
+                        dest: result_slot.clone(),
+                        value: Operand::Var(last),
+                    });
+                }
             }
             body.push(Instruction::Jump {
                 label: end_label.clone(),
@@ -1021,6 +1025,42 @@ pub(crate) fn ast_binop_to_mir(op: BinOp, is_float: bool) -> MirBinOp {
 /// Returns true if the instruction range `body[start..]` already ends with a block
 /// terminator (Return, Jump, or BranchIf), so that the caller can skip emitting
 /// a redundant Store + Jump.
+/// True if the last value-producing instruction in `body[start..]` is an
+/// assignment-style `Store` — i.e. a store whose destination is a
+/// user-named binding (named identifier, not a compiler-generated `_tN`
+/// temp) and not the defer-activation flag reserved name `.defer_active_*`.
+///
+/// Used by `lower_if` / `lower_while` / match lowering to avoid spilling
+/// the RHS of an assignment into the block's result slot when the block
+/// actually evaluates to `Unit` (Tyra's spec: `x = e` is a statement of
+/// type `Unit`, not the value of `e`). Without this check, the if's
+/// result slot ends up holding whatever temp fed the Store — typically
+/// an i64 from `x = x + 1` — and clashes with a sibling arm whose
+/// tail is a Bool assignment (`done = true`). That mismatch surfaces in
+/// LLVM codegen as E0500 (`'%_tN' defined with type 'i64' but expected 'i1'`).
+pub(crate) fn block_ends_with_assignment(body: &[Instruction], start: usize) -> bool {
+    // Walk backwards skipping Jump/Label/Alloca bookkeeping to find the
+    // instruction that actually expresses the block's tail value.
+    for inst in body[start..].iter().rev() {
+        match inst {
+            Instruction::Jump { .. }
+            | Instruction::Label(_)
+            | Instruction::Alloca { .. } => continue,
+            Instruction::Store { dest, .. } => {
+                // A Store into a temp (`_t42`) is internal plumbing (e.g. a
+                // nested if's result-slot propagation); it is NOT a user
+                // assignment and should not Unit-ify the enclosing block.
+                // Similarly, the §12.3 defer activation flags are internal.
+                let is_temp = dest.starts_with("_t");
+                let is_defer_flag = dest.starts_with(".defer_active_");
+                return !is_temp && !is_defer_flag;
+            }
+            _ => return false,
+        }
+    }
+    false
+}
+
 pub(crate) fn range_terminates(body: &[Instruction], start: usize) -> bool {
     body[start..].iter().rev().find(|i| {
         !matches!(i, Instruction::Alloca { .. } | Instruction::Label(_))
