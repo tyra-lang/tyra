@@ -367,6 +367,46 @@ pub fn lower(file: &SourceFile) -> Program {
         ctx.generic_var_types.clear();
         ctx.deferred_exprs.clear();
         let mut body = Vec::new();
+        // Hoist pattern-binding allocas (see lower_fn for rationale).
+        let top_stmts: Vec<Stmt> = file
+            .items
+            .iter()
+            .filter_map(|item| {
+                if let Item::Stmt(s) = item {
+                    Some(s.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let mut pattern_bindings: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        collect_pattern_bindings_in_stmts(&top_stmts, &mut pattern_bindings);
+        let mut let_counts: std::collections::HashMap<String, u32> =
+            std::collections::HashMap::new();
+        collect_let_binding_counts_in_stmts(&top_stmts, &mut let_counts);
+        for name in &pattern_bindings {
+            *let_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+        for name in &pattern_bindings {
+            if ctx.mut_vars.contains(name) {
+                continue;
+            }
+            body.push(Instruction::Alloca {
+                dest: name.clone(),
+            });
+            ctx.pattern_vars.insert(name.clone());
+            ctx.local_binding_names.insert(name.clone());
+        }
+        for (name, count) in &let_counts {
+            if *count > 1 && !ctx.pattern_vars.contains(name) && !ctx.mut_vars.contains(name) {
+                body.push(Instruction::Alloca {
+                    dest: name.clone(),
+                });
+                ctx.pattern_vars.insert(name.clone());
+                ctx.local_binding_names.insert(name.clone());
+            }
+        }
         for item in &file.items {
             if let Item::Stmt(s) = item {
                 ctx.lower_stmt(s, &mut body);
@@ -655,6 +695,52 @@ impl LowerCtx {
 
         let mut body = Vec::new();
 
+        // Pre-emit allocas for every match-pattern binding reachable in
+        // this function. Placing them in the entry block guarantees they
+        // dominate every arm (and any later `let`/`mut` shadow). Without
+        // the hoist, a pattern binding placed inside a conditional arm
+        // fails to dominate sibling matches or subsequent lets that reuse
+        // the name, producing E0500 (`multiple definition of local value`
+        // / `Instruction does not dominate all uses`). See
+        // `collect_pattern_bindings_in_stmts`.
+        let mut pattern_bindings: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        collect_pattern_bindings_in_stmts(&f.body, &mut pattern_bindings);
+        let mut let_counts: std::collections::HashMap<String, u32> =
+            std::collections::HashMap::new();
+        collect_let_binding_counts_in_stmts(&f.body, &mut let_counts);
+        // Param names and prior pattern collisions already count as one
+        // "introduction" of the name, so a single later `let` of the same
+        // name is also a collision requiring the hoisted alloca.
+        for (name, _) in &params {
+            *let_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+        for name in &pattern_bindings {
+            *let_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+        for name in &pattern_bindings {
+            if self.mut_vars.contains(name) {
+                continue;
+            }
+            body.push(Instruction::Alloca {
+                dest: name.clone(),
+            });
+            self.pattern_vars.insert(name.clone());
+            self.local_binding_names.insert(name.clone());
+        }
+        // Hoist alloca slots for `let` names introduced more than once.
+        // We reuse `pattern_vars` as the carrier so `lower_expr` knows to
+        // emit a Load on subsequent Ident references.
+        for (name, count) in &let_counts {
+            if *count > 1 && !self.pattern_vars.contains(name) && !self.mut_vars.contains(name) {
+                body.push(Instruction::Alloca {
+                    dest: name.clone(),
+                });
+                self.pattern_vars.insert(name.clone());
+                self.local_binding_names.insert(name.clone());
+            }
+        }
+
         // spec §12.3 (M-defer-fix): pre-allocate one bool-backed activation
         // flag per `defer` statement in the function body (including nested
         // if/while/for/match scopes). Flags default to false; a defer
@@ -752,10 +838,29 @@ impl LowerCtx {
                 if let Some(trt) = self.task_result_types.get(&val).cloned() {
                     self.task_result_types.insert(s.name.clone(), trt);
                 }
-                body.push(Instruction::Copy {
-                    dest: s.name.clone(),
-                    source: val,
-                });
+                // If the name is already backed by an alloca (from a prior
+                // match pattern binding or a prior `mut`), reuse the slot
+                // via Store instead of emitting a fresh SSA Copy. Tyra's
+                // match pattern variables are tracked function-wide today
+                // (not per-arm), so a `let v = foo()` after a sibling match
+                // that bound `v` would otherwise collide on the `%v` SSA
+                // name and trip LLVM's "multiple definition of local value"
+                // verifier. Semantically equivalent: subsequent Ident("v")
+                // lookups already Load from the alloca for pattern_vars /
+                // mut_vars (see lower/expr.rs:82).
+                if self.pattern_vars.contains(&s.name)
+                    || self.mut_vars.contains(&s.name)
+                {
+                    body.push(Instruction::Store {
+                        dest: s.name.clone(),
+                        value: Operand::Var(val),
+                    });
+                } else {
+                    body.push(Instruction::Copy {
+                        dest: s.name.clone(),
+                        source: val,
+                    });
+                }
             }
             Stmt::Mut(s) => {
                 self.local_binding_names.insert(s.name.clone());
@@ -1149,6 +1254,202 @@ fn count_defer_sites_in_expr(e: &Expr) -> usize {
         // Lambdas: defers inside a lambda belong to that frame; skip.
         ExprKind::Lambda(_) => 0,
         _ => 0,
+    }
+}
+
+// --- Binding-name pre-scan ---
+//
+// Match pattern variables must be alloca'd at a program point that
+// dominates every arm that might bind them AND every code site that
+// reads them. The naive strategy of emitting the alloca at the match's
+// entry block fails when the enclosing match is itself nested inside
+// an `if` / `while` / `for` branch: the alloca sits in a non-dominating
+// block, so a sibling branch that also binds the same pattern name — or
+// a later `let` that shadows it — gets `use of undefined value` /
+// `Instruction does not dominate all uses` from the LLVM verifier.
+//
+// The same failure mode applies to a user writing `let n = foo()`
+// twice in the same function (e.g. once inside a `while` body, once
+// after the loop): each Copy emits `%n = add i64 …, 0`, which LLVM
+// rejects as `multiple definition of local value named 'n'`. Tyra's
+// surface syntax treats those two `let`s as distinct scope bindings,
+// but the current MIR name scheme reuses the user identifier directly.
+//
+// We side-step both by pre-scanning the whole function body and
+// emitting an alloca in the entry block for every name that is either
+// (a) introduced by a match pattern, or (b) introduced by `let`/`mut`
+// more than once. `pre_alloca_pattern_vars` then finds them already in
+// `pattern_vars` and no-ops, and `Stmt::Let` / `Stmt::Mut` emit a
+// Store into the hoisted alloca instead of the usual Copy.
+
+pub(crate) fn collect_pattern_bindings_in_stmts(
+    stmts: &[Stmt],
+    out: &mut std::collections::HashSet<String>,
+) {
+    for s in stmts {
+        collect_pattern_bindings_in_stmt(s, out);
+    }
+}
+
+/// Count every `let` / `mut` introduction of each name in the statement
+/// tree. Used alongside pattern bindings to detect the "same identifier
+/// bound twice in the same function" case that would otherwise emit
+/// two `%name = …` SSA definitions.
+pub(crate) fn collect_let_binding_counts_in_stmts(
+    stmts: &[Stmt],
+    out: &mut std::collections::HashMap<String, u32>,
+) {
+    for s in stmts {
+        collect_let_binding_counts_in_stmt(s, out);
+    }
+}
+
+fn collect_let_binding_counts_in_stmt(
+    s: &Stmt,
+    out: &mut std::collections::HashMap<String, u32>,
+) {
+    match s {
+        Stmt::Let(l) => {
+            *out.entry(l.name.clone()).or_insert(0) += 1;
+            collect_let_binding_counts_in_expr(&l.value, out);
+        }
+        Stmt::Mut(m) => {
+            *out.entry(m.name.clone()).or_insert(0) += 1;
+            collect_let_binding_counts_in_expr(&m.value, out);
+        }
+        Stmt::Return(r) => {
+            if let Some(v) = &r.value {
+                collect_let_binding_counts_in_expr(v, out);
+            }
+        }
+        Stmt::Expr(e) => collect_let_binding_counts_in_expr(&e.expr, out),
+        Stmt::Defer(d) => collect_let_binding_counts_in_expr(&d.expr, out),
+    }
+}
+
+fn collect_let_binding_counts_in_expr(
+    e: &Expr,
+    out: &mut std::collections::HashMap<String, u32>,
+) {
+    match &e.kind {
+        ExprKind::If(i) => {
+            collect_let_binding_counts_in_expr(&i.condition, out);
+            collect_let_binding_counts_in_stmts(&i.then_body, out);
+            if let Some(eb) = &i.else_body {
+                collect_let_binding_counts_in_else(eb, out);
+            }
+        }
+        ExprKind::Match(m) => {
+            collect_let_binding_counts_in_expr(&m.subject, out);
+            for arm in &m.arms {
+                collect_let_binding_counts_in_stmts(&arm.body, out);
+            }
+        }
+        ExprKind::While(w) => {
+            collect_let_binding_counts_in_expr(&w.condition, out);
+            collect_let_binding_counts_in_stmts(&w.body, out);
+        }
+        ExprKind::For(f) => {
+            collect_let_binding_counts_in_expr(&f.iter, out);
+            collect_let_binding_counts_in_stmts(&f.body, out);
+        }
+        ExprKind::Lambda(_) => {}
+        _ => {}
+    }
+}
+
+fn collect_let_binding_counts_in_else(
+    eb: &ElseBranch,
+    out: &mut std::collections::HashMap<String, u32>,
+) {
+    match eb {
+        ElseBranch::Else(stmts) => collect_let_binding_counts_in_stmts(stmts, out),
+        ElseBranch::ElseIf(i) => {
+            collect_let_binding_counts_in_expr(&i.condition, out);
+            collect_let_binding_counts_in_stmts(&i.then_body, out);
+            if let Some(inner) = &i.else_body {
+                collect_let_binding_counts_in_else(inner, out);
+            }
+        }
+    }
+}
+
+fn collect_pattern_bindings_in_stmt(s: &Stmt, out: &mut std::collections::HashSet<String>) {
+    match s {
+        Stmt::Let(l) => collect_pattern_bindings_in_expr(&l.value, out),
+        Stmt::Mut(m) => collect_pattern_bindings_in_expr(&m.value, out),
+        Stmt::Return(r) => {
+            if let Some(v) = &r.value {
+                collect_pattern_bindings_in_expr(v, out);
+            }
+        }
+        Stmt::Expr(e) => collect_pattern_bindings_in_expr(&e.expr, out),
+        Stmt::Defer(d) => collect_pattern_bindings_in_expr(&d.expr, out),
+    }
+}
+
+fn collect_pattern_bindings_in_expr(e: &Expr, out: &mut std::collections::HashSet<String>) {
+    match &e.kind {
+        ExprKind::If(i) => {
+            collect_pattern_bindings_in_expr(&i.condition, out);
+            collect_pattern_bindings_in_stmts(&i.then_body, out);
+            if let Some(else_branch) = &i.else_body {
+                collect_pattern_bindings_in_else(else_branch, out);
+            }
+        }
+        ExprKind::Match(m) => {
+            collect_pattern_bindings_in_expr(&m.subject, out);
+            for arm in &m.arms {
+                collect_pattern_bindings_in_pattern(&arm.pattern.kind, out);
+                collect_pattern_bindings_in_stmts(&arm.body, out);
+            }
+        }
+        ExprKind::While(w) => {
+            collect_pattern_bindings_in_expr(&w.condition, out);
+            collect_pattern_bindings_in_stmts(&w.body, out);
+        }
+        ExprKind::For(f) => {
+            collect_pattern_bindings_in_expr(&f.iter, out);
+            collect_pattern_bindings_in_stmts(&f.body, out);
+        }
+        // Lambdas get their own function frame; skip.
+        ExprKind::Lambda(_) => {}
+        _ => {}
+    }
+}
+
+fn collect_pattern_bindings_in_else(
+    eb: &ElseBranch,
+    out: &mut std::collections::HashSet<String>,
+) {
+    match eb {
+        ElseBranch::Else(stmts) => collect_pattern_bindings_in_stmts(stmts, out),
+        ElseBranch::ElseIf(i) => {
+            collect_pattern_bindings_in_expr(&i.condition, out);
+            collect_pattern_bindings_in_stmts(&i.then_body, out);
+            if let Some(inner) = &i.else_body {
+                collect_pattern_bindings_in_else(inner, out);
+            }
+        }
+    }
+}
+
+fn collect_pattern_bindings_in_pattern(
+    p: &PatternKind,
+    out: &mut std::collections::HashSet<String>,
+) {
+    if let PatternKind::Constructor(_, fields) = p {
+        for pf in fields {
+            match &pf.pattern.kind {
+                PatternKind::Ident(name) if name != "_" => {
+                    out.insert(name.clone());
+                }
+                PatternKind::Constructor(_, _) => {
+                    collect_pattern_bindings_in_pattern(&pf.pattern.kind, out);
+                }
+                _ => {}
+            }
+        }
     }
 }
 
