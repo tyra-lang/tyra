@@ -43,7 +43,7 @@ pub fn parse_body(ts: &mut TokenStream, report: &mut Report) -> Vec<Stmt> {
 
 fn parse_let(ts: &mut TokenStream, report: &mut Report) -> Stmt {
     let start = ts.advance().span; // consume 'let'
-    let name = ts.expect_ident(report).unwrap_or_default();
+    let name = ts.expect_ident_or_field_keyword(report).unwrap_or_default();
     let type_annotation = parse_optional_type_annotation(ts, report);
     ts.expect(&TokenKind::Eq, report);
     let value = parse_expr(ts, report);
@@ -59,7 +59,7 @@ fn parse_let(ts: &mut TokenStream, report: &mut Report) -> Stmt {
 
 fn parse_mut(ts: &mut TokenStream, report: &mut Report) -> Stmt {
     let start = ts.advance().span; // consume 'mut'
-    let name = ts.expect_ident(report).unwrap_or_default();
+    let name = ts.expect_ident_or_field_keyword(report).unwrap_or_default();
     let type_annotation = parse_optional_type_annotation(ts, report);
     ts.expect(&TokenKind::Eq, report);
     let value = parse_expr(ts, report);

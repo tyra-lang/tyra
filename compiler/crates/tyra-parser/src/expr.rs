@@ -277,6 +277,26 @@ fn parse_prefix(ts: &mut TokenStream, report: &mut Report) -> Expr {
             }
         }
 
+        // Contextual keywords usable as identifiers in expression
+        // position. `value` / `data` / `type` / `trait` / `impl` are
+        // reserved at the top level for declarations (§5.2 / §8.5) but
+        // have no expression-level role, so accepting them as Ident here
+        // lets AI-generated code like `let value = ...; println("#{value}")`
+        // parse. `async` / `await` / `spawn` / `mut` / `import` / `export`
+        // / `defer` are NOT included — they have statement/expression
+        // syntactic roles (e.g. `t.await`, `spawn f()`).
+        TokenKind::Value | TokenKind::Data | TokenKind::Type
+        | TokenKind::Trait | TokenKind::Impl => {
+            let name = crate::token_stream::keyword_as_ident(ts.peek())
+                .map(str::to_string)
+                .unwrap_or_default();
+            ts.advance();
+            Expr {
+                kind: ExprKind::Ident(name),
+                span: start,
+            }
+        }
+
         // Unary minus: -expr
         TokenKind::Minus => {
             ts.advance();
