@@ -946,22 +946,33 @@ impl LowerCtx {
         }
     }
 
-    /// Lower a statement block and return the name of the last
-    /// expression's SSA value when the block's tail is a `Stmt::Expr`.
-    /// Captures the result of bare-Ident tails such as `if cond a else
-    /// b end` which would otherwise be invisible in the MIR instruction
-    /// stream (Ident lookups on non-alloca bindings don't emit an
-    /// instruction — they just return the binding name).
+    /// Lower a statement block. Returns:
+    /// - `BlockTail::Value(name)` — trailing `Stmt::Expr` lowered to a
+    ///   usable SSA temp (including bare-Ident arms whose value only
+    ///   exists in `lower_expr`'s return, not in the MIR stream).
+    /// - `BlockTail::Unit` — trailing `Stmt::Expr` is Unit-typed (a call
+    ///   to a void-returning fn, or a print-family sink). The enclosing
+    ///   if/match MUST NOT spill any value; the call's MIR dest is
+    ///   never assigned in codegen (066-square-list E0500 class).
+    /// - `BlockTail::Fallback` — no trailing `Stmt::Expr` (block ends on
+    ///   a Let/Mut/Defer/Return, or is empty). Caller may fall back to
+    ///   `last_temp_in_range` if it cares about value-shaped arms.
     fn lower_block_collect_tail(
         &mut self,
         stmts: &[Stmt],
         body: &mut Vec<Instruction>,
-    ) -> Option<String> {
-        let mut tail = None;
+    ) -> BlockTail {
+        let mut tail = BlockTail::Fallback;
         for (i, stmt) in stmts.iter().enumerate() {
             if i + 1 == stmts.len() {
                 if let Stmt::Expr(s) = stmt {
-                    tail = Some(self.lower_expr(&s.expr, body));
+                    let suppress = is_unit_call_expr(&s.expr, &self.fn_return_types);
+                    let val = self.lower_expr(&s.expr, body);
+                    tail = if suppress {
+                        BlockTail::Unit
+                    } else {
+                        BlockTail::Value(val)
+                    };
                     continue;
                 }
             }
@@ -994,13 +1005,11 @@ impl LowerCtx {
         let then_tail = self.lower_block_collect_tail(&if_expr.then_body, body);
         if !range_terminates(body, then_start) {
             if !block_ends_with_assignment(body, then_start) {
-                // Prefer the value returned by the last `Stmt::Expr` —
-                // that captures bare-Ident arms (`if c then a else b end`)
-                // which don't emit their own MIR instruction. Fall back to
-                // `last_temp_in_range` for statement-shaped arms whose
-                // tail happens to produce a MIR value (Const / BinOp /
-                // Call / etc.).
-                let last = then_tail.or_else(|| self.last_temp_in_range(body, then_start));
+                let last = match then_tail {
+                    BlockTail::Value(v) => Some(v),
+                    BlockTail::Unit => None,
+                    BlockTail::Fallback => self.last_temp_in_range(body, then_start),
+                };
                 if let Some(last) = last {
                     body.push(Instruction::Store {
                         dest: result_slot.clone(),
@@ -1016,18 +1025,22 @@ impl LowerCtx {
         // Else branch
         body.push(Instruction::Label(else_label));
         let else_start = body.len();
-        let else_tail: Option<String> = match &if_expr.else_body {
+        let else_tail: BlockTail = match &if_expr.else_body {
             Some(ElseBranch::Else(stmts)) => {
                 self.lower_block_collect_tail(stmts, body)
             }
             Some(ElseBranch::ElseIf(inner)) => {
-                Some(self.lower_if(inner, body))
+                BlockTail::Value(self.lower_if(inner, body))
             }
-            None => None,
+            None => BlockTail::Fallback,
         };
         if !range_terminates(body, else_start) {
             if !block_ends_with_assignment(body, else_start) {
-                let last = else_tail.or_else(|| self.last_temp_in_range(body, else_start));
+                let last = match else_tail {
+                    BlockTail::Value(v) => Some(v),
+                    BlockTail::Unit => None,
+                    BlockTail::Fallback => self.last_temp_in_range(body, else_start),
+                };
                 if let Some(last) = last {
                     body.push(Instruction::Store {
                         dest: result_slot.clone(),
@@ -1153,6 +1166,47 @@ impl LowerCtx {
 }
 
 /// Convert AST binary op to MIR op, selecting Int or Float variant.
+/// Outcome of `LowerCtx::lower_block_collect_tail`. Lets the caller tell
+/// "block produced no usable tail value, but NOT because of lack of
+/// inspection" (`Unit`) from "no Stmt::Expr tail at all, fall back to
+/// MIR-scan" (`Fallback`).
+#[derive(Debug, Clone)]
+pub(crate) enum BlockTail {
+    Value(String),
+    Unit,
+    Fallback,
+}
+
+/// Return true when `expr` is a function call whose callee is known to
+/// return `Unit` — either via a registered entry in `fn_return_types` or
+/// because the callee is a prelude sink (`println`, `panic`, etc.).
+///
+/// Used by `lower_block_collect_tail` to suppress propagating a
+/// void-returning call's MIR dest as the enclosing block's tail value.
+/// Codegen emits `call void @f(...)` for such calls (no `%dest = ...`
+/// SSA assignment), so reporting the dest up to `lower_if` / `lower_match`
+/// would spill an undefined SSA value into the result slot and trip
+/// LLVM's `use of undefined value` verifier — the 066-square-list class
+/// of E0500.
+pub(crate) fn is_unit_call_expr(
+    expr: &Expr,
+    fn_return_types: &std::collections::HashMap<String, Ty>,
+) -> bool {
+    let ExprKind::Call(callee, _args) = &expr.kind else {
+        return false;
+    };
+    let ExprKind::Ident(fname) = &callee.kind else {
+        return false;
+    };
+    if matches!(
+        fname.as_str(),
+        "print" | "println" | "eprint" | "eprintln" | "panic"
+    ) {
+        return true;
+    }
+    matches!(fn_return_types.get(fname), Some(Ty::Unit))
+}
+
 pub(crate) fn ast_binop_to_mir(op: BinOp, is_float: bool) -> MirBinOp {
     match (op, is_float) {
         (BinOp::Add, false) => MirBinOp::AddInt,

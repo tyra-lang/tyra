@@ -535,9 +535,14 @@ impl super::LowerCtx {
                 }
             }
 
-            for stmt in &arm.body {
-                self.lower_stmt(stmt, body);
-            }
+            // Lower the arm body via the block-tail helper so the trailing
+            // `Stmt::Expr` — including bare-Ident tails like `when Some(x) x`
+            // — gets its value captured from `lower_expr`'s return rather
+            // than from a scan of the emitted MIR. The helper also drops
+            // the tail when it's a Unit-returning call (see
+            // `is_unit_call_expr`) so the 066-square-list class of
+            // void-recursive arms doesn't spill an undefined SSA value.
+            let tail = self.lower_block_collect_tail(&arm.body, body);
 
             // If the arm body already ends with a block terminator (Return, Jump,
             // or BranchIf from a nested match/if), skip Store/Jump to avoid
@@ -545,13 +550,18 @@ impl super::LowerCtx {
             let arm_terminates = super::range_terminates(body, arm_body_start);
 
             if !arm_terminates {
-                // Store arm result into the alloca'd slot (scan only this arm's instructions).
+                // Store arm result into the alloca'd slot.
                 // Skip when the arm's tail is a user assignment (`x = e`) — Tyra spec
-                // makes that a Unit-typed statement, not the value of `e`. Spilling
-                // `e` into the match-result slot would mistype it and surface as
-                // E0500 in LLVM codegen (same reasoning as `lower_if`).
+                // makes that a Unit-typed statement, not the value of `e`.
                 if !super::block_ends_with_assignment(body, arm_body_start) {
-                    if let Some(last) = self.last_temp_in_range(body, arm_body_start) {
+                    let last = match tail {
+                        super::BlockTail::Value(v) => Some(v),
+                        super::BlockTail::Unit => None,
+                        super::BlockTail::Fallback => {
+                            self.last_temp_in_range(body, arm_body_start)
+                        }
+                    };
+                    if let Some(last) = last {
                         if self.string_vars.contains(&last) {
                             result_slot_is_string = true;
                         }
