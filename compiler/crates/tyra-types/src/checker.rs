@@ -1207,22 +1207,43 @@ fn check_if(if_expr: &IfExpr, env: &mut TypeEnv, report: &mut Report) -> Ty {
     for stmt in &if_expr.then_body {
         check_stmt(stmt, env, report);
     }
+    let then_ty = if_expr
+        .then_body
+        .last()
+        .map(|s| stmt_type(s, env, report))
+        .unwrap_or(Ty::Unit);
     env.pop();
 
-    match &if_expr.else_body {
+    let else_ty = match &if_expr.else_body {
         Some(ElseBranch::Else(body)) => {
             env.push();
             for stmt in body {
                 check_stmt(stmt, env, report);
             }
+            let ty = body
+                .last()
+                .map(|s| stmt_type(s, env, report))
+                .unwrap_or(Ty::Unit);
             env.pop();
+            ty
         }
-        Some(ElseBranch::ElseIf(inner)) => {
-            check_if(inner, env, report);
+        Some(ElseBranch::ElseIf(inner)) => check_if(inner, env, report),
+        None => Ty::Unit,
+    };
+
+    // Unify arm types: if both arms agree (or one is Never/Error), use
+    // that type; otherwise fall back to Ty::Unit for a statement-shaped
+    // if. Without this, `let b = if c then 1 else 2 end` was reported as
+    // Unit and subsequent `b + 1` tripped E0305.
+    if types_compatible(&then_ty, &else_ty) {
+        if then_ty.is_never() || then_ty.is_error() {
+            else_ty
+        } else {
+            then_ty
         }
-        None => {}
+    } else {
+        Ty::Unit
     }
-    Ty::Unit // if/else type unification deferred
 }
 
 /// Infer binary operator result type.
