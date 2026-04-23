@@ -419,6 +419,34 @@ fn register_prelude(env: &mut TypeEnv) {
         Ty::Fn(vec![], Box::new(Ty::Int)),
     );
 
+    // §17.3.5: list stdlib intrinsics (List<Int> only). See stdlib/list.tyra.
+    let list_int = Ty::Generic("List".into(), vec![Ty::Int]);
+    let opt_int = Ty::Generic("Option".into(), vec![Ty::Int]);
+    env.define(
+        "__list_int_push".to_string(),
+        Ty::Fn(vec![list_int.clone(), Ty::Int], Box::new(list_int.clone())),
+    );
+    env.define(
+        "__list_int_sum".to_string(),
+        Ty::Fn(vec![list_int.clone()], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__list_int_max".to_string(),
+        Ty::Fn(vec![list_int.clone()], Box::new(opt_int.clone())),
+    );
+    env.define(
+        "__list_int_min".to_string(),
+        Ty::Fn(vec![list_int.clone()], Box::new(opt_int.clone())),
+    );
+    env.define(
+        "__list_int_contains".to_string(),
+        Ty::Fn(vec![list_int.clone(), Ty::Int], Box::new(Ty::Bool)),
+    );
+    env.define(
+        "__list_int_index_of".to_string(),
+        Ty::Fn(vec![list_int, Ty::Int], Box::new(opt_int)),
+    );
+
     // Prelude ADTs for §10.3 exhaustiveness checking.
     env.register_adt("Option".into(), vec!["Some".into(), "None".into()]);
     env.register_adt("Result".into(), vec!["Ok".into(), "Err".into()]);

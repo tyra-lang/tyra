@@ -186,6 +186,13 @@ const PRELUDE_FUNCTIONS: &[&str] = &[
     "__string_ends_with",
     "__string_parse_int",
     "__string_parse_errno",
+    // §17.3.5: list stdlib backing (List<Int> only; LLVM-only, no runtime C ABI).
+    "__list_int_push",
+    "__list_int_sum",
+    "__list_int_max",
+    "__list_int_min",
+    "__list_int_contains",
+    "__list_int_index_of",
 ];
 
 /// Prelude ADT constructors: unqualified access to Option/Result variants.

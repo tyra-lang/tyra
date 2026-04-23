@@ -52,6 +52,10 @@ fn builtin_primitive_return(fname: &str) -> Option<Ty> {
         | "__string_ends_with" => Some(Ty::Bool),
         // __string_len / __string_parse_int / __string_parse_errno return
         // Int (default i64 path — no tracking needed).
+        // §17.3.5: list stdlib intrinsics (List<Int> only). Int / List<Int> /
+        // Option<Int> returns are tracked via struct_temps in
+        // pre_scan_struct_types; only the Bool return needs registration here.
+        "__list_int_contains" => Some(Ty::Bool),
         _ => None,
     }
 }
@@ -579,6 +583,17 @@ fn pre_scan_struct_types(
                             struct_temps.insert(dest.clone(), "Option__Int".into());
                         }
                     }
+                    // §17.3.5: list stdlib intrinsics returning aggregate types.
+                    "__list_int_push" => {
+                        if struct_map.contains_key("List__Int") {
+                            struct_temps.insert(dest.clone(), "List__Int".into());
+                        }
+                    }
+                    "__list_int_max" | "__list_int_min" | "__list_int_index_of" => {
+                        if struct_map.contains_key("Option__Int") {
+                            struct_temps.insert(dest.clone(), "Option__Int".into());
+                        }
+                    }
                     _ => {}
                 }
                 // Check if the called function returns a value-type struct (not data types)
@@ -591,11 +606,22 @@ fn pre_scan_struct_types(
                             // data type return values are ptrs, tracked as string_temps in caller
                         }
                     }
-                    // Also check for generic return types (Option/Result)
+                    // Also check for generic return types (Option/Result/List)
                     if sig.return_type.is_option() || sig.return_type.is_result() {
                         let mono_name = sig.return_type.monomorphized_name();
                         if struct_map.contains_key(mono_name.as_str()) {
                             struct_temps.insert(dest.clone(), mono_name);
+                        }
+                    }
+                    // List<T> returns (e.g. `list.push(_) -> List<Int>` from the
+                    // §17.3.5 stdlib wrappers): propagate the monomorphized
+                    // struct so downstream Copy / Store uses struct-aware paths.
+                    if let Ty::Generic(name, _) = &sig.return_type {
+                        if name == "List" {
+                            let mono_name = sig.return_type.monomorphized_name();
+                            if struct_map.contains_key(mono_name.as_str()) {
+                                struct_temps.insert(dest.clone(), mono_name);
+                            }
                         }
                     }
                 }

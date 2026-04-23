@@ -1211,6 +1211,7 @@ Operator correspondences:
 These modules are practically important but do not affect language semantics. Their APIs are defined separately in `docs/stdlib/`.
 
 - `string` — string operations (len, trim, contains, starts_with, etc.; v0.1 API frozen in §17.3.4)
+- `list` — `List<Int>` operations (push, sum, max, min, contains, index_of; v0.1 API frozen in §17.3.5, generic `List<T>` deferred to §22)
 - `collections` — methods on `List`, `Map`, `Set` (sort_by, min_by, max_by, map, filter, etc.)
 - `float` — Float comparison functions (eq, approx_eq, is_nan, etc.; see ADR-0002)
 - `json` — JSON parsing (v0.1 API frozen in §17.3)
@@ -1427,6 +1428,42 @@ export fn parse_int(_ s: String) -> Option<Int>
   plumbing that lands in a later milestone). Tracked in §22 as
   "extended `string` API".
 
+#### 17.3.5 list
+
+Callers `import list` and use module-qualified calls like `list.push(...)`
+/ `list.sum(...)`. v0.1 freezes a **`List<Int>`-only** surface of six
+functions.
+
+```tyra
+# stdlib/list.tyra
+export fn push(_ list: List<Int>, _ x: Int) -> List<Int>
+export fn sum(_ list: List<Int>) -> Int
+export fn max(_ list: List<Int>) -> Option<Int>
+export fn min(_ list: List<Int>) -> Option<Int>
+export fn contains(_ list: List<Int>, _ x: Int) -> Bool
+export fn index_of(_ list: List<Int>, _ x: Int) -> Option<Int>
+```
+
+- All operations are **immutable**. Functions returning `List<Int>`
+  (`push`) allocate a fresh GC-managed buffer and never mutate the input
+  (§coding-style immutability rule).
+- `push` returns a new list with the element appended at the tail, O(n).
+- `sum` is a fold with identity `0`. Overflow is NOT checked in v0.1
+  (follows `Int` two's-complement wrap semantics).
+- `max` / `min` return `None` for the empty list and `Some(v)` otherwise.
+  Ordering is the usual signed-integer comparison.
+- `contains` performs a linear scan for equality.
+- `index_of` returns `Some(i)` for the smallest matching index (0-based)
+  or `None` if no element matches.
+- Element type is **`Int` only**. `List<String>` and arbitrary `List<T>`
+  are out of scope for v0.1 (requires stdlib-intrinsic element-type
+  monomorphization plumbing; tracked in §22).
+- `map` / `filter` / `fold` are out of scope for v0.1 (lambda passing
+  through a C ABI is required). Tracked in §22 as "extended `list` API".
+- Implementation emits LLVM IR directly (`__list_int_*` intrinsics →
+  inline `GC_malloc` + loops); no runtime C ABI is involved. Safe because
+  the `List<Int>` layout (`{ptr data, i64 len}`) is compiler-owned.
+
 ---
 
 ## 18. Toolchain
@@ -1600,6 +1637,7 @@ The following are postponed for later specification:
 - Module-level initialization semantics (`let`/`mut` at module scope)
 - Detailed APIs for Tier 2 standard library modules (collections, time, test, log, float) — `fs`, `json`, `http`, and `string` are frozen in §17.3
 - Extended `string` API (split, split_whitespace, replace, join, char_at, regex) — the nine functions frozen in §17.3.4 are the only v0.1 surface
+- Extended `list` API (generic `List<T>`, `map` / `filter` / `fold`, `List<String>`, etc.) — the six `List<Int>`-only functions frozen in §17.3.5 are the only v0.1 surface (requires element-type monomorphization and lambda-through-C-ABI plumbing)
 
 ---
 

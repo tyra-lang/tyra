@@ -282,6 +282,33 @@ pub fn lower(file: &SourceFile) -> Program {
     ctx.fn_param_types
         .insert("__string_parse_errno".into(), vec![]);
 
+    // §17.3.5: list stdlib intrinsics (List<Int> only).
+    let list_int = Ty::Generic("List".into(), vec![Ty::Int]);
+    let opt_int = Ty::Generic("Option".into(), vec![Ty::Int]);
+    ctx.fn_return_types
+        .insert("__list_int_push".into(), list_int.clone());
+    ctx.fn_param_types
+        .insert("__list_int_push".into(), vec![list_int.clone(), Ty::Int]);
+    ctx.fn_return_types.insert("__list_int_sum".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__list_int_sum".into(), vec![list_int.clone()]);
+    ctx.fn_return_types
+        .insert("__list_int_max".into(), opt_int.clone());
+    ctx.fn_param_types
+        .insert("__list_int_max".into(), vec![list_int.clone()]);
+    ctx.fn_return_types
+        .insert("__list_int_min".into(), opt_int.clone());
+    ctx.fn_param_types
+        .insert("__list_int_min".into(), vec![list_int.clone()]);
+    ctx.fn_return_types
+        .insert("__list_int_contains".into(), Ty::Bool);
+    ctx.fn_param_types
+        .insert("__list_int_contains".into(), vec![list_int.clone(), Ty::Int]);
+    ctx.fn_return_types
+        .insert("__list_int_index_of".into(), opt_int);
+    ctx.fn_param_types
+        .insert("__list_int_index_of".into(), vec![list_int, Ty::Int]);
+
     // Collect function return types and store definitions for monomorphization
     for item in &file.items {
         if let Item::FnDef(f) = item {
