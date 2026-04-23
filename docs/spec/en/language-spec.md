@@ -1407,6 +1407,10 @@ export fn contains(_ s: String, _ needle: String) -> Bool
 export fn starts_with(_ s: String, _ prefix: String) -> Bool
 export fn ends_with(_ s: String, _ suffix: String) -> Bool
 export fn parse_int(_ s: String) -> Option<Int>
+export fn byte_at(_ s: String, _ index: Int) -> Option<Int>
+export fn substring(_ s: String, _ start: Int, _ stop: Int) -> String
+export fn reverse(_ s: String) -> String
+export fn from_byte(_ b: Int) -> String
 ```
 
 - `len` returns the UTF-8 byte length, not the Unicode code-point
@@ -1422,6 +1426,23 @@ export fn parse_int(_ s: String) -> Option<Int>
   decimal digits. Leading or trailing whitespace is rejected (trim
   first if needed). Parse failure returns `None`. Radix selection is
   deferred to v0.2+.
+- `byte_at(s, i)` returns the `i`-th UTF-8 **byte** as an `Int` in
+  `0..=255` wrapped in `Some`, or `None` when `i` is outside
+  `[0, len(s))` (negative values included). This is a byte-level
+  accessor, not a code-point one (`byte_at("あ", 0)` is `Some(227)`).
+- `substring(s, start, stop)` returns the byte-level half-open slice
+  `[start, stop)`. Both bounds are clamped to `[0, len(s)]`, and the
+  result is empty when `start >= stop`. If either index lands in the
+  middle of a multi-byte UTF-8 sequence, v0.1 returns an empty string
+  (a grapheme-aware API is deferred to v0.2+). The parameter is named
+  `stop` because `end` is a Tyra keyword (§6).
+- `reverse(s)` reverses the string byte-by-byte. The result is exact
+  for ASCII inputs; multi-byte UTF-8 strings break the encoding and
+  v0.1 returns an empty string (grapheme-aware reverse is v0.2+).
+- `from_byte(b)` builds a single-byte string from an `Int` in
+  `0..=255` (higher bits are truncated via `b & 0xFF`). Standalone
+  bytes in `0x80..=0xFF` are not valid UTF-8, so v0.1 returns an empty
+  string for them.
 - `split` / `split_whitespace` / `replace` / `join` are NOT part of
   this freeze (they require intrinsic → `List<String>` construction
   plumbing that lands in a later milestone). Tracked in §22 as

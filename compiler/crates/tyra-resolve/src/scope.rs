@@ -186,6 +186,10 @@ const PRELUDE_FUNCTIONS: &[&str] = &[
     "__string_ends_with",
     "__string_parse_int",
     "__string_parse_errno",
+    "__string_byte_at",
+    "__string_substring",
+    "__string_reverse",
+    "__string_from_byte",
 ];
 
 /// Prelude ADT constructors: unqualified access to Option/Result variants.

@@ -200,6 +200,28 @@ pub(crate) fn emit_builtin_call(
             writeln!(out, "  %{d} = sext i32 %{d}.i32 to i64").unwrap();
             true
         }
+        "__string_byte_at" => {
+            emit_string_ptr_i64_to_i64(out, dest.as_deref(), "tyra_string_byte_at", args, func);
+            true
+        }
+        "__string_substring" => {
+            emit_string_ptr_i64_i64_to_ptr(
+                out,
+                dest.as_deref(),
+                "tyra_string_substring",
+                args,
+                func,
+            );
+            true
+        }
+        "__string_reverse" => {
+            emit_string_ptr_to_ptr(out, dest.as_deref(), "tyra_string_reverse", args, func);
+            true
+        }
+        "__string_from_byte" => {
+            emit_string_i64_to_ptr(out, dest.as_deref(), "tyra_string_from_byte", args, func);
+            true
+        }
         "sys__exit" => {
             // §17.1: core.sys.exit(_ code: Int) -> Never
             if let Some(arg) = args.first() {
@@ -725,6 +747,67 @@ fn emit_string_ptr2_to_bool(
         .unwrap_or_else(|| "null".into());
     writeln!(out, "  %{d}.i32 = call i32 @{callee}(ptr {a}, ptr {b})").unwrap();
     writeln!(out, "  %{d} = icmp ne i32 %{d}.i32, 0").unwrap();
+}
+
+fn emit_string_ptr_i64_to_i64(
+    out: &mut String,
+    dest: Option<&str>,
+    callee: &str,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_string");
+    let s = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    let n = args
+        .get(1)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    writeln!(out, "  %{d} = call i64 @{callee}(ptr {s}, i64 {n})").unwrap();
+}
+
+fn emit_string_ptr_i64_i64_to_ptr(
+    out: &mut String,
+    dest: Option<&str>,
+    callee: &str,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_string");
+    let s = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    let lo = args
+        .get(1)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    let hi = args
+        .get(2)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    writeln!(
+        out,
+        "  %{d} = call ptr @{callee}(ptr {s}, i64 {lo}, i64 {hi})"
+    )
+    .unwrap();
+}
+
+fn emit_string_i64_to_ptr(
+    out: &mut String,
+    dest: Option<&str>,
+    callee: &str,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_string");
+    let n = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    writeln!(out, "  %{d} = call ptr @{callee}(i64 {n})").unwrap();
 }
 
 /// parse::<Int>(str) -> Option<Int>

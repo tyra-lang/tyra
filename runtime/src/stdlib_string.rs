@@ -148,6 +148,88 @@ pub extern "C" fn tyra_string_parse_errno() -> c_int {
     STRING_PARSE_ERRNO.with(|e| e.get())
 }
 
+/// `__string_byte_at(s, index) -> Int` — UTF-8 byte at `index` (0..=255),
+/// or -1 when `index` is out of `[0, len(s))`. The Tyra-side wrapper
+/// converts -1 to `None`.
+///
+/// # Safety
+/// `s` must be null-terminated UTF-8 (or null).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_string_byte_at(s: *const c_char, index: i64) -> i64 {
+    let bytes = borrow_utf8(s).as_bytes();
+    if index < 0 {
+        return -1;
+    }
+    let idx = index as usize;
+    if idx >= bytes.len() {
+        return -1;
+    }
+    bytes[idx] as i64
+}
+
+/// `__string_substring(s, start, end) -> String` — byte-level half-open
+/// slice `[start, end)`. Both bounds are clamped to `[0, len(s)]` and
+/// the result is empty when `start >= end` after clamping.
+///
+/// v0.1 is byte-level: slicing in the middle of a multi-byte UTF-8
+/// sequence yields an invalid-UTF-8 buffer which is then coerced to an
+/// empty string by `leak_cstring`'s UTF-8 borrow. Callers should respect
+/// code-point boundaries themselves until a grapheme-aware API lands.
+///
+/// # Safety
+/// `s` must be null-terminated UTF-8 (or null).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_string_substring(
+    s: *const c_char,
+    start: i64,
+    end: i64,
+) -> *const c_char {
+    let input = borrow_utf8(s);
+    let len = input.len() as i64;
+    let lo = start.clamp(0, len) as usize;
+    let hi = end.clamp(0, len) as usize;
+    if lo >= hi {
+        return leak_cstring(String::new());
+    }
+    let bytes = &input.as_bytes()[lo..hi];
+    // If the byte slice is not valid UTF-8 (mid-codepoint cut), fall back
+    // to an empty string — v0.1 keeps the result well-formed.
+    match std::str::from_utf8(bytes) {
+        Ok(s) => leak_cstring(s.to_string()),
+        Err(_) => leak_cstring(String::new()),
+    }
+}
+
+/// `__string_reverse(s) -> String` — byte-level reverse. Not
+/// grapheme-aware; reversing multi-byte UTF-8 strings yields invalid
+/// UTF-8, in which case the result is an empty string.
+///
+/// # Safety
+/// `s` must be null-terminated UTF-8 (or null).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_string_reverse(s: *const c_char) -> *const c_char {
+    let input = borrow_utf8(s);
+    let mut bytes = input.as_bytes().to_vec();
+    bytes.reverse();
+    match String::from_utf8(bytes) {
+        Ok(s) => leak_cstring(s),
+        Err(_) => leak_cstring(String::new()),
+    }
+}
+
+/// `__string_from_byte(b) -> String` — build a single-byte string from
+/// an Int. Higher bits are truncated (only bits 0..=7 are used). Not
+/// UTF-8-validated — values in `0x80..=0xFF` yield an invalid-UTF-8
+/// buffer, in which case the result is an empty string.
+#[unsafe(no_mangle)]
+pub extern "C" fn tyra_string_from_byte(b: i64) -> *const c_char {
+    let byte = (b & 0xFF) as u8;
+    match String::from_utf8(vec![byte]) {
+        Ok(s) => leak_cstring(s),
+        Err(_) => leak_cstring(String::new()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,5 +307,86 @@ mod tests {
     fn null_pointer_is_empty_string() {
         assert_eq!(unsafe { tyra_string_len(std::ptr::null()) }, 0);
         assert_eq!(unsafe { tyra_string_is_empty(std::ptr::null()) }, 1);
+    }
+
+    #[test]
+    fn byte_at_ascii_utf8_and_out_of_range() {
+        let ascii = cs("abc");
+        assert_eq!(unsafe { tyra_string_byte_at(ascii.as_ptr(), 0) }, b'a' as i64);
+        assert_eq!(unsafe { tyra_string_byte_at(ascii.as_ptr(), 2) }, b'c' as i64);
+        // Out-of-range (>= len) and negative both return -1.
+        assert_eq!(unsafe { tyra_string_byte_at(ascii.as_ptr(), 3) }, -1);
+        assert_eq!(unsafe { tyra_string_byte_at(ascii.as_ptr(), -1) }, -1);
+        // UTF-8: "あ" is 3 bytes (E3 81 82).
+        let ja = cs("あ");
+        assert_eq!(unsafe { tyra_string_byte_at(ja.as_ptr(), 0) }, 0xE3);
+        assert_eq!(unsafe { tyra_string_byte_at(ja.as_ptr(), 1) }, 0x81);
+        assert_eq!(unsafe { tyra_string_byte_at(ja.as_ptr(), 2) }, 0x82);
+        assert_eq!(unsafe { tyra_string_byte_at(ja.as_ptr(), 3) }, -1);
+        // Empty string yields -1 for any index.
+        let empty = cs("");
+        assert_eq!(unsafe { tyra_string_byte_at(empty.as_ptr(), 0) }, -1);
+    }
+
+    #[test]
+    fn substring_clamps_and_slices_bytewise() {
+        let s = cs("hello");
+        let p = unsafe { tyra_string_substring(s.as_ptr(), 1, 4) };
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "ell");
+        // Clamp end to len.
+        let p = unsafe { tyra_string_substring(s.as_ptr(), 3, 100) };
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "lo");
+        // Negative start clamps to 0.
+        let p = unsafe { tyra_string_substring(s.as_ptr(), -5, 2) };
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "he");
+        // start >= end → empty.
+        let p = unsafe { tyra_string_substring(s.as_ptr(), 3, 3) };
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "");
+        let p = unsafe { tyra_string_substring(s.as_ptr(), 4, 2) };
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "");
+        // UTF-8 codepoint-aligned slice: "あい" bytes [0..3) = "あ".
+        let ja = cs("あい");
+        let p = unsafe { tyra_string_substring(ja.as_ptr(), 0, 3) };
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "あ");
+        // Mid-codepoint cut is v0.1-undefined: we coerce to empty.
+        let p = unsafe { tyra_string_substring(ja.as_ptr(), 0, 2) };
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "");
+        // Empty input is always empty.
+        let empty = cs("");
+        let p = unsafe { tyra_string_substring(empty.as_ptr(), 0, 10) };
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "");
+    }
+
+    #[test]
+    fn reverse_bytewise_ascii_and_utf8() {
+        let s = cs("hello");
+        let p = unsafe { tyra_string_reverse(s.as_ptr()) };
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "olleh");
+        // Empty is empty.
+        let empty = cs("");
+        let p = unsafe { tyra_string_reverse(empty.as_ptr()) };
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "");
+        // Byte-reversing a multi-byte UTF-8 string breaks the encoding;
+        // v0.1 coerces to empty.
+        let ja = cs("あ");
+        let p = unsafe { tyra_string_reverse(ja.as_ptr()) };
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "");
+    }
+
+    #[test]
+    fn from_byte_ascii_truncation_and_non_ascii() {
+        let p = tyra_string_from_byte(b'A' as i64);
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "A");
+        // Higher bits truncated: 0x141 & 0xFF = 0x41 = 'A'.
+        let p = tyra_string_from_byte(0x141);
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "A");
+        // 0x00 would produce a NUL byte; leak_cstring truncates at NUL
+        // so the result is empty.
+        let p = tyra_string_from_byte(0);
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "");
+        // Non-ASCII byte (0x80..=0xFF) is not valid UTF-8 by itself →
+        // empty string in v0.1.
+        let p = tyra_string_from_byte(0xE3);
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "");
     }
 }

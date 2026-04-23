@@ -1392,6 +1392,10 @@ export fn contains(_ s: String, _ needle: String) -> Bool
 export fn starts_with(_ s: String, _ prefix: String) -> Bool
 export fn ends_with(_ s: String, _ suffix: String) -> Bool
 export fn parse_int(_ s: String) -> Option<Int>
+export fn byte_at(_ s: String, _ index: Int) -> Option<Int>
+export fn substring(_ s: String, _ start: Int, _ stop: Int) -> String
+export fn reverse(_ s: String) -> String
+export fn from_byte(_ b: Int) -> String
 ```
 
 - `len` は UTF-8 バイト長を返す。Unicode コードポイント数ではない
@@ -1404,6 +1408,21 @@ export fn parse_int(_ s: String) -> Option<Int>
 - `parse_int` は先頭の `+` / `-` と ASCII 十進数字を受理する。先頭・
   末尾の空白は拒否する (必要であれば先に `trim` を呼ぶ)。パース失敗時は
   `None`。基数指定は v0.2 以降。
+- `byte_at(s, i)` は `i` 番目の UTF-8 **バイト** を `0..=255` の `Int`
+  として `Some` で返す。`i` が `[0, len(s))` の範囲外 (負値も含む) の
+  場合は `None`。バイトアクセスであり、コードポイント単位ではない
+  ことに注意 (`byte_at("あ", 0)` は `Some(227)`)。
+- `substring(s, start, stop)` はバイト単位の半開区間 `[start, stop)` を
+  切り出す。両端は `[0, len(s)]` にクランプされ、`start >= stop` の場合は
+  空文字列。`start` / `stop` がマルチバイト UTF-8 の途中を指した場合、
+  v0.1 では安全側に倒して空文字列を返す (grapheme 対応 API は v0.2+)。
+  引数名が `stop` なのは `end` が予約語 (§6) のため。
+- `reverse(s)` はバイト単位で文字列を反転する。ASCII 文字列であれば
+  期待通りの結果になるが、マルチバイト UTF-8 はエンコーディングが
+  壊れるため空文字列を返す (grapheme 反転は v0.2+)。
+- `from_byte(b)` は `0..=255` の `Int` から 1 バイトの文字列を生成する。
+  上位ビットは切り捨てられる (`b & 0xFF`)。`0x80..=0xFF` の単独バイトは
+  UTF-8 として不正なので v0.1 では空文字列を返す。
 - `split` / `split_whitespace` / `replace` / `join` は本凍結には含まれない
   (intrinsic → `List<String>` 構築の配管が必要なため次のマイルストーンに
   繰延)。§22 の「`string` の拡張 API」として追跡する。

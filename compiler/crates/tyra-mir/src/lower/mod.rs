@@ -281,6 +281,24 @@ pub fn lower(file: &SourceFile) -> Program {
         .insert("__string_parse_errno".into(), Ty::Int);
     ctx.fn_param_types
         .insert("__string_parse_errno".into(), vec![]);
+    ctx.fn_return_types
+        .insert("__string_byte_at".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__string_byte_at".into(), vec![Ty::String, Ty::Int]);
+    ctx.fn_return_types
+        .insert("__string_substring".into(), Ty::String);
+    ctx.fn_param_types.insert(
+        "__string_substring".into(),
+        vec![Ty::String, Ty::Int, Ty::Int],
+    );
+    ctx.fn_return_types
+        .insert("__string_reverse".into(), Ty::String);
+    ctx.fn_param_types
+        .insert("__string_reverse".into(), vec![Ty::String]);
+    ctx.fn_return_types
+        .insert("__string_from_byte".into(), Ty::String);
+    ctx.fn_param_types
+        .insert("__string_from_byte".into(), vec![Ty::Int]);
 
     // Collect function return types and store definitions for monomorphization
     for item in &file.items {

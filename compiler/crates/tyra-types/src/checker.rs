@@ -418,6 +418,22 @@ fn register_prelude(env: &mut TypeEnv) {
         "__string_parse_errno".to_string(),
         Ty::Fn(vec![], Box::new(Ty::Int)),
     );
+    env.define(
+        "__string_byte_at".to_string(),
+        Ty::Fn(vec![Ty::String, Ty::Int], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__string_substring".to_string(),
+        Ty::Fn(vec![Ty::String, Ty::Int, Ty::Int], Box::new(Ty::String)),
+    );
+    env.define(
+        "__string_reverse".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(Ty::String)),
+    );
+    env.define(
+        "__string_from_byte".to_string(),
+        Ty::Fn(vec![Ty::Int], Box::new(Ty::String)),
+    );
 
     // Prelude ADTs for §10.3 exhaustiveness checking.
     env.register_adt("Option".into(), vec!["Some".into(), "None".into()]);
