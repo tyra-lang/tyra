@@ -97,6 +97,10 @@ def _load_tyra_context() -> str:
         "- `for x in 1..=n` — no numeric range literal in v0.1. Use "
         "`while` with a counter.\n"
         "- There is no `%` on Float, only on Int.\n"
+        "- **String concatenation via `+` does NOT exist**. `s1 + s2` is "
+        "invalid and produces invalid LLVM IR. Always use interpolation: "
+        "`\"#{s1}#{s2}\"`. To append a single byte, use "
+        "`result = \"#{result}#{string.from_byte(b)}\"`.\n"
     )
     _load_tyra_context._cache = context  # type: ignore[attr-defined]
     return context

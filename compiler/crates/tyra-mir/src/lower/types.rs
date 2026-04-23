@@ -63,6 +63,23 @@ impl super::LowerCtx {
                 .get(name.as_str())
                 .map_or(false, |ty| ty == expected),
             ExprKind::FieldAccess(obj, method) => {
+                // Module-qualified function call: `string.substring(...)`,
+                // `list.get(...)`, etc. The call-site lowering (call.rs
+                // ~line 676) resolves these via `{module}__{method}` in
+                // fn_return_types. Mirror that here so expression-shape
+                // predicates (is_string_expr / is_float_expr) see the
+                // correct return type and the binop lowering picks the
+                // right Eq variant. Without this, `string.substring(...)
+                // == string.substring(...)` falls through to EqInt and
+                // LLVM rejects the `icmp eq i64` on ptr operands (E0500).
+                if let ExprKind::Ident(module_name) = &obj.kind {
+                    if self.imported_modules.contains(module_name.as_str()) {
+                        let qualified = format!("{module_name}__{method}");
+                        if let Some(ty) = self.fn_return_types.get(&qualified) {
+                            return ty == expected;
+                        }
+                    }
+                }
                 // Check impl method return type
                 if let ImplMethodResult::Resolved(mangled) =
                     self.resolve_impl_method(obj, method)
