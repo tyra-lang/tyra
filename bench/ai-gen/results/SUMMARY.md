@@ -2,12 +2,14 @@
 
 Prompts observed: 100
 
-Latest sweep: **Run 10** (`tyra+spec × claude × 100`, 2026-04-23)
-after the Track B E0500 cluster fixes and recursive ADT support.
+Latest sweep: **Run 11** (`tyra+spec × claude × 100`, 2026-04-23)
+after §17.3.4 string extension (byte_at / substring / reverse /
+from_byte) and §17.3.5 list stdlib (push / sum / max / min /
+contains / index_of), plus the 066-class E0500 fix.
 
 | language  | generator | pass | check_fail | exec_fail | compile_fail | generator_fail | harness_error | skipped | total | pass% |
 | --------- | --------- | ---- | ---------- | --------- | ------------ | -------------- | ------------- | ------- | ----- | ----- |
-| tyra+spec | claude    | 58   | 17         | 1         | 19           | 5              | 0             | 0       | 100   | 58.0% |
+| tyra+spec | claude    | 65   | 7          | 0         | 28           | 0              | 0             | 0       | 100   | 65.0% |
 
 Historical passes on 100-prompt × tyra+spec × claude sweeps:
 
@@ -18,40 +20,43 @@ Historical passes on 100-prompt × tyra+spec × claude sweeps:
 | 7   | 2026-04-21 | 26   | 33           | + stdlib source in context                  |
 | 8   | 2026-04-21 | 25   | 40           | + anti-hallucination guide                  |
 | 9   | 2026-04-22 | 32   | 40           | + `string` stdlib v0.1 (§17.3.4)            |
-| 10  | 2026-04-23 | 58   | 76           | + Track B E0500 fixes + recursive ADT      |
+| 10  | 2026-04-23 | 58   | 76           | + Track B E0500 fixes + recursive ADT       |
+| 11  | 2026-04-23 | 65   | 72           | + string extension + list stdlib + 066 fix  |
 
-Run 10 error distribution (100 prompts):
+Run 11 error distribution (100 prompts):
 
-| code  | count | typical cause                                |
-| ----- | ----- | -------------------------------------------- |
-| E0104 | 14    | parser: reserved word / unexpected token     |
-| E0200 | 14    | fabricated intrinsic / undefined name        |
-| E0308 | 9     | type mismatch                                |
-| E0101 | 7     | parser: expected newline / EOF               |
-| E0500 | 4     | LLVM codegen (mostly void-recursive 066-class) |
-| E0103 | 3     | parser                                       |
-| E0305 | 2     | —                                            |
-| E0102 | 1     | parser                                       |
-| E0100 | 1     | parser                                       |
+| code  | count | typical cause                                         |
+| ----- | ----- | ----------------------------------------------------- |
+| E0308 | 50    | type mismatch (AI code doesn't match Tyra's strict typing) |
+| E0305 | 14    | — (type-checker diagnostic)                           |
+| E0104 | 5     | parser: reserved word / unexpected token              |
+| E0200 | 3     | undefined name (2× `string` module-as-expr, 1× fabricated intrinsic) |
+| E0102 | 2     | parser                                                |
+| E0100 | 2     | parser                                                |
+| E0500 | 1     | LLVM codegen (single edge-case)                       |
 
-Run 9 → Run 10 deltas (driven by Track B + recursive ADT):
+Run 10 → Run 11 deltas:
 
-- E0500 28 → 4 (-24): recursive ADT, pattern/let hoist, if-arm
-  bare-Ident, Unit-assignment tail, struct/Option field type hints,
-  `.copy()` inference — all landed.
-- E0104 10 → 14 (+4): variance across Claude sweeps.
-- E0200 8 → 14 (+6): with more programs reaching further, new
-  hallucinations surface (mostly missing stdlib surface).
-- E0308 2 → 9 (+7): same — more programs now type-check far enough
-  to hit genuine type mismatches.
-- E0101 0 → 7 (+7): parser tail edge cases in newly reaching
-  programs.
+- E0500 4 → 1 (the 066 void-recursive fix plus the list stdlib
+  closing `__list_int_*` hallucinations landed).
+- E0200 14 → 3 (string extension + list stdlib fully absorbed the
+  hallucination cluster; residual is 2 `string` module-level
+  misuses and 1 fabricated intrinsic).
+- E0104 14 → 5 (parser pressure eased as programs diverge from
+  the ambiguous reserved-word zones).
+- E0308 9 → 50 (type-checker is the new frontier — programs that
+  previously failed earlier now reach type check and surface real
+  mismatches).
 
-Pass increased 32 → 58 (+26, +81%). compile_pass increased 40 → 76
-(+36, +90%). The compile-surviving / correctness gap is now
-dominated by `E0308` (type-checker strictness against AI-generated
-code) and the residual stdlib hallucination cluster, not by
-codegen bugs.
+Pass increased 58 → 65 (+7, +12%). compile_pass dropped slightly
+(76 → 72, −4) but the programs that DO compile are now producing
+correct output more reliably (pass / compile_pass ratio: 76% → 90%).
+
+The failure mode has completely shifted: codegen and stdlib
+hallucinations are essentially resolved. The dominant barrier is
+now Tyra's type-checker rejecting the types AI writes naturally.
+Relaxing the type-checker (or improving its diagnostics so AI
+understands what to fix on retry) is the next attack surface.
 
 `pass%` is computed against non-skipped runs so a missing compiler
 does not depress the headline number.
