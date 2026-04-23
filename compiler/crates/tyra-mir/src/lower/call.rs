@@ -775,9 +775,15 @@ impl super::LowerCtx {
             args: arg_operands,
         });
 
-        // Track generic return types from function signatures
+        // Track generic return types from function signatures so downstream
+        // method dispatch (e.g. `xs.get(i)` on a `List<T>` returned by a
+        // user function) can see the correct type via `infer_list_type`.
+        // Without the `is_list()` branch, `let nums = parse_ints(s)` leaves
+        // `nums` untyped in `generic_var_types`, and `.get()` on it falls
+        // through to the raw-call path that emits `@nums.get` as a
+        // literal function name — LLVM then rejects the cross-type call.
         if let Some(ret_ty) = self.fn_return_types.get(&func_name).cloned() {
-            if ret_ty.is_option() || ret_ty.is_result() {
+            if ret_ty.is_option() || ret_ty.is_result() || ret_ty.is_list() {
                 self.register_adt_type(&ret_ty);
                 let mono = ret_ty.monomorphized_name();
                 self.generic_var_types.insert(dest.clone(), ret_ty);

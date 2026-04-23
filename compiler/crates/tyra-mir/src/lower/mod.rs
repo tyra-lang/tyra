@@ -890,6 +890,23 @@ impl LowerCtx {
                     self.generic_var_types.insert(s.name.clone(), gt.clone());
                     self.var_types.insert(s.name.clone(), gt.monomorphized_name());
                 }
+                // Fallback: if the LHS carries an explicit Generic type
+                // annotation (`let xs: List<Int> = []`), use it for the
+                // binding's type tracking. The RHS may be a ListLit whose
+                // element type is an unresolved Var (empty list), in which
+                // case generic_var_types would otherwise not propagate —
+                // leaving `.get()` / `.push()` method dispatch unable to
+                // find the list element type.
+                if let Some(ann) = &s.type_annotation {
+                    let ann_ty = Ty::from_type_expr(ann);
+                    if ann_ty.is_option() || ann_ty.is_result() || ann_ty.is_list() {
+                        self.register_adt_type(&ann_ty);
+                        self.generic_var_types.insert(s.name.clone(), ann_ty.clone());
+                        self.var_types.insert(s.name.clone(), ann_ty.monomorphized_name());
+                    } else if let Ty::Named(n) = &ann_ty {
+                        self.var_types.insert(s.name.clone(), n.clone());
+                    }
+                }
                 // Propagate M9 task-handle tracking across let-binding copy.
                 if let Some(trt) = self.task_result_types.get(&val).cloned() {
                     self.task_result_types.insert(s.name.clone(), trt);
@@ -932,6 +949,23 @@ impl LowerCtx {
                 }
                 if let Some(stype) = struct_type {
                     self.var_types.insert(s.name.clone(), stype);
+                }
+                // Propagate generic tracking from the RHS temp (List<T>
+                // returned from a user function, Option/Result from a call).
+                if let Some(gt) = self.generic_var_types.get(&val).cloned() {
+                    self.generic_var_types.insert(s.name.clone(), gt.clone());
+                    self.var_types.insert(s.name.clone(), gt.monomorphized_name());
+                }
+                // Fallback to explicit annotation (see Stmt::Let rationale).
+                if let Some(ann) = &s.type_annotation {
+                    let ann_ty = Ty::from_type_expr(ann);
+                    if ann_ty.is_option() || ann_ty.is_result() || ann_ty.is_list() {
+                        self.register_adt_type(&ann_ty);
+                        self.generic_var_types.insert(s.name.clone(), ann_ty.clone());
+                        self.var_types.insert(s.name.clone(), ann_ty.monomorphized_name());
+                    } else if let Ty::Named(n) = &ann_ty {
+                        self.var_types.insert(s.name.clone(), n.clone());
+                    }
                 }
                 // M9 follow-up: propagate Task<T> handle tracking across
                 // `mut t = spawn ...` so `t.await` later unboxes correctly.

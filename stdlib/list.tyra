@@ -1,6 +1,8 @@
 # stdlib/list.tyra — Tier 2 list module (§17.3.5).
 #
 # v0.1 API (frozen, List<Int> only):
+#   list.len(xs)            -> Int        (module form of the xs.len() method)
+#   list.get(xs, i)          -> Option<Int> (module form of xs.get(i))
 #   list.push(xs, x)        -> List<Int>   (immutable append: returns new list)
 #   list.sum(xs)            -> Int
 #   list.max(xs)            -> Option<Int>
@@ -19,6 +21,14 @@
 #   are intentionally out of scope for v0.1 (§22).
 # - `push` is O(n) because it copies the underlying data; the semantics
 #   stay immutable even once a true persistent structure is added later.
+
+export fn len(_ xs: List<Int>) -> Int
+  xs.len()
+end
+
+export fn get(_ xs: List<Int>, _ i: Int) -> Option<Int>
+  xs.get(i)
+end
 
 export fn push(_ list: List<Int>, _ x: Int) -> List<Int>
   __list_int_push(list, x)
