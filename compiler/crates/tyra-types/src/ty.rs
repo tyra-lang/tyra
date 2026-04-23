@@ -194,11 +194,35 @@ impl Ty {
 /// Check if two types are compatible (assignable).
 /// Never is compatible with everything (bottom type).
 /// Error is compatible with everything (to suppress cascading errors).
+/// `Ty::Var` (unresolved type variable) is compatible with anything
+/// — it represents a type we couldn't infer yet, not a mismatch.
+/// This is what makes `let xs: List<Int> = []` type-check: the empty
+/// `ListLit` produces `List<Var(0)>` which must match `List<Int>`
+/// through structural compatibility.
 pub fn types_compatible(expected: &Ty, actual: &Ty) -> bool {
     if actual.is_never() || actual.is_error() || expected.is_error() {
         return true;
     }
-    expected == actual
+    match (expected, actual) {
+        (Ty::Var(_), _) | (_, Ty::Var(_)) => true,
+        (Ty::Generic(e_name, e_args), Ty::Generic(a_name, a_args)) => {
+            e_name == a_name
+                && e_args.len() == a_args.len()
+                && e_args
+                    .iter()
+                    .zip(a_args.iter())
+                    .all(|(e, a)| types_compatible(e, a))
+        }
+        (Ty::Fn(e_params, e_ret), Ty::Fn(a_params, a_ret)) => {
+            e_params.len() == a_params.len()
+                && e_params
+                    .iter()
+                    .zip(a_params.iter())
+                    .all(|(e, a)| types_compatible(e, a))
+                && types_compatible(e_ret, a_ret)
+        }
+        _ => expected == actual,
+    }
 }
 
 #[cfg(test)]
