@@ -2,14 +2,13 @@
 
 Prompts observed: 100
 
-Latest sweep: **Run 11** (`tyra+spec × claude × 100`, 2026-04-23)
-after §17.3.4 string extension (byte_at / substring / reverse /
-from_byte) and §17.3.5 list stdlib (push / sum / max / min /
-contains / index_of), plus the 066-class E0500 fix.
+Latest sweep: **Run 12** (`tyra+spec × claude × 100`, 2026-04-23)
+after the Ty::Var structural-compatibility fix (empty ListLit
+E0308 cluster).
 
 | language  | generator | pass | check_fail | exec_fail | compile_fail | generator_fail | harness_error | skipped | total | pass% |
 | --------- | --------- | ---- | ---------- | --------- | ------------ | -------------- | ------------- | ------- | ----- | ----- |
-| tyra+spec | claude    | 65   | 7          | 0         | 28           | 0              | 0             | 0       | 100   | 65.0% |
+| tyra+spec | claude    | 66   | 6          | 7         | 21           | 0              | 0             | 0       | 100   | 66.0% |
 
 Historical passes on 100-prompt × tyra+spec × claude sweeps:
 
@@ -22,6 +21,7 @@ Historical passes on 100-prompt × tyra+spec × claude sweeps:
 | 9   | 2026-04-22 | 32   | 40           | + `string` stdlib v0.1 (§17.3.4)            |
 | 10  | 2026-04-23 | 58   | 76           | + Track B E0500 fixes + recursive ADT       |
 | 11  | 2026-04-23 | 65   | 72           | + string extension + list stdlib + 066 fix  |
+| 12  | 2026-04-23 | 66   | 79           | + Ty::Var compat (empty ListLit E0308)      |
 
 Run 11 error distribution (100 prompts):
 
