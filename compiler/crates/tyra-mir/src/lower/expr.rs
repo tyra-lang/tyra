@@ -320,10 +320,34 @@ impl super::LowerCtx {
                         }
                         _ => {}
                     }
-                    body.push(Instruction::Copy {
-                        dest: f.binding.clone(),
-                        source: elem,
-                    });
+                    // If the binding name is already slotted (hoisted
+                    // pattern/mut alloca, or a prior `let`/`mut` of the same
+                    // name), reuse the slot via Store. Emitting Copy here
+                    // would mint a fresh SSA `%binding` and collide with the
+                    // existing alloca — E0500.
+                    //
+                    // Invariant: when this guard fires, the pre-existing
+                    // slot's LLVM type must match `elem_type`. The type
+                    // checker rejects shadowing at incompatible types in
+                    // the same function scope, so an outer `let x: Foo`
+                    // followed by `for x in int_list` is a prior type
+                    // error — we never reach here. If that invariant ever
+                    // weakens, Store will silently produce mistyped IR and
+                    // LLVM will emit a type-mismatch E0500; tighten with a
+                    // MIR-level assert at that point.
+                    if self.pattern_vars.contains(&f.binding)
+                        || self.mut_vars.contains(&f.binding)
+                    {
+                        body.push(Instruction::Store {
+                            dest: f.binding.clone(),
+                            value: Operand::Var(elem),
+                        });
+                    } else {
+                        body.push(Instruction::Copy {
+                            dest: f.binding.clone(),
+                            source: elem,
+                        });
+                    }
 
                     // User's loop body
                     for stmt in &f.body {
@@ -354,12 +378,24 @@ impl super::LowerCtx {
                     // End
                     body.push(Instruction::Label(end_label));
                 } else {
-                    // Non-list iteration: keep current stub behavior
+                    // Non-list iteration: keep current stub behavior.
+                    // Same invariant as the list branch: a pre-existing
+                    // slot for `f.binding` must be type-compatible with
+                    // `iter_val`. Upheld by the type checker today.
                     self.local_binding_names.insert(f.binding.clone());
-                    body.push(Instruction::Copy {
-                        dest: f.binding.clone(),
-                        source: iter_val,
-                    });
+                    if self.pattern_vars.contains(&f.binding)
+                        || self.mut_vars.contains(&f.binding)
+                    {
+                        body.push(Instruction::Store {
+                            dest: f.binding.clone(),
+                            value: Operand::Var(iter_val),
+                        });
+                    } else {
+                        body.push(Instruction::Copy {
+                            dest: f.binding.clone(),
+                            source: iter_val,
+                        });
+                    }
                     for stmt in &f.body {
                         self.lower_stmt(stmt, body);
                     }

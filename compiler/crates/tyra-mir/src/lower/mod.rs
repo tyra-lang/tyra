@@ -972,15 +972,30 @@ impl LowerCtx {
                 if let Some(trt) = self.task_result_types.get(&val).cloned() {
                     self.task_result_types.insert(s.name.clone(), trt);
                 }
-                // Mutable locals use alloca+store for SSA-compatible mutation
-                body.push(Instruction::Alloca {
-                    dest: s.name.clone(),
-                });
+                // Mutable locals use alloca+store for SSA-compatible mutation.
+                // Skip the alloca if the slot was already emitted — either
+                // hoisted to function entry (when the same name appears >1
+                // times, see collect_let_binding_counts_in_stmts) or created
+                // by a prior `mut`/`let`/pattern binding earlier in the
+                // function. Without this guard, `mut v = ...` inside two
+                // sibling branches produces `%v = alloca i64` twice and LLVM
+                // rejects with "multiple definition of local value".
+                //
+                // Record the name as mut BEFORE the guard so later reads in
+                // the same statement's value expression (rare but possible
+                // via closures / self-reference) see the slot semantics.
+                let already_slotted = self.pattern_vars.contains(&s.name)
+                    || self.mut_vars.contains(&s.name);
+                self.mut_vars.insert(s.name.clone());
+                if !already_slotted {
+                    body.push(Instruction::Alloca {
+                        dest: s.name.clone(),
+                    });
+                }
                 body.push(Instruction::Store {
                     dest: s.name.clone(),
                     value: Operand::Var(val),
                 });
-                self.mut_vars.insert(s.name.clone());
             }
             Stmt::Return(s) => {
                 let value = s.value.as_ref().map(|v| {
@@ -1522,6 +1537,13 @@ fn collect_let_binding_counts_in_expr(
             collect_let_binding_counts_in_stmts(&w.body, out);
         }
         ExprKind::For(f) => {
+            // NOTE: we deliberately do NOT count `f.binding` here.
+            // The hoist path is untyped (emits `%binding = alloca i64`
+            // regardless of the loop's element type), so hoisting a
+            // List-typed for-binding produces a type-mismatch at Store
+            // time (E0500). For-loop bindings that actually collide
+            // are handled by the Copy→Store path in lower_expr.rs when
+            // the name is already hoisted via pattern/let/mut counts.
             collect_let_binding_counts_in_expr(&f.iter, out);
             collect_let_binding_counts_in_stmts(&f.body, out);
         }
