@@ -45,7 +45,12 @@ fn builtin_primitive_return(fname: &str) -> Option<Ty> {
         "__io_read_line" | "__io_read_to_end" => Some(Ty::String),
         "__io_eof" => Some(Ty::Bool),
         // §17.3.4: string stdlib intrinsics.
-        "__string_trim" | "__string_to_upper" | "__string_to_lower" => Some(Ty::String),
+        "__string_trim"
+        | "__string_to_upper"
+        | "__string_to_lower"
+        | "__string_substring"
+        | "__string_reverse"
+        | "__string_from_byte" => Some(Ty::String),
         "__string_is_empty"
         | "__string_contains"
         | "__string_starts_with"

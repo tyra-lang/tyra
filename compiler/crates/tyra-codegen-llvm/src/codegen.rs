@@ -210,6 +210,10 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare i32 @tyra_string_ends_with(ptr, ptr)").unwrap();
     writeln!(out, "declare i64 @tyra_string_parse_int(ptr)").unwrap();
     writeln!(out, "declare i32 @tyra_string_parse_errno()").unwrap();
+    writeln!(out, "declare i64 @tyra_string_byte_at(ptr, i64)").unwrap();
+    writeln!(out, "declare ptr @tyra_string_substring(ptr, i64, i64)").unwrap();
+    writeln!(out, "declare ptr @tyra_string_reverse(ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_string_from_byte(i64)").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
     writeln!(out, "declare void @exit(i32)").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();

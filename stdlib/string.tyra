@@ -10,6 +10,10 @@
 #   string.starts_with(s, prefix)    -> Bool
 #   string.ends_with(s, suffix)      -> Bool
 #   string.parse_int(s)              -> Option<Int>
+#   string.byte_at(s, index)         -> Option<Int>  (UTF-8 byte in 0..=255)
+#   string.substring(s, start, stop) -> String       (byte-level half-open)
+#   string.reverse(s)                -> String       (byte-level)
+#   string.from_byte(b)              -> String       (single-byte, 0..=255)
 #
 # Backed by `__string_*` intrinsics (see runtime/src/stdlib_string.rs).
 #
@@ -64,4 +68,39 @@ export fn parse_int(_ s: String) -> Option<Int>
   else
     None
   end
+end
+
+# Returns the UTF-8 byte at `index` as Int (0..=255), or None when out of
+# range. Byte-level — on multi-byte UTF-8 the return is a raw byte, not a
+# code point.
+export fn byte_at(_ s: String, _ index: Int) -> Option<Int>
+  let n = __string_byte_at(s, index)
+  if n < 0
+    None
+  else
+    Some(n)
+  end
+end
+
+# Byte-level half-open slice [start, stop). Bounds are clamped to
+# [0, len(s)]; the result is empty when start >= stop after clamping.
+# `stop` names the exclusive end index (the bare identifier `end` is a
+# Tyra keyword). v0.1 is byte-addressed — slicing inside a multi-byte
+# UTF-8 sequence returns an empty string.
+export fn substring(_ s: String, _ start: Int, _ stop: Int) -> String
+  __string_substring(s, start, stop)
+end
+
+# Byte-level reverse (not grapheme-aware). Reversing an ASCII string is
+# exact; multi-byte UTF-8 strings break the encoding and return empty
+# in v0.1.
+export fn reverse(_ s: String) -> String
+  __string_reverse(s)
+end
+
+# Build a single-byte string from an Int in 0..=255. Higher bits are
+# truncated. Values outside the ASCII range (0x80..=0xFF) are not
+# valid UTF-8 on their own and yield an empty string in v0.1.
+export fn from_byte(_ b: Int) -> String
+  __string_from_byte(b)
 end
