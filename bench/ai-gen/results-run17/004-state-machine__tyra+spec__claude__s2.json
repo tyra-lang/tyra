@@ -1,0 +1,36 @@
+{
+  "prompt_id": "004-state-machine",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1776946635,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9769,
+      "code_len": 438,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 634,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 778,
+      "stdout": "RedGreenYellowRed",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "type Color =\n  | Red\n  | Green\n  | Yellow\n\nfn next(_ c: Color) -> Color\n  match c\n  when Red\n    Color.Green\n  when Green\n    Color.Yellow\n  when Yellow\n    Color.Red\n  end\nend\n\nfn name(_ c: Color) -> String\n  match c\n  when Red\n    \"Red\"\n  when Green\n    \"Green\"\n  when Yellow\n    \"Yellow\"\n  end\nend\n\nlet s0 = Color.Red\nprint(name(s0))\nlet s1 = next(s0)\nprint(name(s1))\nlet s2 = next(s1)\nprint(name(s2))\nlet s3 = next(s2)\nprint(name(s3))",
+  "overall": "pass"
+}

@@ -1,0 +1,26 @@
+{
+  "prompt_id": "076-running-max",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1776951739,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 32676,
+      "code_len": 1061,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 239,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-49_et3yu/main.ll:612:27: error: '%_t67' defined with type 'i64' but expected '%struct.List__Int = type { ptr, i64 }'\n  612 |   store %struct.List__Int %_t67, ptr %v\n      |                           ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut nums: List<Int> = []\nmut cur = 0\nmut sign = 1\nmut in_num = false\nmut i = 0\nlet n = string.len(line)\n\nwhile i < n\n  let b = match string.byte_at(line, i)\n  when Some(v)\n    v\n  when None\n    0\n  end\n\n  if b >= 48 and b <= 57\n    if not in_num\n      cur = 0\n      sign = 1\n      in_num = true\n    end\n    cur = cur * 10 + (b - 48)\n  else if b == 45 and not in_num\n    in_num = true\n    sign = -1\n    cur = 0\n  else\n    if in_num\n      nums = list.push(nums, cur * sign)\n      in_num = false\n    end\n  end\n  i = i + 1\nend\n\nif in_num\n  nums = list.push(nums, cur * sign)\n  in_num = false\nend\n\nmut result: List<Int> = []\nmut cur_max = 0\nmut first = true\nfor x in nums\n  if first\n    cur_max = x\n    first = false\n  else\n    if x > cur_max\n      cur_max = x\n    end\n  end\n  result = list.push(result, cur_max)\nend\n\nmut out = \"\"\nmut idx = 0\nfor v in result\n  if idx == 0\n    out = \"#{v}\"\n  else\n    out = \"#{out} #{v}\"\n  end\n  idx = idx + 1\nend\n\nprintln(out)",
+  "overall": "compile_fail"
+}

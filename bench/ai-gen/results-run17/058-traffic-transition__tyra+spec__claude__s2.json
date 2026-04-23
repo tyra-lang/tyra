@@ -1,0 +1,36 @@
+{
+  "prompt_id": "058-traffic-transition",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1776950537,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 26448,
+      "code_len": 734,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 1568,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 474,
+      "stdout": "Green\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut count = 0\nmut i = 0\nmut start = -1\nwhile i < n\n  let b = match string.byte_at(input, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  let is_ws = b == 32 or b == 9 or b == 10 or b == 13\n  if is_ws\n    if start >= 0\n      let word = string.substring(input, start, i)\n      if word == \"next\"\n        count = count + 1\n      end\n      start = -1\n    end\n  else\n    if start < 0\n      start = i\n    end\n  end\n  i = i + 1\nend\nif start >= 0\n  let word = string.substring(input, start, n)\n  if word == \"next\"\n    count = count + 1\n  end\nend\n\nlet final = count % 3\nmatch final\nwhen 0\n  println(\"Red\")\nwhen 1\n  println(\"Green\")\nwhen _\n  println(\"Yellow\")\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "028-range-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1776948118,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11393,
+      "code_len": 311,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 758,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 643,
+      "stdout": "sum=5050",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line = io.read_line().ok_or(\"no input\")?\n  let trimmed = string.trim(line)\n  let n = string.parse_int(trimmed).ok_or(\"invalid int\")?\n  mut sum = 0\n  mut i = 1\n  while i <= n\n    sum = sum + i\n    i = i + 1\n  end\n  print(\"sum=#{sum}\")\n  Ok(())\nend",
+  "overall": "pass"
+}

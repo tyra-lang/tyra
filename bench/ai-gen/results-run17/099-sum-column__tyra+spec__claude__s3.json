@@ -1,0 +1,36 @@
+{
+  "prompt_id": "099-sum-column",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1776953982,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 41609,
+      "code_len": 1127,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 657,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 729,
+      "stdout": "sum=39",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import string\nimport io\n\nfn byte_or_neg(_ s: String, _ i: Int) -> Int\n  match string.byte_at(s, i)\n  when Some(b)\n    b\n  when None\n    -1\n  end\nend\n\nfn is_hspace(_ b: Int) -> Bool\n  b == 32 or b == 9\nend\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut i = 0\nmut sum = 0\n\nwhile i < n\n  while i < n and is_hspace(byte_or_neg(input, i))\n    i = i + 1\n  end\n  if i < n\n    let b = byte_or_neg(input, i)\n    if b == 10 or b == 13\n      i = i + 1\n    else\n      while i < n and not is_ws(byte_or_neg(input, i))\n        i = i + 1\n      end\n      while i < n and is_hspace(byte_or_neg(input, i))\n        i = i + 1\n      end\n      let start = i\n      while i < n and not is_ws(byte_or_neg(input, i))\n        i = i + 1\n      end\n      let tok = string.substring(input, start, i)\n      match string.parse_int(tok)\n      when Some(v)\n        sum = sum + v\n      when None\n        ()\n      end\n      while i < n and byte_or_neg(input, i) != 10\n        i = i + 1\n      end\n      if i < n\n        i = i + 1\n      end\n    end\n  end\nend\n\nprint(\"sum=#{sum}\")",
+  "overall": "pass"
+}

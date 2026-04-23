@@ -1,0 +1,26 @@
+{
+  "prompt_id": "065-list-product",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1776950917,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11904,
+      "code_len": 1024,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 78,
+      "stderr": "error[E0200]: undefined name `string`\n  --> main.tyra:8:13\n  |\n8 |     let n = string.len(s)\n  |             ^^^^^^ not found in this scope\n\nerror[E0200]: undefined name `string`\n   --> main.tyra:14:19\n   |\n14 |       let b_opt = string.byte_at(s, i)\n   |                   ^^^^^^ not found in this scope\n\n2 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\n\nfn main() -> Unit\n  let line = io.read_line()\n  mut product = 1\n  match line\n  when Some(s)\n    let n = string.len(s)\n    mut i = 0\n    mut cur = 0\n    mut has_digit = false\n    mut negative = false\n    while i < n\n      let b_opt = string.byte_at(s, i)\n      match b_opt\n      when Some(b)\n        if b == 32 or b == 9\n          if has_digit\n            if negative\n              product = product * (-cur)\n            else\n              product = product * cur\n            end\n            cur = 0\n            has_digit = false\n            negative = false\n          end\n        else if b == 45\n          negative = true\n        else if b == 43\n          negative = false\n        else\n          cur = cur * 10 + (b - 48)\n          has_digit = true\n        end\n      when None\n        ()\n      end\n      i = i + 1\n    end\n    if has_digit\n      if negative\n        product = product * (-cur)\n      else\n        product = product * cur\n      end\n    end\n  when None\n    ()\n  end\n  println(\"product=#{product}\")\nend",
+  "overall": "compile_fail"
+}

@@ -1,0 +1,26 @@
+{
+  "prompt_id": "094-last-line",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1776953535,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 23932,
+      "code_len": 337,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 32,
+      "stderr": "\nthread 'main' (12340322) panicked at compiler/crates/tyra-mir/src/lower/match_lower.rs:144:37:\nBUG: cannot determine ADT type for match subject '_t57'\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+      "exit_code": 101,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nmut last: Option<String> = None\nmut done = false\nwhile not done\n  match io.read_line()\n  when Some(line)\n    let t = string.trim(line)\n    if not string.is_empty(t)\n      last = Some(line)\n    end\n  when None\n    done = true\n  end\nend\n\nmatch last\nwhen Some(line)\n  println(line)\nwhen None\n  println(\"(none)\")\nend",
+  "overall": "compile_fail"
+}

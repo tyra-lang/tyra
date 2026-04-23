@@ -1,0 +1,36 @@
+{
+  "prompt_id": "086-set-intersect",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1776952813,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 66735,
+      "code_len": 2324,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 1183,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 640,
+      "stdout": "1 3 4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_line(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut buf = \"\"\n  mut i = 0\n  let n = string.len(s)\n  while i <= n\n    mut is_ws = false\n    if i == n\n      is_ws = true\n    else\n      match string.byte_at(s, i)\n      when Some(b)\n        if b == 32 or b == 9 or b == 13 or b == 10\n          is_ws = true\n        else\n          buf = \"#{buf}#{string.from_byte(b)}\"\n        end\n      when None\n        is_ws = true\n      end\n    end\n    if is_ws\n      if string.len(buf) > 0\n        match string.parse_int(buf)\n        when Some(v)\n          result = list.push(result, v)\n        when None\n          ()\n        end\n        buf = \"\"\n      end\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn intersect(_ a: List<Int>, _ b: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  while i < a.len()\n    match a.get(i)\n    when Some(x)\n      if list.contains(b, x) and not list.contains(result, x)\n        result = list.push(result, x)\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn sort_unique(_ xs: List<Int>) -> List<Int>\n  mut sorted: List<Int> = []\n  mut have_prev = false\n  mut prev = 0\n  mut done = false\n  while not done\n    mut found = false\n    mut best = 0\n    mut i = 0\n    while i < xs.len()\n      match xs.get(i)\n      when Some(v)\n        mut eligible = true\n        if have_prev and v <= prev\n          eligible = false\n        end\n        if eligible\n          if not found or v < best\n            best = v\n            found = true\n          end\n        end\n      when None\n        ()\n      end\n      i = i + 1\n    end\n    if not found\n      done = true\n    else\n      sorted = list.push(sorted, best)\n      prev = best\n      have_prev = true\n    end\n  end\n  sorted\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet a = parse_line(line1)\nlet b = parse_line(line2)\nlet inter = intersect(a, b)\nlet sorted = sort_unique(inter)\n\nif sorted.len() == 0\n  println(\"empty\")\nelse\n  mut out = \"\"\n  mut i = 0\n  while i < sorted.len()\n    match sorted.get(i)\n    when Some(v)\n      if i == 0\n        out = \"#{v}\"\n      else\n        out = \"#{out} #{v}\"\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

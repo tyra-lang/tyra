@@ -1,0 +1,36 @@
+{
+  "prompt_id": "058-traffic-transition",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1776950566,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11936,
+      "code_len": 459,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 620,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 523,
+      "stdout": "Green\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nmut count = 0\nmut i = 0\nlet n = string.len(input)\nwhile i < n\n  match string.byte_at(input, i)\n  when Some(b)\n    if b == 110\n      count = count + 1\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nmut state = 0\nmut j = 0\nwhile j < count\n  state = state + 1\n  if state == 3\n    state = 0\n  end\n  j = j + 1\nend\n\nmatch state\nwhen 0\n  println(\"Red\")\nwhen 1\n  println(\"Green\")\nwhen _\n  println(\"Yellow\")\nend",
+  "overall": "pass"
+}

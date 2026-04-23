@@ -1,0 +1,38 @@
+{
+  "prompt_id": "053-toggle-case",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1776949890,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 14326,
+      "code_len": 529,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 1136,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 469,
+      "stdout": "h, 7R!\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": false,
+      "check_details": [
+        "missing marker: 'hELLO, wORLD!'"
+      ]
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(line)\n    let n = string.len(line)\n    mut out = \"\"\n    mut i = 0\n    while i < n\n      match string.byte_at(line, i)\n      when Some(b)\n        if (b >= 65 and b <= 90) or (b >= 97 and b <= 122)\n          out = \"#{out}#{string.from_byte(b + 32 - 2 * (b % 32 / 16) * 32)}\"\n        else\n          out = \"#{out}#{string.from_byte(b)}\"\n        end\n      when None\n        ()\n      end\n      i = i + 1\n    end\n    println(out)\n  when None\n    ()\n  end\nend",
+  "overall": "check_fail"
+}

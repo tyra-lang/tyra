@@ -1,0 +1,26 @@
+{
+  "prompt_id": "002-word-count",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1776946583,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10510,
+      "code_len": 449,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 15,
+      "stderr": "error[E0200]: undefined name `string`\n  --> main.tyra:4:9\n  |\n4 | let n = string.len(text)\n  |         ^^^^^^ not found in this scope\n\nerror[E0200]: undefined name `string`\n  --> main.tyra:9:11\n  |\n9 |   let b = string.byte_at(text, i)\n  |           ^^^^^^ not found in this scope\n\n2 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\n\nlet text = io.read_to_end()\nlet n = string.len(text)\nmut count = 0\nmut in_word = false\nmut i = 0\nwhile i < n\n  let b = string.byte_at(text, i)\n  match b\n  when Some(v)\n    let is_ws = v == 32 or v == 9 or v == 10 or v == 13 or v == 11 or v == 12\n    if is_ws\n      in_word = false\n    else\n      if not in_word\n        count = count + 1\n        in_word = true\n      end\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\nprintln(\"#{count}\")",
+  "overall": "compile_fail"
+}

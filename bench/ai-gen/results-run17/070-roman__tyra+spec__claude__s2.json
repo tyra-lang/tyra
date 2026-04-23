@@ -1,0 +1,36 @@
+{
+  "prompt_id": "070-roman",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1776951322,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 19083,
+      "code_len": 527,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 1279,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 720,
+      "stdout": "IVIXXXVIIXXXIX",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "fn to_roman(_ n: Int) -> String\n  mut result = \"\"\n  mut x = n / 10\n  while x > 0\n    result = \"#{result}X\"\n    x = x - 1\n  end\n  let u = n % 10\n  match u\n  when 0\n    result\n  when 1\n    \"#{result}I\"\n  when 2\n    \"#{result}II\"\n  when 3\n    \"#{result}III\"\n  when 4\n    \"#{result}IV\"\n  when 5\n    \"#{result}V\"\n  when 6\n    \"#{result}VI\"\n  when 7\n    \"#{result}VII\"\n  when 8\n    \"#{result}VIII\"\n  when 9\n    \"#{result}IX\"\n  when _\n    result\n  end\nend\n\nprint(to_roman(4))\nprint(to_roman(9))\nprint(to_roman(27))\nprint(to_roman(39))",
+  "overall": "pass"
+}

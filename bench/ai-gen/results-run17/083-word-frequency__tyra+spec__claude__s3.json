@@ -1,0 +1,36 @@
+{
+  "prompt_id": "083-word-frequency",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1776952508,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 54704,
+      "code_len": 2395,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 506,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 614,
+      "stdout": "top=the=4",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn range_eq(_ s: String, _ a: Int, _ b: Int, _ c: Int, _ d: Int) -> Bool\n  let la = b - a\n  let lb = d - c\n  if la != lb\n    false\n  else\n    mut i = 0\n    mut eq = true\n    while i < la\n      let ba = match string.byte_at(s, a + i)\n        when Some(x)\n          x\n        when None\n          0\n        end\n      let bb = match string.byte_at(s, c + i)\n        when Some(x)\n          x\n        when None\n          0\n        end\n      if ba != bb\n        eq = false\n      end\n      i = i + 1\n    end\n    eq\n  end\nend\n\nlet input = io.read_to_end()\nlet n = string.len(input)\n\nmut starts: List<Int> = []\nmut stops: List<Int> = []\nmut i = 0\nmut in_tok = false\nmut tok_start = 0\n\nwhile i < n\n  let b = match string.byte_at(input, i)\n    when Some(x)\n      x\n    when None\n      0\n    end\n  let is_ws = b <= 32\n  if in_tok\n    if is_ws\n      starts = list.push(starts, tok_start)\n      stops = list.push(stops, i)\n      in_tok = false\n    end\n  else\n    if not is_ws\n      tok_start = i\n      in_tok = true\n    end\n  end\n  i = i + 1\nend\n\nif in_tok\n  starts = list.push(starts, tok_start)\n  stops = list.push(stops, n)\nend\n\nlet m = list.len(starts)\nmut best_count = 0\nmut best_start = 0\nmut best_stop = 0\nmut k = 0\n\nwhile k < m\n  let sk = match list.get(starts, k)\n    when Some(x)\n      x\n    when None\n      0\n    end\n  let ek = match list.get(stops, k)\n    when Some(x)\n      x\n    when None\n      0\n    end\n  mut j = 0\n  mut is_first = true\n  while j < k\n    let sj = match list.get(starts, j)\n      when Some(x)\n        x\n      when None\n        0\n      end\n    let ej = match list.get(stops, j)\n      when Some(x)\n        x\n      when None\n        0\n      end\n    if range_eq(input, sj, ej, sk, ek)\n      is_first = false\n    end\n    j = j + 1\n  end\n  if is_first\n    mut count = 0\n    mut p = 0\n    while p < m\n      let sp = match list.get(starts, p)\n        when Some(x)\n          x\n        when None\n          0\n        end\n      let ep = match list.get(stops, p)\n        when Some(x)\n          x\n        when None\n          0\n        end\n      if range_eq(input, sp, ep, sk, ek)\n        count = count + 1\n      end\n      p = p + 1\n    end\n    if count > best_count\n      best_count = count\n      best_start = sk\n      best_stop = ek\n    end\n  end\n  k = k + 1\nend\n\nlet top = string.substring(input, best_start, best_stop)\nprint(\"top=#{top}=#{best_count}\")",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "034-group-even-odd",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1776948411,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 30666,
+      "code_len": 969,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 993,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 779,
+      "stdout": "evens=4 2 6 8\nodds=7 1 9 3\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut evens = \"\"\nmut odds = \"\"\nmut cur = \"\"\nmut i = 0\nwhile i < n + 1\n  mut is_ws = false\n  mut b = 0\n  if i == n\n    is_ws = true\n  else\n    match string.byte_at(input, i)\n    when Some(x)\n      b = x\n    when None\n      b = 0\n    end\n    if b == 32 or b == 9 or b == 10 or b == 13\n      is_ws = true\n    end\n  end\n  if is_ws\n    if not string.is_empty(cur)\n      match string.parse_int(cur)\n      when Some(v)\n        if v % 2 == 0\n          if string.is_empty(evens)\n            evens = \"#{v}\"\n          else\n            evens = \"#{evens} #{v}\"\n          end\n        else\n          if string.is_empty(odds)\n            odds = \"#{v}\"\n          else\n            odds = \"#{odds} #{v}\"\n          end\n        end\n      when None\n        ()\n      end\n      cur = \"\"\n    end\n  else\n    cur = \"#{cur}#{string.from_byte(b)}\"\n  end\n  i = i + 1\nend\n\nprintln(\"evens=#{evens}\")\nprintln(\"odds=#{odds}\")",
+  "overall": "pass"
+}

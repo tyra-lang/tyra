@@ -1,0 +1,26 @@
+{
+  "prompt_id": "001-fizzbuzz",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1776946452,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 16156,
+      "code_len": 453,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 76,
+      "stderr": "error[E0200]: undefined name `string`\n  --> main.tyra:5:17\n  |\n5 |   let trimmed = string.trim(input)\n  |                 ^^^^^^ not found in this scope\n\nerror[E0200]: undefined name `string`\n  --> main.tyra:6:9\n  |\n6 |   match string.parse_int(trimmed)\n  |         ^^^^^^ not found in this scope\n\n2 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\n\nfn main() -> Unit\n  let input = io.read_to_end()\n  let trimmed = string.trim(input)\n  match string.parse_int(trimmed)\n  when Some(n)\n    mut i = 1\n    while i <= n\n      let m3 = i % 3 == 0\n      let m5 = i % 5 == 0\n      if m3 and m5\n        println(\"FizzBuzz\")\n      else if m3\n        println(\"Fizz\")\n      else if m5\n        println(\"Buzz\")\n      else\n        println(\"#{i}\")\n      end\n      i = i + 1\n    end\n  when None\n    ()\n  end\nend",
+  "overall": "compile_fail"
+}

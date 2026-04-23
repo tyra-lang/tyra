@@ -1,0 +1,36 @@
+{
+  "prompt_id": "087-set-union",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1776952882,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 58897,
+      "code_len": 2691,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 443,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 488,
+      "stdout": "1 2 3 4 5 6 7\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_line(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  let n = string.len(s)\n  mut cur = 0\n  mut has = false\n  mut neg = false\n  while i < n\n    match string.byte_at(s, i)\n    when Some(b)\n      if b == 32 or b == 9 or b == 10 or b == 13\n        if has\n          if neg\n            result = list.push(result, -cur)\n          else\n            result = list.push(result, cur)\n          end\n          cur = 0\n          has = false\n          neg = false\n        end\n      else if b == 45\n        neg = true\n      else if b == 43\n        ()\n      else\n        cur = cur * 10 + (b - 48)\n        has = true\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if has\n    if neg\n      result = list.push(result, -cur)\n    else\n      result = list.push(result, cur)\n    end\n  end\n  result\nend\n\nfn concat(_ a: List<Int>, _ b: List<Int>) -> List<Int>\n  mut r = a\n  mut i = 0\n  while i < b.len()\n    match b.get(i)\n    when Some(v)\n      r = list.push(r, v)\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  r\nend\n\nfn sort_dedupe(_ xs: List<Int>) -> List<Int>\n  mut remaining = xs\n  mut result: List<Int> = []\n  while remaining.len() > 0\n    mut min_val = 0\n    mut first = true\n    mut j = 0\n    while j < remaining.len()\n      match remaining.get(j)\n      when Some(v)\n        if first\n          min_val = v\n          first = false\n        else\n          if v < min_val\n            min_val = v\n          end\n        end\n      when None\n        ()\n      end\n      j = j + 1\n    end\n    let rlen = result.len()\n    if rlen == 0\n      result = list.push(result, min_val)\n    else\n      match result.get(rlen - 1)\n      when Some(last)\n        if last != min_val\n          result = list.push(result, min_val)\n        end\n      when None\n        ()\n      end\n    end\n    mut new_rem: List<Int> = []\n    mut k = 0\n    while k < remaining.len()\n      match remaining.get(k)\n      when Some(v)\n        if v != min_val\n          new_rem = list.push(new_rem, v)\n        end\n      when None\n        ()\n      end\n      k = k + 1\n    end\n    remaining = new_rem\n  end\n  result\nend\n\nfn to_output(_ xs: List<Int>) -> String\n  mut out = \"\"\n  mut i = 0\n  while i < xs.len()\n    match xs.get(i)\n    when Some(v)\n      if i == 0\n        out = \"#{v}\"\n      else\n        out = \"#{out} #{v}\"\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  out\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet a = parse_line(line1)\nlet b = parse_line(line2)\nlet combined = concat(a, b)\nlet sorted = sort_dedupe(combined)\nprintln(to_output(sorted))",
+  "overall": "pass"
+}

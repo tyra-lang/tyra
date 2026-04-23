@@ -1,0 +1,36 @@
+{
+  "prompt_id": "072-min-abs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1776951483,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 38970,
+      "code_len": 1317,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 1377,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 754,
+      "stdout": "min_abs=-2",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn bat(_ s: String, _ i: Int) -> Int\n  match string.byte_at(s, i)\n  when Some(b)\n    b\n  when None\n    -1\n  end\nend\n\nfn is_ws(_ c: Int) -> Bool\n  c == 32 or c == 9 or c == 10 or c == 13\nend\n\nfn is_digit(_ c: Int) -> Bool\n  c >= 48 and c <= 57\nend\n\nfn abs_int(_ x: Int) -> Int\n  if x < 0\n    -x\n  else\n    x\n  end\nend\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  let n = string.len(line)\n  mut i = 0\n  mut have = false\n  mut best = 0\n  mut best_abs = 0\n\n  while i < n\n    let c = bat(line, i)\n    if is_ws(c)\n      i = i + 1\n    else\n      mut sign = 1\n      if c == 45\n        sign = -1\n        i = i + 1\n      else if c == 43\n        i = i + 1\n      end\n      mut val = 0\n      mut reading = true\n      while reading\n        if i < n\n          let d = bat(line, i)\n          if is_digit(d)\n            val = val * 10 + (d - 48)\n            i = i + 1\n          else\n            reading = false\n          end\n        else\n          reading = false\n        end\n      end\n      let signed = val * sign\n      let a = abs_int(signed)\n      if not have\n        have = true\n        best = signed\n        best_abs = a\n      else if a < best_abs\n        best = signed\n        best_abs = a\n      end\n    end\n  end\n\n  print(\"min_abs=#{best}\")\nend",
+  "overall": "pass"
+}
