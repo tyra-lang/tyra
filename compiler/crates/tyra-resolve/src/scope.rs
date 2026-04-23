@@ -190,6 +190,13 @@ const PRELUDE_FUNCTIONS: &[&str] = &[
     "__string_substring",
     "__string_reverse",
     "__string_from_byte",
+    // §17.3.5: list stdlib backing (List<Int> only; LLVM-only, no runtime C ABI).
+    "__list_int_push",
+    "__list_int_sum",
+    "__list_int_max",
+    "__list_int_min",
+    "__list_int_contains",
+    "__list_int_index_of",
 ];
 
 /// Prelude ADT constructors: unqualified access to Option/Result variants.

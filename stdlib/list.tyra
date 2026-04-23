@@ -1,0 +1,45 @@
+# stdlib/list.tyra — Tier 2 list module (§17.3.5).
+#
+# v0.1 API (frozen, List<Int> only):
+#   list.push(xs, x)        -> List<Int>   (immutable append: returns new list)
+#   list.sum(xs)            -> Int
+#   list.max(xs)            -> Option<Int>
+#   list.min(xs)            -> Option<Int>
+#   list.contains(xs, x)    -> Bool
+#   list.index_of(xs, x)    -> Option<Int>
+#
+# Backed by `__list_int_*` intrinsics emitted inline as LLVM IR; no C ABI
+# runtime is used. All operations allocate via GC_malloc and never mutate
+# the input list (§coding-style immutability rule).
+#
+# v0.1 caveats:
+# - Int elements only. `List<String>` and arbitrary `List<T>` are deferred
+#   until element-type monomorphization for stdlib intrinsics lands (§22).
+# - `map` / `filter` / `fold` require lambda passing through a C ABI and
+#   are intentionally out of scope for v0.1 (§22).
+# - `push` is O(n) because it copies the underlying data; the semantics
+#   stay immutable even once a true persistent structure is added later.
+
+export fn push(_ list: List<Int>, _ x: Int) -> List<Int>
+  __list_int_push(list, x)
+end
+
+export fn sum(_ list: List<Int>) -> Int
+  __list_int_sum(list)
+end
+
+export fn max(_ list: List<Int>) -> Option<Int>
+  __list_int_max(list)
+end
+
+export fn min(_ list: List<Int>) -> Option<Int>
+  __list_int_min(list)
+end
+
+export fn contains(_ list: List<Int>, _ x: Int) -> Bool
+  __list_int_contains(list, x)
+end
+
+export fn index_of(_ list: List<Int>, _ x: Int) -> Option<Int>
+  __list_int_index_of(list, x)
+end

@@ -1205,6 +1205,7 @@ ADT バリアント:
 言語意味論には影響しないが、実用上重要なモジュール。API 仕様は `docs/stdlib/` に別途定義する。
 
 - `string` — 文字列操作 (len, trim, contains, starts_with 等。§17.3.4 で v0.1 API 凍結)
+- `list` — `List<Int>` の操作 (push, sum, max, min, contains, index_of。§17.3.5 で v0.1 API 凍結、`List<T>` 全般は §22 で延期)
 - `collections` — `List`, `Map`, `Set` のメソッド (sort_by, min_by, max_by, map, filter 等)
 - `float` — Float の比較関数 (eq, approx_eq, is_nan 等。ADR-0002 参照)
 - `json` — JSON パース (§17.3 で v0.1 API 凍結)
@@ -1427,6 +1428,40 @@ export fn from_byte(_ b: Int) -> String
   (intrinsic → `List<String>` 構築の配管が必要なため次のマイルストーンに
   繰延)。§22 の「`string` の拡張 API」として追跡する。
 
+#### 17.3.5 list
+
+呼出側は `import list` の上で `list.push(...)` / `list.sum(...)` のように
+モジュール修飾して呼ぶ。v0.1 では **`List<Int>` 専用** の 6 関数を凍結する。
+
+```tyra
+# stdlib/list.tyra
+export fn push(_ list: List<Int>, _ x: Int) -> List<Int>
+export fn sum(_ list: List<Int>) -> Int
+export fn max(_ list: List<Int>) -> Option<Int>
+export fn min(_ list: List<Int>) -> Option<Int>
+export fn contains(_ list: List<Int>, _ x: Int) -> Bool
+export fn index_of(_ list: List<Int>, _ x: Int) -> Option<Int>
+```
+
+- すべて **不変操作**。戻り値が `List<Int>` であるもの (`push`) は新しい
+  GC 割り当てバッファを返し、入力リストは変更しない (§coding-style 不変性)。
+- `push` は末尾に要素を追加した新リストを返す O(n)。
+- `sum` は 0 を初期値とする fold。オーバーフローは v0.1 ではチェックしない
+  (`Int` の二補数ラップ意味論に従う)。
+- `max` / `min` は空リストに対して `None`、非空リストに対して `Some(v)` を
+  返す。比較は符号付き整数の通常順序。
+- `contains` は線形走査で等価一致を返す。
+- `index_of` は最初に一致するインデックス (0-based) を `Some(i)` で返し、
+  一致がなければ `None` を返す。
+- 要素型は **`Int` のみ**。`List<String>` や任意の `List<T>` は v0.1 で
+  対象外 (`stdlib` intrinsic の要素型モノモーフィゼーション整備が必要。
+  §22 で追跡)。
+- `map` / `filter` / `fold` は v0.1 の範囲外 (ラムダの C ABI 通し配管が
+  必要なため)。§22 の「list 拡張 API」として追跡する。
+- 実装は LLVM IR 直接生成 (`__list_int_*` intrinsic → `GC_malloc` + ループ)
+  で行い、C ABI ランタイムは経由しない。`List<Int>` のレイアウト
+  (`{ptr data, i64 len}`) はコンパイラ専有のため、これが安全に可能。
+
 ---
 
 ## 18. ツールチェーン
@@ -1600,6 +1635,7 @@ end
 - モジュールレベルの初期化セマンティクス (`let`/`mut` のモジュールスコープ)
 - Tier 2 標準ライブラリ API の詳細 (collections, time, test, log, float) — `fs`, `json`, `http`, `string` は §17.3 で v0.1 凍結済
 - `string` の拡張 API (split, split_whitespace, replace, join, char_at, 正規表現) — §17.3.4 で凍結した 9 関数の外側は v0.2 以降
+- `list` の拡張 API (ジェネリック `List<T>` 全般、`map` / `filter` / `fold`、`List<String>` 等) — §17.3.5 で凍結した `List<Int>` 専用 6 関数の外側は v0.2 以降 (要素型モノモーフィゼーションとラムダ C ABI 通し配管が必要)
 
 ---
 

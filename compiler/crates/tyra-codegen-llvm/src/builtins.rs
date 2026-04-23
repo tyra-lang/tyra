@@ -222,6 +222,31 @@ pub(crate) fn emit_builtin_call(
             emit_string_i64_to_ptr(out, dest.as_deref(), "tyra_string_from_byte", args, func);
             true
         }
+        // §17.3.5: list stdlib intrinsics (List<Int> only).
+        "__list_int_push" => {
+            emit_list_int_push(out, dest.as_deref(), args, func, ctx);
+            true
+        }
+        "__list_int_sum" => {
+            emit_list_int_sum(out, dest.as_deref(), args, func, ctx);
+            true
+        }
+        "__list_int_contains" => {
+            emit_list_int_contains(out, dest.as_deref(), args, func, ctx);
+            true
+        }
+        "__list_int_index_of" => {
+            emit_list_int_index_of(out, dest.as_deref(), args, func, ctx);
+            true
+        }
+        "__list_int_max" => {
+            emit_list_int_min_max(out, dest.as_deref(), args, func, ctx, true);
+            true
+        }
+        "__list_int_min" => {
+            emit_list_int_min_max(out, dest.as_deref(), args, func, ctx, false);
+            true
+        }
         "sys__exit" => {
             // §17.1: core.sys.exit(_ code: Int) -> Never
             if let Some(arg) = args.first() {
@@ -858,5 +883,285 @@ fn emit_parse_int(
     writeln!(out, "  br label %{d}.merge").unwrap();
     // Merge
     writeln!(out, "{d}.merge:").unwrap();
+    writeln!(out, "  %{d} = load {opt_ty}, ptr %{d}.slot").unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// §17.3.5: list stdlib emit helpers. All operate on `List<Int>` values laid
+// out as `{ptr data, i64 len}`. Implemented purely in LLVM IR — no runtime
+// C ABI — because the list layout is compiler-owned. Every operation is
+// immutable: mutating inputs is never allowed; callers always receive a
+// fresh GC-allocated buffer when the output is a list.
+// ---------------------------------------------------------------------------
+
+/// Look up the LLVM struct type name for `List<Int>`. All `List<Int>` values
+/// share one physical layout; the fallback keeps emission well-formed when
+/// the monomorphized struct has not been registered (e.g. intrinsic called
+/// from a context where no List<Int> literal forced monomorphization).
+fn list_int_llvm_ty(ctx: &EmitCtx) -> String {
+    if let Some(info) = ctx.struct_map.get("List__Int") {
+        info.llvm_name.clone()
+    } else {
+        "%struct.List__Int".into()
+    }
+}
+
+fn option_int_llvm_ty(ctx: &EmitCtx) -> String {
+    if let Some(info) = ctx.struct_map.get("Option__Int") {
+        info.llvm_name.clone()
+    } else {
+        "%struct.Option__Int".into()
+    }
+}
+
+/// `__list_int_push(list, x)` — immutable append. Allocates a new buffer of
+/// size `(len + 1) * 8`, copies every element, writes `x` at index `len`, and
+/// returns a fresh `{ptr, i64}` struct. Input is never mutated.
+fn emit_list_int_push(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+    ctx: &EmitCtx,
+) {
+    let d = dest.unwrap_or("_list_push");
+    let list_ty = list_int_llvm_ty(ctx);
+    let list_val = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "undef".into());
+    let x = args
+        .get(1)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+
+    writeln!(out, "  %{d}.olddata = extractvalue {list_ty} {list_val}, 0").unwrap();
+    writeln!(out, "  %{d}.oldlen = extractvalue {list_ty} {list_val}, 1").unwrap();
+    writeln!(out, "  %{d}.newlen = add i64 %{d}.oldlen, 1").unwrap();
+    writeln!(out, "  %{d}.size = mul i64 %{d}.newlen, 8").unwrap();
+    writeln!(out, "  %{d}.newdata = call ptr @GC_malloc(i64 %{d}.size)").unwrap();
+    writeln!(out, "  %{d}.null = icmp eq ptr %{d}.newdata, null").unwrap();
+    writeln!(out, "  br i1 %{d}.null, label %{d}.oom, label %{d}.copy").unwrap();
+    writeln!(out, "{d}.oom:").unwrap();
+    writeln!(out, "  call void @abort()").unwrap();
+    writeln!(out, "  unreachable").unwrap();
+    writeln!(out, "{d}.copy:").unwrap();
+    writeln!(out, "  %{d}.ctr = alloca i64").unwrap();
+    writeln!(out, "  store i64 0, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  br label %{d}.loop").unwrap();
+    writeln!(out, "{d}.loop:").unwrap();
+    writeln!(out, "  %{d}.i = load i64, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  %{d}.done = icmp sge i64 %{d}.i, %{d}.oldlen").unwrap();
+    writeln!(out, "  br i1 %{d}.done, label %{d}.tail, label %{d}.body").unwrap();
+    writeln!(out, "{d}.body:").unwrap();
+    writeln!(out, "  %{d}.srcp = getelementptr i64, ptr %{d}.olddata, i64 %{d}.i").unwrap();
+    writeln!(out, "  %{d}.v = load i64, ptr %{d}.srcp").unwrap();
+    writeln!(out, "  %{d}.dstp = getelementptr i64, ptr %{d}.newdata, i64 %{d}.i").unwrap();
+    writeln!(out, "  store i64 %{d}.v, ptr %{d}.dstp").unwrap();
+    writeln!(out, "  %{d}.next = add i64 %{d}.i, 1").unwrap();
+    writeln!(out, "  store i64 %{d}.next, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  br label %{d}.loop").unwrap();
+    writeln!(out, "{d}.tail:").unwrap();
+    writeln!(out, "  %{d}.tailp = getelementptr i64, ptr %{d}.newdata, i64 %{d}.oldlen").unwrap();
+    writeln!(out, "  store i64 {x}, ptr %{d}.tailp").unwrap();
+    writeln!(out, "  %{d}.s0 = insertvalue {list_ty} undef, ptr %{d}.newdata, 0").unwrap();
+    writeln!(out, "  %{d} = insertvalue {list_ty} %{d}.s0, i64 %{d}.newlen, 1").unwrap();
+}
+
+/// `__list_int_sum(list)` — fold with `+`, identity `0`.
+fn emit_list_int_sum(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+    ctx: &EmitCtx,
+) {
+    let d = dest.unwrap_or("_list_sum");
+    let list_ty = list_int_llvm_ty(ctx);
+    let list_val = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "undef".into());
+    writeln!(out, "  %{d}.data = extractvalue {list_ty} {list_val}, 0").unwrap();
+    writeln!(out, "  %{d}.len = extractvalue {list_ty} {list_val}, 1").unwrap();
+    writeln!(out, "  %{d}.acc = alloca i64").unwrap();
+    writeln!(out, "  store i64 0, ptr %{d}.acc").unwrap();
+    writeln!(out, "  %{d}.ctr = alloca i64").unwrap();
+    writeln!(out, "  store i64 0, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  br label %{d}.loop").unwrap();
+    writeln!(out, "{d}.loop:").unwrap();
+    writeln!(out, "  %{d}.i = load i64, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  %{d}.done = icmp sge i64 %{d}.i, %{d}.len").unwrap();
+    writeln!(out, "  br i1 %{d}.done, label %{d}.end, label %{d}.body").unwrap();
+    writeln!(out, "{d}.body:").unwrap();
+    writeln!(out, "  %{d}.p = getelementptr i64, ptr %{d}.data, i64 %{d}.i").unwrap();
+    writeln!(out, "  %{d}.v = load i64, ptr %{d}.p").unwrap();
+    writeln!(out, "  %{d}.cur = load i64, ptr %{d}.acc").unwrap();
+    writeln!(out, "  %{d}.sum = add i64 %{d}.cur, %{d}.v").unwrap();
+    writeln!(out, "  store i64 %{d}.sum, ptr %{d}.acc").unwrap();
+    writeln!(out, "  %{d}.next = add i64 %{d}.i, 1").unwrap();
+    writeln!(out, "  store i64 %{d}.next, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  br label %{d}.loop").unwrap();
+    writeln!(out, "{d}.end:").unwrap();
+    writeln!(out, "  %{d} = load i64, ptr %{d}.acc").unwrap();
+}
+
+/// `__list_int_contains(list, x)` — linear search; returns i1.
+fn emit_list_int_contains(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+    ctx: &EmitCtx,
+) {
+    let d = dest.unwrap_or("_list_contains");
+    let list_ty = list_int_llvm_ty(ctx);
+    let list_val = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "undef".into());
+    let x = args
+        .get(1)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    writeln!(out, "  %{d}.data = extractvalue {list_ty} {list_val}, 0").unwrap();
+    writeln!(out, "  %{d}.len = extractvalue {list_ty} {list_val}, 1").unwrap();
+    writeln!(out, "  %{d}.res = alloca i1").unwrap();
+    writeln!(out, "  store i1 0, ptr %{d}.res").unwrap();
+    writeln!(out, "  %{d}.ctr = alloca i64").unwrap();
+    writeln!(out, "  store i64 0, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  br label %{d}.loop").unwrap();
+    writeln!(out, "{d}.loop:").unwrap();
+    writeln!(out, "  %{d}.i = load i64, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  %{d}.done = icmp sge i64 %{d}.i, %{d}.len").unwrap();
+    writeln!(out, "  br i1 %{d}.done, label %{d}.end, label %{d}.body").unwrap();
+    writeln!(out, "{d}.body:").unwrap();
+    writeln!(out, "  %{d}.p = getelementptr i64, ptr %{d}.data, i64 %{d}.i").unwrap();
+    writeln!(out, "  %{d}.v = load i64, ptr %{d}.p").unwrap();
+    writeln!(out, "  %{d}.eq = icmp eq i64 %{d}.v, {x}").unwrap();
+    writeln!(out, "  br i1 %{d}.eq, label %{d}.hit, label %{d}.cont").unwrap();
+    writeln!(out, "{d}.hit:").unwrap();
+    writeln!(out, "  store i1 1, ptr %{d}.res").unwrap();
+    writeln!(out, "  br label %{d}.end").unwrap();
+    writeln!(out, "{d}.cont:").unwrap();
+    writeln!(out, "  %{d}.next = add i64 %{d}.i, 1").unwrap();
+    writeln!(out, "  store i64 %{d}.next, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  br label %{d}.loop").unwrap();
+    writeln!(out, "{d}.end:").unwrap();
+    writeln!(out, "  %{d} = load i1, ptr %{d}.res").unwrap();
+}
+
+/// `__list_int_index_of(list, x)` — first-match linear search; returns
+/// `Some(i)` for the lowest match, or `None` if absent.
+fn emit_list_int_index_of(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+    ctx: &EmitCtx,
+) {
+    let d = dest.unwrap_or("_list_index_of");
+    let list_ty = list_int_llvm_ty(ctx);
+    let opt_ty = option_int_llvm_ty(ctx);
+    let list_val = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "undef".into());
+    let x = args
+        .get(1)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    writeln!(out, "  %{d}.data = extractvalue {list_ty} {list_val}, 0").unwrap();
+    writeln!(out, "  %{d}.len = extractvalue {list_ty} {list_val}, 1").unwrap();
+    writeln!(out, "  %{d}.slot = alloca {opt_ty}").unwrap();
+    // Initialize to None so the post-loop fallthrough path is correct.
+    writeln!(out, "  %{d}.none0 = insertvalue {opt_ty} undef, i8 1, 0").unwrap();
+    writeln!(out, "  %{d}.none1 = insertvalue {opt_ty} %{d}.none0, i64 0, 1").unwrap();
+    writeln!(out, "  store {opt_ty} %{d}.none1, ptr %{d}.slot").unwrap();
+    writeln!(out, "  %{d}.ctr = alloca i64").unwrap();
+    writeln!(out, "  store i64 0, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  br label %{d}.loop").unwrap();
+    writeln!(out, "{d}.loop:").unwrap();
+    writeln!(out, "  %{d}.i = load i64, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  %{d}.done = icmp sge i64 %{d}.i, %{d}.len").unwrap();
+    writeln!(out, "  br i1 %{d}.done, label %{d}.end, label %{d}.body").unwrap();
+    writeln!(out, "{d}.body:").unwrap();
+    writeln!(out, "  %{d}.p = getelementptr i64, ptr %{d}.data, i64 %{d}.i").unwrap();
+    writeln!(out, "  %{d}.v = load i64, ptr %{d}.p").unwrap();
+    writeln!(out, "  %{d}.eq = icmp eq i64 %{d}.v, {x}").unwrap();
+    writeln!(out, "  br i1 %{d}.eq, label %{d}.hit, label %{d}.cont").unwrap();
+    writeln!(out, "{d}.hit:").unwrap();
+    writeln!(out, "  %{d}.some0 = insertvalue {opt_ty} undef, i8 0, 0").unwrap();
+    writeln!(out, "  %{d}.some1 = insertvalue {opt_ty} %{d}.some0, i64 %{d}.i, 1").unwrap();
+    writeln!(out, "  store {opt_ty} %{d}.some1, ptr %{d}.slot").unwrap();
+    writeln!(out, "  br label %{d}.end").unwrap();
+    writeln!(out, "{d}.cont:").unwrap();
+    writeln!(out, "  %{d}.next = add i64 %{d}.i, 1").unwrap();
+    writeln!(out, "  store i64 %{d}.next, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  br label %{d}.loop").unwrap();
+    writeln!(out, "{d}.end:").unwrap();
+    writeln!(out, "  %{d} = load {opt_ty}, ptr %{d}.slot").unwrap();
+}
+
+/// `__list_int_max(list)` / `__list_int_min(list)` — returns `Some(v)` with
+/// the extremum, or `None` for empty lists. `is_max = true` selects max.
+fn emit_list_int_min_max(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+    ctx: &EmitCtx,
+    is_max: bool,
+) {
+    let d = dest.unwrap_or(if is_max { "_list_max" } else { "_list_min" });
+    let list_ty = list_int_llvm_ty(ctx);
+    let opt_ty = option_int_llvm_ty(ctx);
+    let cmp = if is_max { "sgt" } else { "slt" };
+    let list_val = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "undef".into());
+    writeln!(out, "  %{d}.data = extractvalue {list_ty} {list_val}, 0").unwrap();
+    writeln!(out, "  %{d}.len = extractvalue {list_ty} {list_val}, 1").unwrap();
+    writeln!(out, "  %{d}.slot = alloca {opt_ty}").unwrap();
+    writeln!(out, "  %{d}.empty = icmp eq i64 %{d}.len, 0").unwrap();
+    writeln!(out, "  br i1 %{d}.empty, label %{d}.none, label %{d}.init").unwrap();
+    writeln!(out, "{d}.none:").unwrap();
+    writeln!(out, "  %{d}.none0 = insertvalue {opt_ty} undef, i8 1, 0").unwrap();
+    writeln!(out, "  %{d}.none1 = insertvalue {opt_ty} %{d}.none0, i64 0, 1").unwrap();
+    writeln!(out, "  store {opt_ty} %{d}.none1, ptr %{d}.slot").unwrap();
+    writeln!(out, "  br label %{d}.end").unwrap();
+    writeln!(out, "{d}.init:").unwrap();
+    writeln!(out, "  %{d}.p0 = getelementptr i64, ptr %{d}.data, i64 0").unwrap();
+    writeln!(out, "  %{d}.v0 = load i64, ptr %{d}.p0").unwrap();
+    writeln!(out, "  %{d}.best = alloca i64").unwrap();
+    writeln!(out, "  store i64 %{d}.v0, ptr %{d}.best").unwrap();
+    writeln!(out, "  %{d}.ctr = alloca i64").unwrap();
+    writeln!(out, "  store i64 1, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  br label %{d}.loop").unwrap();
+    writeln!(out, "{d}.loop:").unwrap();
+    writeln!(out, "  %{d}.i = load i64, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  %{d}.done = icmp sge i64 %{d}.i, %{d}.len").unwrap();
+    writeln!(out, "  br i1 %{d}.done, label %{d}.some, label %{d}.body").unwrap();
+    writeln!(out, "{d}.body:").unwrap();
+    writeln!(out, "  %{d}.p = getelementptr i64, ptr %{d}.data, i64 %{d}.i").unwrap();
+    writeln!(out, "  %{d}.v = load i64, ptr %{d}.p").unwrap();
+    writeln!(out, "  %{d}.cur = load i64, ptr %{d}.best").unwrap();
+    writeln!(out, "  %{d}.better = icmp {cmp} i64 %{d}.v, %{d}.cur").unwrap();
+    writeln!(out, "  br i1 %{d}.better, label %{d}.upd, label %{d}.cont").unwrap();
+    writeln!(out, "{d}.upd:").unwrap();
+    writeln!(out, "  store i64 %{d}.v, ptr %{d}.best").unwrap();
+    writeln!(out, "  br label %{d}.cont").unwrap();
+    writeln!(out, "{d}.cont:").unwrap();
+    writeln!(out, "  %{d}.next = add i64 %{d}.i, 1").unwrap();
+    writeln!(out, "  store i64 %{d}.next, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  br label %{d}.loop").unwrap();
+    writeln!(out, "{d}.some:").unwrap();
+    writeln!(out, "  %{d}.final = load i64, ptr %{d}.best").unwrap();
+    writeln!(out, "  %{d}.some0 = insertvalue {opt_ty} undef, i8 0, 0").unwrap();
+    writeln!(out, "  %{d}.some1 = insertvalue {opt_ty} %{d}.some0, i64 %{d}.final, 1").unwrap();
+    writeln!(out, "  store {opt_ty} %{d}.some1, ptr %{d}.slot").unwrap();
+    writeln!(out, "  br label %{d}.end").unwrap();
+    writeln!(out, "{d}.end:").unwrap();
     writeln!(out, "  %{d} = load {opt_ty}, ptr %{d}.slot").unwrap();
 }
