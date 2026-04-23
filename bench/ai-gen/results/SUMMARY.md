@@ -2,13 +2,12 @@
 
 Prompts observed: 100
 
-Latest sweep: **Run 13** (`tyra+spec × claude × 100`, 2026-04-23)
-after propagating `List<T>` through user-fn returns and LHS
-annotations, plus adding `list.len` / `list.get` stdlib wrappers.
+Latest sweep: **Run 14** (`tyra+spec × claude × 100`, 2026-04-23)
+after unifying if/else arm types (E0305 cluster).
 
 | language  | generator | pass | check_fail | exec_fail | compile_fail | generator_fail | harness_error | skipped | total | pass% |
 | --------- | --------- | ---- | ---------- | --------- | ------------ | -------------- | ------------- | ------- | ----- | ----- |
-| tyra+spec | claude    | 78   | 6          | 0         | 16           | 0              | 0             | 0       | 100   | 78.0% |
+| tyra+spec | claude    | 83   | 8          | 0         | 9            | 0              | 0             | 0       | 100   | 83.0% |
 
 Historical passes on 100-prompt × tyra+spec × claude sweeps:
 
@@ -23,6 +22,7 @@ Historical passes on 100-prompt × tyra+spec × claude sweeps:
 | 11  | 2026-04-23 | 65   | 72           | + string extension + list stdlib + 066 fix  |
 | 12  | 2026-04-23 | 66   | 79           | + Ty::Var compat (empty ListLit E0308)      |
 | 13  | 2026-04-23 | 78   | 84           | + List<T> propagation + list.len / list.get |
+| 14  | 2026-04-23 | 83   | 91           | + if/else arm-type unification (E0305)      |
 
 Run 11 error distribution (100 prompts):
 
