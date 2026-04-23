@@ -1,0 +1,36 @@
+{
+  "prompt_id": "087-set-union",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1776926483,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 40277,
+      "code_len": 2940,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 474,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 540,
+      "stdout": "1 2 3 4 5 6 7\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  let n = string.len(s)\n  mut current = 0\n  mut sign = 1\n  mut in_num = false\n  while i < n\n    match string.byte_at(s, i)\n    when Some(b)\n      if b >= 48 and b <= 57\n        if not in_num\n          current = 0\n          sign = 1\n          in_num = true\n        end\n        current = current * 10 + (b - 48)\n      else if b == 45 and not in_num\n        in_num = true\n        current = 0\n        sign = -1\n      else\n        if in_num\n          result = list.push(result, current * sign)\n          in_num = false\n        end\n      end\n    when None\n      i = i\n    end\n    i = i + 1\n  end\n  if in_num\n    result = list.push(result, current * sign)\n  end\n  result\nend\n\nfn dedupe(_ xs: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  let n = xs.len()\n  while i < n\n    match xs.get(i)\n    when Some(v)\n      if not list.contains(result, v)\n        result = list.push(result, v)\n      end\n    when None\n      i = i\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn sort_unique(_ xs: List<Int>) -> List<Int>\n  mut sorted: List<Int> = []\n  let n = xs.len()\n  if n == 0\n    sorted\n  else\n    match list.min(xs)\n    when Some(m)\n      mut current = m\n      sorted = list.push(sorted, current)\n      mut count = 1\n      mut done = false\n      while not done\n        if count >= n\n          done = true\n        else\n          mut next_val = 0\n          mut found = false\n          mut j = 0\n          while j < n\n            match xs.get(j)\n            when Some(v)\n              if v > current\n                if not found\n                  next_val = v\n                  found = true\n                else if v < next_val\n                  next_val = v\n                end\n              end\n            when None\n              j = j\n            end\n            j = j + 1\n          end\n          if found\n            current = next_val\n            sorted = list.push(sorted, current)\n            count = count + 1\n          else\n            done = true\n          end\n        end\n      end\n      sorted\n    when None\n      sorted\n    end\n  end\nend\n\nfn format_list(_ xs: List<Int>) -> String\n  mut out = \"\"\n  mut i = 0\n  let n = xs.len()\n  while i < n\n    match xs.get(i)\n    when Some(v)\n      if i == 0\n        out = \"#{v}\"\n      else\n        out = \"#{out} #{v}\"\n      end\n    when None\n      i = i\n    end\n    i = i + 1\n  end\n  out\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet nums1 = parse_ints(line1)\nlet nums2 = parse_ints(line2)\n\nmut combined = nums1\nmut k = 0\nlet m2 = nums2.len()\nwhile k < m2\n  match nums2.get(k)\n  when Some(v)\n    combined = list.push(combined, v)\n  when None\n    k = k\n  end\n  k = k + 1\nend\n\nlet uniques = dedupe(combined)\nlet sorted = sort_unique(uniques)\nprintln(format_list(sorted))",
+  "overall": "pass"
+}

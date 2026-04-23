@@ -1,0 +1,26 @@
+{
+  "prompt_id": "017-key-value-lookup",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1776921415,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9268,
+      "code_len": 205,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 15,
+      "stderr": "\nthread 'main' (10427634) panicked at compiler/crates/tyra-mir/src/lower/match_lower.rs:144:37:\nBUG: cannot determine ADT type for match subject '_t26'\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+      "exit_code": 101,
+      "note": ""
+    }
+  },
+  "code": "import io\n\nlet key = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet m = {\"one\": 1, \"two\": 2, \"three\": 3}\n\nmatch m.get(key)\nwhen Some(n)\n  print(\"value=#{n}\")\nwhen None\n  print(\"missing\")\nend",
+  "overall": "compile_fail"
+}

@@ -1,0 +1,26 @@
+{
+  "prompt_id": "041-sum-pairs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1776922568,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 28094,
+      "code_len": 1479,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 253,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-m9l2_uml/main.ll:165:3: error: multiple definition of local value named 'v'\n  165 |   %v = alloca i64\n      |   ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  mut start = 0\n  mut in_tok = false\n  while i < n\n    mut b = 0\n    match string.byte_at(s, i)\n    when Some(x)\n      b = x\n    when None\n      b = 0\n    end\n    let is_ws = b == 32 or b == 9 or b == 10 or b == 13\n    if is_ws\n      if in_tok\n        let tok = string.substring(s, start, i)\n        mut v = 0\n        match string.parse_int(tok)\n        when Some(x)\n          v = x\n        when None\n          v = 0\n        end\n        result = list.push(result, v)\n        in_tok = false\n      end\n    else\n      if not in_tok\n        start = i\n        in_tok = true\n      end\n    end\n    i = i + 1\n  end\n  if in_tok\n    let tok = string.substring(s, start, n)\n    mut v = 0\n    match string.parse_int(tok)\n    when Some(x)\n      v = x\n    when None\n      v = 0\n    end\n    result = list.push(result, v)\n  end\n  result\nend\n\nfn get_or_zero(_ xs: List<Int>, _ i: Int) -> Int\n  match list.get(xs, i)\n  when Some(v)\n    v\n  when None\n    0\n  end\nend\n\nmut line1 = \"\"\nmatch io.read_line()\nwhen Some(s)\n  line1 = s\nwhen None\n  line1 = \"\"\nend\n\nmut line2 = \"\"\nmatch io.read_line()\nwhen Some(s)\n  line2 = s\nwhen None\n  line2 = \"\"\nend\n\nlet a = parse_ints(line1)\nlet b = parse_ints(line2)\n\nlet n = list.len(a)\nmut k = 0\nwhile k < n\n  let x = get_or_zero(a, k)\n  let y = get_or_zero(b, k)\n  let s = x + y\n  println(\"#{x}+#{y}=#{s}\")\n  k = k + 1\nend",
+  "overall": "compile_fail"
+}

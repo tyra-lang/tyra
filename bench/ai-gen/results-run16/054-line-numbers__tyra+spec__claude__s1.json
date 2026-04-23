@@ -1,0 +1,26 @@
+{
+  "prompt_id": "054-line-numbers",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1776923025,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 7436,
+      "code_len": 268,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 115,
+      "stderr": "\nthread 'main' (10579939) panicked at compiler/crates/tyra-mir/src/lower/match_lower.rs:144:37:\nBUG: cannot determine ADT type for match subject '_t9'\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+      "exit_code": 101,
+      "note": ""
+    }
+  },
+  "code": "import io\n\nmut n = 0\nmut line_opt = io.read_line()\nwhile match line_opt\n  when Some(_)\n    true\n  when None\n    false\n  end\n  n = n + 1\n  let line = match line_opt\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  println(\"#{n}: #{line}\")\n  line_opt = io.read_line()\nend",
+  "overall": "compile_fail"
+}

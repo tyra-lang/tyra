@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1776926983,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 63494,
+      "code_len": 2039,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 499,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 667,
+      "stdout": "9 6 5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  mut start = -1\n  while i < n\n    match string.byte_at(s, i)\n    when Some(b)\n      let is_ws = b == 32 or b == 9 or b == 10 or b == 13\n      if is_ws\n        if start >= 0\n          match string.parse_int(string.substring(s, start, i))\n          when Some(v)\n            result = list.push(result, v)\n          when None\n            ()\n          end\n          start = -1\n        end\n      else\n        if start < 0\n          start = i\n        end\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if start >= 0\n    match string.parse_int(string.substring(s, start, n))\n    when Some(v)\n      result = list.push(result, v)\n    when None\n      ()\n    end\n  end\n  result\nend\n\nfn take_k_desc(_ xs: List<Int>, _ k: Int) -> List<Int>\n  let n = xs.len()\n  mut limit = k\n  if limit > n\n    limit = n\n  end\n  mut result: List<Int> = []\n  mut used: List<Int> = []\n  mut count = 0\n  while count < limit\n    mut best_idx = -1\n    mut best_val = 0\n    mut j = 0\n    while j < n\n      if not list.contains(used, j)\n        match xs.get(j)\n        when Some(v)\n          if best_idx < 0 or v > best_val\n            best_idx = j\n            best_val = v\n          end\n        when None\n          ()\n        end\n      end\n      j = j + 1\n    end\n    used = list.push(used, best_idx)\n    result = list.push(result, best_val)\n    count = count + 1\n  end\n  result\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet numbers = parse_ints(line1)\nlet k = match string.parse_int(string.trim(line2))\nwhen Some(v)\n  v\nwhen None\n  0\nend\n\nlet sorted = take_k_desc(numbers, k)\n\nmut out = \"\"\nmut idx = 0\nlet sn = sorted.len()\nwhile idx < sn\n  match sorted.get(idx)\n  when Some(v)\n    if idx == 0\n      out = \"#{v}\"\n    else\n      out = \"#{out} #{v}\"\n    end\n  when None\n    ()\n  end\n  idx = idx + 1\nend\nprintln(out)",
+  "overall": "pass"
+}

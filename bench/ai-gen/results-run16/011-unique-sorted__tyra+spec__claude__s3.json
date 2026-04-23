@@ -1,0 +1,36 @@
+{
+  "prompt_id": "011-unique-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1776921102,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 63109,
+      "code_len": 2017,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 571,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 542,
+      "stdout": "1 2 3 4 5 6 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn get_byte(_ s: String, _ i: Int) -> Int\n  match string.byte_at(s, i)\n  when Some(v)\n    v\n  when None\n    0\n  end\nend\n\nfn get_at(_ xs: List<Int>, _ i: Int) -> Int\n  match xs.get(i)\n  when Some(v)\n    v\n  when None\n    0\n  end\nend\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn add_unique(_ xs: List<Int>, _ v: Int) -> List<Int>\n  if list.contains(xs, v)\n    xs\n  else\n    list.push(xs, v)\n  end\nend\n\nfn try_add(_ xs: List<Int>, _ s: String, _ start: Int, _ stop: Int) -> List<Int>\n  let tok = string.substring(s, start, stop)\n  match string.parse_int(tok)\n  when Some(v)\n    add_unique(xs, v)\n  when None\n    xs\n  end\nend\n\nfn main() -> Unit\n  let input = io.read_to_end()\n  let n = string.len(input)\n  mut nums: List<Int> = []\n  mut i = 0\n  mut start = -1\n  while i < n\n    let b = get_byte(input, i)\n    if is_ws(b)\n      if start >= 0\n        nums = try_add(nums, input, start, i)\n        start = -1\n      end\n    else\n      if start < 0\n        start = i\n      end\n    end\n    i = i + 1\n  end\n  if start >= 0\n    nums = try_add(nums, input, start, n)\n  end\n\n  mut sorted: List<Int> = []\n  match list.min(nums)\n  when Some(m)\n    sorted = list.push(sorted, m)\n    mut last = m\n    mut done = false\n    while not done\n      mut best_val = 0\n      mut have_best = false\n      mut j = 0\n      let ln = nums.len()\n      while j < ln\n        let x = get_at(nums, j)\n        if x > last\n          if not have_best\n            best_val = x\n            have_best = true\n          else if x < best_val\n            best_val = x\n          end\n        end\n        j = j + 1\n      end\n      if have_best\n        sorted = list.push(sorted, best_val)\n        last = best_val\n      else\n        done = true\n      end\n    end\n  when None\n    ()\n  end\n\n  mut out = \"\"\n  mut k = 0\n  let sl = sorted.len()\n  while k < sl\n    let x = get_at(sorted, k)\n    if k == 0\n      out = \"#{x}\"\n    else\n      out = \"#{out} #{x}\"\n    end\n    k = k + 1\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

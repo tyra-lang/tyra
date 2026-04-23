@@ -1,0 +1,26 @@
+{
+  "prompt_id": "083-word-frequency",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1776926045,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 55132,
+      "code_len": 1522,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 126,
+      "stderr": "error[E0200]: cannot import `core.io`: module not found\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import string\nimport core.io as io\n\nfn is_ws_at(_ s: String, _ i: Int) -> Bool\n  match string.byte_at(s, i)\n  when Some(b)\n    b == 32 or b == 9 or b == 10 or b == 11 or b == 12 or b == 13\n  when None\n    false\n  end\nend\n\nfn first_pos(_ s: String, _ n: Int, _ tok: String) -> Int\n  mut i = 0\n  while i < n\n    while i < n and is_ws_at(s, i)\n      i = i + 1\n    end\n    if i < n\n      let start = i\n      while i < n and not is_ws_at(s, i)\n        i = i + 1\n      end\n      let stop = i\n      if string.substring(s, start, stop) == tok\n        return start\n      end\n    end\n  end\n  -1\nend\n\nfn count_occ(_ s: String, _ n: Int, _ tok: String) -> Int\n  mut i = 0\n  mut count = 0\n  while i < n\n    while i < n and is_ws_at(s, i)\n      i = i + 1\n    end\n    if i < n\n      let start = i\n      while i < n and not is_ws_at(s, i)\n        i = i + 1\n      end\n      let stop = i\n      if string.substring(s, start, stop) == tok\n        count = count + 1\n      end\n    end\n  end\n  count\nend\n\nlet s = io.read_to_end()\nlet n = string.len(s)\n\nmut best_token = \"\"\nmut best_count = 0\nmut i = 0\n\nwhile i < n\n  while i < n and is_ws_at(s, i)\n    i = i + 1\n  end\n  if i < n\n    let start = i\n    while i < n and not is_ws_at(s, i)\n      i = i + 1\n    end\n    let stop = i\n    let tok = string.substring(s, start, stop)\n    if first_pos(s, n, tok) == start\n      let cnt = count_occ(s, n, tok)\n      if cnt > best_count\n        best_count = cnt\n        best_token = tok\n      end\n    end\n  end\nend\n\nprintln(\"top=#{best_token}=#{best_count}\")",
+  "overall": "compile_fail"
+}

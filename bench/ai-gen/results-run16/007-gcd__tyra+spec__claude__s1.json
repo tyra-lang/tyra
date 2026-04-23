@@ -1,0 +1,36 @@
+{
+  "prompt_id": "007-gcd",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1776920839,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 24667,
+      "code_len": 946,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 677,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 476,
+      "stdout": "gcd=6",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\n\nmut i = 0\nmut a = 0\nmut b = 0\nmut parsed = 0\n\nwhile parsed < 2 and i < n\n  let bopt = string.byte_at(input, i)\n  match bopt\n  when Some(ch)\n    if ch == 32 or ch == 9 or ch == 10 or ch == 13\n      i = i + 1\n    else\n      mut num = 0\n      mut done = false\n      while not done\n        if i >= n\n          done = true\n        else\n          match string.byte_at(input, i)\n          when Some(d)\n            if d >= 48 and d <= 57\n              num = num * 10 + (d - 48)\n              i = i + 1\n            else\n              done = true\n            end\n          when None\n            done = true\n          end\n        end\n      end\n      if parsed == 0\n        a = num\n      else\n        b = num\n      end\n      parsed = parsed + 1\n    end\n  when None\n    i = i + 1\n  end\nend\n\nmut x = a\nmut y = b\nwhile y != 0\n  let t = y\n  y = x % y\n  x = t\nend\n\nprint(\"gcd=#{x}\")",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "018-count-positive",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1776921474,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 25479,
+      "code_len": 865,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 1084,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 606,
+      "stdout": "positive=5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut count = 0\nmut i = 0\nmut in_num = false\nmut sign = 1\nmut val = 0\n\nwhile i < n\n  let b = match string.byte_at(input, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  let is_digit = b >= 48 and b <= 57\n  let is_sign = b == 45 or b == 43\n  if in_num\n    if is_digit\n      val = val * 10 + (b - 48)\n    else\n      let signed = val * sign\n      if signed > 0\n        count = count + 1\n      end\n      in_num = false\n      val = 0\n      sign = 1\n    end\n  else\n    if is_digit\n      in_num = true\n      val = b - 48\n    else if is_sign\n      in_num = true\n      val = 0\n      if b == 45\n        sign = -1\n      else\n        sign = 1\n      end\n    end\n  end\n  i = i + 1\nend\n\nif in_num\n  let signed = val * sign\n  if signed > 0\n    count = count + 1\n  end\nend\n\nprintln(\"positive=#{count}\")",
+  "overall": "pass"
+}

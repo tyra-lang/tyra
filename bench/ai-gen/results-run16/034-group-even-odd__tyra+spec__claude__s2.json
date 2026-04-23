@@ -1,0 +1,26 @@
+{
+  "prompt_id": "034-group-even-odd",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1776922175,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 22390,
+      "code_len": 1331,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 208,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-3j5orpj1/main.ll:825:3: error: multiple definition of local value named 'v.copy.addr'\n  825 |   %v.copy.addr = alloca %struct.List__Int\n      |   ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet input = io.read_to_end()\nlet n = string.len(input)\n\nmut evens: List<Int> = []\nmut odds: List<Int> = []\n\nmut i = 0\nmut cur = 0\nmut has = false\nmut neg = false\n\nwhile i < n\n  match string.byte_at(input, i)\n  when Some(b)\n    if b == 32 or b == 9 or b == 10 or b == 13\n      if has\n        let val = if neg\n          -cur\n        else\n          cur\n        end\n        if val % 2 == 0\n          evens = list.push(evens, val)\n        else\n          odds = list.push(odds, val)\n        end\n        cur = 0\n        has = false\n        neg = false\n      end\n    else if b == 45\n      neg = true\n      has = true\n    else if b == 43\n      has = true\n    else\n      cur = cur * 10 + (b - 48)\n      has = true\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nif has\n  let val = if neg\n    -cur\n  else\n    cur\n  end\n  if val % 2 == 0\n    evens = list.push(evens, val)\n  else\n    odds = list.push(odds, val)\n  end\nend\n\nmut evens_str = \"evens=\"\nmut first = true\nfor v in evens\n  if first\n    evens_str = \"#{evens_str}#{v}\"\n    first = false\n  else\n    evens_str = \"#{evens_str} #{v}\"\n  end\nend\n\nmut odds_str = \"odds=\"\nmut first2 = true\nfor v in odds\n  if first2\n    odds_str = \"#{odds_str}#{v}\"\n    first2 = false\n  else\n    odds_str = \"#{odds_str} #{v}\"\n  end\nend\n\nprintln(evens_str)\nprintln(odds_str)",
+  "overall": "compile_fail"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "099-sum-column",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1776927566,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 44186,
+      "code_len": 1042,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 391,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 531,
+      "stdout": "sum=39\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet text = io.read_to_end()\nlet n = string.len(text)\nmut sum = 0\nmut state = 0\nmut tok_start = 0\nmut i = 0\nwhile i <= n\n  mut b = 10\n  if i < n\n    match string.byte_at(text, i)\n    when Some(x)\n      b = x\n    when None\n      b = 10\n    end\n  end\n\n  let is_space = b == 32 or b == 9 or b == 13\n  let is_newline = b == 10\n\n  if state == 0\n    if not is_space and not is_newline\n      state = 1\n    end\n  else if state == 1\n    if is_newline\n      state = 0\n    else if is_space\n      state = 2\n    end\n  else if state == 2\n    if is_newline\n      state = 0\n    else if not is_space\n      state = 3\n      tok_start = i\n    end\n  else if state == 3\n    if is_space or is_newline\n      let s = string.substring(text, tok_start, i)\n      match string.parse_int(s)\n      when Some(v)\n        sum = sum + v\n      when None\n        ()\n      end\n      if is_newline\n        state = 0\n      else\n        state = 4\n      end\n    end\n  else\n    if is_newline\n      state = 0\n    end\n  end\n\n  i = i + 1\nend\n\nprintln(\"sum=#{sum}\")",
+  "overall": "pass"
+}

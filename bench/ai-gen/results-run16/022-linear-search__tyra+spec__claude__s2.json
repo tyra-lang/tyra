@@ -1,0 +1,36 @@
+{
+  "prompt_id": "022-linear-search",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1776921666,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 34046,
+      "code_len": 1463,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 434,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 483,
+      "stdout": "index=2\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn search(_ xs: List<Int>, _ target: Int) -> Option<Int>\n  list.index_of(xs, target)\nend\n\nfn read_line_or_empty() -> String\n  match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\nend\n\nfn parse_tokens(_ line: String) -> List<Int>\n  mut nums: List<Int> = []\n  let n = string.len(line)\n  mut i = 0\n  mut start = 0\n  mut in_tok = false\n  while i < n\n    let b = match string.byte_at(line, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    let is_ws = b == 32 or b == 9 or b == 13 or b == 10\n    if is_ws\n      if in_tok\n        let tok = string.substring(line, start, i)\n        match string.parse_int(tok)\n        when Some(v)\n          nums = list.push(nums, v)\n        when None\n          ()\n        end\n        in_tok = false\n      end\n    else\n      if not in_tok\n        start = i\n        in_tok = true\n      end\n    end\n    i = i + 1\n  end\n  if in_tok\n    let tok = string.substring(line, start, n)\n    match string.parse_int(tok)\n    when Some(v)\n      nums = list.push(nums, v)\n    when None\n      ()\n    end\n  end\n  nums\nend\n\nfn main() -> Unit\n  let line1 = read_line_or_empty()\n  let line2 = read_line_or_empty()\n  let nums = parse_tokens(line1)\n  let trimmed = string.trim(line2)\n  let target = match string.parse_int(trimmed)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  match search(nums, target)\n  when Some(idx)\n    println(\"index=#{idx}\")\n  when None\n    println(\"not_found\")\n  end\nend",
+  "overall": "pass"
+}

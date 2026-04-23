@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1776927048,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 80419,
+      "code_len": 2289,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 577,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 588,
+      "stdout": "9 6 5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  mut start = -1\n  while i < n\n    let b = match string.byte_at(s, i)\n      when Some(v)\n        v\n      when None\n        0\n      end\n    let is_ws = b == 32 or b == 9 or b == 10 or b == 13\n    if is_ws\n      if start >= 0\n        let token = string.substring(s, start, i)\n        match string.parse_int(token)\n        when Some(v)\n          result = list.push(result, v)\n        when None\n          ()\n        end\n        start = -1\n      end\n    else\n      if start < 0\n        start = i\n      end\n    end\n    i = i + 1\n  end\n  if start >= 0\n    let token = string.substring(s, start, n)\n    match string.parse_int(token)\n    when Some(v)\n      result = list.push(result, v)\n    when None\n      ()\n    end\n  end\n  result\nend\n\nfn remove_at(_ xs: List<Int>, _ idx: Int) -> List<Int>\n  mut result: List<Int> = []\n  let n = xs.len()\n  mut i = 0\n  while i < n\n    if i != idx\n      match xs.get(i)\n      when Some(v)\n        result = list.push(result, v)\n      when None\n        ()\n      end\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn sort_desc(_ xs: List<Int>) -> List<Int>\n  mut remaining = xs\n  mut result: List<Int> = []\n  while remaining.len() > 0\n    match list.max(remaining)\n    when Some(m)\n      result = list.push(result, m)\n      match list.index_of(remaining, m)\n      when Some(idx)\n        remaining = remove_at(remaining, idx)\n      when None\n        remaining = []\n      end\n    when None\n      remaining = []\n    end\n  end\n  result\nend\n\nfn main() -> Unit\n  let line1 = match io.read_line()\n    when Some(s)\n      s\n    when None\n      \"\"\n    end\n  let line2 = match io.read_line()\n    when Some(s)\n      s\n    when None\n      \"\"\n    end\n  let nums = parse_ints(line1)\n  let k = match string.parse_int(string.trim(line2))\n    when Some(v)\n      v\n    when None\n      0\n    end\n  let sorted = sort_desc(nums)\n  let total = sorted.len()\n  let take = if k < total\n    k\n  else\n    total\n  end\n  mut out = \"\"\n  mut i = 0\n  while i < take\n    match sorted.get(i)\n    when Some(v)\n      if i == 0\n        out = \"#{v}\"\n      else\n        out = \"#{out} #{v}\"\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

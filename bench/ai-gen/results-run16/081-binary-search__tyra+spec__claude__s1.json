@@ -1,0 +1,36 @@
+{
+  "prompt_id": "081-binary-search",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1776925693,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 31174,
+      "code_len": 2128,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 412,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 585,
+      "stdout": "index=6\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn is_space(_ c: Int) -> Bool\n  c == 32 or c == 9 or c == 10 or c == 13\nend\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  while i < n\n    mut skipping = true\n    while skipping\n      if i >= n\n        skipping = false\n      else\n        match string.byte_at(s, i)\n        when Some(c)\n          if is_space(c)\n            i = i + 1\n          else\n            skipping = false\n          end\n        when None\n          skipping = false\n        end\n      end\n    end\n    if i < n\n      let start = i\n      mut scanning = true\n      while scanning\n        if i >= n\n          scanning = false\n        else\n          match string.byte_at(s, i)\n          when Some(c)\n            if is_space(c)\n              scanning = false\n            else\n              i = i + 1\n            end\n          when None\n            scanning = false\n          end\n        end\n      end\n      let tok = string.substring(s, start, i)\n      match string.parse_int(tok)\n      when Some(v)\n        result = list.push(result, v)\n      when None\n        i = i\n      end\n    end\n  end\n  result\nend\n\nfn bsearch(_ xs: List<Int>, _ t: Int) -> Option<Int>\n  mut lo = 0\n  mut hi = xs.len()\n  mut found: Option<Int> = None\n  mut done = false\n  while not done and lo < hi\n    let mid = (lo + hi) / 2\n    match xs.get(mid)\n    when Some(v)\n      if v == t\n        found = Some(mid)\n        done = true\n      else if v < t\n        lo = mid + 1\n      else\n        hi = mid\n      end\n    when None\n      done = true\n    end\n  end\n  found\nend\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(line1)\n    match io.read_line()\n    when Some(line2)\n      let xs = parse_ints(line1)\n      let t_str = string.trim(line2)\n      match string.parse_int(t_str)\n      when Some(t)\n        match bsearch(xs, t)\n        when Some(idx)\n          println(\"index=#{idx}\")\n        when None\n          println(\"not_found\")\n        end\n      when None\n        println(\"not_found\")\n      end\n    when None\n      println(\"not_found\")\n    end\n  when None\n    println(\"not_found\")\n  end\nend",
+  "overall": "pass"
+}

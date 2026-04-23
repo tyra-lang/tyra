@@ -9,9 +9,10 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import statistics
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 HERE = Path(__file__).resolve().parent
 
@@ -52,6 +53,71 @@ def aggregate(
     return buckets
 
 
+def aggregate_by_seed(
+    results: List[Dict[str, Any]],
+) -> Dict[tuple, Dict[str, float]]:
+    """Per (lang, generator) seed-aware stats.
+
+    For each (prompt_id, lang, generator), collect the pass/fail outcome
+    per seed. Then for each (lang, generator), roll up across prompts:
+
+      - mean_pass: average over prompts of (passes / seeds_for_that_prompt).
+        Equivalent to total passes / total runs when every prompt has the
+        same number of seeds.
+      - median_pass: median of the per-prompt pass fractions. Robust to
+        a few hard prompts dragging the mean down.
+      - any_pass: fraction of prompts where at least one seed passed.
+        Upper bound on "could the model solve this if we resampled".
+      - all_pass: fraction of prompts where every seed passed. Lower
+        bound / stability indicator.
+      - seeds_per_prompt: min..max observed, to sanity-check the sweep.
+    """
+    # (lang, gen) -> prompt_id -> list of bool (True if outcome == "pass")
+    grid: Dict[tuple, Dict[str, List[bool]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    for r in results:
+        lang = r.get("language", "?")
+        if r.get("inject_tyra_spec"):
+            lang = f"{lang}+spec"
+        if r.get("overall") == "skipped_no_compiler":
+            continue
+        key = (lang, r.get("generator", "?"))
+        pid = r.get("prompt_id", "?")
+        grid[key][pid].append(r.get("overall") == "pass")
+
+    out: Dict[tuple, Dict[str, float]] = {}
+    for key, per_prompt in grid.items():
+        pass_fracs: List[float] = []
+        any_count = 0
+        all_count = 0
+        seed_counts: List[int] = []
+        for pid, outcomes in per_prompt.items():
+            n = len(outcomes)
+            seed_counts.append(n)
+            passes = sum(1 for o in outcomes if o)
+            pass_fracs.append(passes / n if n else 0.0)
+            if passes >= 1:
+                any_count += 1
+            if passes == n and n > 0:
+                all_count += 1
+        n_prompts = len(per_prompt)
+        out[key] = {
+            "n_prompts": n_prompts,
+            "mean_pass": (
+                statistics.fmean(pass_fracs) if pass_fracs else 0.0
+            ),
+            "median_pass": (
+                statistics.median(pass_fracs) if pass_fracs else 0.0
+            ),
+            "any_pass": (any_count / n_prompts) if n_prompts else 0.0,
+            "all_pass": (all_count / n_prompts) if n_prompts else 0.0,
+            "seeds_min": min(seed_counts) if seed_counts else 0,
+            "seeds_max": max(seed_counts) if seed_counts else 0,
+        }
+    return out
+
+
 def render_markdown(
     buckets: Dict[tuple, Dict[str, int]], total_prompts: int
 ) -> str:
@@ -90,6 +156,46 @@ def render_markdown(
     return "\n".join(lines) + "\n"
 
 
+def render_seed_markdown(
+    seed_stats: Dict[tuple, Dict[str, float]],
+) -> str:
+    if not seed_stats:
+        return ""
+    lines: List[str] = []
+    lines.append("## Multi-seed aggregates")
+    lines.append("")
+    lines.append(
+        "Rolled up per (language, generator) by first computing the "
+        "per-prompt pass fraction across seeds, then summarising across "
+        "prompts. `any_pass` = ≥1 seed passed; `all_pass` = every seed "
+        "passed. `seeds` column shows the observed min/max seed count "
+        "per prompt — they should match unless a sweep was partial."
+    )
+    lines.append("")
+    lines.append(
+        "| language | generator | prompts | seeds | mean_pass% | "
+        "median_pass% | any_pass% | all_pass% |"
+    )
+    lines.append(
+        "| -------- | --------- | ------- | ----- | ---------- | "
+        "------------ | --------- | --------- |"
+    )
+    for key in sorted(seed_stats.keys()):
+        lang, gen = key
+        s = seed_stats[key]
+        seed_col = (
+            f"{s['seeds_min']}"
+            if s["seeds_min"] == s["seeds_max"]
+            else f"{s['seeds_min']}..{s['seeds_max']}"
+        )
+        lines.append(
+            f"| {lang} | {gen} | {int(s['n_prompts'])} | {seed_col} | "
+            f"{s['mean_pass']*100:.1f}% | {s['median_pass']*100:.1f}% | "
+            f"{s['any_pass']*100:.1f}% | {s['all_pass']*100:.1f}% |"
+        )
+    return "\n".join(lines) + "\n"
+
+
 def write_csv(
     path: Path, buckets: Dict[tuple, Dict[str, int]]
 ) -> None:
@@ -123,6 +229,11 @@ def main() -> int:
     prompts = {r.get("prompt_id") for r in results if "prompt_id" in r}
     buckets = aggregate(results)
     print(render_markdown(buckets, len(prompts)))
+    seed_stats = aggregate_by_seed(results)
+    # Only print the seed section if at least one (lang, gen) was run
+    # with ≥2 seeds — otherwise it is redundant with the pass% column.
+    if any(s["seeds_max"] >= 2 for s in seed_stats.values()):
+        print(render_seed_markdown(seed_stats))
     if args.csv:
         write_csv(Path(args.csv), buckets)
     return 0

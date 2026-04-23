@@ -186,7 +186,11 @@ def main() -> int:
     ap.add_argument("--languages", default="tyra,crystal,v,gleam,ruby")
     ap.add_argument("--generators", default="claude,codex")
     ap.add_argument("--prompts", default="prompts/*.yaml")
-    ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--seed", type=int, default=None,
+                    help="Single seed (legacy). Prefer --seeds.")
+    ap.add_argument("--seeds", default=None,
+                    help="Seed list: '1,2,3' or 'N' (=1..N). "
+                         "Each seed is a separate run per (prompt, lang, gen).")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument(
         "--inject-tyra-spec",
@@ -206,6 +210,7 @@ def main() -> int:
     prompts = load_prompts([args.prompts])
     languages = [l.strip() for l in args.languages.split(",") if l.strip()]
     generators_names = [g.strip() for g in args.generators.split(",") if g.strip()]
+    seeds = parse_seeds(args.seeds, args.seed)
 
     missing_langs = [l for l in languages if l not in ALL_RUNNERS]
     if missing_langs:
@@ -219,8 +224,9 @@ def main() -> int:
 
     print(
         f"plan: {len(prompts)} prompts × {len(languages)} languages × "
-        f"{len(generators)} generators × seed={args.seed} "
-        f"= {len(prompts)*len(languages)*len(generators)} runs",
+        f"{len(generators)} generators × {len(seeds)} seeds "
+        f"(seeds={seeds}) "
+        f"= {len(prompts)*len(languages)*len(generators)*len(seeds)} runs",
         file=sys.stderr,
     )
     if args.dry_run:
@@ -240,43 +246,63 @@ def main() -> int:
         for language in languages:
             runner_cls = ALL_RUNNERS[language]
             for generator in generators:
-                completed += 1
-                # Suffix spec-injected Tyra runs so they sit side by side
-                # with the zero-corpus baseline rather than overwriting it.
-                spec_suffix = (
-                    "+spec"
-                    if args.inject_tyra_spec and language == "tyra"
-                    else ""
-                )
-                key = (
-                    f"{prompt['id']}__{language}{spec_suffix}"
-                    f"__{generator.name}__s{args.seed}"
-                )
-                print(f"[{completed}] {key}", file=sys.stderr)
-                try:
-                    result = run_one(
-                        prompt=prompt,
-                        language=language,
-                        generator=generator,
-                        runner_cls=runner_cls,
-                        config=config,
-                        seed=args.seed,
-                        inject_tyra_spec=args.inject_tyra_spec,
+                for seed in seeds:
+                    completed += 1
+                    # Suffix spec-injected Tyra runs so they sit side by side
+                    # with the zero-corpus baseline rather than overwriting it.
+                    spec_suffix = (
+                        "+spec"
+                        if args.inject_tyra_spec and language == "tyra"
+                        else ""
                     )
-                except Exception as e:
-                    result = {
-                        "prompt_id": prompt["id"],
-                        "language": language,
-                        "generator": generator.name,
-                        "seed": args.seed,
-                        "overall": "harness_error",
-                        "error": f"{type(e).__name__}: {e}",
-                    }
-                out_path = results_dir / f"{key}.json"
-                with open(out_path, "w") as f:
-                    json.dump(result, f, indent=2)
-                print(f"    -> {result.get('overall')}", file=sys.stderr)
+                    key = (
+                        f"{prompt['id']}__{language}{spec_suffix}"
+                        f"__{generator.name}__s{seed}"
+                    )
+                    print(f"[{completed}] {key}", file=sys.stderr)
+                    try:
+                        result = run_one(
+                            prompt=prompt,
+                            language=language,
+                            generator=generator,
+                            runner_cls=runner_cls,
+                            config=config,
+                            seed=seed,
+                            inject_tyra_spec=args.inject_tyra_spec,
+                        )
+                    except Exception as e:
+                        result = {
+                            "prompt_id": prompt["id"],
+                            "language": language,
+                            "generator": generator.name,
+                            "seed": seed,
+                            "overall": "harness_error",
+                            "error": f"{type(e).__name__}: {e}",
+                        }
+                    out_path = results_dir / f"{key}.json"
+                    with open(out_path, "w") as f:
+                        json.dump(result, f, indent=2)
+                    print(f"    -> {result.get('overall')}", file=sys.stderr)
     return 0
+
+
+def parse_seeds(seeds_arg: str | None, seed_arg: int | None) -> List[int]:
+    """Resolve --seeds / --seed into an explicit seed list.
+
+    Precedence: --seeds wins if given; otherwise fall back to --seed;
+    otherwise default to [1] so existing invocations keep working.
+    """
+    if seeds_arg:
+        s = seeds_arg.strip()
+        if "," in s:
+            return [int(x) for x in s.split(",") if x.strip()]
+        n = int(s)
+        if n <= 0:
+            raise ValueError(f"--seeds must be positive, got {n}")
+        return list(range(1, n + 1))
+    if seed_arg is not None:
+        return [seed_arg]
+    return [1]
 
 
 if __name__ == "__main__":

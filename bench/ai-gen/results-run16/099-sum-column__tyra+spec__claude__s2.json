@@ -1,0 +1,36 @@
+{
+  "prompt_id": "099-sum-column",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1776927611,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 25392,
+      "code_len": 1390,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 517,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 452,
+      "stdout": "sum=39",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 13\nend\n\nfn parse_second(_ line: String) -> Option<Int>\n  let n = string.len(line)\n  mut i = 0\n  mut s1 = false\n  while i < n and not s1\n    match string.byte_at(line, i)\n    when Some(b)\n      if is_ws(b)\n        i = i + 1\n      else\n        s1 = true\n      end\n    when None\n      s1 = true\n    end\n  end\n  mut s2 = false\n  while i < n and not s2\n    match string.byte_at(line, i)\n    when Some(b)\n      if is_ws(b)\n        s2 = true\n      else\n        i = i + 1\n      end\n    when None\n      s2 = true\n    end\n  end\n  mut s3 = false\n  while i < n and not s3\n    match string.byte_at(line, i)\n    when Some(b)\n      if is_ws(b)\n        i = i + 1\n      else\n        s3 = true\n      end\n    when None\n      s3 = true\n    end\n  end\n  let start = i\n  mut s4 = false\n  while i < n and not s4\n    match string.byte_at(line, i)\n    when Some(b)\n      if is_ws(b)\n        s4 = true\n      else\n        i = i + 1\n      end\n    when None\n      s4 = true\n    end\n  end\n  if start == i\n    None\n  else\n    string.parse_int(string.substring(line, start, i))\n  end\nend\n\nmut total = 0\nmut cont = true\nwhile cont\n  match io.read_line()\n  when Some(line)\n    match parse_second(line)\n    when Some(v)\n      total = total + v\n    when None\n      total = total\n    end\n  when None\n    cont = false\n  end\nend\nprint(\"sum=#{total}\")",
+  "overall": "pass"
+}

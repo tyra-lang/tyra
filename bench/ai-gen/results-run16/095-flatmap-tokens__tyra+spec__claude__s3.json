@@ -1,0 +1,38 @@
+{
+  "prompt_id": "095-flatmap-tokens",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1776927402,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 25564,
+      "code_len": 752,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 855,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 452,
+      "stdout": "436581972843658197444365819760 436581972843658197444365819760 43658331844365833200436583321643658332324365833248 43658331844365833200436583321643658332324365833248 4365833264436584153643658415524365841568 4365833264436584153643658415524365841568\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": false,
+      "check_details": [
+        "missing marker: 'red red green green blue blue'"
+      ]
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(line)\n    let n = string.len(line)\n    mut out = \"\"\n    mut cur = \"\"\n    mut i = 0\n    while i < n\n      match string.byte_at(line, i)\n      when Some(b)\n        if b == 32 or b == 9\n          if not string.is_empty(cur)\n            out = \"#{out}#{cur} #{cur} \"\n            cur = \"\"\n          end\n        else\n          cur = \"#{cur}#{string.from_byte(b)}\"\n        end\n      when None\n        ()\n      end\n      i = i + 1\n    end\n    if not string.is_empty(cur)\n      out = \"#{out}#{cur} #{cur} \"\n    end\n    let olen = string.len(out)\n    if olen > 0\n      println(string.substring(out, 0, olen - 1))\n    else\n      println(\"\")\n    end\n  when None\n    println(\"\")\n  end\nend",
+  "overall": "check_fail"
+}

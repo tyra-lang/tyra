@@ -1,0 +1,36 @@
+{
+  "prompt_id": "062-sum-two-squares",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1776923514,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 29951,
+      "code_len": 873,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 588,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 559,
+      "stdout": "r=25\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\n\nmut a = 0\nmut b = 0\nmut count = 0\nmut cur = 0\nmut sign = 1\nmut in_num = false\nmut i = 0\n\nwhile i < n\n  let byte = match string.byte_at(input, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  let is_ws = byte == 32 or byte == 9 or byte == 10 or byte == 13\n  let is_digit = byte >= 48 and byte <= 57\n  if is_digit\n    cur = cur * 10 + (byte - 48)\n    in_num = true\n  else if byte == 45\n    sign = -1\n    in_num = true\n  else if is_ws\n    if in_num\n      let val = cur * sign\n      if count == 0\n        a = val\n      else\n        b = val\n      end\n      count = count + 1\n      cur = 0\n      sign = 1\n      in_num = false\n    end\n  end\n  i = i + 1\nend\n\nif in_num\n  let val = cur * sign\n  if count == 0\n    a = val\n  else\n    b = val\n  end\nend\n\nlet result = a * a + b * b\nprintln(\"r=#{result}\")",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "064-count-down",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1776923631,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9321,
+      "code_len": 357,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 239,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 532,
+      "stdout": "3\n2\n1\n0\ndone\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let trimmed = string.trim(line)\n  let n = match string.parse_int(trimmed)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  mut i = n\n  while i >= 0\n    println(\"#{i}\")\n    i = i - 1\n  end\n  println(\"done\")\n  Ok(())\nend",
+  "overall": "pass"
+}

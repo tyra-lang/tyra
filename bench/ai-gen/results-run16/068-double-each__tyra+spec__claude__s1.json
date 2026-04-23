@@ -1,0 +1,26 @@
+{
+  "prompt_id": "068-double-each",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1776923938,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 30162,
+      "code_len": 968,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 195,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-cryssnkn/main.ll:380:3: error: multiple definition of local value named 'v'\n  380 |   %v = alloca i64\n      |   ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nlet line_opt = io.read_line()\nlet line = match line_opt\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet n = string.len(line)\nmut i = 0\nmut have = false\nmut neg = false\nmut cur = 0\nmut out = \"\"\nmut first = true\n\nwhile i < n\n  let b_opt = string.byte_at(line, i)\n  let b = match b_opt\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if b == 32 or b == 9 or b == 13 or b == 10\n    if have\n      mut v = cur\n      if neg\n        v = -v\n      end\n      let d = v * 2\n      if first\n        out = \"#{d}\"\n        first = false\n      else\n        out = \"#{out} #{d}\"\n      end\n      have = false\n      neg = false\n      cur = 0\n    end\n  else if b == 45\n    neg = true\n    have = true\n  else if b == 43\n    have = true\n  else\n    cur = cur * 10 + (b - 48)\n    have = true\n  end\n  i = i + 1\nend\n\nif have\n  mut v = cur\n  if neg\n    v = -v\n  end\n  let d = v * 2\n  if first\n    out = \"#{d}\"\n    first = false\n  else\n    out = \"#{out} #{d}\"\n  end\nend\n\nprintln(out)",
+  "overall": "compile_fail"
+}

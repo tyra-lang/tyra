@@ -1,0 +1,36 @@
+{
+  "prompt_id": "094-last-line",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1776927271,
+  "inject_tyra_spec": true,
+  "model": "2.1.118 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 32387,
+      "code_len": 902,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 458,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 697,
+      "stdout": "gamma\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut last_line = \"\"\nmut found = false\nmut start = 0\nmut i = 0\n\nwhile i <= n\n  mut is_end = false\n  if i == n\n    is_end = true\n  else\n    match string.byte_at(input, i)\n    when Some(b)\n      if b == 10\n        is_end = true\n      end\n    when None\n      is_end = true\n    end\n  end\n\n  if is_end\n    let line = string.substring(input, start, i)\n    let line_len = string.len(line)\n    mut j = 0\n    mut has_content = false\n    while j < line_len\n      match string.byte_at(line, j)\n      when Some(c)\n        if c != 32 and c != 9 and c != 13\n          has_content = true\n        end\n      when None\n        j = line_len\n      end\n      j = j + 1\n    end\n    if has_content\n      last_line = line\n      found = true\n    end\n    start = i + 1\n  end\n  i = i + 1\nend\n\nif found\n  println(last_line)\nelse\n  println(\"(none)\")\nend",
+  "overall": "pass"
+}
