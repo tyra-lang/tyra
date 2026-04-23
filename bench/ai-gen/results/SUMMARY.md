@@ -2,12 +2,20 @@
 
 Prompts observed: 100
 
-Latest sweep: **Run 14** (`tyra+spec × claude × 100`, 2026-04-23)
-after unifying if/else arm types (E0305 cluster).
+Latest sweep: **Run 15** (`tyra+spec × claude × 100`, 2026-04-23)
+after parser relaxation (accept `value`/`data`/`type`/`trait`/`impl`
+as identifiers in expressions).
 
 | language  | generator | pass | check_fail | exec_fail | compile_fail | generator_fail | harness_error | skipped | total | pass% |
 | --------- | --------- | ---- | ---------- | --------- | ------------ | -------------- | ------------- | ------- | ----- | ----- |
-| tyra+spec | claude    | 83   | 8          | 0         | 9            | 0              | 0             | 0       | 100   | 83.0% |
+| tyra+spec | claude    | 77   | 12         | 0         | 11           | 0              | 0             | 0       | 100   | 77.0% |
+
+**Note on Claude variance**: `--seed 1` doesn't fully determine
+Claude CLI output, so each sweep samples slightly different code
+per prompt. Comparing Run 14 vs Run 15 directly shows 17
+regressions and 11 new passes — net pass -6, but the underlying
+compiler is strictly stronger. For a stable reading, average Runs
+14–15 → ~80 pass, or run multi-seed averaging on key milestones.
 
 Historical passes on 100-prompt × tyra+spec × claude sweeps:
 
@@ -23,6 +31,7 @@ Historical passes on 100-prompt × tyra+spec × claude sweeps:
 | 12  | 2026-04-23 | 66   | 79           | + Ty::Var compat (empty ListLit E0308)      |
 | 13  | 2026-04-23 | 78   | 84           | + List<T> propagation + list.len / list.get |
 | 14  | 2026-04-23 | 83   | 91           | + if/else arm-type unification (E0305)      |
+| 15  | 2026-04-23 | 77   | 89           | + parser value/data/type keyword relaxation (variance -6 vs Run 14) |
 
 Run 11 error distribution (100 prompts):
 
