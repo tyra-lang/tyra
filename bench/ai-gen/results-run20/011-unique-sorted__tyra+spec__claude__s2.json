@@ -1,0 +1,36 @@
+{
+  "prompt_id": "011-unique-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777037817,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 64608,
+      "code_len": 2097,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 176,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 554,
+      "stdout": "1 2 3 4 5 6 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn is_digit(_ b: Int) -> Bool\n  b >= 48 and b <= 57\nend\n\nfn main() -> Unit\n  let text = io.read_to_end()\n  let n = string.len(text)\n  mut uniques: List<Int> = []\n  mut i = 0\n  while i < n\n    mut skipping = true\n    while skipping\n      if i >= n\n        skipping = false\n      else\n        match string.byte_at(text, i)\n        when Some(x)\n          if is_ws(x)\n            i = i + 1\n          else\n            skipping = false\n          end\n        when None\n          skipping = false\n        end\n      end\n    end\n\n    if i < n\n      mut sign = 1\n      match string.byte_at(text, i)\n      when Some(x)\n        if x == 45\n          sign = -1\n          i = i + 1\n        else if x == 43\n          i = i + 1\n        end\n      when None\n        ()\n      end\n\n      mut value = 0\n      mut parsing = true\n      while parsing\n        if i >= n\n          parsing = false\n        else\n          match string.byte_at(text, i)\n          when Some(x)\n            if is_digit(x)\n              value = value * 10 + (x - 48)\n              i = i + 1\n            else\n              parsing = false\n            end\n          when None\n            parsing = false\n          end\n        end\n      end\n\n      let result_value = value * sign\n      if not list.contains(uniques, result_value)\n        uniques = list.push(uniques, result_value)\n      end\n    end\n  end\n\n  mut sorted: List<Int> = []\n  mut remaining = uniques\n  while list.len(remaining) > 0\n    match list.min(remaining)\n    when Some(m)\n      sorted = list.push(sorted, m)\n      mut next_list: List<Int> = []\n      mut skipped = false\n      for x in remaining\n        if not skipped and x == m\n          skipped = true\n        else\n          next_list = list.push(next_list, x)\n        end\n      end\n      remaining = next_list\n    when None\n      ()\n    end\n  end\n\n  mut out = \"\"\n  mut first = true\n  for x in sorted\n    if first\n      out = \"#{x}\"\n      first = false\n    else\n      out = \"#{out} #{x}\"\n    end\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

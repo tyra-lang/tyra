@@ -1,0 +1,36 @@
+{
+  "prompt_id": "058-traffic-transition",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777040133,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 21264,
+      "code_len": 610,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 120,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 450,
+      "stdout": "Green\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line_opt = io.read_line()\nlet line = match line_opt\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut count = 0\nmut in_token = false\nmut i = 0\nlet n = string.len(line)\nwhile i < n\n  let b = match string.byte_at(line, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  let is_ws = b == 32 or b == 9 or b == 10 or b == 13\n  if is_ws\n    in_token = false\n  else\n    if not in_token\n      count = count + 1\n      in_token = true\n    end\n  end\n  i = i + 1\nend\n\nlet state_idx = count % 3\nlet name = match state_idx\nwhen 0\n  \"Red\"\nwhen 1\n  \"Green\"\nwhen 2\n  \"Yellow\"\nwhen _\n  \"Red\"\nend\nprintln(name)",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "033-fib-iterative",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777038826,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10323,
+      "code_len": 366,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 137,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 450,
+      "stdout": "fib=6765\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\n\nfn main() -> Unit\n  let line = io.read_line()\n  match line\n  when Some(s)\n    let n = match parse::<Int>(s)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    mut a = 0\n    mut b = 1\n    mut i = 0\n    while i < n\n      let t = a + b\n      a = b\n      b = t\n      i = i + 1\n    end\n    println(\"fib=#{a}\")\n  when None\n    println(\"fib=0\")\n  end\nend",
+  "overall": "pass"
+}

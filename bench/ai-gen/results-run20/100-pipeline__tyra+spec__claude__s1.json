@@ -1,0 +1,36 @@
+{
+  "prompt_id": "100-pipeline",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777043331,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 27421,
+      "code_len": 875,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 140,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 506,
+      "stdout": "result=18",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet n = string.len(line)\nmut sum = 0\nmut i = 0\nmut in_tok = false\nmut neg = false\nmut val = 0\nmut has_digit = false\n\nwhile i <= n\n  let is_end = i == n\n  let b = if is_end\n    0\n  else\n    match string.byte_at(line, i)\n    when Some(x)\n      x\n    when None\n      0\n    end\n  end\n  let is_ws = is_end or b == 32 or b == 9 or b == 13 or b == 10\n  if is_ws\n    if in_tok and has_digit\n      mut v = val\n      if neg\n        v = -v\n      end\n      if v > 0\n        sum = sum + v * 2\n      end\n    end\n    in_tok = false\n    neg = false\n    val = 0\n    has_digit = false\n  else\n    in_tok = true\n    if b == 45\n      neg = true\n    else if b == 43\n      in_tok = true\n    else\n      val = val * 10 + (b - 48)\n      has_digit = true\n    end\n  end\n  i = i + 1\nend\n\nprint(\"result=#{sum}\")",
+  "overall": "pass"
+}

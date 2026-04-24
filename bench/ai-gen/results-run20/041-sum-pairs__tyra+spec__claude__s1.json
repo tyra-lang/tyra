@@ -1,0 +1,36 @@
+{
+  "prompt_id": "041-sum-pairs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777039223,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 29859,
+      "code_len": 1756,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 145,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 579,
+      "stdout": "1+10=11\n2+20=22\n3+30=33\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 13 or b == 10\nend\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  while i < n\n    mut skipping = true\n    while skipping\n      if i >= n\n        skipping = false\n      else\n        match string.byte_at(s, i)\n        when Some(b)\n          if is_ws(b)\n            i = i + 1\n          else\n            skipping = false\n          end\n        when None\n          skipping = false\n        end\n      end\n    end\n    if i < n\n      let start = i\n      mut scanning = true\n      while scanning\n        if i >= n\n          scanning = false\n        else\n          match string.byte_at(s, i)\n          when Some(b)\n            if is_ws(b)\n              scanning = false\n            else\n              i = i + 1\n            end\n          when None\n            scanning = false\n          end\n        end\n      end\n      let token = string.substring(s, start, i)\n      match string.parse_int(token)\n      when Some(v)\n        result = list.push(result, v)\n      when None\n        ()\n      end\n    end\n  end\n  result\nend\n\nfn emit_pairs(_ a: List<Int>, _ b: List<Int>) -> Unit\n  let n = list.len(a)\n  mut i = 0\n  mut stop = false\n  while i < n and not stop\n    match list.get(a, i)\n    when Some(x)\n      match list.get(b, i)\n      when Some(y)\n        let s = x + y\n        println(\"#{x}+#{y}=#{s}\")\n      when None\n        stop = true\n      end\n    when None\n      stop = true\n    end\n    i = i + 1\n  end\nend\n\nmatch io.read_line()\nwhen Some(line1)\n  match io.read_line()\n  when Some(line2)\n    let xs = parse_ints(line1)\n    let ys = parse_ints(line2)\n    emit_pairs(xs, ys)\n  when None\n    ()\n  end\nwhen None\n  ()\nend",
+  "overall": "pass"
+}

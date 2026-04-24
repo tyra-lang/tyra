@@ -1,0 +1,36 @@
+{
+  "prompt_id": "034-group-even-odd",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777038858,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 41760,
+      "code_len": 1437,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 161,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 562,
+      "stdout": "evens=4 2 6 8\nodds=7 1 9 3\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut evens_list: List<Int> = []\nmut odds_list: List<Int> = []\nmut i = 0\nmut start = 0\nmut in_tok = false\n\nwhile i < n\n  let b = match string.byte_at(input, i)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  let is_ws = b == 32 or b == 9 or b == 10 or b == 13\n  if is_ws\n    if in_tok\n      let tok = string.substring(input, start, i)\n      match string.parse_int(tok)\n      when Some(v)\n        if v % 2 == 0\n          evens_list = list.push(evens_list, v)\n        else\n          odds_list = list.push(odds_list, v)\n        end\n      when None\n        ()\n      end\n      in_tok = false\n    end\n  else\n    if not in_tok\n      start = i\n      in_tok = true\n    end\n  end\n  i = i + 1\nend\n\nif in_tok\n  let tok = string.substring(input, start, n)\n  match string.parse_int(tok)\n  when Some(v)\n    if v % 2 == 0\n      evens_list = list.push(evens_list, v)\n    else\n      odds_list = list.push(odds_list, v)\n    end\n  when None\n    ()\n  end\nend\n\nmut evens_str = \"\"\nmut evens_first = true\nfor x in evens_list\n  if evens_first\n    evens_str = \"#{x}\"\n    evens_first = false\n  else\n    evens_str = \"#{evens_str} #{x}\"\n  end\nend\n\nmut odds_str = \"\"\nmut odds_first = true\nfor x in odds_list\n  if odds_first\n    odds_str = \"#{x}\"\n    odds_first = false\n  else\n    odds_str = \"#{odds_str} #{x}\"\n  end\nend\n\nprintln(\"evens=#{evens_str}\")\nprintln(\"odds=#{odds_str}\")",
+  "overall": "pass"
+}

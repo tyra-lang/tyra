@@ -1,0 +1,36 @@
+{
+  "prompt_id": "082-insertion-sort",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777041528,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 46276,
+      "code_len": 1739,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 138,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 555,
+      "stdout": "1 2 3 4 5 6 7 8 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut nums: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  mut has = false\n  mut neg = false\n  mut cur = 0\n  while i < n\n    let b = match string.byte_at(s, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if b == 32 or b == 9 or b == 10 or b == 13\n      if has\n        if neg\n          nums = list.push(nums, -cur)\n        else\n          nums = list.push(nums, cur)\n        end\n        has = false\n        neg = false\n        cur = 0\n      end\n    else if b == 45 and not has\n      neg = true\n      has = true\n    else\n      cur = cur * 10 + (b - 48)\n      has = true\n    end\n    i = i + 1\n  end\n  if has\n    if neg\n      nums = list.push(nums, -cur)\n    else\n      nums = list.push(nums, cur)\n    end\n  end\n  nums\nend\n\nfn insert_sorted(_ sorted: List<Int>, _ x: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut inserted = false\n  for y in sorted\n    if not inserted and x <= y\n      result = list.push(result, x)\n      result = list.push(result, y)\n      inserted = true\n    else\n      result = list.push(result, y)\n    end\n  end\n  if not inserted\n    result = list.push(result, x)\n  end\n  result\nend\n\nfn sort_list(_ xs: List<Int>) -> List<Int>\n  mut sorted: List<Int> = []\n  for x in xs\n    sorted = insert_sorted(sorted, x)\n  end\n  sorted\nend\n\nfn join_ints(_ xs: List<Int>) -> String\n  mut out = \"\"\n  mut first = true\n  for x in xs\n    if first\n      out = \"#{x}\"\n      first = false\n    else\n      out = \"#{out} #{x}\"\n    end\n  end\n  out\nend\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let nums = parse_ints(line)\n  let sorted = sort_list(nums)\n  println(join_ints(sorted))\nend",
+  "overall": "pass"
+}

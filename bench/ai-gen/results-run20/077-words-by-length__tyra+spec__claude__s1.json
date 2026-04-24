@@ -1,0 +1,36 @@
+{
+  "prompt_id": "077-words-by-length",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777041198,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 22929,
+      "code_len": 878,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 131,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 447,
+      "stdout": "longest=quick\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 13\nend\n\nfn byte_or(_ s: String, _ i: Int, _ default: Int) -> Int\n  match string.byte_at(s, i)\n  when Some(b)\n    b\n  when None\n    default\n  end\nend\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(line)\n    mut best = \"\"\n    mut best_len = 0\n    mut cur = \"\"\n    mut cur_len = 0\n    mut i = 0\n    let n = string.len(line)\n    while i < n\n      let b = byte_or(line, i, 32)\n      if is_ws(b)\n        if cur_len > best_len\n          best = cur\n          best_len = cur_len\n        end\n        cur = \"\"\n        cur_len = 0\n      else\n        cur = \"#{cur}#{string.from_byte(b)}\"\n        cur_len = cur_len + 1\n      end\n      i = i + 1\n    end\n    if cur_len > best_len\n      best = cur\n      best_len = cur_len\n    end\n    println(\"longest=#{best}\")\n  when None\n    println(\"longest=\")\n  end\nend",
+  "overall": "pass"
+}

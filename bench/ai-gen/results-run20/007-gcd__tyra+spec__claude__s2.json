@@ -1,0 +1,36 @@
+{
+  "prompt_id": "007-gcd",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777037652,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 20708,
+      "code_len": 2082,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 120,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 444,
+      "stdout": "gcd=6\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn is_digit(_ b: Int) -> Bool\n  b >= 48 and b <= 57\nend\n\nfn parse_next(_ s: String, _ start: Int) -> Option<Int>\n  let n = string.len(s)\n  mut i = start\n  while i < n\n    match string.byte_at(s, i)\n    when Some(b)\n      if is_ws(b)\n        i = i + 1\n      else\n        i = n + 1\n      end\n    when None\n      i = n\n    end\n  end\n  if i == n\n    None\n  else\n    mut j = i - 1\n    mut acc = 0\n    mut has = false\n    while j < n\n      match string.byte_at(s, j)\n      when Some(b)\n        if is_digit(b)\n          acc = acc * 10 + (b - 48)\n          has = true\n          j = j + 1\n        else\n          j = n + 1\n        end\n      when None\n        j = n\n      end\n    end\n    if has\n      Some(acc)\n    else\n      None\n    end\n  end\nend\n\nfn find_start(_ s: String, _ from: Int) -> Int\n  let n = string.len(s)\n  mut i = from\n  mut done = false\n  while i < n and not done\n    match string.byte_at(s, i)\n    when Some(b)\n      if is_ws(b)\n        i = i + 1\n      else\n        done = true\n      end\n    when None\n      done = true\n    end\n  end\n  i\nend\n\nfn find_end(_ s: String, _ from: Int) -> Int\n  let n = string.len(s)\n  mut i = from\n  mut done = false\n  while i < n and not done\n    match string.byte_at(s, i)\n    when Some(b)\n      if is_digit(b)\n        i = i + 1\n      else\n        done = true\n      end\n    when None\n      done = true\n    end\n  end\n  i\nend\n\nfn read_int(_ s: String, _ lo: Int, _ hi: Int) -> Int\n  mut i = lo\n  mut acc = 0\n  while i < hi\n    match string.byte_at(s, i)\n    when Some(b)\n      acc = acc * 10 + (b - 48)\n      i = i + 1\n    when None\n      i = hi\n    end\n  end\n  acc\nend\n\nfn gcd(_ a: Int, _ b: Int) -> Int\n  mut x = a\n  mut y = b\n  while y != 0\n    let r = x % y\n    x = y\n    y = r\n  end\n  x\nend\n\nlet input = io.read_to_end()\nlet s1 = find_start(input, 0)\nlet e1 = find_end(input, s1)\nlet a = read_int(input, s1, e1)\nlet s2 = find_start(input, e1)\nlet e2 = find_end(input, s2)\nlet b = read_int(input, s2, e2)\nlet g = gcd(a, b)\nprintln(\"gcd=#{g}\")",
+  "overall": "pass"
+}

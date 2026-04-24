@@ -1,0 +1,36 @@
+{
+  "prompt_id": "076-running-max",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777041137,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 31856,
+      "code_len": 1646,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 135,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 524,
+      "stdout": "3 3 4 4 5 9 9 9",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nmatch io.read_line()\nwhen Some(line)\n  solve(line)\nwhen None\n  ()\nend\n\nfn solve(_ line: String) -> Unit\n  let nums = parse_nums(line)\n  let result = prefix_max(nums)\n  print(format_list(result))\nend\n\nfn parse_nums(_ line: String) -> List<Int>\n  mut nums: List<Int> = []\n  mut buf = \"\"\n  let n = string.len(line)\n  mut i = 0\n  while i < n\n    match string.byte_at(line, i)\n    when Some(b)\n      if b == 32 or b == 9 or b == 10 or b == 13\n        if not string.is_empty(buf)\n          nums = push_parsed(nums, buf)\n          buf = \"\"\n        end\n      else\n        buf = \"#{buf}#{string.from_byte(b)}\"\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if not string.is_empty(buf)\n    nums = push_parsed(nums, buf)\n  end\n  nums\nend\n\nfn push_parsed(_ xs: List<Int>, _ s: String) -> List<Int>\n  match string.parse_int(s)\n  when Some(v)\n    list.push(xs, v)\n  when None\n    xs\n  end\nend\n\nfn prefix_max(_ nums: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  mut cur = 0\n  mut first = true\n  mut j = 0\n  let len = nums.len()\n  while j < len\n    match nums.get(j)\n    when Some(v)\n      if first\n        cur = v\n        first = false\n      else\n        if v > cur\n          cur = v\n        end\n      end\n      result = list.push(result, cur)\n    when None\n      ()\n    end\n    j = j + 1\n  end\n  result\nend\n\nfn format_list(_ xs: List<Int>) -> String\n  mut out = \"\"\n  mut k = 0\n  let len = xs.len()\n  while k < len\n    match xs.get(k)\n    when Some(v)\n      if k == 0\n        out = \"#{v}\"\n      else\n        out = \"#{out} #{v}\"\n      end\n    when None\n      ()\n    end\n    k = k + 1\n  end\n  out\nend",
+  "overall": "pass"
+}

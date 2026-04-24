@@ -1,0 +1,36 @@
+{
+  "prompt_id": "038-capitalize-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777039123,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 30290,
+      "code_len": 1177,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 140,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 490,
+      "stdout": "Hello World From Tyra\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn to_upper_byte(_ b: Int) -> Int\n  if b >= 97 and b <= 122\n    b - 32\n  else\n    b\n  end\nend\n\nfn byte_is_ws(_ s: String, _ i: Int) -> Bool\n  match string.byte_at(s, i)\n  when Some(b)\n    b == 32 or b == 9\n  when None\n    false\n  end\nend\n\nfn append_byte(_ acc: String, _ b: Int) -> String\n  \"#{acc}#{string.from_byte(b)}\"\nend\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(line)\n    let n = string.len(line)\n    mut result = \"\"\n    mut i = 0\n    mut first_word = true\n    while i < n\n      while i < n and byte_is_ws(line, i)\n        i = i + 1\n      end\n      if i < n\n        if not first_word\n          result = \"#{result} \"\n        end\n        first_word = false\n        match string.byte_at(line, i)\n        when Some(b)\n          result = append_byte(result, to_upper_byte(b))\n        when None\n          ()\n        end\n        i = i + 1\n        while i < n and not byte_is_ws(line, i)\n          match string.byte_at(line, i)\n          when Some(b)\n            result = append_byte(result, b)\n          when None\n            ()\n          end\n          i = i + 1\n        end\n      end\n    end\n    println(result)\n  when None\n    ()\n  end\nend",
+  "overall": "pass"
+}

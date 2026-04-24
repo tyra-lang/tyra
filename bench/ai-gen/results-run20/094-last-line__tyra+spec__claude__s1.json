@@ -1,0 +1,36 @@
+{
+  "prompt_id": "094-last-line",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777042924,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 46219,
+      "code_len": 906,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 138,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 531,
+      "stdout": "gamma\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 13\nend\n\nfn byte_of(_ s: String, _ i: Int) -> Int\n  match string.byte_at(s, i)\n  when Some(b)\n    b\n  when None\n    -1\n  end\nend\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut line_start = 0\nmut last_start = -1\nmut last_end = 0\nmut i = 0\nwhile i <= n\n  mut is_end = false\n  if i == n\n    is_end = true\n  else if byte_of(input, i) == 10\n    is_end = true\n  end\n  if is_end\n    let e = i\n    mut ee = e\n    mut stop = false\n    while ee > line_start and not stop\n      let b = byte_of(input, ee - 1)\n      if is_ws(b)\n        ee = ee - 1\n      else\n        stop = true\n      end\n    end\n    if ee > line_start\n      last_start = line_start\n      last_end = e\n    end\n    line_start = i + 1\n  end\n  i = i + 1\nend\n\nif last_start < 0\n  println(\"(none)\")\nelse\n  println(string.substring(input, last_start, last_end))\nend",
+  "overall": "pass"
+}

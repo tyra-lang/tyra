@@ -1,0 +1,36 @@
+{
+  "prompt_id": "099-sum-column",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777043219,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 38307,
+      "code_len": 936,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 129,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 606,
+      "stdout": "sum=39\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws_at(_ s: String, _ i: Int) -> Bool\n  match string.byte_at(s, i)\n  when Some(b)\n    b == 32 or b == 9\n  when None\n    false\n  end\nend\n\nfn second_int(_ line: String) -> Option<Int>\n  let n = string.len(line)\n  mut i = 0\n  while i < n and is_ws_at(line, i)\n    i = i + 1\n  end\n  while i < n and not is_ws_at(line, i)\n    i = i + 1\n  end\n  while i < n and is_ws_at(line, i)\n    i = i + 1\n  end\n  let start = i\n  while i < n and not is_ws_at(line, i)\n    i = i + 1\n  end\n  if start == i\n    None\n  else\n    string.parse_int(string.substring(line, start, i))\n  end\nend\n\nmut total = 0\nmut done = false\nwhile not done\n  match io.read_line()\n  when Some(line)\n    let trimmed = string.trim(line)\n    if not string.is_empty(trimmed)\n      match second_int(line)\n      when Some(v)\n        total = total + v\n      when None\n        ()\n      end\n    end\n  when None\n    done = true\n  end\nend\nprintln(\"sum=#{total}\")",
+  "overall": "pass"
+}

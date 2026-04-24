@@ -1,0 +1,36 @@
+{
+  "prompt_id": "095-flatmap-tokens",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777043053,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 18603,
+      "code_len": 688,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 133,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 472,
+      "stdout": "red red green green blue blue\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_space(_ s: String, _ i: Int) -> Bool\n  match string.byte_at(s, i)\n  when Some(b)\n    b == 32 or b == 9\n  when None\n    false\n  end\nend\n\nmatch io.read_line()\nwhen Some(line)\n  mut out = \"\"\n  mut i = 0\n  mut first = true\n  let n = string.len(line)\n  while i < n\n    while i < n and is_space(line, i)\n      i = i + 1\n    end\n    if i < n\n      let start = i\n      while i < n and not is_space(line, i)\n        i = i + 1\n      end\n      let tok = string.substring(line, start, i)\n      if first\n        out = \"#{tok} #{tok}\"\n        first = false\n      else\n        out = \"#{out} #{tok} #{tok}\"\n      end\n    end\n  end\n  println(out)\nwhen None\n  println(\"\")\nend",
+  "overall": "pass"
+}

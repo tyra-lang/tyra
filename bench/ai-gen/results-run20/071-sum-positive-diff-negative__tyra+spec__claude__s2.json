@@ -1,0 +1,36 @@
+{
+  "prompt_id": "071-sum-positive-diff-negative",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777040862,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 19359,
+      "code_len": 798,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 135,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 441,
+      "stdout": "r=30\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  mut total = 0\n  mut cur = \"\"\n  mut i = 0\n  let n = string.len(line)\n  while i <= n\n    let b = if i < n\n      match string.byte_at(line, i)\n      when Some(x)\n        x\n      when None\n        32\n      end\n    else\n      32\n    end\n    if b == 32 or b == 9 or b == 10 or b == 13\n      if not string.is_empty(cur)\n        let v = match string.parse_int(cur)\n        when Some(x)\n          x\n        when None\n          0\n        end\n        if v > 0\n          total = total + v\n        else if v < 0\n          total = total - v\n        end\n        cur = \"\"\n      end\n    else\n      cur = \"#{cur}#{string.from_byte(b)}\"\n    end\n    i = i + 1\n  end\n  println(\"r=#{total}\")\nend",
+  "overall": "pass"
+}

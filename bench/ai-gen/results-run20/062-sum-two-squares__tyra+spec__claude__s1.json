@@ -1,0 +1,36 @@
+{
+  "prompt_id": "062-sum-two-squares",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777040299,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10594,
+      "code_len": 849,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 148,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 476,
+      "stdout": "r=25\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = io.read_to_end()\n  mut a = 0\n  mut b = 0\n  mut cur = 0\n  mut sign = 1\n  mut has = false\n  mut got_a = false\n  mut i = 0\n  let n = string.len(line)\n  while i < n\n    let bo = string.byte_at(line, i)\n    match bo\n    when Some(by)\n      if by >= 48 and by <= 57\n        cur = cur * 10 + (by - 48)\n        has = true\n      else if by == 45 and not has\n        sign = -1\n      else\n        if has\n          if got_a\n            b = cur * sign\n          else\n            a = cur * sign\n            got_a = true\n          end\n          cur = 0\n          sign = 1\n          has = false\n        end\n      end\n    when None\n      cur = cur\n    end\n    i = i + 1\n  end\n  if has\n    if got_a\n      b = cur * sign\n    else\n      a = cur * sign\n    end\n  end\n  let r = a * a + b * b\n  println(\"r=#{r}\")\nend",
+  "overall": "pass"
+}

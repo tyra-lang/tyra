@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777042719,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 61460,
+      "code_len": 2139,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 138,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 499,
+      "stdout": "9 6 5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn flush(_ nums: List<Int>, _ cur: String) -> List<Int>\n  if string.is_empty(cur)\n    nums\n  else\n    match string.parse_int(cur)\n    when Some(v)\n      list.push(nums, v)\n    when None\n      nums\n    end\n  end\nend\n\nfn parse_line(_ s: String) -> List<Int>\n  mut nums: List<Int> = []\n  mut cur = \"\"\n  mut i = 0\n  let n = string.len(s)\n  while i < n\n    let b = match string.byte_at(s, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if b == 32 or b == 9 or b == 10 or b == 13\n      nums = flush(nums, cur)\n      cur = \"\"\n    else\n      cur = \"#{cur}#{string.from_byte(b)}\"\n    end\n    i = i + 1\n  end\n  flush(nums, cur)\nend\n\nfn main() -> Unit\n  let line1 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let line2 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let nums = parse_line(line1)\n  let k = match string.parse_int(string.trim(line2))\n  when Some(v)\n    v\n  when None\n    0\n  end\n  let n = nums.len()\n  let take = if k > n\n    n\n  else\n    k\n  end\n\n  mut used: List<Int> = []\n  mut i = 0\n  while i < n\n    used = list.push(used, 0)\n    i = i + 1\n  end\n\n  mut out = \"\"\n  mut round = 0\n  while round < take\n    mut best_idx = -1\n    mut best_val = 0\n    mut j = 0\n    while j < n\n      let u = match used.get(j)\n      when Some(v)\n        v\n      when None\n        1\n      end\n      if u == 0\n        let val = match nums.get(j)\n        when Some(v)\n          v\n        when None\n          0\n        end\n        if best_idx == -1 or val > best_val\n          best_idx = j\n          best_val = val\n        end\n      end\n      j = j + 1\n    end\n\n    mut new_used: List<Int> = []\n    mut k2 = 0\n    while k2 < n\n      if k2 == best_idx\n        new_used = list.push(new_used, 1)\n      else\n        let u2 = match used.get(k2)\n        when Some(v)\n          v\n        when None\n          0\n        end\n        new_used = list.push(new_used, u2)\n      end\n      k2 = k2 + 1\n    end\n    used = new_used\n\n    if round == 0\n      out = \"#{best_val}\"\n    else\n      out = \"#{out} #{best_val}\"\n    end\n    round = round + 1\n  end\n\n  println(out)\nend",
+  "overall": "pass"
+}

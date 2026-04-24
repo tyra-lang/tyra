@@ -1,0 +1,38 @@
+{
+  "prompt_id": "089-unique-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777042590,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 40163,
+      "code_len": 851,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 156,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 561,
+      "stdout": "unique=5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": false,
+      "check_details": [
+        "missing marker: 'unique=6'"
+      ]
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let input = io.read_to_end()\n  let n = string.len(input)\n  let delim = string.from_byte(10)\n  mut seen = delim\n  mut count = 0\n  mut i = 0\n  mut cur = \"\"\n  while i < n\n    match string.byte_at(input, i)\n    when Some(b)\n      if b == 32 or b == 9 or b == 10 or b == 13\n        if not string.is_empty(cur)\n          let key = \"#{delim}#{cur}#{delim}\"\n          if not string.contains(seen, key)\n            seen = \"#{seen}#{cur}#{delim}\"\n            count = count + 1\n          end\n          cur = \"\"\n        end\n      else\n        cur = \"#{cur}#{string.from_byte(b)}\"\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if not string.is_empty(cur)\n    let key = \"#{delim}#{cur}#{delim}\"\n    if not string.contains(seen, key)\n      count = count + 1\n    end\n  end\n  println(\"unique=#{count}\")\nend",
+  "overall": "check_fail"
+}

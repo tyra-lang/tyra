@@ -1,0 +1,26 @@
+{
+  "prompt_id": "088-histogram",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777042447,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 15503,
+      "code_len": 1460,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 13,
+      "stderr": " expected type, found `value`\n   --> main.tyra:62:47\n   |\n62 | fn update_at(_ list: List<Int>, _ idx: Int, _ value: Int) -> List<Int>\n   |                                               ^^^^^ expected type\n\nerror[E0100]: expected `)`, found `:`\n   --> main.tyra:62:52\n   |\n62 | fn update_at(_ list: List<Int>, _ idx: Int, _ value: Int) -> List<Int>\n   |                                                    ^ expected `)`\n\nerror[E0104]: expected expression, found `:`\n   --> main.tyra:62:52\n   |\n62 | fn update_at(_ list: List<Int>, _ idx: Int, _ value: Int) -> List<Int>\n   |                                                    ^ expected expression\n\nerror[E0104]: expected expression, found `)`\n   --> main.tyra:62:57\n   |\n62 | fn update_at(_ list: List<Int>, _ idx: Int, _ value: Int) -> List<Int>\n   |                                                         ^ expected expression\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:62:59\n   |\n62 | fn update_at(_ list: List<Int>, _ idx: Int, _ value: Int) -> List<Int>\n   |                                                           ^^ expected newline here\n\nerror[E0104]: expected expression, found `->`\n   --> main.tyra:62:59\n   |\n62 | fn update_at(_ list: List<Int>, _ idx: Int, _ value: Int) -> List<Int>\n   |                                                           ^^ expected expression\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:62:62\n   |\n62 | fn update_at(_ list: List<Int>, _ idx: Int, _ value: Int) -> List<Int>\n   |                                                              ^^^^ expected newline here\n\nerror[E0104]: expected expression, found newline\n   --> main.tyra:62:71\n   |\n62 | fn update_at(_ list: List<Int>, _ idx: Int, _ value: Int) -> List<Int>\n   |                                                                       ^ expected expression\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:63:3\n   |\n63 |   mut result = []\n   |   ^^^ expected newline here\n\n11 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  mut counts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n  let n = string.len(line)\n  mut i = 0\n  while i < n\n    match string.byte_at(line, i)\n    when Some(b)\n      if b >= 48 and b <= 57\n        let d = b - 48\n        mut new_counts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n        mut j = 0\n        while j < 10\n          match counts.get(j)\n          when Some(v)\n            if j == d\n              new_counts = update_at(new_counts, j, v + 1)\n            else\n              new_counts = update_at(new_counts, j, v)\n            end\n          when None\n            ()\n          end\n          j = j + 1\n        end\n        counts = new_counts\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n\n  mut d = 0\n  while d < 10\n    let c = match counts.get(d)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    mut hashes = \"\"\n    mut k = 0\n    while k < c\n      hashes = \"#{hashes}#\"\n      k = k + 1\n    end\n    println(\"#{d}: #{hashes}\")\n    d = d + 1\n  end\nend\n\nfn update_at(_ list: List<Int>, _ idx: Int, _ value: Int) -> List<Int>\n  mut result = []\n  mut i = 0\n  let n = list.len()\n  while i < n\n    let v = match list.get(i)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    if i == idx\n      result = __list_int_push(result, value)\n    else\n      result = __list_int_push(result, v)\n    end\n    i = i + 1\n  end\n  result\nend",
+  "overall": "compile_fail"
+}

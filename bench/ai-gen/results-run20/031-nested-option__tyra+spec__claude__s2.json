@@ -1,0 +1,36 @@
+{
+  "prompt_id": "031-nested-option",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777038773,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8740,
+      "code_len": 329,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 132,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 455,
+      "stdout": "id=1,nick=alpha\nid=2,nick=<anonymous>\nid=3,nick=gamma\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "data User\n  id: Int\n  nickname: Option<String>\nend\n\nlet users = [\n  User(id: 1, nickname: Some(\"alpha\")),\n  User(id: 2, nickname: None),\n  User(id: 3, nickname: Some(\"gamma\")),\n]\n\nfor u in users\n  match u.nickname\n  when Some(n)\n    println(\"id=#{u.id},nick=#{n}\")\n  when None\n    println(\"id=#{u.id},nick=<anonymous>\")\n  end\nend",
+  "overall": "pass"
+}

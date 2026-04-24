@@ -1,0 +1,26 @@
+{
+  "prompt_id": "064-count-down",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777040378,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9389,
+      "code_len": 334,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 14,
+      "stderr": "error[E0200]: undefined name `string`\n  --> main.tyra:7:19\n  |\n7 |     let trimmed = string.trim(s)\n  |                   ^^^^^^ not found in this scope\n\nerror[E0200]: undefined name `string`\n  --> main.tyra:8:11\n  |\n8 |     match string.parse_int(trimmed)\n  |           ^^^^^^ not found in this scope\n\n2 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\n\nfn main() -> Unit\n  let line = io.read_line()\n  match line\n  when Some(s)\n    let trimmed = string.trim(s)\n    match string.parse_int(trimmed)\n    when Some(n)\n      mut i = n\n      while i >= 0\n        println(i)\n        i = i - 1\n      end\n      println(\"done\")\n    when None\n      ()\n    end\n  when None\n    ()\n  end\nend",
+  "overall": "compile_fail"
+}

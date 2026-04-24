@@ -1,0 +1,36 @@
+{
+  "prompt_id": "011-unique-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777037882,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 38048,
+      "code_len": 1348,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 152,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 495,
+      "stdout": "1 2 3 4 5 6 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet text = io.read_to_end()\nlet n = string.len(text)\nmut nums: List<Int> = []\nmut cur = \"\"\nmut i = 0\nwhile i < n\n  match string.byte_at(text, i)\n  when Some(b)\n    if b == 32 or b == 9 or b == 10 or b == 13\n      if not string.is_empty(cur)\n        match string.parse_int(cur)\n        when Some(v)\n          nums = list.push(nums, v)\n        when None\n          ()\n        end\n        cur = \"\"\n      end\n    else\n      cur = \"#{cur}#{string.from_byte(b)}\"\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\nif not string.is_empty(cur)\n  match string.parse_int(cur)\n  when Some(v)\n    nums = list.push(nums, v)\n  when None\n    ()\n  end\nend\n\nmut unique: List<Int> = []\nfor x in nums\n  if not list.contains(unique, x)\n    unique = list.push(unique, x)\n  end\nend\n\nmut remaining = unique\nmut sorted: List<Int> = []\nlet total = list.len(remaining)\nmut k = 0\nwhile k < total\n  match list.min(remaining)\n  when Some(m)\n    sorted = list.push(sorted, m)\n    mut next_remaining: List<Int> = []\n    for y in remaining\n      if y != m\n        next_remaining = list.push(next_remaining, y)\n      end\n    end\n    remaining = next_remaining\n  when None\n    ()\n  end\n  k = k + 1\nend\n\nmut out = \"\"\nmut first = true\nfor z in sorted\n  if first\n    out = \"#{z}\"\n    first = false\n  else\n    out = \"#{out} #{z}\"\n  end\nend\nprintln(out)",
+  "overall": "pass"
+}

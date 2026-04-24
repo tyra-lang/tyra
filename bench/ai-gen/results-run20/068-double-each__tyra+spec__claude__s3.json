@@ -1,0 +1,36 @@
+{
+  "prompt_id": "068-double-each",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777040705,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 18920,
+      "code_len": 1011,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 117,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 522,
+      "stdout": "2 4 6 -8 10\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let n = string.len(line)\n  mut i = 0\n  mut out = \"\"\n  mut first = true\n  mut has = false\n  mut cur = 0\n  mut neg = false\n  while i < n\n    let b = match string.byte_at(line, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if b == 32 or b == 9 or b == 10 or b == 13\n      if has\n        mut val = cur\n        if neg\n          val = 0 - val\n        end\n        val = val * 2\n        if first\n          out = \"#{val}\"\n          first = false\n        else\n          out = \"#{out} #{val}\"\n        end\n        has = false\n        cur = 0\n        neg = false\n      end\n    else if b == 45\n      neg = true\n    else\n      cur = cur * 10 + (b - 48)\n      has = true\n    end\n    i = i + 1\n  end\n  if has\n    mut val = cur\n    if neg\n      val = 0 - val\n    end\n    val = val * 2\n    if first\n      out = \"#{val}\"\n    else\n      out = \"#{out} #{val}\"\n    end\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

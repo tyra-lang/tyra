@@ -1,0 +1,36 @@
+{
+  "prompt_id": "029-count-word",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777038708,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 24609,
+      "code_len": 689,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 139,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 441,
+      "stdout": "count=3\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet t_line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet body = io.read_to_end()\n\nmut count = 0\nmut tok = \"\"\nmut i = 0\nlet n = string.len(body)\nwhile i <= n\n  mut is_ws = true\n  mut cb = 0\n  if i < n\n    let bv = match string.byte_at(body, i)\n    when Some(v)\n      v\n    when None\n      32\n    end\n    cb = bv\n    if bv == 32 or bv == 9 or bv == 10 or bv == 13\n      is_ws = true\n    else\n      is_ws = false\n    end\n  end\n  if is_ws\n    if not string.is_empty(tok)\n      if tok == t_line\n        count = count + 1\n      end\n      tok = \"\"\n    end\n  else\n    tok = \"#{tok}#{string.from_byte(cb)}\"\n  end\n  i = i + 1\nend\n\nprintln(\"count=#{count}\")",
+  "overall": "pass"
+}

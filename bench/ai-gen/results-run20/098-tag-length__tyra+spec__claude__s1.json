@@ -1,0 +1,36 @@
+{
+  "prompt_id": "098-tag-length",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777043186,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10294,
+      "code_len": 364,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 138,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 511,
+      "stdout": "hi -> short\nhello -> medium\ngoodmorning -> long\nok -> short\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn classify(_ n: Int) -> String\n  if n <= 3\n    \"short\"\n  else if n <= 7\n    \"medium\"\n  else\n    \"long\"\n  end\nend\n\nfn loop() -> Unit\n  match io.read_line()\n  when Some(line)\n    let n = string.len(line)\n    if n == 0\n      loop()\n    else\n      println(\"#{line} -> #{classify(n)}\")\n      loop()\n    end\n  when None\n    ()\n  end\nend\n\nloop()",
+  "overall": "pass"
+}

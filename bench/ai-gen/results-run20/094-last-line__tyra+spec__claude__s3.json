@@ -1,0 +1,36 @@
+{
+  "prompt_id": "094-last-line",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777043014,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 26147,
+      "code_len": 995,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 105,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 449,
+      "stdout": "gamma\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut last = \"\"\nmut found = false\nmut start = 0\nmut i = 0\nwhile i <= n\n  let at_end = i == n\n  mut is_nl = false\n  if not at_end\n    match string.byte_at(input, i)\n    when Some(b)\n      if b == 10\n        is_nl = true\n      end\n    when None\n      ()\n    end\n  end\n  if at_end or is_nl\n    let line = string.substring(input, start, i)\n    mut endp = string.len(line)\n    mut stripping = true\n    while stripping\n      if endp == 0\n        stripping = false\n      else\n        match string.byte_at(line, endp - 1)\n        when Some(b)\n          if b == 32 or b == 9 or b == 13 or b == 11 or b == 12\n            endp = endp - 1\n          else\n            stripping = false\n          end\n        when None\n          stripping = false\n        end\n      end\n    end\n    if endp > 0\n      last = line\n      found = true\n    end\n    start = i + 1\n  end\n  i = i + 1\nend\n\nif found\n  println(last)\nelse\n  println(\"(none)\")\nend",
+  "overall": "pass"
+}
