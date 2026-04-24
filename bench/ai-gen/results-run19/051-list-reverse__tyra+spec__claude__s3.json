@@ -1,0 +1,36 @@
+{
+  "prompt_id": "051-list-reverse",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777021216,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 24108,
+      "code_len": 1233,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 185,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 449,
+      "stdout": "5 4 3 2 1\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(line)\n    process(line)\n  when None\n    ()\n  end\nend\n\nfn process(_ line: String) -> Unit\n  mut nums: List<Int> = []\n  mut i = 0\n  let n = string.len(line)\n  mut cur = 0\n  mut has = false\n  mut neg = false\n  while i < n\n    match string.byte_at(line, i)\n    when Some(b)\n      if b == 32 or b == 9 or b == 10 or b == 13\n        if has\n          if neg\n            nums = list.push(nums, 0 - cur)\n          else\n            nums = list.push(nums, cur)\n          end\n          cur = 0\n          has = false\n          neg = false\n        end\n      else if b == 45 and not has and not neg\n        neg = true\n      else\n        cur = cur * 10 + (b - 48)\n        has = true\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if has\n    if neg\n      nums = list.push(nums, 0 - cur)\n    else\n      nums = list.push(nums, cur)\n    end\n  end\n\n  mut out = \"\"\n  mut j = list.len(nums) - 1\n  mut first = true\n  while j >= 0\n    match list.get(nums, j)\n    when Some(v)\n      if first\n        out = \"#{v}\"\n        first = false\n      else\n        out = \"#{out} #{v}\"\n      end\n    when None\n      ()\n    end\n    j = j - 1\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

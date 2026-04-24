@@ -1,0 +1,36 @@
+{
+  "prompt_id": "066-square-list",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777022035,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 21701,
+      "code_len": 980,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 245,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 450,
+      "stdout": "1 4 9 16 25\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line_opt = io.read_line()\nlet line = match line_opt\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet n = string.len(line)\nmut nums: List<Int> = []\nmut cur = 0\nmut sign = 1\nmut has = false\nmut i = 0\n\nwhile i < n\n  let b_opt = string.byte_at(line, i)\n  let b = match b_opt\n  when Some(v)\n    v\n  when None\n    0\n  end\n\n  if b == 32 or b == 9 or b == 13 or b == 10\n    if has\n      nums = list.push(nums, sign * cur)\n      cur = 0\n      sign = 1\n      has = false\n    end\n  else if b == 45\n    sign = -1\n    has = true\n  else if b == 43\n    sign = 1\n    has = true\n  else\n    cur = cur * 10 + (b - 48)\n    has = true\n  end\n  i = i + 1\nend\n\nif has\n  nums = list.push(nums, sign * cur)\nend\n\nmut out = \"\"\nmut j = 0\nlet m = nums.len()\nwhile j < m\n  let v_opt = nums.get(j)\n  let v = match v_opt\n  when Some(x)\n    x\n  when None\n    0\n  end\n  let sq = v * v\n  if j == 0\n    out = \"#{sq}\"\n  else\n    out = \"#{out} #{sq}\"\n  end\n  j = j + 1\nend\n\nprintln(out)",
+  "overall": "pass"
+}

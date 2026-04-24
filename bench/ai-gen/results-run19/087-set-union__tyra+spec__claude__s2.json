@@ -1,0 +1,36 @@
+{
+  "prompt_id": "087-set-union",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777023530,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 50582,
+      "code_len": 2400,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 168,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 490,
+      "stdout": "1 2 3 4 5 6 7\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import string\nimport list\nimport io\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  mut cur = 0\n  mut has = false\n  mut neg = false\n  while i < n\n    let b = match string.byte_at(s, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if b == 32 or b == 9 or b == 13 or b == 10\n      if has\n        if neg\n          result = list.push(result, -cur)\n        else\n          result = list.push(result, cur)\n        end\n        cur = 0\n        has = false\n        neg = false\n      end\n    else if b == 45\n      neg = true\n    else\n      cur = cur * 10 + (b - 48)\n      has = true\n    end\n    i = i + 1\n  end\n  if has\n    if neg\n      result = list.push(result, -cur)\n    else\n      result = list.push(result, cur)\n    end\n  end\n  result\nend\n\nfn sorted_unique(_ xs: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  let n = xs.len()\n  while i < n\n    let x = match xs.get(i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if not list.contains(result, x)\n      mut j = 0\n      mut inserted = false\n      mut newres: List<Int> = []\n      let m = result.len()\n      while j < m\n        let y = match result.get(j)\n        when Some(v)\n          v\n        when None\n          0\n        end\n        if not inserted and x < y\n          newres = list.push(newres, x)\n          inserted = true\n        end\n        newres = list.push(newres, y)\n        j = j + 1\n      end\n      if not inserted\n        newres = list.push(newres, x)\n      end\n      result = newres\n    end\n    i = i + 1\n  end\n  result\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet a = parse_ints(line1)\nlet b = parse_ints(line2)\n\nmut combined: List<Int> = []\nmut ia = 0\nlet na = a.len()\nwhile ia < na\n  let x = match a.get(ia)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  combined = list.push(combined, x)\n  ia = ia + 1\nend\n\nmut ib = 0\nlet nb = b.len()\nwhile ib < nb\n  let x = match b.get(ib)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  combined = list.push(combined, x)\n  ib = ib + 1\nend\n\nlet u = sorted_unique(combined)\n\nmut out = \"\"\nmut k = 0\nlet nu = u.len()\nwhile k < nu\n  let x = match u.get(k)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  if k == 0\n    out = \"#{x}\"\n  else\n    out = \"#{out} #{x}\"\n  end\n  k = k + 1\nend\nprintln(out)",
+  "overall": "pass"
+}

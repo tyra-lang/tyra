@@ -1,0 +1,26 @@
+{
+  "prompt_id": "001-fizzbuzz",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777017813,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 13508,
+      "code_len": 395,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 13,
+      "stderr": "error[E0200]: undefined name `string`\n  --> main.tyra:5:11\n  |\n5 |   let n = string.parse_int(string.trim(line)).ok_or(\"invalid input\")?\n  |           ^^^^^^ not found in this scope\n\nerror[E0200]: undefined name `string`\n  --> main.tyra:5:28\n  |\n5 |   let n = string.parse_int(string.trim(line)).ok_or(\"invalid input\")?\n  |                            ^^^^^^ not found in this scope\n\n2 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\n\nfn main() -> Result<Unit, String>\n  let line = io.read_line().ok_or(\"no input\")?\n  let n = string.parse_int(string.trim(line)).ok_or(\"invalid input\")?\n  mut i = 1\n  while i <= n\n    if i % 15 == 0\n      println(\"FizzBuzz\")\n    else if i % 3 == 0\n      println(\"Fizz\")\n    else if i % 5 == 0\n      println(\"Buzz\")\n    else\n      println(\"#{i}\")\n    end\n    i = i + 1\n  end\n  Ok(())\nend",
+  "overall": "compile_fail"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "094-last-line",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777024357,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 27506,
+      "code_len": 880,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 293,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 444,
+      "stdout": "gamma\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut last_start = -1\nmut last_end = -1\nmut line_start = 0\nmut i = 0\nwhile i <= n\n  mut is_boundary = false\n  if i == n\n    is_boundary = true\n  else\n    match string.byte_at(input, i)\n    when Some(b)\n      if b == 10\n        is_boundary = true\n      end\n    when None\n      ()\n    end\n  end\n  if is_boundary\n    mut found_nonws = false\n    mut j = line_start\n    while j < i\n      match string.byte_at(input, j)\n      when Some(b)\n        if b != 32 and b != 9 and b != 13\n          found_nonws = true\n        end\n      when None\n        ()\n      end\n      j = j + 1\n    end\n    if found_nonws\n      last_start = line_start\n      last_end = i\n    end\n    line_start = i + 1\n  end\n  i = i + 1\nend\n\nif last_start < 0\n  println(\"(none)\")\nelse\n  println(string.substring(input, last_start, last_end))\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "038-capitalize-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777019421,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 36836,
+      "code_len": 919,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 164,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 523,
+      "stdout": "Hello World From Tyra\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(line)\n    mut out = \"\"\n    mut i = 0\n    mut in_word = false\n    mut had_word = false\n    let n = string.len(line)\n    while i < n\n      match string.byte_at(line, i)\n      when Some(b)\n        if is_ws(b)\n          in_word = false\n        else\n          if not in_word\n            if had_word\n              out = \"#{out} \"\n            end\n            had_word = true\n            in_word = true\n            if b >= 97 and b <= 122\n              out = \"#{out}#{string.from_byte(b - 32)}\"\n            else\n              out = \"#{out}#{string.from_byte(b)}\"\n            end\n          else\n            out = \"#{out}#{string.from_byte(b)}\"\n          end\n        end\n      when None\n        ()\n      end\n      i = i + 1\n    end\n    println(out)\n  when None\n    ()\n  end\nend",
+  "overall": "pass"
+}

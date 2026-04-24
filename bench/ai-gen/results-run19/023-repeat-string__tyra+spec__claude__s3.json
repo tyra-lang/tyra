@@ -1,0 +1,26 @@
+{
+  "prompt_id": "023-repeat-string",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777018819,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9770,
+      "code_len": 401,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 57,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-i893f118/main.ll:148:13: error: '%_t29' defined with type 'i64' but expected 'ptr'\n  148 |   store ptr %_t29, ptr %v\n      |             ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let s = match io.read_line()\n  when Some(v)\n    v\n  when None\n    \"\"\n  end\n  let n_str = match io.read_line()\n  when Some(v)\n    v\n  when None\n    \"0\"\n  end\n  let n = match string.parse_int(n_str)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  mut result = \"\"\n  mut i = 0\n  while i < n\n    result = \"#{result}#{s}\"\n    i = i + 1\n  end\n  println(result)\nend",
+  "overall": "compile_fail"
+}

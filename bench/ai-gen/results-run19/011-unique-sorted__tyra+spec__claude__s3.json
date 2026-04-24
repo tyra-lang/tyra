@@ -1,0 +1,36 @@
+{
+  "prompt_id": "011-unique-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777018193,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 63731,
+      "code_len": 2063,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 354,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 529,
+      "stdout": "1 2 3 4 5 6 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport list\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn flush_token(_ acc: List<Int>, _ current: String) -> List<Int>\n  if string.is_empty(current)\n    acc\n  else\n    match string.parse_int(current)\n    when Some(v)\n      list.push(acc, v)\n    when None\n      acc\n    end\n  end\nend\n\nfn parse_tokens(_ text: String) -> List<Int>\n  mut result: List<Int> = []\n  mut current = \"\"\n  mut i = 0\n  let n = string.len(text)\n  while i < n\n    match string.byte_at(text, i)\n    when Some(byte)\n      if is_ws(byte)\n        result = flush_token(result, current)\n        current = \"\"\n      else\n        current = \"#{current}#{string.from_byte(byte)}\"\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  flush_token(result, current)\nend\n\nfn sorted_insert(_ xs: List<Int>, _ v: Int) -> List<Int>\n  if list.contains(xs, v)\n    xs\n  else\n    mut result: List<Int> = []\n    mut inserted = false\n    mut i = 0\n    let n = xs.len()\n    while i < n\n      match xs.get(i)\n      when Some(x)\n        if not inserted\n          if v < x\n            result = list.push(result, v)\n            inserted = true\n          end\n        end\n        result = list.push(result, x)\n      when None\n        ()\n      end\n      i = i + 1\n    end\n    if not inserted\n      result = list.push(result, v)\n    end\n    result\n  end\nend\n\nfn dedupe_sort(_ xs: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  let n = xs.len()\n  while i < n\n    match xs.get(i)\n    when Some(v)\n      result = sorted_insert(result, v)\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn join_ints(_ xs: List<Int>) -> String\n  mut out = \"\"\n  mut first = true\n  mut i = 0\n  let n = xs.len()\n  while i < n\n    match xs.get(i)\n    when Some(v)\n      if first\n        out = \"#{v}\"\n        first = false\n      else\n        out = \"#{out} #{v}\"\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  out\nend\n\nlet text = io.read_to_end()\nlet nums = parse_tokens(text)\nlet sorted = dedupe_sort(nums)\nprintln(join_ints(sorted))",
+  "overall": "pass"
+}

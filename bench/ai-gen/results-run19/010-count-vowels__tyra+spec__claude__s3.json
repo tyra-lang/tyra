@@ -1,0 +1,26 @@
+{
+  "prompt_id": "010-count-vowels",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777018105,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8667,
+      "code_len": 424,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 8,
+      "stderr": "error[E0200]: undefined name `string`\n   --> main.tyra:10:11\n   |\n10 |   let n = string.len(line)\n   |           ^^^^^^ not found in this scope\n\nerror[E0200]: undefined name `string`\n   --> main.tyra:14:11\n   |\n14 |     match string.byte_at(line, i)\n   |           ^^^^^^ not found in this scope\n\n2 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let n = string.len(line)\n  mut count = 0\n  mut i = 0\n  while i < n\n    match string.byte_at(line, i)\n    when Some(b)\n      if b == 97 or b == 101 or b == 105 or b == 111 or b == 117\n        count = count + 1\n      end\n    when None\n      count = count\n    end\n    i = i + 1\n  end\n  println(\"vowels=#{count}\")\nend",
+  "overall": "compile_fail"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "086-set-intersect",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777023302,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 56506,
+      "code_len": 2179,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 342,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 500,
+      "stdout": "1 3 4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut cur = \"\"\n  mut i = 0\n  let n = string.len(s)\n  while i < n\n    match string.byte_at(s, i)\n    when Some(b)\n      if b == 32 or b == 9 or b == 10 or b == 13\n        if not string.is_empty(cur)\n          match string.parse_int(cur)\n          when Some(v)\n            result = list.push(result, v)\n          when None\n            ()\n          end\n          cur = \"\"\n        end\n      else\n        cur = \"#{cur}#{string.from_byte(b)}\"\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if not string.is_empty(cur)\n    match string.parse_int(cur)\n    when Some(v)\n      result = list.push(result, v)\n    when None\n      ()\n    end\n  end\n  result\nend\n\nfn intersect_unique(_ a: List<Int>, _ b: List<Int>) -> List<Int>\n  mut uniq: List<Int> = []\n  for x in a\n    if list.contains(b, x) and not list.contains(uniq, x)\n      uniq = list.push(uniq, x)\n    end\n  end\n  uniq\nend\n\nfn sort_list(_ xs: List<Int>) -> List<Int>\n  let n = xs.len()\n  mut sorted: List<Int> = []\n  mut placed = 0\n  mut prev = 0\n  mut have_prev = false\n  while placed < n\n    mut found = false\n    mut candidate = 0\n    for v in xs\n      if have_prev\n        if v > prev\n          if not found\n            candidate = v\n            found = true\n          else if v < candidate\n            candidate = v\n          end\n        end\n      else\n        if not found\n          candidate = v\n          found = true\n        else if v < candidate\n          candidate = v\n        end\n      end\n    end\n    sorted = list.push(sorted, candidate)\n    prev = candidate\n    have_prev = true\n    placed = placed + 1\n  end\n  sorted\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet a = parse_ints(line1)\nlet b = parse_ints(line2)\nlet inter = intersect_unique(a, b)\nlet sorted = sort_list(inter)\n\nif sorted.len() == 0\n  println(\"empty\")\nelse\n  mut out = \"\"\n  mut first = true\n  for v in sorted\n    if first\n      out = \"#{v}\"\n      first = false\n    else\n      out = \"#{out} #{v}\"\n    end\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

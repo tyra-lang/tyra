@@ -1,0 +1,36 @@
+{
+  "prompt_id": "056-cumulative-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777021465,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 35578,
+      "code_len": 965,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 180,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 478,
+      "stdout": "1 3 6 10 15\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_digit(_ b: Int) -> Bool\n  b >= 48 and b <= 57\nend\n\nlet line = io.read_to_end()\nlet n = string.len(line)\nmut i = 0\nmut sum = 0\nmut out = \"\"\nmut first_num = true\nmut cur = 0\nmut sign = 1\nmut in_num = false\n\nwhile i < n\n  match string.byte_at(line, i)\n  when Some(b)\n    if is_digit(b)\n      if not in_num\n        in_num = true\n        cur = 0\n      end\n      cur = cur * 10 + (b - 48)\n    else if b == 45 and not in_num\n      sign = -1\n      in_num = true\n      cur = 0\n    else\n      if in_num\n        let val = cur * sign\n        sum = sum + val\n        if first_num\n          out = \"#{sum}\"\n          first_num = false\n        else\n          out = \"#{out} #{sum}\"\n        end\n        in_num = false\n        sign = 1\n        cur = 0\n      end\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nif in_num\n  let val = cur * sign\n  sum = sum + val\n  if first_num\n    out = \"#{sum}\"\n  else\n    out = \"#{out} #{sum}\"\n  end\nend\n\nprintln(out)",
+  "overall": "pass"
+}

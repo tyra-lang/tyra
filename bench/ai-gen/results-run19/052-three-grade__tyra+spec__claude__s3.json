@@ -1,0 +1,36 @@
+{
+  "prompt_id": "052-three-grade",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777021260,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8337,
+      "code_len": 349,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 129,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 440,
+      "stdout": "B\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line = io.read_line().ok_or(\"no input\")?\n  let trimmed = string.trim(line)\n  let score = string.parse_int(trimmed).ok_or(\"invalid int\")?\n  let grade = if score >= 90\n    \"A\"\n  else if score >= 75\n    \"B\"\n  else if score >= 60\n    \"C\"\n  else\n    \"F\"\n  end\n  println(grade)\n  Ok(())\nend",
+  "overall": "pass"
+}

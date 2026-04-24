@@ -1,0 +1,26 @@
+{
+  "prompt_id": "007-gcd",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777017976,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11956,
+      "code_len": 762,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 14,
+      "stderr": "error[E0104]: expected expression, found `,`\n   --> main.tyra:21:98\n   |\n21 |             nums = [if idx == 0 then_unused_placeholder(cur) else nums.get(0).ok_or(0).ok_value(), if idx == 1 then_unused_placeholder(cur) else 0]\n   |                                                                                                  ^ expected expression\n\nerror[E0104]: expected expression, found `]`\n   --> main.tyra:21:147\n   |\n21 |             nums = [if idx == 0 then_unused_placeholder(cur) else nums.get(0).ok_or(0).ok_value(), if idx == 1 then_unused_placeholder(cur) else 0]\n   |                                                                                                                                                   ^ expected expression\n\nerror[E0100]: expected `]`, found newline\n   --> main.tyra:26:12\n   |\n26 |         end\n   |            ^ expected `]`\n\nerror[E0100]: expected `end`, found `when`\n   --> main.tyra:28:5\n   |\n28 |     when None\n   |     ^^^^ expected `end`\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:28:5\n   |\n28 |     when None\n   |     ^^^^ expected newline here\n\nerror[E0100]: expected `end`, found `when`\n   --> main.tyra:28:5\n   |\n28 |     when None\n   |     ^^^^ expected `end`\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:28:5\n   |\n28 |     when None\n   |     ^^^^ expected newline here\n\n7 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let input = io.read_to_end()\n  let n = string.len(input)\n  mut nums = [0, 0]\n  mut idx = 0\n  mut i = 0\n  mut cur = 0\n  mut in_num = false\n  while i < n\n    match string.byte_at(input, i)\n    when Some(b)\n      if b >= 48 and b <= 57\n        cur = cur * 10 + (b - 48)\n        in_num = true\n      else\n        if in_num\n          if idx < 2\n            nums = [if idx == 0 then_unused_placeholder(cur) else nums.get(0).ok_or(0).ok_value(), if idx == 1 then_unused_placeholder(cur) else 0]\n          end\n          in_num = false\n          cur = 0\n          idx = idx + 1\n        end\n      end\n    when None\n      i = i\n    end\n    i = i + 1\n  end\n  print(\"gcd=0\")\nend\n\nfn then_unused_placeholder(_ x: Int) -> Int\n  x\nend",
+  "overall": "compile_fail"
+}

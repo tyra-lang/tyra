@@ -1,0 +1,36 @@
+{
+  "prompt_id": "007-gcd",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777017988,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 25557,
+      "code_len": 658,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 157,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 530,
+      "stdout": "gcd=6\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn gcd(_ x: Int, _ y: Int) -> Int\n  mut a = x\n  mut b = y\n  while b != 0\n    let t = b\n    b = a % b\n    a = t\n  end\n  a\nend\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut a = 0\nmut b = 0\nmut which = 0\nmut in_num = false\nmut i = 0\nwhile i < n\n  mut c = 0\n  match string.byte_at(input, i)\n  when Some(v)\n    c = v\n  when None\n    c = 0\n  end\n  if c >= 48 and c <= 57\n    if which == 0\n      a = a * 10 + (c - 48)\n    else\n      b = b * 10 + (c - 48)\n    end\n    in_num = true\n  else\n    if in_num\n      if which == 0\n        which = 1\n      end\n    end\n    in_num = false\n  end\n  i = i + 1\nend\nprintln(\"gcd=#{gcd(a, b)}\")",
+  "overall": "pass"
+}

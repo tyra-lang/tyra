@@ -1,0 +1,36 @@
+{
+  "prompt_id": "021-sum-evens",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777018594,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 25513,
+      "code_len": 978,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 372,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 409,
+      "stdout": "sum_even=30\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut sum = 0\nmut i = 0\nwhile i < n\n  mut b = 0\n  match string.byte_at(input, i)\n  when Some(x)\n    b = x\n  when None\n    b = 0\n  end\n  if b == 32 or b == 9 or b == 10 or b == 13\n    i = i + 1\n  else\n    mut sign = 1\n    if b == 45\n      sign = -1\n      i = i + 1\n    else if b == 43\n      i = i + 1\n    end\n    mut val = 0\n    mut has = false\n    mut reading = true\n    while reading\n      if i >= n\n        reading = false\n      else\n        mut c = 0\n        match string.byte_at(input, i)\n        when Some(x)\n          c = x\n        when None\n          c = 0\n        end\n        if c >= 48 and c <= 57\n          val = val * 10 + (c - 48)\n          has = true\n          i = i + 1\n        else\n          reading = false\n        end\n      end\n    end\n    if has\n      let signed = val * sign\n      if signed % 2 == 0\n        sum = sum + signed\n      end\n    end\n  end\nend\nprintln(\"sum_even=#{sum}\")",
+  "overall": "pass"
+}

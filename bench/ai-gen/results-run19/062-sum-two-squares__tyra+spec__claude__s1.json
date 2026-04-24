@@ -1,0 +1,36 @@
+{
+  "prompt_id": "062-sum-two-squares",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777021782,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 21177,
+      "code_len": 785,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 262,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 440,
+      "stdout": "r=25",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut a = 0\nmut b = 0\nmut which = 0\nmut sign = 1\nmut have = false\nmut cur = 0\nmut i = 0\nwhile i <= n\n  mut c = -1\n  if i < n\n    match string.byte_at(input, i)\n    when Some(x)\n      c = x\n    when None\n      c = -1\n    end\n  else\n    c = 32\n  end\n  let is_ws = c == 32 or c == 9 or c == 10 or c == 13 or i == n\n  if is_ws\n    if have\n      let v = sign * cur\n      if which == 0\n        a = v\n      else\n        b = v\n      end\n      which = which + 1\n      have = false\n      cur = 0\n      sign = 1\n    end\n  else if c == 45\n    sign = -1\n  else if c == 43\n    sign = 1\n  else if c >= 48 and c <= 57\n    cur = cur * 10 + (c - 48)\n    have = true\n  end\n  i = i + 1\nend\nlet r = a * a + b * b\nprint(\"r=#{r}\")",
+  "overall": "pass"
+}
