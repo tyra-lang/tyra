@@ -130,22 +130,44 @@ impl super::LowerCtx {
 
                     if let Some(tag) = prelude_tag {
                         // Option/Result ADT: extract tag from tagged struct
-                        let subject_type_name = self
+                        let subject_type_name = match self
                             .generic_var_types
                             .get(&subject)
                             .map(|t| t.monomorphized_name())
                             .or_else(|| self.var_types.get(&subject).cloned())
-                            .unwrap_or_else(|| {
-                                if self.current_fn_return_type.is_option()
-                                    || self.current_fn_return_type.is_result()
-                                {
-                                    self.current_fn_return_type.monomorphized_name()
-                                } else {
-                                    panic!(
-                                        "BUG: cannot determine ADT type for match subject '{subject}'"
-                                    )
-                                }
-                            });
+                        {
+                            Some(n) => n,
+                            None if self.current_fn_return_type.is_option()
+                                || self.current_fn_return_type.is_result() =>
+                            {
+                                self.current_fn_return_type.monomorphized_name()
+                            }
+                            None => {
+                                // Graceful fallback when upstream type
+                                // inference failed to tag the subject
+                                // (typical cause: a method call on an
+                                // unknown-typed receiver, e.g. an
+                                // unsupported `Map` literal's `.get()`).
+                                // Register and emit code assuming the most
+                                // common Option/Result variant; downstream
+                                // type_scan or LLVM will reject the program
+                                // with a clear E0500 type-mismatch rather
+                                // than crashing the compiler process.
+                                //
+                                // Long-term: plumb a Report into MIR
+                                // lowering and emit an E0XXX diagnostic
+                                // here instead of silently continuing.
+                                let fallback = match variant_name.as_str() {
+                                    "Ok" | "Err" => Ty::Generic(
+                                        "Result".into(),
+                                        vec![Ty::Int, Ty::String],
+                                    ),
+                                    _ => Ty::Generic("Option".into(), vec![Ty::Int]),
+                                };
+                                self.register_adt_type(&fallback);
+                                fallback.monomorphized_name()
+                            }
+                        };
 
                         let tag_val = self.fresh_temp();
                         body.push(Instruction::AdtTag {
@@ -401,22 +423,32 @@ impl super::LowerCtx {
                     && fields[0].field_name != "_"
                     && !inner_is_constructor
                 {
-                    let subject_type_name = self
+                    let subject_type_name = match self
                         .generic_var_types
                         .get(&subject)
                         .map(|t| t.monomorphized_name())
                         .or_else(|| self.var_types.get(&subject).cloned())
-                        .unwrap_or_else(|| {
-                            if self.current_fn_return_type.is_option()
-                                || self.current_fn_return_type.is_result()
-                            {
-                                self.current_fn_return_type.monomorphized_name()
-                            } else {
-                                panic!(
-                                    "BUG: cannot determine ADT type for match subject '{subject}'"
-                                )
-                            }
-                        });
+                    {
+                        Some(n) => n,
+                        None if self.current_fn_return_type.is_option()
+                            || self.current_fn_return_type.is_result() =>
+                        {
+                            self.current_fn_return_type.monomorphized_name()
+                        }
+                        None => {
+                            // Same fallback as the tag-extraction site
+                            // above. Keep in sync.
+                            let fallback = match variant_name.as_str() {
+                                "Ok" | "Err" => Ty::Generic(
+                                    "Result".into(),
+                                    vec![Ty::Int, Ty::String],
+                                ),
+                                _ => Ty::Generic("Option".into(), vec![Ty::Int]),
+                            };
+                            self.register_adt_type(&fallback);
+                            fallback.monomorphized_name()
+                        }
+                    };
 
                     // Extract payload from ADT and bind to the first field variable
                     // For Option: Some=field 1. For Result: Ok=field 1, Err=field 2.
