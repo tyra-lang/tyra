@@ -98,6 +98,18 @@ impl super::LowerCtx {
                     if let Some(trt) = self.task_result_types.get(name.as_str()).cloned() {
                         self.task_result_types.insert(temp.clone(), trt);
                     }
+                    // Propagate struct / ADT type tracking through load so
+                    // downstream consumers (match subject ADT lookup, method
+                    // dispatch) can resolve the type from the fresh Load temp.
+                    // Without this, a `let x = Option<Int>; ...; match x` where
+                    // `x` was alloca-backed (multi-let shadow or mut) produces
+                    // a Load temp that looks type-less to match_lower.
+                    if let Some(vty) = self.var_types.get(name.as_str()).cloned() {
+                        self.var_types.insert(temp.clone(), vty);
+                    }
+                    if let Some(gt) = self.generic_var_types.get(name.as_str()).cloned() {
+                        self.generic_var_types.insert(temp.clone(), gt);
+                    }
                     temp
                 } else {
                     name.clone()
