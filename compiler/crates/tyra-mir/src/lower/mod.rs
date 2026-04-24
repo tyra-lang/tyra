@@ -1537,13 +1537,19 @@ fn collect_let_binding_counts_in_expr(
             collect_let_binding_counts_in_stmts(&w.body, out);
         }
         ExprKind::For(f) => {
-            // NOTE: we deliberately do NOT count `f.binding` here.
-            // The hoist path is untyped (emits `%binding = alloca i64`
-            // regardless of the loop's element type), so hoisting a
-            // List-typed for-binding produces a type-mismatch at Store
-            // time (E0500). For-loop bindings that actually collide
-            // are handled by the Copy→Store path in lower_expr.rs when
-            // the name is already hoisted via pattern/let/mut counts.
+            // Count the induction variable too so that two sibling
+            // `for x in ...` loops over lists of the same element type
+            // share one alloca slot. Without this, each loop emits
+            // `Copy { dest: "x" }` which LLVM rejects as a duplicate
+            // definition of `%x`. The codegen type-scan resolves the
+            // alloca type from the Store instructions emitted in
+            // lower/expr.rs (ExprKind::For Store path), so typed
+            // iterables (String / struct / Option / etc.) hoist
+            // correctly — not just the i64 case. Incompatible shadows
+            // at different element types are rejected earlier by the
+            // type checker, so we never reach here with a genuine
+            // type conflict.
+            *out.entry(f.binding.clone()).or_insert(0) += 1;
             collect_let_binding_counts_in_expr(&f.iter, out);
             collect_let_binding_counts_in_stmts(&f.body, out);
         }
