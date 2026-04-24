@@ -1,0 +1,36 @@
+{
+  "prompt_id": "056-cumulative-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777008637,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 20700,
+      "code_len": 1217,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 448,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 501,
+      "stdout": "1 3 6 10 15\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(line)\n    emit_prefix_sums(line)\n  when None\n    ()\n  end\nend\n\nfn emit_prefix_sums(_ line: String) -> Unit\n  let n = string.len(line)\n  mut i = 0\n  mut cur = 0\n  mut has_digit = false\n  mut neg = false\n  mut total = 0\n  mut out = \"\"\n  mut first = true\n  while i < n\n    match string.byte_at(line, i)\n    when Some(v)\n      if v == 32 or v == 9 or v == 13\n        if has_digit\n          let val = if neg\n            0 - cur\n          else\n            cur\n          end\n          total = total + val\n          if first\n            out = \"#{total}\"\n            first = false\n          else\n            out = \"#{out} #{total}\"\n          end\n          cur = 0\n          has_digit = false\n          neg = false\n        end\n      else if v == 45\n        neg = true\n      else if v == 43\n        neg = false\n      else\n        cur = cur * 10 + (v - 48)\n        has_digit = true\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if has_digit\n    let val = if neg\n      0 - cur\n    else\n      cur\n    end\n    total = total + val\n    if first\n      out = \"#{total}\"\n    else\n      out = \"#{out} #{total}\"\n    end\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

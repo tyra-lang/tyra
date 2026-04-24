@@ -1,0 +1,36 @@
+{
+  "prompt_id": "015-shape-area",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777006943,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 7776,
+      "code_len": 352,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 140,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 444,
+      "stdout": "circle=48\nrect=30\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "type Shape =\n  | Circle(radius: Int)\n  | Rectangle(width: Int, height: Int)\n\nfn area(_ shape: Shape) -> Int\n  match shape\n  when Circle(radius: r)\n    3 * r * r\n  when Rectangle(width: w, height: h)\n    w * h\n  end\nend\n\nlet c = Shape.Circle(radius: 4)\nlet r = Shape.Rectangle(width: 5, height: 6)\nprintln(\"circle=#{area(c)}\")\nprintln(\"rect=#{area(r)}\")",
+  "overall": "pass"
+}

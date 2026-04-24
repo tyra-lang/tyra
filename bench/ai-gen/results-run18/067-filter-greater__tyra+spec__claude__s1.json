@@ -1,0 +1,36 @@
+{
+  "prompt_id": "067-filter-greater",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777009238,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 38377,
+      "code_len": 1291,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 397,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 558,
+      "stdout": "5 8 10\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  let n = string.len(s)\n  mut in_num = false\n  mut sign = 1\n  mut val = 0\n  while i < n\n    let bopt = string.byte_at(s, i)\n    match bopt\n    when Some(c)\n      if c >= 48 and c <= 57\n        if not in_num\n          in_num = true\n          sign = 1\n          val = 0\n        end\n        val = val * 10 + (c - 48)\n      else if c == 45 and not in_num\n        in_num = true\n        sign = -1\n        val = 0\n      else\n        if in_num\n          result = list.push(result, sign * val)\n          in_num = false\n        end\n      end\n    when None\n      i = n\n    end\n    i = i + 1\n  end\n  if in_num\n    result = list.push(result, sign * val)\n  end\n  result\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet nums = parse_ints(line1)\nlet tlist = parse_ints(line2)\nlet t = match tlist.get(0)\nwhen Some(x)\n  x\nwhen None\n  0\nend\n\nmut filtered: List<Int> = []\nfor x in nums\n  if x > t\n    filtered = list.push(filtered, x)\n  end\nend\n\nmut out = \"\"\nmut first = true\nfor x in filtered\n  if first\n    out = \"#{x}\"\n    first = false\n  else\n    out = \"#{out} #{x}\"\n  end\nend\nprintln(out)",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "083-word-frequency",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777010354,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 51200,
+      "code_len": 2172,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 374,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 520,
+      "stdout": "top=the=4",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import string\nimport io\nimport list\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn geti(_ xs: List<Int>, _ i: Int) -> Int\n  match xs.get(i)\n  when Some(v)\n    v\n  when None\n    0\n  end\nend\n\nfn byte_at_or(_ s: String, _ i: Int) -> Int\n  match string.byte_at(s, i)\n  when Some(v)\n    v\n  when None\n    -1\n  end\nend\n\nfn tokens_equal(_ s: String, _ a: Int, _ ae: Int, _ b: Int, _ be: Int) -> Bool\n  let la = ae - a\n  let lb = be - b\n  if la != lb\n    false\n  else\n    mut i = 0\n    mut eq = true\n    while i < la and eq\n      let x = byte_at_or(s, a + i)\n      let y = byte_at_or(s, b + i)\n      if x != y\n        eq = false\n      end\n      i = i + 1\n    end\n    eq\n  end\nend\n\nfn main() -> Unit\n  let s = io.read_to_end()\n  let n = string.len(s)\n  mut starts: List<Int> = []\n  mut ends: List<Int> = []\n  mut i = 0\n  while i < n\n    mut in_ws = true\n    while in_ws and i < n\n      let b = byte_at_or(s, i)\n      if b >= 0 and is_ws(b)\n        i = i + 1\n      else\n        in_ws = false\n      end\n    end\n    if i < n\n      let st = i\n      mut in_tok = true\n      while in_tok and i < n\n        let b = byte_at_or(s, i)\n        if b >= 0 and not is_ws(b)\n          i = i + 1\n        else\n          in_tok = false\n        end\n      end\n      starts = list.push(starts, st)\n      ends = list.push(ends, i)\n    end\n  end\n\n  let nt = list.len(starts)\n  mut best_s = 0\n  mut best_e = 0\n  mut best_c = 0\n  mut idx = 0\n  while idx < nt\n    let si = geti(starts, idx)\n    let ei = geti(ends, idx)\n    mut j = 0\n    mut dup = false\n    while j < idx and not dup\n      let sj = geti(starts, j)\n      let ej = geti(ends, j)\n      if tokens_equal(s, si, ei, sj, ej)\n        dup = true\n      end\n      j = j + 1\n    end\n    if not dup\n      mut k = 0\n      mut c = 0\n      while k < nt\n        let sk = geti(starts, k)\n        let ek = geti(ends, k)\n        if tokens_equal(s, si, ei, sk, ek)\n          c = c + 1\n        end\n        k = k + 1\n      end\n      if c > best_c\n        best_c = c\n        best_s = si\n        best_e = ei\n      end\n    end\n    idx = idx + 1\n  end\n\n  let tok = string.substring(s, best_s, best_e)\n  print(\"top=#{tok}=#{best_c}\")\nend",
+  "overall": "pass"
+}

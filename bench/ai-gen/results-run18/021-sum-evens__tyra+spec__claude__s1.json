@@ -1,0 +1,36 @@
+{
+  "prompt_id": "021-sum-evens",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777007134,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 21856,
+      "code_len": 700,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 375,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 465,
+      "stdout": "sum_even=30\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut total = 0\nmut token = \"\"\nmut i = 0\nwhile i <= n\n  let is_end = i == n\n  mut b = 32\n  if not is_end\n    match string.byte_at(input, i)\n    when Some(v)\n      b = v\n    when None\n      b = 32\n    end\n  end\n  let is_ws = is_end or b == 32 or b == 9 or b == 10 or b == 13 or b == 11 or b == 12\n  if is_ws\n    if not string.is_empty(token)\n      match string.parse_int(token)\n      when Some(x)\n        if x % 2 == 0\n          total = total + x\n        end\n      when None\n        ()\n      end\n      token = \"\"\n    end\n  else\n    token = \"#{token}#{string.from_byte(b)}\"\n  end\n  i = i + 1\nend\nprintln(\"sum_even=#{total}\")",
+  "overall": "pass"
+}

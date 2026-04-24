@@ -1,0 +1,36 @@
+{
+  "prompt_id": "097-sum-skip-negative",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777011461,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 21056,
+      "code_len": 1134,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 376,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 465,
+      "stdout": "partial=13",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut sum = 0\nmut i = 0\nmut done = false\n\nwhile not done\n  mut skipping = true\n  while skipping\n    if i >= n\n      skipping = false\n    else\n      match string.byte_at(input, i)\n      when Some(b)\n        if b == 32 or b == 9 or b == 10 or b == 13\n          i = i + 1\n        else\n          skipping = false\n        end\n      when None\n        skipping = false\n      end\n    end\n  end\n\n  if i >= n\n    done = true\n  else\n    mut token = \"\"\n    mut reading = true\n    while reading\n      if i >= n\n        reading = false\n      else\n        match string.byte_at(input, i)\n        when Some(b)\n          if b == 32 or b == 9 or b == 10 or b == 13\n            reading = false\n          else\n            token = \"#{token}#{string.from_byte(b)}\"\n            i = i + 1\n          end\n        when None\n          reading = false\n        end\n      end\n    end\n\n    match string.parse_int(token)\n    when Some(v)\n      if v < 0\n        done = true\n      else\n        sum = sum + v\n      end\n    when None\n      done = true\n    end\n  end\nend\n\nprint(\"partial=#{sum}\")",
+  "overall": "pass"
+}

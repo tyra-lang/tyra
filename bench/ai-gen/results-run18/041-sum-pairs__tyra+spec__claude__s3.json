@@ -1,0 +1,36 @@
+{
+  "prompt_id": "041-sum-pairs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777008051,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 41862,
+      "code_len": 1475,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 466,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 593,
+      "stdout": "1+10=112+20=223+30=33",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  while i < n\n    mut b = 0\n    match string.byte_at(s, i)\n    when Some(v)\n      b = v\n    when None\n      b = 0\n    end\n    if is_ws(b)\n      i = i + 1\n    else\n      let start = i\n      mut done = false\n      while not done\n        if i >= n\n          done = true\n        else\n          match string.byte_at(s, i)\n          when Some(v)\n            if is_ws(v)\n              done = true\n            else\n              i = i + 1\n            end\n          when None\n            done = true\n          end\n        end\n      end\n      let tok = string.substring(s, start, i)\n      match string.parse_int(tok)\n      when Some(v)\n        result = list.push(result, v)\n      when None\n        ()\n      end\n    end\n  end\n  result\nend\n\nfn read_or_empty() -> String\n  match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\nend\n\nfn main() -> Unit\n  let l1 = read_or_empty()\n  let l2 = read_or_empty()\n  let a = parse_ints(l1)\n  let b = parse_ints(l2)\n  let n = a.len()\n  mut i = 0\n  while i < n\n    mut x = 0\n    match a.get(i)\n    when Some(v)\n      x = v\n    when None\n      x = 0\n    end\n    mut y = 0\n    match b.get(i)\n    when Some(v)\n      y = v\n    when None\n      y = 0\n    end\n    let s = x + y\n    print(\"#{x}+#{y}=#{s}\")\n    i = i + 1\n  end\nend",
+  "overall": "pass"
+}

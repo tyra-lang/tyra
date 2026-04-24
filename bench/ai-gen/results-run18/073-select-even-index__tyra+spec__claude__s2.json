@@ -1,0 +1,36 @@
+{
+  "prompt_id": "073-select-even-index",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777009649,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 22865,
+      "code_len": 1091,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 367,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 461,
+      "stdout": "10 30 50 70\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(line)\n    mut result = \"\"\n    mut current = \"\"\n    mut idx = 0\n    mut first = true\n    let n = string.len(line)\n    mut i = 0\n    while i <= n\n      mut is_ws = true\n      if i < n\n        match string.byte_at(line, i)\n        when Some(b)\n          if b == 32 or b == 9 or b == 13\n            is_ws = true\n          else\n            is_ws = false\n          end\n        when None\n          is_ws = true\n        end\n      end\n      if is_ws\n        if not string.is_empty(current)\n          if idx % 2 == 0\n            if first\n              result = current\n              first = false\n            else\n              result = \"#{result} #{current}\"\n            end\n          end\n          idx = idx + 1\n          current = \"\"\n        end\n      else\n        match string.byte_at(line, i)\n        when Some(b)\n          current = \"#{current}#{string.from_byte(b)}\"\n        when None\n          current = current\n        end\n      end\n      i = i + 1\n    end\n    println(result)\n  when None\n    println(\"\")\n  end\nend",
+  "overall": "pass"
+}

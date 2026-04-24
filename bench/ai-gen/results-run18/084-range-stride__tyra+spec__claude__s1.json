@@ -1,0 +1,26 @@
+{
+  "prompt_id": "084-range-stride",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777010406,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 18934,
+      "code_len": 1984,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 12,
+      "stderr": "sult = [*unsupported*]\n   |                                ^ expected expression\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:36:5\n   |\n36 | Let me restart - I was overcomplicating. Let me write cleanly:\n   |     ^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:36:8\n   |\n36 | Let me restart - I was overcomplicating. Let me write cleanly:\n   |        ^^^^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:36:20\n   |\n36 | Let me restart - I was overcomplicating. Let me write cleanly:\n   |                    ^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:36:24\n   |\n36 | Let me restart - I was overcomplicating. Let me write cleanly:\n   |                        ^^^^^^^^^^^^^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:36:46\n   |\n36 | Let me restart - I was overcomplicating. Let me write cleanly:\n   |                                              ^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:36:49\n   |\n36 | Let me restart - I was overcomplicating. Let me write cleanly:\n   |                                                 ^^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:36:55\n   |\n36 | Let me restart - I was overcomplicating. Let me write cleanly:\n   |                                                       ^^^^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:36:62\n   |\n36 | Let me restart - I was overcomplicating. Let me write cleanly:\n   |                                                              ^ expected newline here\n\nerror[E0104]: expected expression, found `:`\n   --> main.tyra:36:62\n   |\n36 | Let me restart - I was overcomplicating. Let me write cleanly:\n   |                                                              ^ expected expression\n\n12 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn parse_tokens(_ s: String) -> List<Int> \n  mut result: List<Int> = []\n  mut cur = \"\"\n  let n = string.len(s)\n  mut i = 0\n  while i < n\n    let b = match string.byte_at(s, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if is_ws(b)\n      if not string.is_empty(cur)\n        let v = match string.parse_int(cur)\n        when Some(x)\n          x\n        when None\n          0\n        end\n        result = [*unsupported*]\n      end\n    end\n    i = i + 1\n  end\n  result\nend\n\nLet me restart - I was overcomplicating. Let me write cleanly:\n\nimport io\nimport string\nimport list\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn tokenize(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut cur = \"\"\n  let n = string.len(s)\n  mut i = 0\n  while i < n\n    let ob = string.byte_at(s, i)\n    let b = match ob\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if is_ws(b)\n      if not string.is_empty(cur)\n        let v = match string.parse_int(cur)\n        when Some(x)\n          x\n        when None\n          0\n        end\n        result = list.push(result, v)\n        cur = \"\"\n      end\n    else\n      cur = \"#{cur}#{string.from_byte(b)}\"\n    end\n    i = i + 1\n  end\n  if not string.is_empty(cur)\n    let v = match string.parse_int(cur)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    result = list.push(result, v)\n  end\n  result\nend\n\nfn main() -> Unit\n  let input = io.read_to_end()\n  let toks = tokenize(input)\n  let a = match toks.get(0)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  let b = match toks.get(1)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  let s = match toks.get(2)\n  when Some(v)\n    v\n  when None\n    1\n  end\n  mut out = \"\"\n  mut x = a\n  mut first = true\n  while x < b\n    if first\n      out = \"#{x}\"\n      first = false\n    else\n      out = \"#{out} #{x}\"\n    end\n    x = x + s\n  end\n  println(out)\nend",
+  "overall": "compile_fail"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "062-sum-two-squares",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777009016,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 14786,
+      "code_len": 910,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 390,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 528,
+      "stdout": "r=25\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let input = io.read_to_end()\n  let n = string.len(input)\n  mut nums = [0, 0]\n  mut count = 0\n  mut cur = 0\n  mut has = false\n  mut sign = 1\n  mut i = 0\n  while i < n\n    let b = match string.byte_at(input, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if b >= 48 and b <= 57\n      cur = cur * 10 + (b - 48)\n      has = true\n    else if b == 45 and not has\n      sign = -1\n    else\n      if has\n        if count == 0\n          nums = [cur * sign, 0]\n        else\n          nums = [nums[0], cur * sign]\n        end\n        count = count + 1\n        cur = 0\n        has = false\n        sign = 1\n      end\n    end\n    i = i + 1\n  end\n  if has\n    if count == 0\n      nums = [cur * sign, 0]\n    else\n      nums = [nums[0], cur * sign]\n    end\n    count = count + 1\n  end\n  let a = nums[0]\n  let b = nums[1]\n  let r = a * a + b * b\n  println(\"r=#{r}\")\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "072-min-abs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777009596,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 22864,
+      "code_len": 1069,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 354,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 467,
+      "stdout": "min_abs=-2",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws_byte(_ s: String, _ i: Int) -> Bool\n  match string.byte_at(s, i)\n  when Some(b)\n    b == 32 or b == 9 or b == 10 or b == 13\n  when None\n    false\n  end\nend\n\nfn abs(_ x: Int) -> Int\n  if x < 0\n    -x\n  else\n    x\n  end\nend\n\nfn process(_ line: String) -> Unit\n  let n = string.len(line)\n  mut i = 0\n  mut has_best = false\n  mut best_val = 0\n  mut best_abs = 0\n  while i < n\n    while i < n and is_ws_byte(line, i)\n      i = i + 1\n    end\n    if i < n\n      mut j = i\n      while j < n and not is_ws_byte(line, j)\n        j = j + 1\n      end\n      let tok = string.substring(line, i, j)\n      match string.parse_int(tok)\n      when Some(v)\n        let a = abs(v)\n        if not has_best\n          has_best = true\n          best_val = v\n          best_abs = a\n        else if a < best_abs\n          best_val = v\n          best_abs = a\n        end\n      when None\n        ()\n      end\n      i = j\n    end\n  end\n  if has_best\n    print(\"min_abs=#{best_val}\")\n  end\nend\n\nmatch io.read_line()\nwhen Some(line)\n  process(line)\nwhen None\n  ()\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "098-tag-length",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777011524,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 24239,
+      "code_len": 742,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 392,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 555,
+      "stdout": "hi -> short\nhello -> medium\ngoodmorning -> long\nok -> short\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut i = 0\nmut line = \"\"\nwhile i < n\n  match string.byte_at(input, i)\n  when Some(b)\n    if b == 10\n      let len = string.len(line)\n      if len > 0\n        let cat = if len <= 3\n          \"short\"\n        else if len <= 7\n          \"medium\"\n        else\n          \"long\"\n        end\n        println(\"#{line} -> #{cat}\")\n      end\n      line = \"\"\n    else if b == 13\n      ()\n    else\n      line = \"#{line}#{string.from_byte(b)}\"\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\nlet tail_len = string.len(line)\nif tail_len > 0\n  let cat = if tail_len <= 3\n    \"short\"\n  else if tail_len <= 7\n    \"medium\"\n  else\n    \"long\"\n  end\n  println(\"#{line} -> #{cat}\")\nend",
+  "overall": "pass"
+}

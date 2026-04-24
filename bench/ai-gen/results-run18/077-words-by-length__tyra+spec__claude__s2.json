@@ -1,0 +1,36 @@
+{
+  "prompt_id": "077-words-by-length",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777009846,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 18142,
+      "code_len": 705,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 213,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 444,
+      "stdout": "longest=quick\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut longest = \"\"\nmut longest_len = 0\nmut current = \"\"\nmut current_len = 0\n\nlet n = string.len(line)\nmut i = 0\nwhile i < n\n  let b = match string.byte_at(line, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n\n  if b == 32 or b == 9 or b == 10 or b == 13\n    if current_len > longest_len\n      longest = current\n      longest_len = current_len\n    end\n    current = \"\"\n    current_len = 0\n  else\n    current = \"#{current}#{string.from_byte(b)}\"\n    current_len = current_len + 1\n  end\n  i = i + 1\nend\n\nif current_len > longest_len\n  longest = current\n  longest_len = current_len\nend\n\nprintln(\"longest=#{longest}\")",
+  "overall": "pass"
+}

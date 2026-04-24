@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777011020,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 54959,
+      "code_len": 2095,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 362,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 503,
+      "stdout": "9 6 5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport list\nimport string\n\nfn is_ws_byte(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 13 or b == 10\nend\n\nfn byte_or_zero(_ s: String, _ i: Int) -> Int\n  match string.byte_at(s, i)\n  when Some(v)\n    v\n  when None\n    0\n  end\nend\n\nfn parse_ints(_ line: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(line)\n  mut i = 0\n  while i < n\n    let b = byte_or_zero(line, i)\n    if is_ws_byte(b)\n      i = i + 1\n    else\n      let start = i\n      mut done = false\n      while not done\n        if i >= n\n          done = true\n        else\n          let bb = byte_or_zero(line, i)\n          if is_ws_byte(bb)\n            done = true\n          else\n            i = i + 1\n          end\n        end\n      end\n      let tok = string.substring(line, start, i)\n      match string.parse_int(tok)\n      when Some(v)\n        result = list.push(result, v)\n      when None\n        ()\n      end\n    end\n  end\n  result\nend\n\nfn remove_at(_ xs: List<Int>, _ idx: Int) -> List<Int>\n  mut result: List<Int> = []\n  let n = xs.len()\n  mut i = 0\n  while i < n\n    if i != idx\n      match xs.get(i)\n      when Some(v)\n        result = list.push(result, v)\n      when None\n        ()\n      end\n    end\n    i = i + 1\n  end\n  result\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet nums = parse_ints(line1)\nlet k = match string.parse_int(string.trim(line2))\nwhen Some(v)\n  v\nwhen None\n  0\nend\n\nlet total = nums.len()\nlet take = if k > total\n  total\nelse\n  k\nend\n\nmut remaining = nums\nmut picked: List<Int> = []\nmut count = 0\nmut stop = false\nwhile count < take and not stop\n  match list.max(remaining)\n  when Some(m)\n    picked = list.push(picked, m)\n    match list.index_of(remaining, m)\n    when Some(idx)\n      remaining = remove_at(remaining, idx)\n    when None\n      stop = true\n    end\n  when None\n    stop = true\n  end\n  count = count + 1\nend\n\nmut out = \"\"\nmut first = true\nfor v in picked\n  if first\n    out = \"#{v}\"\n    first = false\n  else\n    out = \"#{out} #{v}\"\n  end\nend\nprintln(out)",
+  "overall": "pass"
+}

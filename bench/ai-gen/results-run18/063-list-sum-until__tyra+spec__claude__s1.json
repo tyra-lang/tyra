@@ -1,0 +1,36 @@
+{
+  "prompt_id": "063-list-sum-until",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777009031,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11354,
+      "code_len": 855,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 206,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 517,
+      "stdout": "total=100",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let n = string.len(line)\n  mut total = 0\n  mut i = 0\n  mut cur = 0\n  mut has = false\n  mut done = false\n  while i < n\n    if not done\n      let b = match string.byte_at(line, i)\n      when Some(x)\n        x\n      when None\n        0\n      end\n      if b >= 48 and b <= 57\n        cur = cur * 10 + (b - 48)\n        has = true\n      else\n        if has\n          let next_sum = total + cur\n          if next_sum > 100\n            done = true\n          else\n            total = next_sum\n          end\n          cur = 0\n          has = false\n        end\n      end\n    end\n    i = i + 1\n  end\n  if has and not done\n    let next_sum = total + cur\n    if next_sum <= 100\n      total = next_sum\n    end\n  end\n  print(\"total=#{total}\")\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "076-running-max",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777009789,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 24979,
+      "code_len": 1191,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 178,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 490,
+      "stdout": "3 3 4 4 5 9 9 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet input = io.read_to_end()\nlet n = string.len(input)\n\nmut nums: List<Int> = []\nmut cur = \"\"\nmut i = 0\nwhile i < n\n  match string.byte_at(input, i)\n  when Some(b)\n    if b == 32 or b == 9 or b == 10 or b == 13\n      if not string.is_empty(cur)\n        match string.parse_int(cur)\n        when Some(v)\n          nums = list.push(nums, v)\n        when None\n          ()\n        end\n        cur = \"\"\n      end\n    else\n      cur = \"#{cur}#{string.from_byte(b)}\"\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nif not string.is_empty(cur)\n  match string.parse_int(cur)\n  when Some(v)\n    nums = list.push(nums, v)\n  when None\n    ()\n  end\nend\n\nlet count = nums.len()\nmut maxes: List<Int> = []\nmut running = 0\nmut j = 0\nwhile j < count\n  match nums.get(j)\n  when Some(v)\n    if j == 0\n      running = v\n    else\n      if v > running\n        running = v\n      end\n    end\n    maxes = list.push(maxes, running)\n  when None\n    ()\n  end\n  j = j + 1\nend\n\nmut out = \"\"\nmut k = 0\nwhile k < count\n  match maxes.get(k)\n  when Some(v)\n    if k == 0\n      out = \"#{v}\"\n    else\n      out = \"#{out} #{v}\"\n    end\n  when None\n    ()\n  end\n  k = k + 1\nend\n\nprintln(out)",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "083-word-frequency",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777010243,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 109850,
+      "code_len": 2304,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 389,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 584,
+      "stdout": "top=the=4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13 or b == 11 or b == 12\nend\n\nfn byte_or(_ s: String, _ i: Int) -> Int\n  match string.byte_at(s, i)\n  when Some(b)\n    b\n  when None\n    -1\n  end\nend\n\nfn index_of_sub(_ s: String, _ needle: String) -> Option<Int>\n  let sn = string.len(s)\n  let nn = string.len(needle)\n  if nn == 0\n    return Some(0)\n  end\n  mut i = 0\n  while i + nn <= sn\n    let slice = string.substring(s, i, i + nn)\n    if slice == needle\n      return Some(i)\n    end\n    i = i + 1\n  end\n  None\nend\n\nfn find_newline_from(_ s: String, _ start: Int) -> Int\n  let n = string.len(s)\n  mut i = start\n  while i < n\n    if byte_or(s, i) == 10\n      return i\n    end\n    i = i + 1\n  end\n  n\nend\n\nfn parse_count(_ s: String) -> Int\n  match string.parse_int(s)\n  when Some(x)\n    x\n  when None\n    0\n  end\nend\n\nfn update_acc(_ acc: String, _ token: String) -> String\n  let needle = \"\\n#{token}\\t\"\n  match index_of_sub(acc, needle)\n  when Some(p)\n    let prefix_len = p + string.len(needle)\n    let nl = find_newline_from(acc, prefix_len)\n    let count_str = string.substring(acc, prefix_len, nl)\n    let new_count = parse_count(count_str) + 1\n    let head = string.substring(acc, 0, prefix_len)\n    let tail = string.substring(acc, nl, string.len(acc))\n    \"#{head}#{new_count}#{tail}\"\n  when None\n    \"#{acc}#{token}\\t1\\n\"\n  end\nend\n\nfn main() -> Unit\n  let text = io.read_to_end()\n  let n = string.len(text)\n  mut acc = \"\\n\"\n  mut cur = \"\"\n  mut i = 0\n  while i < n\n    let b = byte_or(text, i)\n    if is_ws(b)\n      if not string.is_empty(cur)\n        acc = update_acc(acc, cur)\n        cur = \"\"\n      end\n    else\n      cur = \"#{cur}#{string.from_byte(b)}\"\n    end\n    i = i + 1\n  end\n  if not string.is_empty(cur)\n    acc = update_acc(acc, cur)\n  end\n\n  let an = string.len(acc)\n  mut best_token = \"\"\n  mut best_count = 0\n  mut j = 1\n  while j < an\n    mut k = j\n    while k < an and byte_or(acc, k) != 9\n      k = k + 1\n    end\n    let tok = string.substring(acc, j, k)\n    let nl = find_newline_from(acc, k + 1)\n    let cnt_str = string.substring(acc, k + 1, nl)\n    let cnt = parse_count(cnt_str)\n    if cnt > best_count\n      best_count = cnt\n      best_token = tok\n    end\n    j = nl + 1\n  end\n\n  println(\"top=#{best_token}=#{best_count}\")\nend",
+  "overall": "pass"
+}

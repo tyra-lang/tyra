@@ -1,0 +1,36 @@
+{
+  "prompt_id": "094-last-line",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777011313,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 28112,
+      "code_len": 921,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 574,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 503,
+      "stdout": "gamma\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut i = 0\nmut line_start = 0\nmut found = false\nmut found_start = 0\nmut found_stop = 0\n\nwhile i <= n\n  let at_end = i == n\n  mut is_newline = false\n  if not at_end\n    match string.byte_at(input, i)\n    when Some(b)\n      if b == 10\n        is_newline = true\n      end\n    when None\n      ()\n    end\n  end\n\n  if at_end or is_newline\n    mut j = line_start\n    mut has_content = false\n    while j < i\n      match string.byte_at(input, j)\n      when Some(b)\n        if b != 32 and b != 9 and b != 13\n          has_content = true\n        end\n      when None\n        ()\n      end\n      j = j + 1\n    end\n    if has_content\n      found = true\n      found_start = line_start\n      found_stop = i\n    end\n    line_start = i + 1\n  end\n\n  i = i + 1\nend\n\nif found\n  println(string.substring(input, found_start, found_stop))\nelse\n  println(\"(none)\")\nend",
+  "overall": "pass"
+}

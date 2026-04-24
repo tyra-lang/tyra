@@ -1,0 +1,36 @@
+{
+  "prompt_id": "083-word-frequency",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777010178,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 64435,
+      "code_len": 2245,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 374,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 524,
+      "stdout": "top=the=4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn byte_of(_ s: String, _ i: Int) -> Int\n  match string.byte_at(s, i)\n  when Some(b)\n    b\n  when None\n    -1\n  end\nend\n\nfn at(_ xs: List<Int>, _ i: Int) -> Int\n  match list.get(xs, i)\n  when Some(v)\n    v\n  when None\n    0\n  end\nend\n\nfn bytes_eq(_ s: String, _ a: Int, _ alen: Int, _ t: String, _ b: Int, _ blen: Int) -> Bool\n  if alen != blen\n    false\n  else\n    mut k = 0\n    mut eq = true\n    while k < alen and eq\n      if byte_of(s, a + k) != byte_of(t, b + k)\n        eq = false\n      end\n      k = k + 1\n    end\n    eq\n  end\nend\n\nlet input = io.read_to_end()\nlet n = string.len(input)\n\nmut starts: List<Int> = []\nmut lens: List<Int> = []\nmut counts: List<Int> = []\nmut num_tokens = 0\nmut best_idx = -1\nmut best_count = 0\n\nmut i = 0\nwhile i < n\n  while i < n and is_ws(byte_of(input, i))\n    i = i + 1\n  end\n  if i < n\n    let tstart = i\n    while i < n and not is_ws(byte_of(input, i))\n      i = i + 1\n    end\n    let tlen = i - tstart\n\n    mut found = -1\n    mut j = 0\n    while j < num_tokens and found < 0\n      let s = at(starts, j)\n      let l = at(lens, j)\n      if bytes_eq(input, s, l, input, tstart, tlen)\n        found = j\n      end\n      j = j + 1\n    end\n\n    if found < 0\n      starts = list.push(starts, tstart)\n      lens = list.push(lens, tlen)\n      counts = list.push(counts, 1)\n      let new_idx = num_tokens\n      num_tokens = num_tokens + 1\n      if 1 > best_count\n        best_count = 1\n        best_idx = new_idx\n      end\n    else\n      mut new_counts: List<Int> = []\n      mut k = 0\n      mut new_val = 0\n      while k < num_tokens\n        if k == found\n          let v = at(counts, k) + 1\n          new_counts = list.push(new_counts, v)\n          new_val = v\n        else\n          new_counts = list.push(new_counts, at(counts, k))\n        end\n        k = k + 1\n      end\n      counts = new_counts\n      if new_val > best_count\n        best_count = new_val\n        best_idx = found\n      end\n    end\n  end\nend\n\nif best_idx < 0\n  println(\"top==0\")\nelse\n  let s = at(starts, best_idx)\n  let l = at(lens, best_idx)\n  let tok = string.substring(input, s, s + l)\n  println(\"top=#{tok}=#{best_count}\")\nend",
+  "overall": "pass"
+}

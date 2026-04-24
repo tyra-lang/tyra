@@ -1,0 +1,26 @@
+{
+  "prompt_id": "041-sum-pairs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777007993,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 24358,
+      "code_len": 1323,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 173,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-xdnd8l3a/main.ll:826:13: error: '%_t168' defined with type 'i64' but expected 'ptr'\n  826 |   store ptr %_t168, ptr %x\n      |             ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut current = 0\n  mut has = false\n  mut neg = false\n  mut i = 0\n  let n = string.len(s)\n  while i < n\n    let b = match string.byte_at(s, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if b == 32 or b == 9 or b == 13 or b == 10\n      if has\n        if neg\n          result = list.push(result, 0 - current)\n        else\n          result = list.push(result, current)\n        end\n        current = 0\n        has = false\n        neg = false\n      end\n    else if b == 45 and not has\n      neg = true\n    else\n      current = current * 10 + (b - 48)\n      has = true\n    end\n    i = i + 1\n  end\n  if has\n    if neg\n      result = list.push(result, 0 - current)\n    else\n      result = list.push(result, current)\n    end\n  end\n  result\nend\n\nlet line1 = match io.read_line()\nwhen Some(x)\n  x\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(x)\n  x\nwhen None\n  \"\"\nend\n\nlet a = parse_ints(line1)\nlet b = parse_ints(line2)\nlet count = list.len(a)\nmut idx = 0\nwhile idx < count\n  let x = match list.get(a, idx)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  let y = match list.get(b, idx)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  let s = x + y\n  println(\"#{x}+#{y}=#{s}\")\n  idx = idx + 1\nend",
+  "overall": "compile_fail"
+}
