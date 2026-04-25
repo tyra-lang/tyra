@@ -752,9 +752,20 @@ impl super::LowerCtx {
                     })
                     .collect();
 
-                // Infer element type from first item (default Int for empty)
+                // Infer element type from first item, or from the active
+                // binding annotation hint when the literal is empty
+                // (`mut xs: List<String> = []`). Without the hint an empty
+                // list defaults to `List<Int>` and the subsequent `Store`
+                // into the annotated `List<String>` slot trips E0500.
                 let elem_type = if let Some(first) = items.first() {
                     self.infer_expr_type(first).unwrap_or(Ty::Int)
+                } else if let Some(hint) = self
+                    .binding_type_hint
+                    .as_ref()
+                    .filter(|t| t.is_list())
+                    .and_then(|t| t.list_elem().cloned())
+                {
+                    hint
                 } else {
                     Ty::Int
                 };
