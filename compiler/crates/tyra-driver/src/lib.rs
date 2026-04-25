@@ -71,6 +71,13 @@ pub fn compile_to_ir(source_path: &Path) -> CompileResult {
     // auto-corrected program.
     auto_import_stdlib(&mut ast);
 
+    // Alpha-rename match-pattern bindings to globally unique names. Two
+    // sibling `when Some(v)` arms that bind values of different types
+    // (e.g. `Option<String>` vs `Option<Int>`) would otherwise share a
+    // single `%v` alloca and trip LLVM type-mismatch (E0500). Renaming
+    // each pattern binding ensures one alloca per match arm.
+    rename_pattern_bindings(&mut ast);
+
     // Resolve imports: parse module files and merge exported items (§13)
     let main_dir = source_path.parent().unwrap_or(Path::new("."));
     resolve_imports(&mut ast, main_dir, &mut sources, &mut report);
@@ -467,6 +474,304 @@ fn auto_import_stdlib(ast: &mut tyra_ast::SourceFile) {
             .collect();
         prefix.append(&mut ast.items);
         ast.items = prefix;
+    }
+}
+
+/// Alpha-rename match-pattern bindings to globally unique names.
+///
+/// AI-gen frequently produces code like:
+///
+/// ```tyra
+/// let s = match io.read_line() when Some(v) v when None "" end
+/// let n = match string.parse_int(s) when Some(v) v when None 0 end
+/// ```
+///
+/// Both arms bind `v`, but `s` is `String` (ptr) and `n` is `Int`
+/// (i64). The MIR pre-alloca pass creates one `%v` slot for the
+/// function and Stores both ptr and i64 values into it — LLVM
+/// rejects with E0500 type-mismatch.
+///
+/// Rename each pattern binding to `<orig>__p<N>` and substitute
+/// references inside the arm body. Inner shadows (`let v = ...`
+/// inside the arm) are not handled scope-perfectly today; they
+/// would substitute through, but no production examples have hit
+/// that combination yet. Tighten with proper scope tracking when
+/// a real failure surfaces.
+fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
+    use tyra_ast::{Expr, ExprKind, Item, MatchArm, Pattern, PatternField, PatternKind, Stmt};
+
+    let mut counter: u32 = 0;
+
+    fn fresh(orig: &str, counter: &mut u32) -> String {
+        *counter += 1;
+        format!("{orig}__p{counter}")
+    }
+
+    fn collect_idents(
+        p: &mut PatternKind,
+        renames: &mut std::collections::HashMap<String, String>,
+        counter: &mut u32,
+    ) {
+        match p {
+            PatternKind::Ident(name) => {
+                let new = fresh(name, counter);
+                renames.insert(name.clone(), new.clone());
+                *name = new;
+            }
+            PatternKind::Constructor(_, fields) => {
+                for f in fields {
+                    // For the shorthand `Some(v)` (parser desugars to
+                    // `Some(v: v)`), match_lower uses `field_name` as
+                    // the alloca destination. Keep field_name in sync
+                    // with the rewritten Ident binding so the Store
+                    // and Load both reference the same renamed slot.
+                    let old_field = f.field_name.clone();
+                    collect_idents(&mut f.pattern.kind, renames, counter);
+                    if let PatternKind::Ident(new_name) = &f.pattern.kind {
+                        if f.field_name == old_field && old_field != *new_name {
+                            f.field_name = new_name.clone();
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn substitute_in_expr(
+        e: &mut Expr,
+        renames: &std::collections::HashMap<String, String>,
+    ) {
+        match &mut e.kind {
+            ExprKind::Ident(name) => {
+                if let Some(new) = renames.get(name) {
+                    *name = new.clone();
+                }
+            }
+            ExprKind::Call(callee, args) => {
+                substitute_in_expr(callee, renames);
+                for a in args {
+                    substitute_in_expr(&mut a.value, renames);
+                }
+            }
+            ExprKind::TurbofishCall(callee, _, args) => {
+                substitute_in_expr(callee, renames);
+                for a in args {
+                    substitute_in_expr(&mut a.value, renames);
+                }
+            }
+            ExprKind::FieldAccess(obj, _) => substitute_in_expr(obj, renames),
+            ExprKind::BinaryOp(l, _, r) => {
+                substitute_in_expr(l, renames);
+                substitute_in_expr(r, renames);
+            }
+            ExprKind::UnaryOp(_, e) => substitute_in_expr(e, renames),
+            ExprKind::Assign(l, r) => {
+                substitute_in_expr(l, renames);
+                substitute_in_expr(r, renames);
+            }
+            ExprKind::If(i) => {
+                substitute_in_expr(&mut i.condition, renames);
+                substitute_in_stmts(&mut i.then_body, renames);
+                if let Some(eb) = &mut i.else_body {
+                    substitute_in_else(eb, renames);
+                }
+            }
+            ExprKind::Match(m) => {
+                substitute_in_expr(&mut m.subject, renames);
+                for arm in &mut m.arms {
+                    substitute_in_stmts(&mut arm.body, renames);
+                }
+            }
+            ExprKind::While(w) => {
+                substitute_in_expr(&mut w.condition, renames);
+                substitute_in_stmts(&mut w.body, renames);
+            }
+            ExprKind::For(f) => {
+                substitute_in_expr(&mut f.iter, renames);
+                substitute_in_stmts(&mut f.body, renames);
+            }
+            ExprKind::ListLit(items) => {
+                for it in items {
+                    substitute_in_expr(it, renames);
+                }
+            }
+            ExprKind::StringInterp(parts) => {
+                for p in parts {
+                    if let tyra_ast::StringPart::Expr(e) = p {
+                        substitute_in_expr(e, renames);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn substitute_in_stmts(
+        stmts: &mut [Stmt],
+        renames: &std::collections::HashMap<String, String>,
+    ) {
+        for s in stmts {
+            substitute_in_stmt(s, renames);
+        }
+    }
+
+    fn substitute_in_stmt(
+        s: &mut Stmt,
+        renames: &std::collections::HashMap<String, String>,
+    ) {
+        match s {
+            Stmt::Let(l) => substitute_in_expr(&mut l.value, renames),
+            Stmt::Mut(m) => substitute_in_expr(&mut m.value, renames),
+            Stmt::Return(r) => {
+                if let Some(v) = &mut r.value {
+                    substitute_in_expr(v, renames);
+                }
+            }
+            Stmt::Expr(e) => substitute_in_expr(&mut e.expr, renames),
+            Stmt::Defer(d) => substitute_in_expr(&mut d.expr, renames),
+        }
+    }
+
+    fn substitute_in_else(
+        eb: &mut tyra_ast::ElseBranch,
+        renames: &std::collections::HashMap<String, String>,
+    ) {
+        match eb {
+            tyra_ast::ElseBranch::Else(stmts) => substitute_in_stmts(stmts, renames),
+            tyra_ast::ElseBranch::ElseIf(i) => {
+                substitute_in_expr(&mut i.condition, renames);
+                substitute_in_stmts(&mut i.then_body, renames);
+                if let Some(inner) = &mut i.else_body {
+                    substitute_in_else(inner, renames);
+                }
+            }
+        }
+    }
+
+    fn process_arm(arm: &mut MatchArm, counter: &mut u32) {
+        // First recurse into the arm body to handle nested matches with
+        // their own pattern names; then collect this arm's renames and
+        // apply them to the (already-recursed) body.
+        process_stmts(&mut arm.body, counter);
+        let mut renames: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
+        collect_idents(&mut arm.pattern.kind, &mut renames, counter);
+        if !renames.is_empty() {
+            substitute_in_stmts(&mut arm.body, &renames);
+        }
+    }
+
+    fn process_expr(e: &mut Expr, counter: &mut u32) {
+        match &mut e.kind {
+            ExprKind::Match(m) => {
+                process_expr(&mut m.subject, counter);
+                for arm in &mut m.arms {
+                    process_arm(arm, counter);
+                }
+            }
+            ExprKind::Call(callee, args) => {
+                process_expr(callee, counter);
+                for a in args {
+                    process_expr(&mut a.value, counter);
+                }
+            }
+            ExprKind::TurbofishCall(callee, _, args) => {
+                process_expr(callee, counter);
+                for a in args {
+                    process_expr(&mut a.value, counter);
+                }
+            }
+            ExprKind::FieldAccess(obj, _) => process_expr(obj, counter),
+            ExprKind::BinaryOp(l, _, r) => {
+                process_expr(l, counter);
+                process_expr(r, counter);
+            }
+            ExprKind::UnaryOp(_, e) => process_expr(e, counter),
+            ExprKind::Assign(l, r) => {
+                process_expr(l, counter);
+                process_expr(r, counter);
+            }
+            ExprKind::If(i) => {
+                process_expr(&mut i.condition, counter);
+                process_stmts(&mut i.then_body, counter);
+                if let Some(eb) = &mut i.else_body {
+                    process_else(eb, counter);
+                }
+            }
+            ExprKind::While(w) => {
+                process_expr(&mut w.condition, counter);
+                process_stmts(&mut w.body, counter);
+            }
+            ExprKind::For(f) => {
+                process_expr(&mut f.iter, counter);
+                process_stmts(&mut f.body, counter);
+            }
+            ExprKind::ListLit(items) => {
+                for it in items {
+                    process_expr(it, counter);
+                }
+            }
+            ExprKind::StringInterp(parts) => {
+                for p in parts {
+                    if let tyra_ast::StringPart::Expr(e) = p {
+                        process_expr(e, counter);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn process_stmts(stmts: &mut [Stmt], counter: &mut u32) {
+        for s in stmts {
+            process_stmt(s, counter);
+        }
+    }
+
+    fn process_stmt(s: &mut Stmt, counter: &mut u32) {
+        match s {
+            Stmt::Let(l) => process_expr(&mut l.value, counter),
+            Stmt::Mut(m) => process_expr(&mut m.value, counter),
+            Stmt::Return(r) => {
+                if let Some(v) = &mut r.value {
+                    process_expr(v, counter);
+                }
+            }
+            Stmt::Expr(e) => process_expr(&mut e.expr, counter),
+            Stmt::Defer(d) => process_expr(&mut d.expr, counter),
+        }
+    }
+
+    fn process_else(eb: &mut tyra_ast::ElseBranch, counter: &mut u32) {
+        match eb {
+            tyra_ast::ElseBranch::Else(stmts) => process_stmts(stmts, counter),
+            tyra_ast::ElseBranch::ElseIf(i) => {
+                process_expr(&mut i.condition, counter);
+                process_stmts(&mut i.then_body, counter);
+                if let Some(inner) = &mut i.else_body {
+                    process_else(inner, counter);
+                }
+            }
+        }
+    }
+
+    let _ = (Pattern { kind: PatternKind::Wildcard, span: ast.span.clone() },
+             PatternField { field_name: String::new(),
+                             pattern: Pattern { kind: PatternKind::Wildcard, span: ast.span.clone() },
+                             span: ast.span.clone() });
+
+    for item in &mut ast.items {
+        match item {
+            Item::FnDef(f) => process_stmts(&mut f.body, &mut counter),
+            Item::Stmt(s) => process_stmt(s, &mut counter),
+            Item::ImplDef(impl_def) => {
+                for m in &mut impl_def.methods {
+                    process_stmts(&mut m.body, &mut counter);
+                }
+            }
+            _ => {}
+        }
     }
 }
 
