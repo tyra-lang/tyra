@@ -569,6 +569,10 @@ pub(crate) struct LowerCtx {
     pub(crate) variant_field_offsets: std::collections::HashMap<(String, String), usize>,
     /// Return type of the function currently being lowered (for ? operator)
     pub(crate) current_fn_return_type: Ty,
+    /// Active type hint from a `let x: T = ...` / `mut x: T = ...`
+    /// annotation, used to type context-sensitive RHS expressions like
+    /// a bare `None` (would otherwise default to `Option<Int>`).
+    pub(crate) binding_type_hint: Option<Ty>,
     /// Collected ADT struct defs (monomorphized Option/Result types)
     pub(crate) adt_struct_defs: std::collections::HashMap<String, Vec<(String, Ty)>>,
     /// Deferred expressions for the current function (spec §12.3, LIFO
@@ -629,6 +633,7 @@ impl LowerCtx {
             adt_variant_fields: std::collections::HashMap::new(),
             variant_field_offsets: std::collections::HashMap::new(),
             current_fn_return_type: Ty::Unit,
+            binding_type_hint: None,
             adt_struct_defs: std::collections::HashMap::new(),
             deferred_exprs: Vec::new(),
             next_defer_index: 0,
@@ -871,7 +876,13 @@ impl LowerCtx {
                 let is_float = self.is_float_expr(&s.value);
                 let is_string = self.is_string_expr(&s.value);
                 let struct_type = self.expr_struct_type(&s.value);
+                // See Stmt::Mut for the binding_type_hint rationale.
+                let prev_hint = self.binding_type_hint.clone();
+                if let Some(ann) = &s.type_annotation {
+                    self.binding_type_hint = Some(Ty::from_type_expr(ann));
+                }
                 let val = self.lower_expr(&s.value, body);
+                self.binding_type_hint = prev_hint;
                 // Track types from AST analysis
                 if is_float || self.float_vars.contains(&val) {
                     self.float_vars.insert(s.name.clone());
@@ -940,7 +951,16 @@ impl LowerCtx {
                 let is_float = self.is_float_expr(&s.value);
                 let is_string = self.is_string_expr(&s.value);
                 let struct_type = self.expr_struct_type(&s.value);
+                // Push the annotation as a typing hint so RHS expressions
+                // that depend on context (a bare `None`, an empty list
+                // literal) can pick up the declared `Option<T>` /
+                // `List<T>` instead of the default Option<Int> / List<Int>.
+                let prev_hint = self.binding_type_hint.clone();
+                if let Some(ann) = &s.type_annotation {
+                    self.binding_type_hint = Some(Ty::from_type_expr(ann));
+                }
                 let val = self.lower_expr(&s.value, body);
+                self.binding_type_hint = prev_hint;
                 if is_float {
                     self.float_vars.insert(s.name.clone());
                 }

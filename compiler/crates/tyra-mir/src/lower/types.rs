@@ -437,6 +437,29 @@ impl super::LowerCtx {
                     if variant == "copy" {
                         return self.infer_expr_type(obj);
                     }
+                    // Module-qualified function call: `string.substring(...)`,
+                    // `list.get(...)`, etc. Same logic as call_returns_type
+                    // above — without this, the constructor inference at
+                    // call.rs (Some/Ok/Err) falls back to Ty::Int and
+                    // builds an Option<Int> / Result<Int, _> when the
+                    // payload is actually a String / List / etc.
+                    if let ExprKind::Ident(module_name) = &obj.kind {
+                        if self.imported_modules.contains(module_name.as_str()) {
+                            let qualified = format!("{module_name}__{variant}");
+                            if let Some(ty) = self.fn_return_types.get(&qualified) {
+                                return Some(ty.clone());
+                            }
+                        }
+                    }
+                    // String value method call: `s.byte_at(i)` etc. Mirrors
+                    // the auto-rewrite in call.rs so the inferred return
+                    // type matches the rewritten call's return type.
+                    let qualified = format!("string__{variant}");
+                    if self.is_string_expr(obj)
+                        && let Some(ty) = self.fn_return_types.get(&qualified)
+                    {
+                        return Some(ty.clone());
+                    }
                     None
                 } else {
                     None

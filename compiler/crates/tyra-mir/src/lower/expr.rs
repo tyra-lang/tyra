@@ -57,11 +57,19 @@ impl super::LowerCtx {
             ExprKind::Ident(name) => {
                 // Check for None constructor
                 if name == "None" {
-                    // Infer the Option<T> type from context (function return type or let binding)
-                    let full_type = if self.current_fn_return_type.is_option() {
+                    // Infer the Option<T> type from context. Priority:
+                    //   1. Active `let x: Option<T> = None` annotation
+                    //      hint — most specific.
+                    //   2. Enclosing function's `Option<T>` return type.
+                    //   3. Fallback to `Option<Int>` (Tyra v0.1 has no
+                    //      first-class type variables yet).
+                    let full_type = if let Some(hint) =
+                        self.binding_type_hint.as_ref().filter(|t| t.is_option())
+                    {
+                        hint.clone()
+                    } else if self.current_fn_return_type.is_option() {
                         self.current_fn_return_type.clone()
                     } else {
-                        // Fallback: Option<Int>
                         Ty::Generic("Option".into(), vec![Ty::Int])
                     };
                     self.register_adt_type(&full_type);
