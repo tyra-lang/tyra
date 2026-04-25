@@ -1,0 +1,36 @@
+{
+  "prompt_id": "087-set-union",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777122404,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 44847,
+      "code_len": 1848,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 372,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 501,
+      "stdout": "1 2 3 4 5 6 7\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn read_byte(_ s: String, _ i: Int) -> Int\n  match string.byte_at(s, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\nend\n\nfn parse_line(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  while i < n\n    mut skipping = true\n    while skipping and i < n\n      let b = read_byte(s, i)\n      if b == 32 or b == 9\n        i = i + 1\n      else\n        skipping = false\n      end\n    end\n    if i < n\n      mut neg = false\n      let first = read_byte(s, i)\n      if first == 45\n        neg = true\n        i = i + 1\n      end\n      mut val = 0\n      mut reading = true\n      while reading and i < n\n        let c = read_byte(s, i)\n        if c >= 48 and c <= 57\n          val = val * 10 + (c - 48)\n          i = i + 1\n        else\n          reading = false\n        end\n      end\n      if neg\n        val = 0 - val\n      end\n      result = list.push(result, val)\n    end\n  end\n  result\nend\n\nfn insert_sorted(_ xs: List<Int>, _ x: Int) -> List<Int>\n  if list.contains(xs, x)\n    xs\n  else\n    mut result: List<Int> = []\n    mut inserted = false\n    for y in xs\n      if not inserted and x < y\n        result = list.push(result, x)\n        inserted = true\n      end\n      result = list.push(result, y)\n    end\n    if not inserted\n      result = list.push(result, x)\n    end\n    result\n  end\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet nums1 = parse_line(line1)\nlet nums2 = parse_line(line2)\n\nmut sorted: List<Int> = []\nfor x in nums1\n  sorted = insert_sorted(sorted, x)\nend\nfor x in nums2\n  sorted = insert_sorted(sorted, x)\nend\n\nmut out = \"\"\nmut first = true\nfor x in sorted\n  if first\n    out = \"#{x}\"\n    first = false\n  else\n    out = \"#{out} #{x}\"\n  end\nend\nprintln(out)",
+  "overall": "pass"
+}

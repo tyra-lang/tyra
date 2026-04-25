@@ -1,0 +1,36 @@
+{
+  "prompt_id": "077-words-by-length",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777121382,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 16580,
+      "code_len": 971,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 150,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 474,
+      "stdout": "longest=quick",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 13\nend\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let n = string.len(line)\n  mut best_start = 0\n  mut best_len = 0\n  mut i = 0\n  mut ws = 32\n  mut start = 0\n  mut in_word = false\n  while i < n\n    let bopt = string.byte_at(line, i)\n    let b = match bopt\n    when Some(x)\n      x\n    when None\n      ws\n    end\n    if is_ws(b)\n      if in_word\n        let wlen = i - start\n        if wlen > best_len\n          best_len = wlen\n          best_start = start\n        end\n        in_word = false\n      end\n    else\n      if not in_word\n        in_word = true\n        start = i\n      end\n    end\n    i = i + 1\n  end\n  if in_word\n    let wlen = n - start\n    if wlen > best_len\n      best_len = wlen\n      best_start = start\n    end\n  end\n  let word = string.substring(line, best_start, best_start + best_len)\n  print(\"longest=#{word}\")\nend",
+  "overall": "pass"
+}

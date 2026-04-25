@@ -1,0 +1,36 @@
+{
+  "prompt_id": "041-sum-pairs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777116401,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 38428,
+      "code_len": 1486,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 523,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 506,
+      "stdout": "1+10=112+20=223+30=33",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn byte_at_or(_ s: String, _ i: Int) -> Int\n  match string.byte_at(s, i)\n  when Some(x)\n    x\n  when None\n    -1\n  end\nend\n\nfn get_or(_ xs: List<Int>, _ i: Int) -> Int\n  match xs.get(i)\n  when Some(x)\n    x\n  when None\n    0\n  end\nend\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  while i < n\n    let b = byte_at_or(s, i)\n    if b == 32 or b == 9 or b == 13 or b == 10\n      i = i + 1\n    else\n      mut sign = 1\n      mut j = i\n      let first = byte_at_or(s, j)\n      if first == 45\n        sign = -1\n        j = j + 1\n      else if first == 43\n        j = j + 1\n      end\n      mut val = 0\n      mut parsing = true\n      while parsing\n        if j >= n\n          parsing = false\n        else\n          let c = byte_at_or(s, j)\n          if c >= 48 and c <= 57\n            val = val * 10 + (c - 48)\n            j = j + 1\n          else\n            parsing = false\n          end\n        end\n      end\n      result = list.push(result, val * sign)\n      i = j\n    end\n  end\n  result\nend\n\nfn read_or_empty() -> String\n  match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\nend\n\nfn main() -> Unit\n  let line1 = read_or_empty()\n  let line2 = read_or_empty()\n  let a = parse_ints(line1)\n  let b = parse_ints(line2)\n  let n = a.len()\n  mut k = 0\n  while k < n\n    let x = get_or(a, k)\n    let y = get_or(b, k)\n    let s = x + y\n    print(\"#{x}+#{y}=#{s}\")\n    k = k + 1\n  end\nend",
+  "overall": "pass"
+}

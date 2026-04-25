@@ -1,0 +1,36 @@
+{
+  "prompt_id": "099-sum-column",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777123171,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 27919,
+      "code_len": 1377,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 376,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 452,
+      "stdout": "sum=39\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn second_token(_ line: String) -> Option<String>\n  let n = string.len(line)\n  mut i = 0\n  mut state = 0\n  mut start = 0\n  mut stop = 0\n  mut found = false\n  while i < n\n    match string.byte_at(line, i)\n    when Some(b)\n      let is_ws = b == 32 or b == 9 or b == 13\n      if state == 0\n        if not is_ws\n          state = 1\n        end\n      else if state == 1\n        if is_ws\n          state = 2\n        end\n      else if state == 2\n        if not is_ws\n          state = 3\n          start = i\n        end\n      else if state == 3\n        if is_ws\n          stop = i\n          found = true\n          i = n\n        end\n      end\n    when None\n      i = n\n    end\n    i = i + 1\n  end\n  if found\n    Some(string.substring(line, start, stop))\n  else if state == 3\n    Some(string.substring(line, start, n))\n  else\n    None\n  end\nend\n\nfn main() -> Unit\n  mut total = 0\n  mut done = false\n  while not done\n    match io.read_line()\n    when Some(line)\n      let trimmed = string.trim(line)\n      if not string.is_empty(trimmed)\n        match second_token(line)\n        when Some(tok)\n          match string.parse_int(tok)\n          when Some(n)\n            total = total + n\n          when None\n            ()\n          end\n        when None\n          ()\n        end\n      end\n    when None\n      done = true\n    end\n  end\n  println(\"sum=#{total}\")\nend",
+  "overall": "pass"
+}

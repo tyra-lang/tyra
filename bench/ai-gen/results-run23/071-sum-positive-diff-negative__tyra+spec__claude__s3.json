@@ -1,0 +1,36 @@
+{
+  "prompt_id": "071-sum-positive-diff-negative",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777120069,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 28304,
+      "code_len": 898,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 355,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 431,
+      "stdout": "r=30\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  mut result = 0\n  mut current = \"\"\n  mut has_token = false\n  let n = string.len(line)\n  mut i = 0\n  while i <= n\n    let b = if i < n\n      match string.byte_at(line, i)\n      when Some(v)\n        v\n      when None\n        32\n      end\n    else\n      32\n    end\n\n    let is_ws = b == 32 or b == 9 or b == 10 or b == 13\n    if is_ws\n      if has_token\n        match string.parse_int(current)\n        when Some(v)\n          if v > 0\n            result = result + v\n          else if v < 0\n            result = result - v\n          end\n        when None\n          ()\n        end\n        current = \"\"\n        has_token = false\n      end\n    else\n      current = \"#{current}#{string.from_byte(b)}\"\n      has_token = true\n    end\n    i = i + 1\n  end\n\n  println(\"r=#{result}\")\nend",
+  "overall": "pass"
+}

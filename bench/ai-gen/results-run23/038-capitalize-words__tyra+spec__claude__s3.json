@@ -1,0 +1,36 @@
+{
+  "prompt_id": "038-capitalize-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777116321,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 23538,
+      "code_len": 768,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 394,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 532,
+      "stdout": "Hello World From Tyra\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nmatch io.read_line()\nwhen Some(line)\n  mut result = \"\"\n  mut in_word = false\n  mut first = false\n  mut i = 0\n  let n = string.len(line)\n  while i < n\n    match string.byte_at(line, i)\n    when Some(b)\n      if b == 32 or b == 9 or b == 13\n        in_word = false\n      else\n        if not in_word\n          if not string.is_empty(result)\n            result = \"#{result} \"\n          end\n          in_word = true\n          first = true\n        end\n        let out_byte = if first and b >= 97 and b <= 122\n          b - 32\n        else\n          b\n        end\n        result = \"#{result}#{string.from_byte(out_byte)}\"\n        first = false\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  println(result)\nwhen None\n  println(\"\")\nend",
+  "overall": "pass"
+}

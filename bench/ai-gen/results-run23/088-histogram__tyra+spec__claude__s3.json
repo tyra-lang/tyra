@@ -1,0 +1,36 @@
+{
+  "prompt_id": "088-histogram",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777122517,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 18229,
+      "code_len": 1152,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 357,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 426,
+      "stdout": "0: \n1: ##\n2: #\n3: ###\n4: #\n5: ###\n6: #\n7: #\n8: #\n9: ###\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn hashes(_ n: Int) -> String\n  mut s = \"\"\n  mut i = 0\n  while i < n\n    s = \"#{s}#\"\n    i = i + 1\n  end\n  s\nend\n\nfn print_row(_ d: Int, _ c: Int) -> Unit\n  println(\"#{d}: #{hashes(c)}\")\nend\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  mut c0 = 0\n  mut c1 = 0\n  mut c2 = 0\n  mut c3 = 0\n  mut c4 = 0\n  mut c5 = 0\n  mut c6 = 0\n  mut c7 = 0\n  mut c8 = 0\n  mut c9 = 0\n\n  let n = string.len(line)\n  mut i = 0\n  while i < n\n    let b = match string.byte_at(line, i)\n    when Some(x)\n      x\n    when None\n      -1\n    end\n    match b\n    when 48\n      c0 = c0 + 1\n    when 49\n      c1 = c1 + 1\n    when 50\n      c2 = c2 + 1\n    when 51\n      c3 = c3 + 1\n    when 52\n      c4 = c4 + 1\n    when 53\n      c5 = c5 + 1\n    when 54\n      c6 = c6 + 1\n    when 55\n      c7 = c7 + 1\n    when 56\n      c8 = c8 + 1\n    when 57\n      c9 = c9 + 1\n    when _\n      ()\n    end\n    i = i + 1\n  end\n\n  print_row(0, c0)\n  print_row(1, c1)\n  print_row(2, c2)\n  print_row(3, c3)\n  print_row(4, c4)\n  print_row(5, c5)\n  print_row(6, c6)\n  print_row(7, c7)\n  print_row(8, c8)\n  print_row(9, c9)\nend",
+  "overall": "pass"
+}

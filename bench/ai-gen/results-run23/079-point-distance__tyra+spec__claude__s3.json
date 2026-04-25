@@ -1,0 +1,36 @@
+{
+  "prompt_id": "079-point-distance",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777121458,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8806,
+      "code_len": 269,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 111,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 423,
+      "stdout": "dist_sq=25",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "value Point\n  x: Int\n  y: Int\nend\n\nfn dist_sq(_ a: Point, _ b: Point) -> Int\n  let dx = a.x - b.x\n  let dy = a.y - b.y\n  dx * dx + dy * dy\nend\n\nfn main() -> Unit\n  let a = Point(x: 1, y: 2)\n  let b = Point(x: 4, y: 6)\n  let d = dist_sq(a, b)\n  print(\"dist_sq=#{d}\")\nend",
+  "overall": "pass"
+}

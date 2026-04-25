@@ -1,0 +1,36 @@
+{
+  "prompt_id": "021-sum-evens",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777115551,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 19975,
+      "code_len": 920,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 377,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 441,
+      "stdout": "sum_even=30\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13 or b == 11 or b == 12\nend\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut i = 0\nmut token = \"\"\nmut total = 0\n\nwhile i <= n\n  mut at_end = false\n  if i == n\n    at_end = true\n  end\n\n  mut is_space = false\n  if at_end\n    is_space = true\n  else\n    match string.byte_at(input, i)\n    when Some(b)\n      if is_ws(b)\n        is_space = true\n      end\n    when None\n      is_space = true\n    end\n  end\n\n  if is_space\n    if not string.is_empty(token)\n      match string.parse_int(token)\n      when Some(v)\n        if v % 2 == 0\n          total = total + v\n        end\n      when None\n        ()\n      end\n      token = \"\"\n    end\n  else\n    match string.byte_at(input, i)\n    when Some(b)\n      token = \"#{token}#{string.from_byte(b)}\"\n    when None\n      ()\n    end\n  end\n\n  i = i + 1\nend\n\nprintln(\"sum_even=#{total}\")",
+  "overall": "pass"
+}

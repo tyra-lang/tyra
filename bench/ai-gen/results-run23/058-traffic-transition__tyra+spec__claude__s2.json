@@ -1,0 +1,36 @@
+{
+  "prompt_id": "058-traffic-transition",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777117213,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 13078,
+      "code_len": 765,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 156,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 444,
+      "stdout": "Green\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let n = string.len(line)\n  mut count = 0\n  mut i = 0\n  mut in_token = false\n  while i < n\n    let b = match string.byte_at(line, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    let is_ws = b == 32 or b == 9 or b == 10 or b == 13\n    if is_ws\n      in_token = false\n    else\n      if not in_token\n        count = count + 1\n        in_token = true\n      end\n    end\n    i = i + 1\n  end\n  mut state = 0\n  mut k = 0\n  while k < count\n    state = state + 1\n    if state == 3\n      state = 0\n    end\n    k = k + 1\n  end\n  let name = match state\n  when 0\n    \"Red\"\n  when 1\n    \"Green\"\n  when _\n    \"Yellow\"\n  end\n  println(name)\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "034-group-even-odd",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777116144,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 33590,
+      "code_len": 1485,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 367,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 485,
+      "stdout": "evens=4 2 6 8\nodds=7 1 9 3\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn flush(_ token: String, _ evens: List<Int>, _ odds: List<Int>) -> List<Int>\n  if string.len(token) == 0\n    evens\n  else\n    match string.parse_int(token)\n    when Some(v)\n      if v % 2 == 0\n        list.push(evens, v)\n      else\n        evens\n      end\n    when None\n      evens\n    end\n  end\nend\n\nfn flush_odds(_ token: String, _ odds: List<Int>) -> List<Int>\n  if string.len(token) == 0\n    odds\n  else\n    match string.parse_int(token)\n    when Some(v)\n      if v % 2 == 0\n        odds\n      else\n        list.push(odds, v)\n      end\n    when None\n      odds\n    end\n  end\nend\n\nfn join_list(_ xs: List<Int>) -> String\n  mut out = \"\"\n  mut i = 0\n  let n = xs.len()\n  while i < n\n    let v = match xs.get(i)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    if i == 0\n      out = \"#{v}\"\n    else\n      out = \"#{out} #{v}\"\n    end\n    i = i + 1\n  end\n  out\nend\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut evens: List<Int> = []\nmut odds: List<Int> = []\nmut token = \"\"\nmut i = 0\nwhile i < n\n  let b = match string.byte_at(input, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if b == 32 or b == 9 or b == 10 or b == 13\n    evens = flush(token, evens, odds)\n    odds = flush_odds(token, odds)\n    token = \"\"\n  else\n    token = \"#{token}#{string.from_byte(b)}\"\n  end\n  i = i + 1\nend\nevens = flush(token, evens, odds)\nodds = flush_odds(token, odds)\n\nprintln(\"evens=#{join_list(evens)}\")\nprintln(\"odds=#{join_list(odds)}\")",
+  "overall": "pass"
+}

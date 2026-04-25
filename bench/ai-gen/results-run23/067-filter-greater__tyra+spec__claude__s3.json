@@ -1,0 +1,36 @@
+{
+  "prompt_id": "067-filter-greater",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777117672,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 34437,
+      "code_len": 1386,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 160,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 483,
+      "stdout": "5 8 10\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  mut start = 0 - 1\n  while i < n\n    mut b = 32\n    match string.byte_at(s, i)\n    when Some(v)\n      b = v\n    when None\n      b = 32\n    end\n    let is_ws = b == 32 or b == 9 or b == 10 or b == 13\n    if is_ws\n      if start >= 0\n        let tok = string.substring(s, start, i)\n        match string.parse_int(tok)\n        when Some(v)\n          result = list.push(result, v)\n        when None\n          ()\n        end\n        start = 0 - 1\n      end\n    else\n      if start < 0\n        start = i\n      end\n    end\n    i = i + 1\n  end\n  if start >= 0\n    let tok = string.substring(s, start, n)\n    match string.parse_int(tok)\n    when Some(v)\n      result = list.push(result, v)\n    when None\n      ()\n    end\n  end\n  result\nend\n\nfn main() -> Unit\n  let line1 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let line2 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let nums = parse_ints(line1)\n  let t = match string.parse_int(string.trim(line2))\n  when Some(v)\n    v\n  when None\n    0\n  end\n  mut out = \"\"\n  mut first = true\n  for x in nums\n    if x > t\n      if first\n        out = \"#{x}\"\n        first = false\n      else\n        out = \"#{out} #{x}\"\n      end\n    end\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

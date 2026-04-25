@@ -1,0 +1,26 @@
+{
+  "prompt_id": "094-last-line",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777122937,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 32792,
+      "code_len": 807,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 9,
+      "stderr": "error[E0100]: expected `end`, found `when`\n   --> main.tyra:23:5\n   |\n23 |     when _\n   |     ^^^^ expected `end`\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:23:5\n   |\n23 |     when _\n   |     ^^^^ expected newline here\n\nerror[E0100]: expected `end`, found `when`\n   --> main.tyra:26:3\n   |\n26 |   when None\n   |   ^^^^ expected `end`\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:26:3\n   |\n26 |   when None\n   |   ^^^^ expected newline here\n\nerror[E0104]: expected expression, found `when`\n   --> main.tyra:26:3\n   |\n26 |   when None\n   |   ^^^^ expected expression\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:26:8\n   |\n26 |   when None\n   |        ^^^^ expected newline here\n\nerror[E0104]: expected expression, found `end`\n   --> main.tyra:28:3\n   |\n28 |   end\n   |   ^^^ expected expression\n\nerror[E0104]: expected expression, found `end`\n   --> main.tyra:30:1\n   |\n30 | end\n   | ^^^ expected expression\n\n8 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut i = 0\nmut line_start = 0\nmut last_start = 0\nmut last_stop = 0\nmut found = false\n\nwhile i < n\n  match string.byte_at(input, i)\n  when Some(b)\n    if b == 10\n      let line = string.substring(input, line_start, i)\n      if not string.is_empty(string.trim(line))\n        last_start = line_start\n        last_stop = i\n        found = true\n      end\n      line_start = i + 1\n    when _\n      ()\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nif line_start < n\n  let tail = string.substring(input, line_start, n)\n  if not string.is_empty(string.trim(tail))\n    last_start = line_start\n    last_stop = n\n    found = true\n  end\nend\n\nif found\n  println(string.substring(input, last_start, last_stop))\nelse\n  println(\"(none)\")\nend",
+  "overall": "compile_fail"
+}

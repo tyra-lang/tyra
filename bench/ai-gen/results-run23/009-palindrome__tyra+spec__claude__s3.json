@@ -1,0 +1,36 @@
+{
+  "prompt_id": "009-palindrome",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777115055,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8458,
+      "code_len": 572,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 134,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 435,
+      "stdout": "YES",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let n = string.len(line)\n  mut i = 0\n  mut j = n - 1\n  mut ok = true\n  while i < j\n    let a = string.byte_at(line, i)\n    let b = string.byte_at(line, j)\n    match a\n    when Some(av)\n      match b\n      when Some(bv)\n        if av != bv\n          ok = false\n        end\n      when None\n        ok = false\n      end\n    when None\n      ok = false\n    end\n    i = i + 1\n    j = j - 1\n  end\n  if ok\n    print(\"YES\")\n  else\n    print(\"NO\")\n  end\nend",
+  "overall": "pass"
+}

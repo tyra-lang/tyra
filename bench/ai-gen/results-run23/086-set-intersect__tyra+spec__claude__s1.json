@@ -1,0 +1,36 @@
+{
+  "prompt_id": "086-set-intersect",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777122200,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 65302,
+      "code_len": 1987,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 412,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 542,
+      "stdout": "1 3 4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn is_space_at(_ s: String, _ i: Int) -> Bool\n  match string.byte_at(s, i)\n  when Some(b)\n    b == 32 or b == 9 or b == 10 or b == 13\n  when None\n    false\n  end\nend\n\nfn parse_line(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  while i < n\n    while i < n and is_space_at(s, i)\n      i = i + 1\n    end\n    let start = i\n    while i < n and not is_space_at(s, i)\n      i = i + 1\n    end\n    if start < i\n      let tok = string.substring(s, start, i)\n      match string.parse_int(tok)\n      when Some(x)\n        result = list.push(result, x)\n      when None\n        ()\n      end\n    end\n  end\n  result\nend\n\nfn intersect(_ a: List<Int>, _ b: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  for x in a\n    if list.contains(b, x) and not list.contains(result, x)\n      result = list.push(result, x)\n    end\n  end\n  result\nend\n\nfn insert_sorted(_ sorted: List<Int>, _ x: Int) -> List<Int>\n  mut out: List<Int> = []\n  mut inserted = false\n  for y in sorted\n    if not inserted and x <= y\n      out = list.push(out, x)\n      inserted = true\n    end\n    out = list.push(out, y)\n  end\n  if not inserted\n    out = list.push(out, x)\n  end\n  out\nend\n\nfn sort_list(_ xs: List<Int>) -> List<Int>\n  mut out: List<Int> = []\n  for x in xs\n    out = insert_sorted(out, x)\n  end\n  out\nend\n\nfn read_or_empty() -> String\n  match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\nend\n\nfn main() -> Unit\n  let line1 = read_or_empty()\n  let line2 = read_or_empty()\n  let a = parse_line(line1)\n  let b = parse_line(line2)\n  let inter = intersect(a, b)\n  let sorted = sort_list(inter)\n  let n = sorted.len()\n  if n == 0\n    println(\"empty\")\n  else\n    mut s = \"\"\n    mut i = 0\n    while i < n\n      match sorted.get(i)\n      when Some(v)\n        if i == 0\n          s = \"#{v}\"\n        else\n          s = \"#{s} #{v}\"\n        end\n      when None\n        ()\n      end\n      i = i + 1\n    end\n    println(s)\n  end\nend",
+  "overall": "pass"
+}

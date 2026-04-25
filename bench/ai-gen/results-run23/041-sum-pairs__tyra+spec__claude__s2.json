@@ -1,0 +1,36 @@
+{
+  "prompt_id": "041-sum-pairs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777116441,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 30885,
+      "code_len": 1214,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 382,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 529,
+      "stdout": "1+10=11\n2+20=22\n3+30=33\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  let n = string.len(s)\n  mut current = 0\n  mut sign = 1\n  mut in_num = false\n  while i < n\n    match string.byte_at(s, i)\n    when Some(b)\n      if b == 32 or b == 9\n        if in_num\n          result = list.push(result, current * sign)\n          current = 0\n          sign = 1\n          in_num = false\n        end\n      else if b == 45\n        sign = -1\n        in_num = true\n      else\n        current = current * 10 + (b - 48)\n        in_num = true\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if in_num\n    result = list.push(result, current * sign)\n  end\n  result\nend\n\nfn process(_ l1: String, _ l2: String) -> Unit\n  let a = parse_ints(l1)\n  let b = parse_ints(l2)\n  let n = a.len()\n  mut i = 0\n  while i < n\n    match a.get(i)\n    when Some(x)\n      match b.get(i)\n      when Some(y)\n        let s = x + y\n        println(\"#{x}+#{y}=#{s}\")\n      when None\n        ()\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\nend\n\nmatch io.read_line()\nwhen Some(l1)\n  match io.read_line()\n  when Some(l2)\n    process(l1, l2)\n  when None\n    ()\n  end\nwhen None\n  ()\nend",
+  "overall": "pass"
+}

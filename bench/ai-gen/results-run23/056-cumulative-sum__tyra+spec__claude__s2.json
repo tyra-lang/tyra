@@ -1,0 +1,36 @@
+{
+  "prompt_id": "056-cumulative-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777117085,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 28394,
+      "code_len": 1229,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 370,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 502,
+      "stdout": "1 3 6 10 15\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn flush(_ tokens: List<Int>, _ buf: String) -> List<Int>\n  if string.is_empty(buf)\n    tokens\n  else\n    match string.parse_int(buf)\n    when Some(v)\n      list.push(tokens, v)\n    when None\n      tokens\n    end\n  end\nend\n\nfn parse_tokens(_ line: String) -> List<Int>\n  let n = string.len(line)\n  mut tokens: List<Int> = []\n  mut current = \"\"\n  mut i = 0\n  while i < n\n    match string.byte_at(line, i)\n    when Some(b)\n      if b == 32 or b == 9 or b == 13\n        tokens = flush(tokens, current)\n        current = \"\"\n      else\n        current = \"#{current}#{string.from_byte(b)}\"\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  flush(tokens, current)\nend\n\nfn build_output(_ tokens: List<Int>) -> String\n  mut sum = 0\n  mut out = \"\"\n  mut j = 0\n  let len = tokens.len()\n  while j < len\n    match tokens.get(j)\n    when Some(v)\n      sum = sum + v\n      if j == 0\n        out = \"#{sum}\"\n      else\n        out = \"#{out} #{sum}\"\n      end\n    when None\n      ()\n    end\n    j = j + 1\n  end\n  out\nend\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(line)\n    let tokens = parse_tokens(line)\n    let out = build_output(tokens)\n    println(out)\n  when None\n    ()\n  end\nend",
+  "overall": "pass"
+}

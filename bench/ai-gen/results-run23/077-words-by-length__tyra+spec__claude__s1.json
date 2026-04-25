@@ -1,0 +1,36 @@
+{
+  "prompt_id": "077-words-by-length",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777121368,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 12821,
+      "code_len": 851,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 141,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 424,
+      "stdout": "longest=quick\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let n = string.len(line)\n  mut best = \"\"\n  mut best_len = 0\n  mut cur_start = 0\n  mut cur_len = 0\n  mut i = 0\n  while i <= n\n    mut is_space = false\n    if i == n\n      is_space = true\n    else\n      let b = match string.byte_at(line, i)\n      when Some(v)\n        v\n      when None\n        0\n      end\n      if b == 32 or b == 9 or b == 10 or b == 13\n        is_space = true\n      end\n    end\n    if is_space\n      if cur_len > 0\n        if cur_len > best_len\n          best_len = cur_len\n          best = string.substring(line, cur_start, cur_start + cur_len)\n        end\n        cur_len = 0\n      end\n      cur_start = i + 1\n    else\n      cur_len = cur_len + 1\n    end\n    i = i + 1\n  end\n  println(\"longest=#{best}\")\nend",
+  "overall": "pass"
+}

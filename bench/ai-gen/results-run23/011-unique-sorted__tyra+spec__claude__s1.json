@@ -1,0 +1,36 @@
+{
+  "prompt_id": "011-unique-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777115092,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 33073,
+      "code_len": 1583,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 179,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 431,
+      "stdout": "1 2 3 4 5 6 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn add_token(_ nums: List<Int>, _ tok: String) -> List<Int>\n  if string.len(tok) == 0\n    nums\n  else\n    match string.parse_int(tok)\n    when Some(v)\n      if list.contains(nums, v)\n        nums\n      else\n        list.push(nums, v)\n      end\n    when None\n      nums\n    end\n  end\nend\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut nums: List<Int> = []\nmut token = \"\"\nmut i = 0\nwhile i < n\n  match string.byte_at(input, i)\n  when Some(b)\n    if (b >= 48 and b <= 57) or b == 45\n      token = \"#{token}#{string.from_byte(b)}\"\n    else\n      nums = add_token(nums, token)\n      token = \"\"\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\nnums = add_token(nums, token)\n\nmut sorted: List<Int> = []\nmut remaining = nums\nlet total = list.len(remaining)\nmut k = 0\nwhile k < total\n  match list.min(remaining)\n  when Some(m)\n    sorted = list.push(sorted, m)\n    mut new_rem: List<Int> = []\n    mut removed = false\n    let rlen = list.len(remaining)\n    mut j = 0\n    while j < rlen\n      match list.get(remaining, j)\n      when Some(x)\n        if x == m and not removed\n          removed = true\n        else\n          new_rem = list.push(new_rem, x)\n        end\n      when None\n        ()\n      end\n      j = j + 1\n    end\n    remaining = new_rem\n  when None\n    ()\n  end\n  k = k + 1\nend\n\nmut out = \"\"\nlet slen = list.len(sorted)\nmut idx = 0\nwhile idx < slen\n  match list.get(sorted, idx)\n  when Some(v)\n    if idx == 0\n      out = \"#{v}\"\n    else\n      out = \"#{out} #{v}\"\n    end\n  when None\n    ()\n  end\n  idx = idx + 1\nend\nprintln(out)",
+  "overall": "pass"
+}

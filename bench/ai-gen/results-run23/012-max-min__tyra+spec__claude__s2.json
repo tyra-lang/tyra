@@ -1,0 +1,36 @@
+{
+  "prompt_id": "012-max-min",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777115228,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 20640,
+      "code_len": 998,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 153,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 426,
+      "stdout": "max=9\nmin=-2\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut max_val = 0\nmut min_val = 0\nmut has = false\nmut cur = \"\"\nmut i = 0\nwhile i <= n\n  mut is_ws = true\n  if i < n\n    match string.byte_at(input, i)\n    when Some(b)\n      if b == 32 or b == 10 or b == 9 or b == 13\n        is_ws = true\n      else\n        is_ws = false\n      end\n    when None\n      is_ws = true\n    end\n  end\n  if is_ws\n    if string.len(cur) > 0\n      match string.parse_int(cur)\n      when Some(v)\n        if not has\n          max_val = v\n          min_val = v\n          has = true\n        else\n          if v > max_val\n            max_val = v\n          end\n          if v < min_val\n            min_val = v\n          end\n        end\n      when None\n        ()\n      end\n      cur = \"\"\n    end\n  else\n    match string.byte_at(input, i)\n    when Some(b)\n      cur = \"#{cur}#{string.from_byte(b)}\"\n    when None\n      ()\n    end\n  end\n  i = i + 1\nend\nprintln(\"max=#{max_val}\")\nprintln(\"min=#{min_val}\")",
+  "overall": "pass"
+}

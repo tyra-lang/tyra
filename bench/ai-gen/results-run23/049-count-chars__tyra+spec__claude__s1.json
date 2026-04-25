@@ -1,0 +1,26 @@
+{
+  "prompt_id": "049-count-chars",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777116730,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8413,
+      "code_len": 458,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 10,
+      "stderr": "here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:10:57\n   |\n10 | let nb = match string.byte_at(needle, 0) when Some(b) b when None -1 end\n   |                                                         ^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:10:67\n   |\n10 | let nb = match string.byte_at(needle, 0) when Some(b) b when None -1 end\n   |                                                                   ^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:10:70\n   |\n10 | let nb = match string.byte_at(needle, 0) when Some(b) b when None -1 end\n   |                                                                      ^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:13:45\n   |\n13 |   let b = match string.byte_at(haystack, i) when Some(x) x when None -1 end\n   |                                             ^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:13:58\n   |\n13 |   let b = match string.byte_at(haystack, i) when Some(x) x when None -1 end\n   |                                                          ^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:13:60\n   |\n13 |   let b = match string.byte_at(haystack, i) when Some(x) x when None -1 end\n   |                                                            ^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:13:70\n   |\n13 |   let b = match string.byte_at(haystack, i) when Some(x) x when None -1 end\n   |                                                                      ^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:13:73\n   |\n13 |   let b = match string.byte_at(haystack, i) when Some(x) x when None -1 end\n   |                                                                         ^^^ expected newline here\n\n20 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nlet haystack = match io.read_line() when Some(s) s when None \"\" end\nlet needle = match io.read_line() when Some(s) s when None \"\" end\n\nmut count = 0\nmut i = 0\nlet n = string.len(haystack)\nlet nb = match string.byte_at(needle, 0) when Some(b) b when None -1 end\n\nwhile i < n\n  let b = match string.byte_at(haystack, i) when Some(x) x when None -1 end\n  if b == nb\n    count = count + 1\n  end\n  i = i + 1\nend\n\nprintln(\"count=#{count}\")",
+  "overall": "compile_fail"
+}
