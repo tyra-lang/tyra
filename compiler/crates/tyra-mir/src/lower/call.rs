@@ -751,6 +751,47 @@ impl super::LowerCtx {
             return dest;
         }
 
+        // String value method auto-dispatch: `s.byte_at(i)` rewrites to
+        // `string.byte_at(s, i)` when `s` is a String value and a matching
+        // `string__<method>` exists in the stdlib. The model frequently
+        // reaches for method syntax on String values even though Tyra v0.1
+        // exposes string operations only as module functions; this auto-
+        // rewrite makes the model's mental model work and turns what would
+        // otherwise be a "@s.method" untyped call (E0500 downstream) into
+        // a typed call with a tracked return type.
+        if let ExprKind::FieldAccess(obj, fn_name) = &callee.kind {
+            let qualified = format!("string__{fn_name}");
+            if self.is_string_expr(obj) && self.fn_return_types.contains_key(&qualified) {
+                let recv_temp = self.lower_expr(obj, body);
+                let mut arg_operands = vec![Operand::Var(recv_temp)];
+                for a in args {
+                    let t = self.lower_expr(&a.value, body);
+                    arg_operands.push(Operand::Var(t));
+                }
+                let dest = self.fresh_temp();
+                let ret_ty = self.fn_return_types.get(&qualified).cloned();
+                body.push(Instruction::Call {
+                    dest: Some(dest.clone()),
+                    func: qualified,
+                    args: arg_operands,
+                });
+                if let Some(ref ty) = ret_ty {
+                    match ty {
+                        Ty::String => { self.string_vars.insert(dest.clone()); }
+                        Ty::Float => { self.float_vars.insert(dest.clone()); }
+                        Ty::Named(n) => { self.var_types.insert(dest.clone(), n.clone()); }
+                        Ty::Generic(_, _) => {
+                            self.register_adt_type(ty);
+                            self.generic_var_types.insert(dest.clone(), ty.clone());
+                            self.var_types.insert(dest.clone(), ty.monomorphized_name());
+                        }
+                        _ => {}
+                    }
+                }
+                return dest;
+            }
+        }
+
         let func_name = match &callee.kind {
             ExprKind::Ident(name) => name.clone(),
             ExprKind::FieldAccess(obj, method) => {

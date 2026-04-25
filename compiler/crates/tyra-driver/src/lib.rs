@@ -62,6 +62,15 @@ pub fn compile_to_ir(source_path: &Path) -> CompileResult {
         };
     }
 
+    // Auto-import obvious stdlib modules (string / list / io) when the
+    // program calls `string.fn(...)` etc. but forgot the import. This
+    // closes the most common E0200 hit in the AI-gen benchmark — the
+    // model writes `string.trim(input)` directly without ever stating
+    // `import string`. Adding the import is always safe (unused imports
+    // are harmless) and converts a 5-error-per-run hot spot into an
+    // auto-corrected program.
+    auto_import_stdlib(&mut ast);
+
     // Resolve imports: parse module files and merge exported items (§13)
     let main_dir = source_path.parent().unwrap_or(Path::new("."));
     resolve_imports(&mut ast, main_dir, &mut sources, &mut report);
@@ -263,6 +272,213 @@ fn resolve_imports(
 /// Check if a module path refers to a compiler built-in module.
 fn is_builtin_module(module_path: &str) -> bool {
     matches!(module_path, "core.sys" | "core.tasks")
+}
+
+/// Add `import string` / `import list` / `import io` automatically when the
+/// program calls those module's functions (`string.trim(s)`, `list.push(xs, v)`,
+/// `io.read_line()`) without an explicit import. The AI-gen benchmark shows
+/// the model frequently forgets these imports; auto-adding them is harmless
+/// (unused imports do not affect output) and removes a class of E0200 hits.
+fn auto_import_stdlib(ast: &mut tyra_ast::SourceFile) {
+    use tyra_ast::{Expr, ExprKind, Item, ImportDecl, Stmt};
+
+    const AUTO: &[&str] = &["string", "list", "io"];
+
+    // Collect already-imported single-segment module names.
+    let mut already: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+    for item in &ast.items {
+        if let Item::Import(imp) = item {
+            if imp.path.len() == 1 {
+                let local = imp
+                    .alias
+                    .as_deref()
+                    .unwrap_or(&imp.path[0]);
+                already.insert(local.to_string());
+            }
+        }
+    }
+
+    // Walk the AST collecting module names referenced by `<module>.<fn>(...)`.
+    let mut needed: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+
+    // Method names that are unambiguous markers for the string stdlib.
+    // If any of these appear as `<expr>.<method>(...)` we conservatively
+    // assume the receiver is a String and import the string module — this
+    // catches the common pattern `line.byte_at(i)` even though we cannot
+    // tell at parse time that `line` is in fact a String. False positives
+    // (an `impl` block defining its own `byte_at`) just produce one extra
+    // unused import, which is harmless.
+    const STRING_METHOD_HINTS: &[&str] = &[
+        "byte_at", "substring", "from_byte", "parse_int", "parse_errno",
+        "starts_with", "ends_with", "to_upper", "to_lower", "is_empty",
+        "trim",
+    ];
+
+    fn walk_expr(e: &Expr, needed: &mut std::collections::HashSet<String>) {
+        match &e.kind {
+            ExprKind::Call(callee, args) => {
+                if let ExprKind::FieldAccess(obj, method) = &callee.kind {
+                    if let ExprKind::Ident(name) = &obj.kind {
+                        if matches!(name.as_str(), "string" | "list" | "io") {
+                            needed.insert(name.clone());
+                        }
+                    }
+                    if STRING_METHOD_HINTS.contains(&method.as_str()) {
+                        needed.insert("string".to_string());
+                    }
+                }
+                walk_expr(callee, needed);
+                for a in args {
+                    walk_expr(&a.value, needed);
+                }
+            }
+            ExprKind::TurbofishCall(callee, _, args) => {
+                walk_expr(callee, needed);
+                for a in args {
+                    walk_expr(&a.value, needed);
+                }
+            }
+            ExprKind::FieldAccess(obj, _) => walk_expr(obj, needed),
+            ExprKind::BinaryOp(l, _, r) => {
+                walk_expr(l, needed);
+                walk_expr(r, needed);
+            }
+            ExprKind::UnaryOp(_, e) => walk_expr(e, needed),
+            ExprKind::Assign(l, r) => {
+                walk_expr(l, needed);
+                walk_expr(r, needed);
+            }
+            ExprKind::If(i) => {
+                walk_expr(&i.condition, needed);
+                walk_stmts(&i.then_body, needed);
+                if let Some(eb) = &i.else_body {
+                    walk_else(eb, needed);
+                }
+            }
+            ExprKind::Match(m) => {
+                walk_expr(&m.subject, needed);
+                for arm in &m.arms {
+                    walk_stmts(&arm.body, needed);
+                }
+            }
+            ExprKind::While(w) => {
+                walk_expr(&w.condition, needed);
+                walk_stmts(&w.body, needed);
+            }
+            ExprKind::For(f) => {
+                walk_expr(&f.iter, needed);
+                walk_stmts(&f.body, needed);
+            }
+            ExprKind::ListLit(items) => {
+                for it in items {
+                    walk_expr(it, needed);
+                }
+            }
+            ExprKind::StringInterp(parts) => {
+                for p in parts {
+                    if let tyra_ast::StringPart::Expr(e) = p {
+                        walk_expr(e, needed);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn walk_stmts(stmts: &[Stmt], needed: &mut std::collections::HashSet<String>) {
+        for s in stmts {
+            walk_stmt(s, needed);
+        }
+    }
+
+    fn walk_stmt(s: &Stmt, needed: &mut std::collections::HashSet<String>) {
+        match s {
+            Stmt::Let(l) => walk_expr(&l.value, needed),
+            Stmt::Mut(m) => walk_expr(&m.value, needed),
+            Stmt::Return(r) => {
+                if let Some(v) = &r.value {
+                    walk_expr(v, needed);
+                }
+            }
+            Stmt::Expr(e) => walk_expr(&e.expr, needed),
+            Stmt::Defer(d) => walk_expr(&d.expr, needed),
+        }
+    }
+
+    fn walk_else(eb: &tyra_ast::ElseBranch, needed: &mut std::collections::HashSet<String>) {
+        match eb {
+            tyra_ast::ElseBranch::Else(stmts) => walk_stmts(stmts, needed),
+            tyra_ast::ElseBranch::ElseIf(i) => {
+                walk_expr(&i.condition, needed);
+                walk_stmts(&i.then_body, needed);
+                if let Some(inner) = &i.else_body {
+                    walk_else(inner, needed);
+                }
+            }
+        }
+    }
+
+    for item in &ast.items {
+        match item {
+            Item::FnDef(f) => walk_stmts(&f.body, &mut needed),
+            Item::Stmt(s) => walk_stmt(s, &mut needed),
+            Item::ImplDef(impl_def) => {
+                for m in &impl_def.methods {
+                    walk_stmts(&m.body, &mut needed);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Inject missing imports at the front of the items list so they are
+    // resolved before any usage downstream.
+    let mut to_add: Vec<&str> = Vec::new();
+    for &m in AUTO {
+        if needed.contains(m) && !already.contains(m) {
+            to_add.push(m);
+        }
+    }
+    if !to_add.is_empty() {
+        // Reuse a span from an existing item so we have a valid SourceId.
+        // The injected import is synthetic — diagnostic accuracy at this
+        // span is not load-bearing — but a well-typed Span is required.
+        let span = ast
+            .items
+            .iter()
+            .find_map(|it| match it {
+                Item::Import(i) => Some(i.span.clone()),
+                Item::FnDef(f) => Some(f.span.clone()),
+                Item::Stmt(s) => Some(stmt_span(s)),
+                _ => None,
+            })
+            .unwrap_or_else(|| ast.span.clone());
+        let mut prefix: Vec<Item> = to_add
+            .into_iter()
+            .map(|m| {
+                Item::Import(ImportDecl {
+                    path: vec![m.to_string()],
+                    alias: None,
+                    span: span.clone(),
+                })
+            })
+            .collect();
+        prefix.append(&mut ast.items);
+        ast.items = prefix;
+    }
+}
+
+fn stmt_span(s: &tyra_ast::Stmt) -> tyra_ast::Span {
+    use tyra_ast::Stmt;
+    match s {
+        Stmt::Let(l) => l.span.clone(),
+        Stmt::Mut(m) => m.span.clone(),
+        Stmt::Return(r) => r.span.clone(),
+        Stmt::Expr(e) => e.span.clone(),
+        Stmt::Defer(d) => d.span.clone(),
+    }
 }
 
 /// Compile a Tyra source file to a native binary.
