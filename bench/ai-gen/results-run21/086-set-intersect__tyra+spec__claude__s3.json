@@ -1,0 +1,36 @@
+{
+  "prompt_id": "086-set-intersect",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777086353,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 63608,
+      "code_len": 1996,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 356,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 496,
+      "stdout": "1 3 4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn is_ws_at(_ s: String, _ i: Int) -> Bool\n  match string.byte_at(s, i)\n  when Some(b)\n    b == 32 or b == 9 or b == 10 or b == 13\n  when None\n    false\n  end\nend\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  while i < n\n    while i < n and is_ws_at(s, i)\n      i = i + 1\n    end\n    if i < n\n      mut j = i\n      while j < n and not is_ws_at(s, j)\n        j = j + 1\n      end\n      let tok = string.substring(s, i, j)\n      match string.parse_int(tok)\n      when Some(v)\n        result = list.push(result, v)\n      when None\n        ()\n      end\n      i = j\n    end\n  end\n  result\nend\n\nfn intersect_dedup(_ a: List<Int>, _ b: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  for x in a\n    if list.contains(b, x) and not list.contains(result, x)\n      result = list.push(result, x)\n    end\n  end\n  result\nend\n\nfn remove_first(_ xs: List<Int>, _ target: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut removed = false\n  for x in xs\n    if not removed and x == target\n      removed = true\n    else\n      result = list.push(result, x)\n    end\n  end\n  result\nend\n\nfn sort_asc(_ xs: List<Int>) -> List<Int>\n  mut remaining = xs\n  mut sorted_out: List<Int> = []\n  while remaining.len() > 0\n    match list.min(remaining)\n    when Some(m)\n      sorted_out = list.push(sorted_out, m)\n      remaining = remove_first(remaining, m)\n    when None\n      ()\n    end\n  end\n  sorted_out\nend\n\nfn read_one_line() -> String\n  match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\nend\n\nlet line1 = read_one_line()\nlet line2 = read_one_line()\nlet a = parse_ints(line1)\nlet b = parse_ints(line2)\nlet inter = intersect_dedup(a, b)\nlet sorted_inter = sort_asc(inter)\n\nif sorted_inter.len() == 0\n  println(\"empty\")\nelse\n  mut out = \"\"\n  mut first = true\n  for x in sorted_inter\n    if first\n      out = \"#{x}\"\n      first = false\n    else\n      out = \"#{out} #{x}\"\n    end\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

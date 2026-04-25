@@ -1,0 +1,36 @@
+{
+  "prompt_id": "087-set-union",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777086459,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 46129,
+      "code_len": 2126,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 348,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 561,
+      "stdout": "1 2 3 4 5 6 7\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  while i < n\n    let b = match string.byte_at(s, i)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    if b == 32 or b == 9 or b == 13 or b == 10\n      i = i + 1\n    else\n      mut neg = false\n      if b == 45\n        neg = true\n        i = i + 1\n      end\n      mut val = 0\n      mut reading = true\n      while i < n and reading\n        let d = match string.byte_at(s, i)\n        when Some(x)\n          x\n        when None\n          0\n        end\n        if d >= 48 and d <= 57\n          val = val * 10 + (d - 48)\n          i = i + 1\n        else\n          reading = false\n        end\n      end\n      if neg\n        val = -val\n      end\n      result = list.push(result, val)\n    end\n  end\n  result\nend\n\nfn sorted_insert(_ xs: List<Int>, _ v: Int) -> List<Int>\n  let n = xs.len()\n  mut result: List<Int> = []\n  mut placed = false\n  mut i = 0\n  while i < n\n    let cur = match xs.get(i)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    if not placed\n      if v < cur\n        result = list.push(result, v)\n        placed = true\n      else if v == cur\n        placed = true\n      end\n    end\n    result = list.push(result, cur)\n    i = i + 1\n  end\n  if not placed\n    result = list.push(result, v)\n  end\n  result\nend\n\nfn main() -> Unit\n  let line1 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let line2 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let combined = \"#{line1} #{line2}\"\n  let nums = parse_ints(combined)\n  mut sorted: List<Int> = []\n  mut i = 0\n  let n = nums.len()\n  while i < n\n    let v = match nums.get(i)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    sorted = sorted_insert(sorted, v)\n    i = i + 1\n  end\n  mut output = \"\"\n  mut j = 0\n  let m = sorted.len()\n  while j < m\n    let v = match sorted.get(j)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    if j == 0\n      output = \"#{v}\"\n    else\n      output = \"#{output} #{v}\"\n    end\n    j = j + 1\n  end\n  println(output)\nend",
+  "overall": "pass"
+}

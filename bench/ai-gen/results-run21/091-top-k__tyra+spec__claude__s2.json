@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777086932,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 44599,
+      "code_len": 1898,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 366,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 474,
+      "stdout": "9 6 5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut current = \"\"\n  mut i = 0\n  let n = string.len(s)\n  while i < n\n    match string.byte_at(s, i)\n    when Some(b)\n      if b == 32 or b == 9 or b == 13\n        if string.len(current) > 0\n          match string.parse_int(current)\n          when Some(v)\n            result = list.push(result, v)\n          when None\n            ()\n          end\n          current = \"\"\n        end\n      else\n        current = \"#{current}#{string.from_byte(b)}\"\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if string.len(current) > 0\n    match string.parse_int(current)\n    when Some(v)\n      result = list.push(result, v)\n    when None\n      ()\n    end\n  end\n  result\nend\n\nfn remove_first(_ xs: List<Int>, _ target: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut removed = false\n  for v in xs\n    if v == target and not removed\n      removed = true\n    else\n      result = list.push(result, v)\n    end\n  end\n  result\nend\n\nfn sort_desc(_ xs: List<Int>) -> List<Int>\n  mut remaining = xs\n  mut result: List<Int> = []\n  while remaining.len() > 0\n    match list.max(remaining)\n    when Some(m)\n      result = list.push(result, m)\n      remaining = remove_first(remaining, m)\n    when None\n      ()\n    end\n  end\n  result\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet nums = parse_ints(string.trim(line1))\nlet k = match string.parse_int(string.trim(line2))\nwhen Some(v)\n  v\nwhen None\n  0\nend\n\nlet sorted = sort_desc(nums)\nlet take = if k < sorted.len()\n  k\nelse\n  sorted.len()\nend\n\nmut out = \"\"\nmut i = 0\nwhile i < take\n  match sorted.get(i)\n  when Some(v)\n    if i == 0\n      out = \"#{v}\"\n    else\n      out = \"#{out} #{v}\"\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\nprintln(out)",
+  "overall": "pass"
+}

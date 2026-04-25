@@ -1,0 +1,36 @@
+{
+  "prompt_id": "004-state-machine",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777082240,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 42242,
+      "code_len": 423,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 382,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 673,
+      "stdout": "Red\nGreen\nYellow\nRed\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "type Light =\n  | Red\n  | Green\n  | Yellow\n\nfn next(_ l: Light) -> Light\n  match l\n  when Red\n    Light.Green\n  when Green\n    Light.Yellow\n  when Yellow\n    Light.Red\n  end\nend\n\nfn name(_ l: Light) -> String\n  match l\n  when Red\n    \"Red\"\n  when Green\n    \"Green\"\n  when Yellow\n    \"Yellow\"\n  end\nend\n\nmut s = Light.Red\nprintln(name(s))\ns = next(s)\nprintln(name(s))\ns = next(s)\nprintln(name(s))\ns = next(s)\nprintln(name(s))",
+  "overall": "pass"
+}

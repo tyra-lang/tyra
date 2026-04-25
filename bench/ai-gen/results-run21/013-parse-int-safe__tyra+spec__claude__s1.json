@@ -1,0 +1,36 @@
+{
+  "prompt_id": "013-parse-int-safe",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777082744,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8142,
+      "code_len": 215,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 147,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 472,
+      "stdout": "ERR",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = io.read_line()\nmatch line\nwhen Some(s)\n  match string.parse_int(string.trim(s))\n  when Some(n)\n    print(\"OK=#{n}\")\n  when None\n    print(\"ERR\")\n  end\nwhen None\n  print(\"ERR\")\nend",
+  "overall": "pass"
+}

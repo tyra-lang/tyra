@@ -1,0 +1,36 @@
+{
+  "prompt_id": "059-is-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777084630,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 33945,
+      "code_len": 1303,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 393,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 486,
+      "stdout": "YES\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn finalize(_ in_num: Bool, _ sign: Int, _ cur: Int, _ has_prev: Bool, _ prev: Int, _ sorted: Bool) -> Bool\n  if in_num\n    let val = sign * cur\n    if has_prev and val < prev\n      false\n    else\n      sorted\n    end\n  else\n    sorted\n  end\nend\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(line)\n    check(line)\n  when None\n    println(\"YES\")\n  end\nend\n\nfn check(_ line: String) -> Unit\n  let n = string.len(line)\n  mut i = 0\n  mut in_num = false\n  mut sign = 1\n  mut cur = 0\n  mut has_prev = false\n  mut prev = 0\n  mut sorted = true\n  while i < n\n    let b = match string.byte_at(line, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if b >= 48 and b <= 57\n      cur = cur * 10 + (b - 48)\n      in_num = true\n    else if (b == 45 or b == 43) and not in_num\n      if b == 45\n        sign = -1\n      end\n      in_num = true\n    else\n      if in_num\n        let val = sign * cur\n        if has_prev and val < prev\n          sorted = false\n        end\n        prev = val\n        has_prev = true\n        in_num = false\n        sign = 1\n        cur = 0\n      end\n    end\n    i = i + 1\n  end\n  if in_num\n    let val = sign * cur\n    if has_prev and val < prev\n      sorted = false\n    end\n  end\n  if sorted\n    println(\"YES\")\n  else\n    println(\"NO\")\n  end\nend",
+  "overall": "pass"
+}

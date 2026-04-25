@@ -1,0 +1,36 @@
+{
+  "prompt_id": "093-option-map",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777087063,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 7958,
+      "code_len": 344,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 110,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 431,
+      "stdout": "some=42\nnone\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "fn double_opt(_ opt: Option<Int>) -> Option<Int>\n  match opt\n  when Some(x)\n    Some(2 * x)\n  when None\n    None\n  end\nend\n\nfn show_opt(_ opt: Option<Int>) -> String\n  match opt\n  when Some(x)\n    \"some=#{x}\"\n  when None\n    \"none\"\n  end\nend\n\nfn main() -> Unit\n  println(show_opt(double_opt(Some(21))))\n  println(show_opt(double_opt(None)))\nend",
+  "overall": "pass"
+}

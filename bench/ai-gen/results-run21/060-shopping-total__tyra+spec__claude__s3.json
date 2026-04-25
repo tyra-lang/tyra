@@ -1,0 +1,36 @@
+{
+  "prompt_id": "060-shopping-total",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777084681,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 7087,
+      "code_len": 384,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 112,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 423,
+      "stdout": "subtotal=900\ntotal=800\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "value Item\n  name: String\n  price: Int\nend\n\nlet cart = [\n  Item(name: \"apple\", price: 120),\n  Item(name: \"bread\", price: 300),\n  Item(name: \"cheese\", price: 480),\n]\n\nmut subtotal = 0\nfor item in cart\n  subtotal = subtotal + item.price\nend\n\nlet discount = if subtotal >= 500\n  100\nelse\n  0\nend\n\nlet total = subtotal - discount\n\nprintln(\"subtotal=#{subtotal}\")\nprintln(\"total=#{total}\")",
+  "overall": "pass"
+}

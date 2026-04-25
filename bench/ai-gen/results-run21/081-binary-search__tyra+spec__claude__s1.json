@@ -1,0 +1,36 @@
+{
+  "prompt_id": "081-binary-search",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777085681,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 25927,
+      "code_len": 1591,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 348,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 433,
+      "stdout": "index=6\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  mut have = false\n  mut neg = false\n  mut cur = 0\n  while i < n\n    let b = match string.byte_at(s, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if b == 32 or b == 9 or b == 13 or b == 10\n      if have\n        let val = if neg\n          -cur\n        else\n          cur\n        end\n        result = list.push(result, val)\n        have = false\n        neg = false\n        cur = 0\n      end\n    else if b == 45\n      neg = true\n      have = true\n    else\n      cur = cur * 10 + (b - 48)\n      have = true\n    end\n    i = i + 1\n  end\n  if have\n    let val = if neg\n      -cur\n    else\n      cur\n    end\n    result = list.push(result, val)\n  end\n  result\nend\n\nfn bsearch(_ xs: List<Int>, _ t: Int) -> Option<Int>\n  mut lo = 0\n  mut hi = list.len(xs)\n  while lo < hi\n    let mid = (lo + hi) / 2\n    let v = match list.get(xs, mid)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    if v == t\n      return Some(mid)\n    else if v < t\n      lo = mid + 1\n    else\n      hi = mid\n    end\n  end\n  None\nend\n\nfn main() -> Unit\n  let line1 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let line2 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let xs = parse_ints(line1)\n  let target = match string.parse_int(string.trim(line2))\n  when Some(n)\n    n\n  when None\n    0\n  end\n  match bsearch(xs, target)\n  when Some(i)\n    println(\"index=#{i}\")\n  when None\n    println(\"not_found\")\n  end\nend",
+  "overall": "pass"
+}

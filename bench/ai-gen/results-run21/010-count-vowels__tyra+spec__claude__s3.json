@@ -1,0 +1,36 @@
+{
+  "prompt_id": "010-count-vowels",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777082479,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8697,
+      "code_len": 365,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 160,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 454,
+      "stdout": "vowels=3\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut count = 0\nmut i = 0\nlet n = string.len(line)\nwhile i < n\n  match string.byte_at(line, i)\n  when Some(b)\n    if b == 97 or b == 101 or b == 105 or b == 111 or b == 117\n      count = count + 1\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nprintln(\"vowels=#{count}\")",
+  "overall": "pass"
+}

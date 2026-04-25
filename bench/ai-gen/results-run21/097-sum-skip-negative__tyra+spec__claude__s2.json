@@ -1,0 +1,36 @@
+{
+  "prompt_id": "097-sum-skip-negative",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777087334,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 17042,
+      "code_len": 1020,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 169,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 421,
+      "stdout": "partial=13\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let n = string.len(line)\n  mut sum = 0\n  mut i = 0\n  mut stop = false\n  mut token = \"\"\n  while i < n and not stop\n    let b = match string.byte_at(line, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    let is_space = b == 32 or b == 9 or b == 10 or b == 13\n    if is_space\n      if not string.is_empty(token)\n        let parsed = match string.parse_int(token)\n        when Some(v)\n          v\n        when None\n          0\n        end\n        if parsed < 0\n          stop = true\n        else\n          sum = sum + parsed\n        end\n        token = \"\"\n      end\n    else\n      token = \"#{token}#{string.from_byte(b)}\"\n    end\n    i = i + 1\n  end\n  if not stop and not string.is_empty(token)\n    let parsed = match string.parse_int(token)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if parsed >= 0\n      sum = sum + parsed\n    end\n  end\n  println(\"partial=#{sum}\")\nend",
+  "overall": "pass"
+}

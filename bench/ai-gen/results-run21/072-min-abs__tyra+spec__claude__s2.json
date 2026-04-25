@@ -1,0 +1,36 @@
+{
+  "prompt_id": "072-min-abs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777085266,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 25705,
+      "code_len": 1038,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 363,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 430,
+      "stdout": "min_abs=-2\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  let n = string.len(line)\n  mut i = 0\n  mut have = false\n  mut best = 0\n  mut best_abs = 0\n  mut cur = \"\"\n\n  while i <= n\n    let at_end = i == n\n    let b = if at_end\n      32\n    else\n      match string.byte_at(line, i)\n      when Some(v)\n        v\n      when None\n        32\n      end\n    end\n    let is_space = b == 32 or b == 9 or b == 10 or b == 13\n    if is_space\n      if not string.is_empty(cur)\n        match string.parse_int(cur)\n        when Some(v)\n          let a = if v < 0\n            -v\n          else\n            v\n          end\n          if not have\n            best = v\n            best_abs = a\n            have = true\n          else if a < best_abs\n            best = v\n            best_abs = a\n          end\n        when None\n          ()\n        end\n        cur = \"\"\n      end\n    else\n      cur = \"#{cur}#{string.from_byte(b)}\"\n    end\n    i = i + 1\n  end\n\n  println(\"min_abs=#{best}\")\nend",
+  "overall": "pass"
+}

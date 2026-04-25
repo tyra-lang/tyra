@@ -1,0 +1,36 @@
+{
+  "prompt_id": "041-sum-pairs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777083815,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 31916,
+      "code_len": 1204,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 393,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 505,
+      "stdout": "1+10=11\n2+20=22\n3+30=33\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn tokenize(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut cur = \"\"\n  let n = string.len(s)\n  mut i = 0\n  while i < n\n    match string.byte_at(s, i)\n    when Some(v)\n      if v == 32 or v == 9 or v == 13 or v == 10\n        if not string.is_empty(cur)\n          match string.parse_int(cur)\n          when Some(x)\n            result = list.push(result, x)\n          when None\n            ()\n          end\n          cur = \"\"\n        end\n      else\n        cur = \"#{cur}#{string.from_byte(v)}\"\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if not string.is_empty(cur)\n    match string.parse_int(cur)\n    when Some(x)\n      result = list.push(result, x)\n    when None\n      ()\n    end\n  end\n  result\nend\n\nfn read_one_line() -> String\n  match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\nend\n\nlet line1 = read_one_line()\nlet line2 = read_one_line()\nlet a = tokenize(line1)\nlet b = tokenize(line2)\nlet n = list.len(a)\nmut i = 0\nwhile i < n\n  match list.get(a, i)\n  when Some(x)\n    match list.get(b, i)\n    when Some(y)\n      println(\"#{x}+#{y}=#{x + y}\")\n    when None\n      ()\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend",
+  "overall": "pass"
+}

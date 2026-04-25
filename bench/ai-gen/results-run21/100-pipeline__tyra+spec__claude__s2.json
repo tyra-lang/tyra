@@ -1,0 +1,36 @@
+{
+  "prompt_id": "100-pipeline",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777087470,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 26242,
+      "code_len": 755,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 175,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 429,
+      "stdout": "result=18\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut sum = 0\nmut token = \"\"\nlet n = string.len(line)\nmut i = 0\nwhile i < n\n  let b = match string.byte_at(line, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if b == 32 or b == 9 or b == 10 or b == 13\n    if not string.is_empty(token)\n      match string.parse_int(token)\n      when Some(v)\n        if v > 0\n          sum = sum + v * 2\n        end\n      when None\n        ()\n      end\n      token = \"\"\n    end\n  else\n    token = \"#{token}#{string.from_byte(b)}\"\n  end\n  i = i + 1\nend\nif not string.is_empty(token)\n  match string.parse_int(token)\n  when Some(v)\n    if v > 0\n      sum = sum + v * 2\n    end\n  when None\n    ()\n  end\nend\nprintln(\"result=#{sum}\")",
+  "overall": "pass"
+}

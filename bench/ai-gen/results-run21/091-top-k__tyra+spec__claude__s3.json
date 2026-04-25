@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777086977,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 55214,
+      "code_len": 2143,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 374,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 490,
+      "stdout": "9 6 5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut tok = \"\"\n  mut i = 0\n  let n = string.len(s)\n  while i < n\n    let b = match string.byte_at(s, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if b == 32 or b == 9 or b == 10 or b == 13\n      if not string.is_empty(tok)\n        match string.parse_int(tok)\n        when Some(v)\n          result = list.push(result, v)\n        when None\n          ()\n        end\n        tok = \"\"\n      end\n    else\n      tok = \"#{tok}#{string.from_byte(b)}\"\n    end\n    i = i + 1\n  end\n  if not string.is_empty(tok)\n    match string.parse_int(tok)\n    when Some(v)\n      result = list.push(result, v)\n    when None\n      ()\n    end\n  end\n  result\nend\n\nfn max_index(_ xs: List<Int>) -> Int\n  mut best_i = 0\n  mut best_v = match list.get(xs, 0)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  mut i = 1\n  let n = list.len(xs)\n  while i < n\n    match list.get(xs, i)\n    when Some(v)\n      if v > best_v\n        best_v = v\n        best_i = i\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  best_i\nend\n\nfn remove_at(_ xs: List<Int>, _ idx: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  let n = list.len(xs)\n  while i < n\n    if i != idx\n      match list.get(xs, i)\n      when Some(v)\n        result = list.push(result, v)\n      when None\n        ()\n      end\n    end\n    i = i + 1\n  end\n  result\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet nums = parse_ints(line1)\nlet k_input = match string.parse_int(string.trim(line2))\nwhen Some(n)\n  n\nwhen None\n  0\nend\n\nlet total = list.len(nums)\nlet take = if k_input < total\n  k_input\nelse\n  total\nend\n\nmut remaining = nums\nmut output = \"\"\nmut produced = 0\nwhile produced < take\n  let idx = max_index(remaining)\n  let v = match list.get(remaining, idx)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if produced == 0\n    output = \"#{v}\"\n  else\n    output = \"#{output} #{v}\"\n  end\n  remaining = remove_at(remaining, idx)\n  produced = produced + 1\nend\n\nprintln(output)",
+  "overall": "pass"
+}

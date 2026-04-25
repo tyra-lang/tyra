@@ -1,0 +1,36 @@
+{
+  "prompt_id": "072-min-abs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777085244,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 21030,
+      "code_len": 1037,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 373,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 430,
+      "stdout": "min_abs=-2",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut best_val = 0\nmut best_abs = 0\nmut have = false\nmut cur = \"\"\nmut in_tok = false\nmut i = 0\nlet n = string.len(line)\n\nwhile i < n\n  let b = match string.byte_at(line, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if b == 32 or b == 9 or b == 10 or b == 13\n    if in_tok\n      let v = match string.parse_int(cur)\n      when Some(x)\n        x\n      when None\n        0\n      end\n      let a = if v < 0\n        -v\n      else\n        v\n      end\n      if not have or a < best_abs\n        best_val = v\n        best_abs = a\n        have = true\n      end\n      cur = \"\"\n      in_tok = false\n    end\n  else\n    cur = \"#{cur}#{string.from_byte(b)}\"\n    in_tok = true\n  end\n  i = i + 1\nend\n\nif in_tok\n  let v = match string.parse_int(cur)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  let a = if v < 0\n    -v\n  else\n    v\n  end\n  if not have or a < best_abs\n    best_val = v\n    best_abs = a\n    have = true\n  end\nend\n\nprint(\"min_abs=#{best_val}\")",
+  "overall": "pass"
+}

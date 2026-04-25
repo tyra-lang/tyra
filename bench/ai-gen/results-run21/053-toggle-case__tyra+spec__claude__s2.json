@@ -1,0 +1,36 @@
+{
+  "prompt_id": "053-toggle-case",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777084284,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11895,
+      "code_len": 489,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 378,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 436,
+      "stdout": "hELLO, wORLD!\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn toggle_byte(_ b: Int) -> Int\n  if b >= 65 and b <= 90\n    b + 32\n  else if b >= 97 and b <= 122\n    b - 32\n  else\n    b\n  end\nend\n\nmatch io.read_line()\nwhen Some(line)\n  let n = string.len(line)\n  mut result = \"\"\n  mut i = 0\n  while i < n\n    match string.byte_at(line, i)\n    when Some(b)\n      result = \"#{result}#{string.from_byte(toggle_byte(b))}\"\n    when None\n      result = result\n    end\n    i = i + 1\n  end\n  println(result)\nwhen None\n  println(\"\")\nend",
+  "overall": "pass"
+}

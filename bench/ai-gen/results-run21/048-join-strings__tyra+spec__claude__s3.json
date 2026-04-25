@@ -1,0 +1,36 @@
+{
+  "prompt_id": "048-join-strings",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777084101,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 5055,
+      "code_len": 27,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 118,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 418,
+      "stdout": "red, green, blue\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "println(\"red, green, blue\")",
+  "overall": "pass"
+}

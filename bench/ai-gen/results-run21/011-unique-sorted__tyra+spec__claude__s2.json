@@ -1,0 +1,36 @@
+{
+  "prompt_id": "011-unique-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777082533,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 69460,
+      "code_len": 1644,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 419,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 531,
+      "stdout": "1 2 3 4 5 6 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn is_ws_byte(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn byte_or_zero(_ s: String, _ i: Int) -> Int\n  match string.byte_at(s, i)\n  when Some(b)\n    b\n  when None\n    0\n  end\nend\n\nfn remove_first(_ xs: List<Int>, _ target: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut removed = false\n  mut i = 0\n  let n = xs.len()\n  while i < n\n    match xs.get(i)\n    when Some(v)\n      if v == target and not removed\n        removed = true\n      else\n        result = list.push(result, v)\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn sort_asc(_ xs: List<Int>) -> List<Int>\n  mut src = xs\n  mut result: List<Int> = []\n  while src.len() > 0\n    match list.min(src)\n    when Some(m)\n      result = list.push(result, m)\n      src = remove_first(src, m)\n    when None\n      ()\n    end\n  end\n  result\nend\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut nums: List<Int> = []\nmut i = 0\nwhile i < n\n  while i < n and is_ws_byte(byte_or_zero(input, i))\n    i = i + 1\n  end\n  if i < n\n    let start = i\n    while i < n and not is_ws_byte(byte_or_zero(input, i))\n      i = i + 1\n    end\n    let tok = string.substring(input, start, i)\n    match string.parse_int(tok)\n    when Some(v)\n      if not list.contains(nums, v)\n        nums = list.push(nums, v)\n      end\n    when None\n      ()\n    end\n  end\nend\n\nlet sorted = sort_asc(nums)\nmut out = \"\"\nmut j = 0\nlet m = sorted.len()\nwhile j < m\n  match sorted.get(j)\n  when Some(v)\n    if j == 0\n      out = \"#{v}\"\n    else\n      out = \"#{out} #{v}\"\n    end\n  when None\n    ()\n  end\n  j = j + 1\nend\nprintln(out)",
+  "overall": "pass"
+}

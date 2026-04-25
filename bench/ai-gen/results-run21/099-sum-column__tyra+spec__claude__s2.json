@@ -1,0 +1,26 @@
+{
+  "prompt_id": "099-sum-column",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777087413,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 28587,
+      "code_len": 1467,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 57,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-40xtg7t0/main.ll:331:59: error: '%_t118' defined with type 'ptr' but expected 'i64'\n  331 |   %_t119 = insertvalue %struct.Option__Int %_t119.s0, i64 %_t118, 1\n      |                                                           ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b <= 32\nend\n\nfn second_token(_ s: String) -> Option<String>\n  let n = string.len(s)\n  mut i = 0\n  mut done = false\n  while i < n and not done\n    match string.byte_at(s, i)\n    when Some(b)\n      if is_ws(b)\n        i = i + 1\n      else\n        done = true\n      end\n    when None\n      done = true\n    end\n  end\n  done = false\n  while i < n and not done\n    match string.byte_at(s, i)\n    when Some(b)\n      if is_ws(b)\n        done = true\n      else\n        i = i + 1\n      end\n    when None\n      done = true\n    end\n  end\n  done = false\n  while i < n and not done\n    match string.byte_at(s, i)\n    when Some(b)\n      if is_ws(b)\n        i = i + 1\n      else\n        done = true\n      end\n    when None\n      done = true\n    end\n  end\n  let start2 = i\n  done = false\n  while i < n and not done\n    match string.byte_at(s, i)\n    when Some(b)\n      if is_ws(b)\n        done = true\n      else\n        i = i + 1\n      end\n    when None\n      done = true\n    end\n  end\n  if start2 >= i\n    None\n  else\n    Some(string.substring(s, start2, i))\n  end\nend\n\nmut total = 0\nmut more = true\nwhile more\n  match io.read_line()\n  when Some(line)\n    match second_token(line)\n    when Some(tok)\n      match string.parse_int(tok)\n      when Some(n)\n        total = total + n\n      when None\n        total = total\n      end\n    when None\n      total = total\n    end\n  when None\n    more = false\n  end\nend\nprint(\"sum=#{total}\")",
+  "overall": "compile_fail"
+}

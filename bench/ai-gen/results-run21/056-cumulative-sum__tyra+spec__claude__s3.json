@@ -1,0 +1,26 @@
+{
+  "prompt_id": "056-cumulative-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777084441,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 12273,
+      "code_len": 1259,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 12,
+      "stderr": "                 ^^^^^^^^^^^^ type mismatch\n\nerror[E0305]: arithmetic operator requires matching Int or Float operands, found List<?0> and List<Int>\n   --> main.tyra:25:22\n   |\n25 |               nums = nums + [cur]\n   |                      ^^^^^^^^^^^^ type mismatch\n\nerror[E0305]: arithmetic operator requires matching Int or Float operands, found List<?0> and List<Int>\n   --> main.tyra:44:16\n   |\n44 |         nums = nums + [-cur]\n   |                ^^^^^^^^^^^^^ type mismatch\n\nerror[E0305]: arithmetic operator requires matching Int or Float operands, found List<?0> and List<Int>\n   --> main.tyra:44:16\n   |\n44 |         nums = nums + [-cur]\n   |                ^^^^^^^^^^^^^ type mismatch\n\nerror[E0305]: arithmetic operator requires matching Int or Float operands, found List<?0> and List<Int>\n   --> main.tyra:46:16\n   |\n46 |         nums = nums + [cur]\n   |                ^^^^^^^^^^^^ type mismatch\n\nerror[E0305]: arithmetic operator requires matching Int or Float operands, found List<?0> and List<Int>\n   --> main.tyra:46:16\n   |\n46 |         nums = nums + [cur]\n   |                ^^^^^^^^^^^^ type mismatch\n\nerror[E0305]: arithmetic operator requires matching Int or Float operands, found List<?0> and List<Int>\n   --> main.tyra:44:16\n   |\n44 |         nums = nums + [-cur]\n   |                ^^^^^^^^^^^^^ type mismatch\n\nerror[E0305]: arithmetic operator requires matching Int or Float operands, found List<?0> and List<Int>\n   --> main.tyra:44:16\n   |\n44 |         nums = nums + [-cur]\n   |                ^^^^^^^^^^^^^ type mismatch\n\nerror[E0305]: arithmetic operator requires matching Int or Float operands, found List<?0> and List<Int>\n   --> main.tyra:46:16\n   |\n46 |         nums = nums + [cur]\n   |                ^^^^^^^^^^^^ type mismatch\n\nerror[E0305]: arithmetic operator requires matching Int or Float operands, found List<?0> and List<Int>\n   --> main.tyra:46:16\n   |\n46 |         nums = nums + [cur]\n   |                ^^^^^^^^^^^^ type mismatch\n\n48 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  match io.read_line()\n  when None\n    ()\n  when Some(line)\n    let n = string.len(line)\n    mut nums: List<Int> = []\n    mut i = 0\n    mut cur = 0\n    mut has = false\n    mut neg = false\n    while i < n\n      match string.byte_at(line, i)\n      when None\n        ()\n      when Some(b)\n        if b == 32 or b == 9 or b == 13 or b == 10\n          if has\n            if neg\n              nums = nums + [-cur]\n            else\n              nums = nums + [cur]\n            end\n            cur = 0\n            has = false\n            neg = false\n          end\n        else if b == 45\n          neg = true\n        else if b == 43\n          neg = false\n        else\n          cur = cur * 10 + (b - 48)\n          has = true\n        end\n      end\n      i = i + 1\n    end\n    if has\n      if neg\n        nums = nums + [-cur]\n      else\n        nums = nums + [cur]\n      end\n    end\n    let len = nums.len()\n    mut sum = 0\n    mut out = \"\"\n    mut j = 0\n    while j < len\n      match nums.get(j)\n      when None\n        ()\n      when Some(v)\n        sum = sum + v\n        if j == 0\n          out = \"#{sum}\"\n        else\n          out = \"#{out} #{sum}\"\n        end\n      end\n      j = j + 1\n    end\n    println(out)\n  end\nend",
+  "overall": "compile_fail"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "055-two-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777084371,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 17631,
+      "code_len": 2352,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 175,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 426,
+      "stdout": "found=0,1",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  mut current = \"\"\n  mut has_digit = false\n  mut negative = false\n  while i < n\n    let b = string.byte_at(s, i).ok_or(0)\n    match b\n    when Ok(byte)\n      if byte == 32 or byte == 9 or byte == 13 or byte == 10\n        if has_digit\n          let val = string.parse_int(current).ok_or(0)\n          match val\n          when Ok(v)\n            if negative\n              result = list.push(result, 0 - v)\n            else\n              result = list.push(result, v)\n            end\n          when Err(_)\n            ()\n          end\n          current = \"\"\n          has_digit = false\n          negative = false\n        end\n      else if byte == 45 and not has_digit\n        negative = true\n      else\n        current = \"#{current}#{string.from_byte(byte)}\"\n        has_digit = true\n      end\n    when Err(_)\n      ()\n    end\n    i = i + 1\n  end\n  if has_digit\n    let val = string.parse_int(current).ok_or(0)\n    match val\n    when Ok(v)\n      if negative\n        result = list.push(result, 0 - v)\n      else\n        result = list.push(result, v)\n      end\n    when Err(_)\n      ()\n    end\n  end\n  result\nend\n\nfn find_pair(_ nums: List<Int>, _ target: Int) -> Option<String>\n  let n = list.len(nums)\n  mut i = 0\n  while i < n\n    mut j = i + 1\n    while j < n\n      let a = list.get(nums, i).ok_or(0)\n      let b = list.get(nums, j).ok_or(0)\n      match a\n      when Ok(av)\n        match b\n        when Ok(bv)\n          if av + bv == target\n            return Some(\"found=#{i},#{j}\")\n          end\n        when Err(_)\n          ()\n        end\n      when Err(_)\n        ()\n      end\n      j = j + 1\n    end\n    i = i + 1\n  end\n  None\nend\n\nfn main() -> Unit\n  let line1 = io.read_line()\n  match line1\n  when Some(l1)\n    let line2 = io.read_line()\n    match line2\n    when Some(l2)\n      let nums = parse_ints(l1)\n      let t_str = string.trim(l2)\n      let t_opt = string.parse_int(t_str)\n      match t_opt\n      when Some(t)\n        let result = find_pair(nums, t)\n        match result\n        when Some(msg)\n          print(msg)\n        when None\n          print(\"none\")\n        end\n      when None\n        print(\"none\")\n      end\n    when None\n      print(\"none\")\n    end\n  when None\n    print(\"none\")\n  end\nend",
+  "overall": "pass"
+}

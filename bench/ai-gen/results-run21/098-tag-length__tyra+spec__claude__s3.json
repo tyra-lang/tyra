@@ -1,0 +1,36 @@
+{
+  "prompt_id": "098-tag-length",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777087382,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8772,
+      "code_len": 402,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 115,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 442,
+      "stdout": "hi -> short\nhello -> medium\ngoodmorning -> long\nok -> short\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  mut done = false\n  while not done\n    match io.read_line()\n    when Some(line)\n      let n = string.len(line)\n      if n == 0\n        ()\n      else if n <= 3\n        println(\"#{line} -> short\")\n      else if n <= 7\n        println(\"#{line} -> medium\")\n      else\n        println(\"#{line} -> long\")\n      end\n    when None\n      done = true\n    end\n  end\nend",
+  "overall": "pass"
+}

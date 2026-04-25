@@ -1,0 +1,36 @@
+{
+  "prompt_id": "080-collect-errors",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777085652,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 16258,
+      "code_len": 674,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 158,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 430,
+      "stdout": "errors=empty-name,negative-age\nok\nerrors=too-old\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import string\n\nfn validate(_ name: String, _ age: Int) -> String\n  mut errs = \"\"\n  mut count = 0\n  if string.is_empty(name)\n    errs = \"empty-name\"\n    count = count + 1\n  end\n  if age < 0\n    if count > 0\n      errs = \"#{errs},negative-age\"\n    else\n      errs = \"negative-age\"\n    end\n    count = count + 1\n  end\n  if age > 150\n    if count > 0\n      errs = \"#{errs},too-old\"\n    else\n      errs = \"too-old\"\n    end\n    count = count + 1\n  end\n  errs\nend\n\nfn report(_ name: String, _ age: Int) -> Unit\n  let e = validate(name, age)\n  if string.is_empty(e)\n    println(\"ok\")\n  else\n    println(\"errors=#{e}\")\n  end\nend\n\nreport(\"\", -5)\nreport(\"Alice\", 30)\nreport(\"Bob\", 200)",
+  "overall": "pass"
+}

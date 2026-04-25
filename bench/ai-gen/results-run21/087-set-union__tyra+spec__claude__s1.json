@@ -1,0 +1,36 @@
+{
+  "prompt_id": "087-set-union",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777086417,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 41066,
+      "code_len": 1644,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 359,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 524,
+      "stdout": "1 2 3 4 5 6 7\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  let n = string.len(s)\n  mut in_num = false\n  mut sign = 1\n  mut val = 0\n  while i < n\n    match string.byte_at(s, i)\n    when Some(b)\n      if b == 32 or b == 9 or b == 13\n        if in_num\n          result = list.push(result, sign * val)\n          in_num = false\n          sign = 1\n          val = 0\n        end\n      else if b == 45\n        sign = -1\n        in_num = true\n      else if b == 43\n        in_num = true\n      else\n        val = val * 10 + (b - 48)\n        in_num = true\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if in_num\n    result = list.push(result, sign * val)\n  end\n  result\nend\n\nfn insert_sorted(_ xs: List<Int>, _ v: Int) -> List<Int>\n  if list.contains(xs, v)\n    xs\n  else\n    mut result: List<Int> = []\n    mut inserted = false\n    for x in xs\n      if not inserted and v < x\n        result = list.push(result, v)\n        inserted = true\n      end\n      result = list.push(result, x)\n    end\n    if not inserted\n      result = list.push(result, v)\n    end\n    result\n  end\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet nums1 = parse_ints(line1)\nlet nums2 = parse_ints(line2)\n\nmut sorted: List<Int> = []\nfor x in nums1\n  sorted = insert_sorted(sorted, x)\nend\nfor x in nums2\n  sorted = insert_sorted(sorted, x)\nend\n\nmut output = \"\"\nmut first = true\nfor x in sorted\n  if first\n    output = \"#{x}\"\n    first = false\n  else\n    output = \"#{output} #{x}\"\n  end\nend\nprintln(output)",
+  "overall": "pass"
+}

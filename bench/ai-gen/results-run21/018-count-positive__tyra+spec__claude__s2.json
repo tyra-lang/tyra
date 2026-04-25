@@ -1,0 +1,36 @@
+{
+  "prompt_id": "018-count-positive",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777082906,
+  "inject_tyra_spec": true,
+  "model": "2.1.120 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 14026,
+      "code_len": 962,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 469,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 509,
+      "stdout": "positive=5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13 or b == 11 or b == 12\nend\n\nfn main() -> Unit\n  let input = io.read_to_end()\n  let n = string.len(input)\n  mut count = 0\n  mut i = 0\n  mut start = -1\n  while i < n\n    let b = match string.byte_at(input, i)\n      when Some(x)\n        x\n      when None\n        0\n    end\n    if is_ws(b)\n      if start >= 0\n        let tok = string.substring(input, start, i)\n        match string.parse_int(tok)\n        when Some(v)\n          if v > 0\n            count = count + 1\n          end\n        when None\n          ()\n        end\n        start = -1\n      end\n    else\n      if start < 0\n        start = i\n      end\n    end\n    i = i + 1\n  end\n  if start >= 0\n    let tok = string.substring(input, start, n)\n    match string.parse_int(tok)\n    when Some(v)\n      if v > 0\n        count = count + 1\n      end\n    when None\n      ()\n    end\n  end\n  println(\"positive=#{count}\")\nend",
+  "overall": "pass"
+}
