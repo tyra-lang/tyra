@@ -22,6 +22,8 @@ impl super::LowerCtx {
         });
         let mut result_slot_is_string = false;
         let mut result_slot_is_float = false;
+        let mut result_slot_var_type: Option<String> = None;
+        let mut result_slot_generic_type: Option<Ty> = None;
 
         // Pre-allocate pattern-bound variables to avoid SSA dominance issues.
         // When multiple arms bind the same name (e.g., Dog(name) + Cat(name)),
@@ -600,6 +602,20 @@ impl super::LowerCtx {
                         if self.float_vars.contains(&last) {
                             result_slot_is_float = true;
                         }
+                        // Capture struct/ADT type from the arm's tail value
+                        // so the match-result temp can be tracked downstream
+                        // (`let a2 = match ... when Ok(acc) acc end` →
+                        // a2 is Account, so `a2.balance` resolves).
+                        if result_slot_var_type.is_none() {
+                            if let Some(vt) = self.var_types.get(&last).cloned() {
+                                result_slot_var_type = Some(vt);
+                            }
+                        }
+                        if result_slot_generic_type.is_none() {
+                            if let Some(gt) = self.generic_var_types.get(&last).cloned() {
+                                result_slot_generic_type = Some(gt);
+                            }
+                        }
                         body.push(Instruction::Store {
                             dest: result_slot.clone(),
                             value: Operand::Var(last),
@@ -631,6 +647,12 @@ impl super::LowerCtx {
         }
         if result_slot_is_float {
             self.float_vars.insert(result.clone());
+        }
+        if let Some(vt) = result_slot_var_type {
+            self.var_types.insert(result.clone(), vt);
+        }
+        if let Some(gt) = result_slot_generic_type {
+            self.generic_var_types.insert(result.clone(), gt);
         }
         result
     }
