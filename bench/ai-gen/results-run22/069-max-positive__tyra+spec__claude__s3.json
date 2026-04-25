@@ -1,0 +1,36 @@
+{
+  "prompt_id": "069-max-positive",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777102273,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 24467,
+      "code_len": 907,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 177,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 442,
+      "stdout": "max=7\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line_opt = io.read_line()\nlet line = match line_opt\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut has_pos = false\nmut max_val = 0\nmut start = 0\nmut i = 0\nlet n = string.len(line)\n\nwhile i <= n\n  let is_end = i == n\n  mut is_ws = false\n  if not is_end\n    match string.byte_at(line, i)\n    when Some(b)\n      if b == 32 or b == 9 or b == 10 or b == 13\n        is_ws = true\n      end\n    when None\n      ()\n    end\n  end\n  if is_end or is_ws\n    if start < i\n      let tok = string.substring(line, start, i)\n      match string.parse_int(tok)\n      when Some(v)\n        if v > 0\n          if not has_pos\n            max_val = v\n            has_pos = true\n          else if v > max_val\n            max_val = v\n          end\n        end\n      when None\n        ()\n      end\n    end\n    start = i + 1\n  end\n  i = i + 1\nend\n\nif has_pos\n  println(\"max=#{max_val}\")\nelse\n  println(\"none\")\nend",
+  "overall": "pass"
+}

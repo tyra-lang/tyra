@@ -1,0 +1,26 @@
+{
+  "prompt_id": "094-last-line",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777107957,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 22321,
+      "code_len": 318,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 195,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-huvsih2c/main.ll:304:29: error: '%_t49' defined with type '%struct.Option__String = type { i8, ptr }' but expected '%struct.Option__Int = type { i8, i64 }'\n  304 |   store %struct.Option__Int %_t49, ptr %last\n      |                             ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nmut last: Option<String> = None\nmut done = false\n\nwhile not done\n  match io.read_line()\n  when Some(line)\n    if not string.is_empty(string.trim(line))\n      last = Some(line)\n    end\n  when None\n    done = true\n  end\nend\n\nmatch last\nwhen Some(s)\n  println(s)\nwhen None\n  println(\"(none)\")\nend",
+  "overall": "compile_fail"
+}

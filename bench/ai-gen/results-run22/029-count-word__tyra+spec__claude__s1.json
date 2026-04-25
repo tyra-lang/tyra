@@ -1,0 +1,36 @@
+{
+  "prompt_id": "029-count-word",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777095448,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 22312,
+      "code_len": 664,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 112,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 438,
+      "stdout": "count=3\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet t_line = io.read_line()\nlet t = match t_line\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet body = io.read_to_end()\nlet n = string.len(body)\n\nmut count = 0\nmut start = 0\nmut i = 0\nwhile i < n\n  let b_opt = string.byte_at(body, i)\n  let b = match b_opt\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if b == 32 or b == 9 or b == 10 or b == 13\n    if start < i\n      let tok = string.substring(body, start, i)\n      if tok == t\n        count = count + 1\n      end\n    end\n    start = i + 1\n  end\n  i = i + 1\nend\n\nif start < n\n  let tok = string.substring(body, start, n)\n  if tok == t\n    count = count + 1\n  end\nend\n\nprintln(\"count=#{count}\")",
+  "overall": "pass"
+}

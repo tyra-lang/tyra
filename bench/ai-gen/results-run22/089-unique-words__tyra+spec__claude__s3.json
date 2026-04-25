@@ -1,0 +1,38 @@
+{
+  "prompt_id": "089-unique-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777107591,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 49552,
+      "code_len": 724,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 399,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 500,
+      "stdout": "unique=5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": false,
+      "check_details": [
+        "missing marker: 'unique=6'"
+      ]
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn byte_at_unsafe(_ s: String, _ i: Int) -> Int\n  match string.byte_at(s, i)\n  when Some(b)\n    b\n  when None\n    0\n  end\nend\n\nlet text = io.read_to_end()\nlet n = string.len(text)\nmut acc = \"\\t\"\nmut count = 0\nmut i = 0\nwhile i < n\n  let b = byte_at_unsafe(text, i)\n  if is_ws(b)\n    i = i + 1\n  else\n    mut j = i\n    while j < n and not is_ws(byte_at_unsafe(text, j))\n      j = j + 1\n    end\n    let token = string.substring(text, i, j)\n    let candidate = \"\\t#{token}\\t\"\n    if not string.contains(acc, candidate)\n      count = count + 1\n      acc = \"#{acc}#{token}\\t\"\n    end\n    i = j\n  end\nend\nprintln(\"unique=#{count}\")",
+  "overall": "check_fail"
+}

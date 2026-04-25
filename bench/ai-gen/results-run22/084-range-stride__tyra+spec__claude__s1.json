@@ -1,0 +1,36 @@
+{
+  "prompt_id": "084-range-stride",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777107011,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 29778,
+      "code_len": 1071,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 480,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 517,
+      "stdout": "0 3 6 9 12 15 18\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut tokens: List<Int> = []\nmut cur = \"\"\nmut i = 0\nwhile i < n\n  match string.byte_at(input, i)\n  when Some(c)\n    if c == 32 or c == 10 or c == 9 or c == 13\n      if not string.is_empty(cur)\n        match string.parse_int(cur)\n        when Some(v)\n          tokens = list.push(tokens, v)\n        when None\n          ()\n        end\n        cur = \"\"\n      end\n    else\n      cur = \"#{cur}#{string.from_byte(c)}\"\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\nif not string.is_empty(cur)\n  match string.parse_int(cur)\n  when Some(v)\n    tokens = list.push(tokens, v)\n  when None\n    ()\n  end\nend\n\nlet a = match tokens.get(0)\n  when Some(v)\n    v\n  when None\n    0\n  end\nlet b = match tokens.get(1)\n  when Some(v)\n    v\n  when None\n    0\n  end\nlet s = match tokens.get(2)\n  when Some(v)\n    v\n  when None\n    1\n  end\n\nmut out = \"\"\nmut x = a\nmut first = true\nwhile x < b\n  if first\n    out = \"#{x}\"\n    first = false\n  else\n    out = \"#{out} #{x}\"\n  end\n  x = x + s\nend\nprintln(out)",
+  "overall": "pass"
+}

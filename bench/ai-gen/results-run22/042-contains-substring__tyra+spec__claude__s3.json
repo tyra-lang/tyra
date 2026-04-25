@@ -1,0 +1,36 @@
+{
+  "prompt_id": "042-contains-substring",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777097920,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 6926,
+      "code_len": 297,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 161,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 450,
+      "stdout": "YES",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let haystack = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let needle = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  if string.contains(haystack, needle)\n    print(\"YES\")\n  else\n    print(\"NO\")\n  end\nend",
+  "overall": "pass"
+}

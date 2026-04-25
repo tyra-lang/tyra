@@ -1,0 +1,36 @@
+{
+  "prompt_id": "011-unique-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777094671,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 76080,
+      "code_len": 1878,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 176,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 494,
+      "stdout": "1 2 3 4 5 6 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn b_at(_ s: String, _ i: Int) -> Int\n  match string.byte_at(s, i)\n  when Some(v)\n    v\n  when None\n    0\n  end\nend\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nlet input = io.read_to_end()\nlet n = string.len(input)\n\nmut nums: List<Int> = []\nmut i = 0\nwhile i < n\n  mut skipping = true\n  while skipping and i < n\n    if is_ws(b_at(input, i))\n      i = i + 1\n    else\n      skipping = false\n    end\n  end\n  if i < n\n    mut j = i\n    mut at_ws = false\n    while j < n and not at_ws\n      if is_ws(b_at(input, j))\n        at_ws = true\n      else\n        j = j + 1\n      end\n    end\n    let token = string.substring(input, i, j)\n    match string.parse_int(token)\n    when Some(v)\n      nums = list.push(nums, v)\n    when None\n      ()\n    end\n    i = j\n  end\nend\n\nmut unique: List<Int> = []\nmut k = 0\nwhile k < nums.len()\n  match nums.get(k)\n  when Some(x)\n    if not list.contains(unique, x)\n      unique = list.push(unique, x)\n    end\n  when None\n    ()\n  end\n  k = k + 1\nend\n\nmut sorted: List<Int> = []\nmut p = 0\nwhile p < unique.len()\n  match unique.get(p)\n  when Some(x)\n    mut new_sorted: List<Int> = []\n    mut inserted = false\n    mut q = 0\n    while q < sorted.len()\n      match sorted.get(q)\n      when Some(y)\n        if not inserted and x < y\n          new_sorted = list.push(new_sorted, x)\n          inserted = true\n        end\n        new_sorted = list.push(new_sorted, y)\n      when None\n        ()\n      end\n      q = q + 1\n    end\n    if not inserted\n      new_sorted = list.push(new_sorted, x)\n    end\n    sorted = new_sorted\n  when None\n    ()\n  end\n  p = p + 1\nend\n\nmut output = \"\"\nmut r = 0\nwhile r < sorted.len()\n  match sorted.get(r)\n  when Some(v)\n    if r == 0\n      output = \"#{v}\"\n    else\n      output = \"#{output} #{v}\"\n    end\n  when None\n    ()\n  end\n  r = r + 1\nend\nprintln(output)",
+  "overall": "pass"
+}

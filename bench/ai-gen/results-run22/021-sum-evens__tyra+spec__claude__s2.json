@@ -1,0 +1,36 @@
+{
+  "prompt_id": "021-sum-evens",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777095118,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11861,
+      "code_len": 831,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 177,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 510,
+      "stdout": "sum_even=30\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let input = io.read_to_end()\n  let n = string.len(input)\n  mut sum = 0\n  mut i = 0\n  mut have = false\n  mut neg = false\n  mut val = 0\n  while i < n\n    let b = string.byte_at(input, i)\n    match b\n    when Some(c)\n      if c >= 48 and c <= 57\n        val = val * 10 + (c - 48)\n        have = true\n      else if c == 45 and not have\n        neg = true\n      else\n        if have\n          mut v = val\n          if neg\n            v = -v\n          end\n          if v % 2 == 0\n            sum = sum + v\n          end\n        end\n        have = false\n        neg = false\n        val = 0\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if have\n    mut v = val\n    if neg\n      v = -v\n    end\n    if v % 2 == 0\n      sum = sum + v\n    end\n  end\n  println(\"sum_even=#{sum}\")\nend",
+  "overall": "pass"
+}

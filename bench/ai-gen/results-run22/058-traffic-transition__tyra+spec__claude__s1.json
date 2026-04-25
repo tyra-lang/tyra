@@ -1,0 +1,36 @@
+{
+  "prompt_id": "058-traffic-transition",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777101428,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 21787,
+      "code_len": 497,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 355,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 452,
+      "stdout": "Green\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = io.read_to_end()\nlet n = string.len(line)\nmut count = 0\nmut i = 0\nmut in_token = false\nwhile i < n\n  match string.byte_at(line, i)\n  when Some(b)\n    if b == 32 or b == 9 or b == 10 or b == 13\n      in_token = false\n    else\n      if not in_token\n        count = count + 1\n        in_token = true\n      end\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nlet r = count % 3\nlet name = match r\nwhen 0\n  \"Red\"\nwhen 1\n  \"Green\"\nwhen _\n  \"Yellow\"\nend\nprintln(name)",
+  "overall": "pass"
+}

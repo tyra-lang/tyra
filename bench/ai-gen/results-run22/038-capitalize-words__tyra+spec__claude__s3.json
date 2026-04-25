@@ -1,0 +1,36 @@
+{
+  "prompt_id": "038-capitalize-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777097719,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 27714,
+      "code_len": 1316,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 383,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 450,
+      "stdout": "Hello World From Tyra\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut result = \"\"\nmut current = \"\"\nmut first_word = true\n\nlet n = string.len(line)\nmut i = 0\nwhile i < n\n  let b = match string.byte_at(line, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if b <= 32\n    if not string.is_empty(current)\n      let fb = match string.byte_at(current, 0)\n      when Some(x)\n        x\n      when None\n        0\n      end\n      mut word = current\n      if fb >= 97 and fb <= 122\n        let upper = string.from_byte(fb - 32)\n        let rest = string.substring(current, 1, string.len(current))\n        word = \"#{upper}#{rest}\"\n      end\n      if first_word\n        result = word\n        first_word = false\n      else\n        result = \"#{result} #{word}\"\n      end\n      current = \"\"\n    end\n  else\n    current = \"#{current}#{string.from_byte(b)}\"\n  end\n  i = i + 1\nend\n\nif not string.is_empty(current)\n  let fb2 = match string.byte_at(current, 0)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  mut word2 = current\n  if fb2 >= 97 and fb2 <= 122\n    let upper2 = string.from_byte(fb2 - 32)\n    let rest2 = string.substring(current, 1, string.len(current))\n    word2 = \"#{upper2}#{rest2}\"\n  end\n  if first_word\n    result = word2\n  else\n    result = \"#{result} #{word2}\"\n  end\nend\n\nprintln(result)",
+  "overall": "pass"
+}

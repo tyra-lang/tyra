@@ -1,0 +1,26 @@
+{
+  "prompt_id": "099-sum-column",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777108219,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 16594,
+      "code_len": 1644,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 187,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-ckgh2eoc/main.ll:380:59: error: '%_t136' defined with type 'ptr' but expected 'i64'\n  380 |   %_t137 = insertvalue %struct.Option__Int %_t137.s0, i64 %_t136, 1\n      |                                                           ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 13\nend\n\nfn second_token(_ line: String) -> Option<String>\n  let n = string.len(line)\n  mut i = 0\n  while i < n\n    match string.byte_at(line, i)\n    when Some(b)\n      if is_ws(b)\n        i = i + 1\n      else\n        i = n + 1\n      end\n    when None\n      i = n\n    end\n  end\n  if i == n\n    return None\n  end\n  mut start = i - 1\n  mut j = start\n  while j < n\n    match string.byte_at(line, j)\n    when Some(b)\n      if is_ws(b)\n        j = n + 1\n      else\n        j = j + 1\n      end\n    when None\n      j = n\n    end\n  end\n  if j <= n\n    return None\n  end\n  mut k = j - 1\n  while k < n\n    match string.byte_at(line, k)\n    when Some(b)\n      if is_ws(b)\n        k = k + 1\n      else\n        k = n + 1\n      end\n    when None\n      k = n\n    end\n  end\n  if k == n\n    return None\n  end\n  let tok_start = k - 1\n  mut e = tok_start\n  while e < n\n    match string.byte_at(line, e)\n    when Some(b)\n      if is_ws(b)\n        e = n + 100\n      else\n        e = e + 1\n      end\n    when None\n      e = n\n    end\n  end\n  let tok_end = if e >= n + 50\n    e - 100\n  else\n    n\n  end\n  Some(string.substring(line, tok_start, tok_end))\nend\n\nfn main() -> Unit\n  mut total = 0\n  mut done = false\n  while not done\n    match io.read_line()\n    when Some(line)\n      match second_token(line)\n      when Some(tok)\n        match string.parse_int(tok)\n        when Some(v)\n          total = total + v\n        when None\n          total = total\n        end\n      when None\n        total = total\n      end\n    when None\n      done = true\n    end\n  end\n  println(\"sum=#{total}\")\nend",
+  "overall": "compile_fail"
+}

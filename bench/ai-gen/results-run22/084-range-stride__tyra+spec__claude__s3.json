@@ -1,0 +1,36 @@
+{
+  "prompt_id": "084-range-stride",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777107075,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 46004,
+      "code_len": 1169,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 445,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 524,
+      "stdout": "0 3 6 9 12 15 18\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\n\nmut a_str = \"\"\nmut b_str = \"\"\nmut s_str = \"\"\nmut t = 0\nmut i = 0\nwhile i < n\n  match string.byte_at(input, i)\n  when Some(byte_val)\n    if byte_val == 32 or byte_val == 9 or byte_val == 10 or byte_val == 13\n      if t == 0 and string.len(a_str) > 0\n        t = 1\n      else if t == 1 and string.len(b_str) > 0\n        t = 2\n      else if t == 2 and string.len(s_str) > 0\n        t = 3\n      end\n    else\n      if t == 0\n        a_str = \"#{a_str}#{string.from_byte(byte_val)}\"\n      else if t == 1\n        b_str = \"#{b_str}#{string.from_byte(byte_val)}\"\n      else if t == 2\n        s_str = \"#{s_str}#{string.from_byte(byte_val)}\"\n      end\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nlet a = match string.parse_int(a_str)\nwhen Some(x)\n  x\nwhen None\n  0\nend\n\nlet b = match string.parse_int(b_str)\nwhen Some(x)\n  x\nwhen None\n  0\nend\n\nlet s = match string.parse_int(s_str)\nwhen Some(x)\n  x\nwhen None\n  1\nend\n\nmut out = \"\"\nmut cur = a\nmut first = true\nwhile cur < b\n  if first\n    out = \"#{cur}\"\n    first = false\n  else\n    out = \"#{out} #{cur}\"\n  end\n  cur = cur + s\nend\n\nprintln(out)",
+  "overall": "pass"
+}

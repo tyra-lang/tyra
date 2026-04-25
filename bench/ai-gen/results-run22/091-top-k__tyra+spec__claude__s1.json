@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777107673,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 58305,
+      "code_len": 2736,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 399,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 533,
+      "stdout": "9 6 5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result = []\n  let n = string.len(s)\n  mut i = 0\n  while i < n\n    mut skipping = true\n    while skipping\n      if i >= n\n        skipping = false\n      else\n        match string.byte_at(s, i)\n        when Some(b)\n          if is_ws(b)\n            i = i + 1\n          else\n            skipping = false\n          end\n        when None\n          skipping = false\n        end\n      end\n    end\n    if i < n\n      mut sign = 1\n      match string.byte_at(s, i)\n      when Some(b)\n        if b == 45\n          sign = -1\n          i = i + 1\n        else if b == 43\n          i = i + 1\n        end\n      when None\n        ()\n      end\n      mut value = 0\n      mut reading = true\n      while reading\n        if i >= n\n          reading = false\n        else\n          match string.byte_at(s, i)\n          when Some(b)\n            if b >= 48 and b <= 57\n              value = value * 10 + (b - 48)\n              i = i + 1\n            else\n              reading = false\n            end\n          when None\n            reading = false\n          end\n        end\n      end\n      result = list.push(result, value * sign)\n    end\n  end\n  result\nend\n\nfn sort_desc(_ xs: List<Int>) -> List<Int>\n  mut remaining = xs\n  mut result = []\n  mut going = true\n  while going\n    let n = remaining.len()\n    if n == 0\n      going = false\n    else\n      mut max_val = 0\n      mut max_idx = 0\n      mut i = 0\n      while i < n\n        match remaining.get(i)\n        when Some(v)\n          if i == 0 or v > max_val\n            max_val = v\n            max_idx = i\n          end\n        when None\n          ()\n        end\n        i = i + 1\n      end\n      result = list.push(result, max_val)\n      mut new_remaining = []\n      mut j = 0\n      while j < n\n        if j != max_idx\n          match remaining.get(j)\n          when Some(v)\n            new_remaining = list.push(new_remaining, v)\n          when None\n            ()\n          end\n        end\n        j = j + 1\n      end\n      remaining = new_remaining\n    end\n  end\n  result\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet nums = parse_ints(line1)\nlet k = match string.parse_int(string.trim(line2))\nwhen Some(v)\n  v\nwhen None\n  0\nend\n\nlet sorted = sort_desc(nums)\nlet total = sorted.len()\nlet take = if k > total\n  total\nelse\n  k\nend\n\nmut out = \"\"\nmut idx = 0\nwhile idx < take\n  match sorted.get(idx)\n  when Some(v)\n    if idx == 0\n      out = \"#{v}\"\n    else\n      out = \"#{out} #{v}\"\n    end\n  when None\n    ()\n  end\n  idx = idx + 1\nend\nprintln(out)",
+  "overall": "pass"
+}

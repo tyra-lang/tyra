@@ -1,0 +1,36 @@
+{
+  "prompt_id": "088-histogram",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777107495,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 14474,
+      "code_len": 1121,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 396,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 462,
+      "stdout": "0: \n1: ##\n2: #\n3: ###\n4: #\n5: ###\n6: #\n7: #\n8: #\n9: ###\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  mut c0 = 0\n  mut c1 = 0\n  mut c2 = 0\n  mut c3 = 0\n  mut c4 = 0\n  mut c5 = 0\n  mut c6 = 0\n  mut c7 = 0\n  mut c8 = 0\n  mut c9 = 0\n\n  let n = string.len(line)\n  mut i = 0\n  while i < n\n    match string.byte_at(line, i)\n    when Some(b)\n      match b\n      when 48\n        c0 = c0 + 1\n      when 49\n        c1 = c1 + 1\n      when 50\n        c2 = c2 + 1\n      when 51\n        c3 = c3 + 1\n      when 52\n        c4 = c4 + 1\n      when 53\n        c5 = c5 + 1\n      when 54\n        c6 = c6 + 1\n      when 55\n        c7 = c7 + 1\n      when 56\n        c8 = c8 + 1\n      when 57\n        c9 = c9 + 1\n      when _\n        ()\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n\n  let counts = [c0, c1, c2, c3, c4, c5, c6, c7, c8, c9]\n  mut d = 0\n  while d < 10\n    mut bars = \"\"\n    mut k = 0\n    let cnt = match counts.get(d)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    while k < cnt\n      bars = \"#{bars}#\"\n      k = k + 1\n    end\n    println(\"#{d}: #{bars}\")\n    d = d + 1\n  end\nend",
+  "overall": "pass"
+}

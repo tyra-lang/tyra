@@ -1,0 +1,36 @@
+{
+  "prompt_id": "086-set-intersect",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777107245,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 71291,
+      "code_len": 2632,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 467,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 593,
+      "stdout": "1 3 4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import string\nimport list\nimport io\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 13 or b == 10\nend\n\nfn byte_at_or(_ s: String, _ i: Int) -> Int\n  match string.byte_at(s, i)\n  when Some(b)\n    b\n  when None\n    0\n  end\nend\n\nfn parse_ints(_ line: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(line)\n  mut i = 0\n  while i < n\n    mut keep = true\n    while keep\n      if i >= n\n        keep = false\n      else\n        let b = byte_at_or(line, i)\n        if is_ws(b)\n          i = i + 1\n        else\n          keep = false\n        end\n      end\n    end\n    let start = i\n    mut keep2 = true\n    while keep2\n      if i >= n\n        keep2 = false\n      else\n        let b = byte_at_or(line, i)\n        if is_ws(b)\n          keep2 = false\n        else\n          i = i + 1\n        end\n      end\n    end\n    if start < i\n      let tok = string.substring(line, start, i)\n      match string.parse_int(tok)\n      when Some(v)\n        result = list.push(result, v)\n      when None\n        ()\n      end\n    end\n  end\n  result\nend\n\nfn insert_sorted(_ xs: List<Int>, _ v: Int) -> List<Int>\n  if list.contains(xs, v)\n    xs\n  else\n    mut result: List<Int> = []\n    mut inserted = false\n    let n = list.len(xs)\n    mut i = 0\n    while i < n\n      match list.get(xs, i)\n      when Some(x)\n        if not inserted\n          if v < x\n            result = list.push(result, v)\n            inserted = true\n          end\n        end\n        result = list.push(result, x)\n      when None\n        ()\n      end\n      i = i + 1\n    end\n    if not inserted\n      result = list.push(result, v)\n    end\n    result\n  end\nend\n\nfn intersect(_ a: List<Int>, _ b: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  let n = list.len(a)\n  mut i = 0\n  while i < n\n    match list.get(a, i)\n    when Some(x)\n      if list.contains(b, x)\n        result = insert_sorted(result, x)\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn format_result(_ xs: List<Int>) -> String\n  mut output = \"\"\n  mut first = true\n  let n = list.len(xs)\n  mut i = 0\n  while i < n\n    match list.get(xs, i)\n    when Some(x)\n      if first\n        output = \"#{x}\"\n        first = false\n      else\n        output = \"#{output} #{x}\"\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  output\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet nums1 = parse_ints(line1)\nlet nums2 = parse_ints(line2)\nlet result = intersect(nums1, nums2)\n\nif list.len(result) == 0\n  println(\"empty\")\nelse\n  println(format_result(result))\nend",
+  "overall": "pass"
+}

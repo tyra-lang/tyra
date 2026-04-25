@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777107732,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 72026,
+      "code_len": 2085,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 511,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 537,
+      "stdout": "9 6 5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  mut in_num = false\n  mut sign = 1\n  mut val = 0\n  while i <= n\n    mut b = 32\n    if i < n\n      match string.byte_at(s, i)\n      when Some(x)\n        b = x\n      when None\n        b = 32\n      end\n    end\n\n    if b >= 48 and b <= 57\n      if not in_num\n        in_num = true\n        sign = 1\n        val = 0\n      end\n      val = val * 10 + (b - 48)\n    else if b == 45 and not in_num\n      in_num = true\n      sign = -1\n      val = 0\n    else if b == 43 and not in_num\n      in_num = true\n      sign = 1\n      val = 0\n    else\n      if in_num\n        result = list.push(result, sign * val)\n        in_num = false\n        sign = 1\n        val = 0\n      end\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn main() -> Unit\n  let line1 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let line2 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  let nums = parse_ints(line1)\n  let k = match string.parse_int(string.trim(line2))\n  when Some(v)\n    v\n  when None\n    0\n  end\n\n  let total = list.len(nums)\n  let take = if k > total\n    total\n  else\n    k\n  end\n\n  mut result: List<Int> = []\n  mut used: List<Int> = []\n  mut taken = 0\n  while taken < take\n    mut best_idx = -1\n    mut best_val = 0\n    mut j = 0\n    while j < total\n      if not list.contains(used, j)\n        match list.get(nums, j)\n        when Some(v)\n          if best_idx == -1 or v > best_val\n            best_idx = j\n            best_val = v\n          end\n        when None\n          best_idx = best_idx\n        end\n      end\n      j = j + 1\n    end\n    result = list.push(result, best_val)\n    used = list.push(used, best_idx)\n    taken = taken + 1\n  end\n\n  mut out = \"\"\n  mut i = 0\n  let m = list.len(result)\n  while i < m\n    match list.get(result, i)\n    when Some(v)\n      if i == 0\n        out = \"#{v}\"\n      else\n        out = \"#{out} #{v}\"\n      end\n    when None\n      out = out\n    end\n    i = i + 1\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

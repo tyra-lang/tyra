@@ -1,0 +1,36 @@
+{
+  "prompt_id": "039-sum-digits",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777097771,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10059,
+      "code_len": 399,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 109,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 444,
+      "stdout": "digit_sum=15\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = io.read_line()\nmatch line\nwhen Some(s)\n  let t = string.trim(s)\n  let n = string.len(t)\n  mut i = 0\n  mut sum = 0\n  while i < n\n    match string.byte_at(t, i)\n    when Some(b)\n      if b >= 48 and b <= 57\n        sum = sum + (b - 48)\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  println(\"digit_sum=#{sum}\")\nwhen None\n  println(\"digit_sum=0\")\nend",
+  "overall": "pass"
+}
