@@ -1,0 +1,36 @@
+{
+  "prompt_id": "066-square-list",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777199403,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 32881,
+      "code_len": 1219,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 475,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 543,
+      "stdout": "1 4 9 16 25\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(line)\n    let n = string.len(line)\n    mut i = 0\n    mut have = false\n    mut neg = false\n    mut acc = 0\n    mut output = \"\"\n    mut first = true\n    while i < n\n      match string.byte_at(line, i)\n      when Some(b)\n        if b == 32 or b == 9 or b == 10 or b == 13\n          if have\n            mut val = acc\n            if neg\n              val = -val\n            end\n            let sq = val * val\n            if first\n              output = \"#{sq}\"\n              first = false\n            else\n              output = \"#{output} #{sq}\"\n            end\n            have = false\n            neg = false\n            acc = 0\n          end\n        else if b == 45\n          neg = true\n        else if b == 43\n          acc = acc\n        else\n          acc = acc * 10 + (b - 48)\n          have = true\n        end\n      when None\n        acc = acc\n      end\n      i = i + 1\n    end\n    if have\n      mut val = acc\n      if neg\n        val = -val\n      end\n      let sq = val * val\n      if first\n        output = \"#{sq}\"\n      else\n        output = \"#{output} #{sq}\"\n      end\n    end\n    println(output)\n  when None\n    println(\"\")\n  end\nend",
+  "overall": "pass"
+}

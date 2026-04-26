@@ -1,0 +1,36 @@
+{
+  "prompt_id": "055-two-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777198795,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 30019,
+      "code_len": 1950,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 436,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 603,
+      "stdout": "found=0,1",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  while i < n\n    mut b = 0\n    match string.byte_at(s, i)\n    when Some(x)\n      b = x\n    when None\n      b = 0\n    end\n    if b == 32 or b == 9 or b == 10 or b == 13\n      i = i + 1\n    else\n      mut sign = 1\n      if b == 45\n        sign = -1\n        i = i + 1\n      else if b == 43\n        i = i + 1\n      end\n      mut num = 0\n      mut parsing = true\n      while parsing\n        if i >= n\n          parsing = false\n        else\n          mut c = 0\n          match string.byte_at(s, i)\n          when Some(x)\n            c = x\n          when None\n            c = 0\n          end\n          if c >= 48 and c <= 57\n            num = num * 10 + (c - 48)\n            i = i + 1\n          else\n            parsing = false\n          end\n        end\n      end\n      result = list.push(result, num * sign)\n    end\n  end\n  result\nend\n\nfn get_at(_ xs: List<Int>, _ i: Int) -> Int\n  match xs.get(i)\n  when Some(x)\n    x\n  when None\n    0\n  end\nend\n\nfn main() -> Unit\n  mut line1 = \"\"\n  match io.read_line()\n  when Some(x)\n    line1 = x\n  when None\n    line1 = \"\"\n  end\n  mut line2 = \"\"\n  match io.read_line()\n  when Some(x)\n    line2 = x\n  when None\n    line2 = \"\"\n  end\n  let nums = parse_ints(line1)\n  mut target = 0\n  match string.parse_int(string.trim(line2))\n  when Some(x)\n    target = x\n  when None\n    target = 0\n  end\n  let n = nums.len()\n  mut found = false\n  mut fi = 0\n  mut fj = 0\n  mut i = 0\n  while i < n\n    if not found\n      mut j = i + 1\n      while j < n\n        if not found\n          let a = get_at(nums, i)\n          let b = get_at(nums, j)\n          if a + b == target\n            found = true\n            fi = i\n            fj = j\n          end\n        end\n        j = j + 1\n      end\n    end\n    i = i + 1\n  end\n  if found\n    print(\"found=#{fi},#{fj}\")\n  else\n    print(\"none\")\n  end\nend",
+  "overall": "pass"
+}

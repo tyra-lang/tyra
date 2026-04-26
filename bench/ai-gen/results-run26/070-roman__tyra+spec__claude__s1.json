@@ -1,0 +1,36 @@
+{
+  "prompt_id": "070-roman",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777199684,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 17220,
+      "code_len": 568,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 392,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 460,
+      "stdout": "IV\nIX\nXXVII\nXXXIX\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "fn to_roman(_ n: Int) -> String\n  mut result = \"\"\n  let tens = n / 10\n  mut i = 0\n  while i < tens\n    result = \"#{result}X\"\n    i = i + 1\n  end\n  let u = n % 10\n  if u == 9\n    result = \"#{result}IX\"\n  else if u >= 5\n    result = \"#{result}V\"\n    mut j = 0\n    while j < u - 5\n      result = \"#{result}I\"\n      j = j + 1\n    end\n  else if u == 4\n    result = \"#{result}IV\"\n  else\n    mut j = 0\n    while j < u\n      result = \"#{result}I\"\n      j = j + 1\n    end\n  end\n  result\nend\n\nprintln(to_roman(4))\nprintln(to_roman(9))\nprintln(to_roman(27))\nprintln(to_roman(39))",
+  "overall": "pass"
+}

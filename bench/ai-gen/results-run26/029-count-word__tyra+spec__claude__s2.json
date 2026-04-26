@@ -1,0 +1,36 @@
+{
+  "prompt_id": "029-count-word",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777197646,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 23945,
+      "code_len": 561,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 426,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 444,
+      "stdout": "count=3\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet t = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet body = io.read_to_end()\nlet n = string.len(body)\nmut count = 0\nmut i = 0\nmut current = \"\"\nwhile i < n\n  let b = match string.byte_at(body, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if b == 32 or b == 9 or b == 10 or b == 13 or b == 12 or b == 11\n    if current == t\n      count = count + 1\n    end\n    current = \"\"\n  else\n    current = \"#{current}#{string.from_byte(b)}\"\n  end\n  i = i + 1\nend\nif current == t\n  count = count + 1\nend\nprintln(\"count=#{count}\")",
+  "overall": "pass"
+}

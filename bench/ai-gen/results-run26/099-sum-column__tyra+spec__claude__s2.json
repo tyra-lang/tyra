@@ -1,0 +1,36 @@
+{
+  "prompt_id": "099-sum-column",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777203371,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 35033,
+      "code_len": 876,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 411,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 494,
+      "stdout": "sum=39\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut i = 0\nmut sum = 0\nmut current = \"\"\nmut token_idx = 0\n\nwhile i < n\n  let b = match string.byte_at(input, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  let is_ws = b == 32 or b == 9 or b == 13\n  let is_nl = b == 10\n  if is_ws or is_nl\n    if string.len(current) > 0\n      if token_idx == 1\n        match string.parse_int(current)\n        when Some(v)\n          sum = sum + v\n        when None\n          ()\n        end\n      end\n      token_idx = token_idx + 1\n      current = \"\"\n    end\n    if is_nl\n      token_idx = 0\n    end\n  else\n    current = \"#{current}#{string.from_byte(b)}\"\n  end\n  i = i + 1\nend\n\nif string.len(current) > 0\n  if token_idx == 1\n    match string.parse_int(current)\n    when Some(v)\n      sum = sum + v\n    when None\n      ()\n    end\n  end\nend\n\nprintln(\"sum=#{sum}\")",
+  "overall": "pass"
+}

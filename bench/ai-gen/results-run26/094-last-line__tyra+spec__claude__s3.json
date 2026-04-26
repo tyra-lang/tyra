@@ -1,0 +1,36 @@
+{
+  "prompt_id": "094-last-line",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777203112,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 20200,
+      "code_len": 318,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 416,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 480,
+      "stdout": "gamma\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nmut last: Option<String> = None\nmut done = false\n\nwhile not done\n  match io.read_line()\n  when Some(line)\n    if not string.is_empty(string.trim(line))\n      last = Some(line)\n    end\n  when None\n    done = true\n  end\nend\n\nmatch last\nwhen Some(s)\n  println(s)\nwhen None\n  println(\"(none)\")\nend",
+  "overall": "pass"
+}

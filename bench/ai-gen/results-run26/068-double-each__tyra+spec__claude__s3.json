@@ -1,0 +1,36 @@
+{
+  "prompt_id": "068-double-each",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777199591,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 25069,
+      "code_len": 879,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 864,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 592,
+      "stdout": "2 4 6 -8 10\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line_opt = io.read_line()\nlet line = match line_opt\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet n = string.len(line)\nmut nums: List<Int> = []\nmut cur = 0\nmut sign = 1\nmut has = false\nmut i = 0\nwhile i < n\n  let b = match string.byte_at(line, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if b == 32 or b == 9 or b == 13\n    if has\n      nums = list.push(nums, cur * sign)\n      cur = 0\n      sign = 1\n      has = false\n    end\n  else if b == 45\n    sign = -1\n  else\n    cur = cur * 10 + (b - 48)\n    has = true\n  end\n  i = i + 1\nend\nif has\n  nums = list.push(nums, cur * sign)\nend\n\nmut out = \"\"\nmut j = 0\nlet m = nums.len()\nwhile j < m\n  let v = match nums.get(j)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  let doubled = v * 2\n  if j == 0\n    out = \"#{doubled}\"\n  else\n    out = \"#{out} #{doubled}\"\n  end\n  j = j + 1\nend\nprintln(out)",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "066-square-list",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777199347,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 29481,
+      "code_len": 993,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 560,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 680,
+      "stdout": "1 4 9 16 25\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  let n = string.len(line)\n  mut i = 0\n  mut out = \"\"\n  mut first = true\n  mut have = false\n  mut neg = false\n  mut val = 0\n\n  while i <= n\n    mut b = 32\n    if i < n\n      match string.byte_at(line, i)\n      when Some(x)\n        b = x\n      when None\n        b = 32\n      end\n    end\n\n    let is_space = b == 32 or b == 9 or b == 13 or b == 10\n\n    if is_space\n      if have\n        let signed = if neg\n          -val\n        else\n          val\n        end\n        let sq = signed * signed\n        if first\n          out = \"#{sq}\"\n          first = false\n        else\n          out = \"#{out} #{sq}\"\n        end\n        have = false\n        neg = false\n        val = 0\n      end\n    else if b == 45 and not have\n      neg = true\n      have = true\n      val = 0\n    else\n      val = val * 10 + (b - 48)\n      have = true\n    end\n\n    i = i + 1\n  end\n\n  println(out)\nend",
+  "overall": "pass"
+}

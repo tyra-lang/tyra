@@ -1,0 +1,41 @@
+{
+  "prompt_id": "027-fizzbuzz-string",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777197544,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10101,
+      "code_len": 429,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 394,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": false,
+      "duration_ms": 10005,
+      "stdout": "",
+      "stderr": "timeout after 10s",
+      "exit_code": null,
+      "note": "timeout",
+      "checks_passed": false,
+      "check_details": [
+        "missing marker: 'FizzBuzz'",
+        "missing marker: 'Fizz'",
+        "missing marker: 'Buzz'",
+        "missing marker: '14'"
+      ]
+    }
+  },
+  "code": "mut i = 1\nmut c3 = 1\nmut c5 = 1\nwhile i <= 15\n  let f3 = c3 == 3\n  let f5 = c5 == 3\nend\nmut n = 1\nmut t3 = 1\nmut t5 = 1\nwhile n <= 15\n  let is3 = t3 == 3\n  let is5 = t5 == 5\n  if is3 and is5\n    println(\"FizzBuzz\")\n  else if is3\n    println(\"Fizz\")\n  else if is5\n    println(\"Buzz\")\n  else\n    println(\"#{n}\")\n  end\n  if is3\n    t3 = 1\n  else\n    t3 = t3 + 1\n  end\n  if is5\n    t5 = 1\n  else\n    t5 = t5 + 1\n  end\n  n = n + 1\nend",
+  "overall": "exec_fail"
+}

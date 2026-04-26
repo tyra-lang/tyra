@@ -1,0 +1,36 @@
+{
+  "prompt_id": "089-unique-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777202364,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 395885,
+      "code_len": 851,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 716,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 630,
+      "stdout": "unique=5",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut count = 0\nmut seen = \"\\n\"\nmut start = 0\nmut in_tok = false\nmut i = 0\nwhile i < n\n  let bopt = string.byte_at(input, i)\n  let b = match bopt\n  when Some(v)\n    v\n  when None\n    0\n  end\n  let is_ws = b == 32 or b == 9 or b == 10 or b == 13 or b == 11 or b == 12\n  if is_ws\n    if in_tok\n      let tok = string.substring(input, start, i)\n      let key = \"\\n#{tok}\\n\"\n      if not string.contains(seen, key)\n        seen = \"#{seen}#{tok}\\n\"\n        count = count + 1\n      end\n      in_tok = false\n    end\n  else\n    if not in_tok\n      start = i\n      in_tok = true\n    end\n  end\n  i = i + 1\nend\nif in_tok\n  let tok = string.substring(input, start, n)\n  let key = \"\\n#{tok}\\n\"\n  if not string.contains(seen, key)\n    count = count + 1\n  end\nend\nprint(\"unique=#{count}\")",
+  "overall": "pass"
+}

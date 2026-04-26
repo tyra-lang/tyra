@@ -1,0 +1,38 @@
+{
+  "prompt_id": "062-sum-two-squares",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777199179,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 14365,
+      "code_len": 896,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 389,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 466,
+      "stdout": "r=0\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": false,
+      "check_details": [
+        "missing marker: 'r=25'"
+      ]
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let input = io.read_to_end()\n  let n = string.len(input)\n  mut nums = [0, 0]\n  mut idx = 0\n  mut cur = 0\n  mut sign = 1\n  mut in_num = false\n  mut i = 0\n  while i < n\n    let b = match string.byte_at(input, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    let is_digit = b >= 48 and b <= 57\n    let is_minus = b == 45\n    if is_digit\n      cur = cur * 10 + (b - 48)\n      in_num = true\n    else if is_minus and not in_num\n      sign = -1\n      in_num = true\n    else\n      if in_num\n        if idx < 2\n          nums[idx] = cur * sign\n          idx = idx + 1\n        end\n        cur = 0\n        sign = 1\n        in_num = false\n      end\n    end\n    i = i + 1\n  end\n  if in_num\n    if idx < 2\n      nums[idx] = cur * sign\n      idx = idx + 1\n    end\n  end\n  let a = nums[0]\n  let b = nums[1]\n  let r = a * a + b * b\n  println(\"r=#{r}\")\nend",
+  "overall": "check_fail"
+}

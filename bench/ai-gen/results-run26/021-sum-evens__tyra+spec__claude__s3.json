@@ -1,0 +1,36 @@
+{
+  "prompt_id": "021-sum-evens",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777197261,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 28990,
+      "code_len": 781,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 451,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 519,
+      "stdout": "sum_even=30\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn process(_ tok: String) -> Int\n  match string.parse_int(tok)\n  when Some(v)\n    if v % 2 == 0\n      v\n    else\n      0\n    end\n  when None\n    0\n  end\nend\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut sum = 0\nmut i = 0\nmut start = 0 - 1\n\nwhile i < n\n  let b = match string.byte_at(input, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if is_ws(b)\n    if start >= 0\n      let tok = string.substring(input, start, i)\n      sum = sum + process(tok)\n      start = 0 - 1\n    end\n  else\n    if start < 0\n      start = i\n    end\n  end\n  i = i + 1\nend\n\nif start >= 0\n  let tok = string.substring(input, start, n)\n  sum = sum + process(tok)\nend\n\nprintln(\"sum_even=#{sum}\")",
+  "overall": "pass"
+}

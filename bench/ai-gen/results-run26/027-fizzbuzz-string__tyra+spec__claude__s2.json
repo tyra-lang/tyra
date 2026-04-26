@@ -1,0 +1,36 @@
+{
+  "prompt_id": "027-fizzbuzz-string",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777197565,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10740,
+      "code_len": 341,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 396,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 441,
+      "stdout": "1\n2\nFizzBuzz\n4\n5\nFizzBuzz\n7\n8\nFizzBuzz\n10\n11\nFizzBuzz\n13\n14\nFizzBuzz\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "mut n = 1\nmut c3 = 1\nmut c5 = 1\nwhile n <= 15\n  let is3 = c3 == 3\n  let is5 = c5 == 3\n  if is3 and is5\n    println(\"FizzBuzz\")\n  else if is3\n    println(\"Fizz\")\n  else if is5\n    println(\"Buzz\")\n  else\n    println(\"#{n}\")\n  end\n  if is3\n    c3 = 1\n  else\n    c3 = c3 + 1\n  end\n  if is5\n    c5 = 1\n  else\n    c5 = c5 + 1\n  end\n  n = n + 1\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "017-key-value-lookup",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777197075,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10307,
+      "code_len": 231,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 382,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 435,
+      "stdout": "value=2",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\n\nmatch io.read_line()\nwhen Some(key)\n  match key\n  when \"one\"\n    print(\"value=1\")\n  when \"two\"\n    print(\"value=2\")\n  when \"three\"\n    print(\"value=3\")\n  when _\n    print(\"missing\")\n  end\nwhen None\n  print(\"missing\")\nend",
+  "overall": "pass"
+}

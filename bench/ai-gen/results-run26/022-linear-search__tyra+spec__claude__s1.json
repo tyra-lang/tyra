@@ -1,0 +1,36 @@
+{
+  "prompt_id": "022-linear-search",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777197290,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 16677,
+      "code_len": 1260,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 393,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 459,
+      "stdout": "index=2\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut current = \"\"\n  mut i = 0\n  let n = string.len(s)\n  while i <= n\n    mut is_sep = true\n    if i < n\n      match string.byte_at(s, i)\n      when Some(b)\n        if b == 32 or b == 9\n          is_sep = true\n        else\n          is_sep = false\n        end\n      when None\n        is_sep = true\n      end\n    end\n    if is_sep\n      if not string.is_empty(current)\n        match string.parse_int(current)\n        when Some(v)\n          result = list.push(result, v)\n        when None\n          ()\n        end\n        current = \"\"\n      end\n    else\n      current = \"#{current}#{string.from_byte(__string_byte_at(s, i))}\"\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn read_int_line() -> Int\n  match io.read_line()\n  when Some(s)\n    match string.parse_int(string.trim(s))\n    when Some(v)\n      v\n    when None\n      0\n    end\n  when None\n    0\n  end\nend\n\nfn main() -> Unit\n  let line1 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let nums = parse_ints(string.trim(line1))\n  let target = read_int_line()\n  match list.index_of(nums, target)\n  when Some(i)\n    println(\"index=#{i}\")\n  when None\n    println(\"not_found\")\n  end\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "095-flatmap-tokens",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777203151,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 21791,
+      "code_len": 758,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 563,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 525,
+      "stdout": "red red green green blue blue\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet n = string.len(line)\nmut output = \"\"\nmut start = 0\nmut i = 0\nmut first = true\n\nwhile i < n\n  let b = match string.byte_at(line, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  let is_ws = b == 32 or b == 9 or b == 10 or b == 13\n  if is_ws\n    if start < i\n      let tok = string.substring(line, start, i)\n      if first\n        output = \"#{tok} #{tok}\"\n        first = false\n      else\n        output = \"#{output} #{tok} #{tok}\"\n      end\n    end\n    start = i + 1\n  end\n  i = i + 1\nend\n\nif start < n\n  let tok = string.substring(line, start, n)\n  if first\n    output = \"#{tok} #{tok}\"\n  else\n    output = \"#{output} #{tok} #{tok}\"\n  end\nend\n\nprintln(output)",
+  "overall": "pass"
+}

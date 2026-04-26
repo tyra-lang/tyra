@@ -1,0 +1,36 @@
+{
+  "prompt_id": "078-nested-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777200199,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11236,
+      "code_len": 166,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 408,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 469,
+      "stdout": "total=45",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "mut total = 0\nfor x in [1, 2, 3]\n  total = total + x\nend\nfor x in [4, 5]\n  total = total + x\nend\nfor x in [6, 7, 8, 9]\n  total = total + x\nend\nprint(\"total=#{total}\")",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "058-traffic-transition",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777199031,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 12153,
+      "code_len": 897,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 424,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 487,
+      "stdout": "Green\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\n\ntype Color =\n  | Red\n  | Green\n  | Yellow\n\nfn next(_ c: Color) -> Color\n  match c\n  when Red\n    Color.Green\n  when Green\n    Color.Yellow\n  when Yellow\n    Color.Red\n  end\nend\n\nfn name(_ c: Color) -> String\n  match c\n  when Red\n    \"Red\"\n  when Green\n    \"Green\"\n  when Yellow\n    \"Yellow\"\n  end\nend\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut state = Color.Red\nmut i = 0\nmut start = 0\nlet n = string.len(line)\n\nimport string\n\nwhile i < n\n  let b = match string.byte_at(line, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if b == 32 or b == 9\n    if start < i\n      let tok = string.substring(line, start, i)\n      if tok == \"next\"\n        state = next(state)\n      end\n    end\n    start = i + 1\n  end\n  i = i + 1\nend\n\nif start < n\n  let tok = string.substring(line, start, n)\n  if tok == \"next\"\n    state = next(state)\n  end\nend\n\nprintln(name(state))",
+  "overall": "pass"
+}

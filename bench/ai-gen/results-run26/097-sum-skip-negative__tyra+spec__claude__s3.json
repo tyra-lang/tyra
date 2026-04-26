@@ -1,0 +1,36 @@
+{
+  "prompt_id": "097-sum-skip-negative",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777203291,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 16001,
+      "code_len": 1314,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 480,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 472,
+      "stdout": "partial=13\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let n = string.len(line)\n  mut sum = 0\n  mut i = 0\n  mut stopped = false\n  while i < n and not stopped\n    mut b = match string.byte_at(line, i)\n    when Some(v)\n      v\n    when None\n      32\n    end\n    while (b == 32 or b == 9 or b == 10 or b == 13) and i < n\n      i = i + 1\n      b = match string.byte_at(line, i)\n      when Some(v)\n        v\n      when None\n        32\n      end\n    end\n    if i >= n\n      stopped = true\n    else\n      mut sign = 1\n      if b == 45\n        sign = -1\n        i = i + 1\n      else if b == 43\n        i = i + 1\n      end\n      mut num = 0\n      mut has_digit = false\n      mut reading = true\n      while reading\n        let cb = match string.byte_at(line, i)\n        when Some(v)\n          v\n        when None\n          -1\n        end\n        if cb >= 48 and cb <= 57\n          num = num * 10 + (cb - 48)\n          has_digit = true\n          i = i + 1\n        else\n          reading = false\n        end\n      end\n      if has_digit\n        let value = num * sign\n        if value < 0\n          stopped = true\n        else\n          sum = sum + value\n        end\n      else\n        stopped = true\n      end\n    end\n  end\n  println(\"partial=#{sum}\")\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "055-two-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777198751,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 43262,
+      "code_len": 1511,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 435,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 602,
+      "stdout": "found=0,1\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut nums: List<Int> = []\n  mut cur = 0\n  mut sign = 1\n  mut in_num = false\n  let n = string.len(s)\n  mut i = 0\n  while i < n\n    let bopt = string.byte_at(s, i)\n    match bopt\n    when Some(b)\n      if b >= 48 and b <= 57\n        cur = cur * 10 + (b - 48)\n        in_num = true\n      else if b == 45 and not in_num\n        sign = -1\n        in_num = true\n      else\n        if in_num\n          nums = list.push(nums, cur * sign)\n          cur = 0\n          sign = 1\n          in_num = false\n        end\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if in_num\n    nums = list.push(nums, cur * sign)\n  end\n  nums\nend\n\nfn get_int(_ xs: List<Int>, _ i: Int) -> Int\n  match xs.get(i)\n  when Some(v)\n    v\n  when None\n    0\n  end\nend\n\nfn read_or_empty() -> String\n  match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\nend\n\nlet line1 = read_or_empty()\nlet line2 = read_or_empty()\nlet nums = parse_ints(line1)\nlet t_opt = string.parse_int(string.trim(line2))\nlet target = match t_opt\nwhen Some(n)\n  n\nwhen None\n  0\nend\n\nlet total = nums.len()\nmut found = false\nmut fi = 0\nmut fj = 0\nmut i = 0\nwhile i < total and not found\n  mut j = i + 1\n  while j < total and not found\n    let a = get_int(nums, i)\n    let b = get_int(nums, j)\n    if a + b == target\n      fi = i\n      fj = j\n      found = true\n    end\n    j = j + 1\n  end\n  i = i + 1\nend\n\nif found\n  println(\"found=#{fi},#{fj}\")\nelse\n  println(\"none\")\nend",
+  "overall": "pass"
+}

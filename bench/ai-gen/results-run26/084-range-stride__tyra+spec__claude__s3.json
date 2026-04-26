@@ -1,0 +1,36 @@
+{
+  "prompt_id": "084-range-stride",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777201786,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 18742,
+      "code_len": 2444,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 418,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 473,
+      "stdout": "0 3 6 9 12 15 18",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let input = io.read_to_end()\n  let n = string.len(input)\n  mut nums = [0, 0, 0]\n  mut idx = 0\n  mut i = 0\n  mut cur = 0\n  mut sign = 1\n  mut in_num = false\n  while i < n\n    let b = match string.byte_at(input, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    let is_digit = b >= 48 and b <= 57\n    let is_minus = b == 45\n    let is_plus = b == 43\n    if is_digit\n      if not in_num\n        in_num = true\n        cur = 0\n      end\n      cur = cur * 10 + (b - 48)\n    else if is_minus and not in_num\n      in_num = true\n      cur = 0\n      sign = -1\n    else if is_plus and not in_num\n      in_num = true\n      cur = 0\n      sign = 1\n    else\n      if in_num\n        if idx < 3\n          mut tmp = [0, 0, 0]\n          mut k = 0\n          while k < 3\n            if k == idx\n              tmp = list.push(list_take(tmp, k), cur * sign)\n            else\n              let v = match list.get(nums, k)\n              when Some(x)\n                x\n              when None\n                0\n              end\n              tmp = list.push(list_take(tmp, k), v)\n            end\n            k = k + 1\n          end\n          nums = tmp\n        end\n        idx = idx + 1\n        in_num = false\n        sign = 1\n      end\n    end\n    i = i + 1\n  end\n  if in_num\n    if idx < 3\n      mut tmp2 = [0, 0, 0]\n      mut k2 = 0\n      while k2 < 3\n        if k2 == idx\n          tmp2 = list.push(list_take(tmp2, k2), cur * sign)\n        else\n          let v2 = match list.get(nums, k2)\n          when Some(x)\n            x\n          when None\n            0\n          end\n          tmp2 = list.push(list_take(tmp2, k2), v2)\n        end\n        k2 = k2 + 1\n      end\n      nums = tmp2\n    end\n    idx = idx + 1\n  end\n  let a = match list.get(nums, 0)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  let b_end = match list.get(nums, 1)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  let s = match list.get(nums, 2)\n  when Some(x)\n    x\n  when None\n    1\n  end\n  mut out = \"\"\n  mut v = a\n  mut first = true\n  while v < b_end\n    if first\n      out = \"#{v}\"\n      first = false\n    else\n      out = \"#{out} #{v}\"\n    end\n    v = v + s\n  end\n  print(out)\nend\n\nfn list_take(_ xs: List<Int>, _ n: Int) -> List<Int>\n  mut result = []\n  mut i = 0\n  while i < n\n    let v = match list.get(xs, i)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    result = list.push(result, v)\n    i = i + 1\n  end\n  result\nend",
+  "overall": "pass"
+}

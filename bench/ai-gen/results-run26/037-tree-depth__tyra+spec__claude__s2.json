@@ -1,0 +1,36 @@
+{
+  "prompt_id": "037-tree-depth",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777198014,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11281,
+      "code_len": 419,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 384,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 461,
+      "stdout": "depth=3",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "type Tree =\n  | Leaf\n  | Node(left: Tree, right: Tree)\n\nfn depth(_ t: Tree) -> Int\n  match t\n  when Leaf\n    0\n  when Node(left: l, right: r)\n    let dl = depth(l)\n    let dr = depth(r)\n    if dl >= dr\n      1 + dl\n    else\n      1 + dr\n    end\n  end\nend\n\nlet tree = Tree.Node(\n  left: Tree.Node(left: Tree.Leaf, right: Tree.Node(left: Tree.Leaf, right: Tree.Leaf)),\n  right: Tree.Leaf,\n)\n\nprint(\"depth=#{depth(tree)}\")",
+  "overall": "pass"
+}

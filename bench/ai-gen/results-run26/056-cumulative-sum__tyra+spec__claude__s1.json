@@ -1,0 +1,36 @@
+{
+  "prompt_id": "056-cumulative-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777198866,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 21210,
+      "code_len": 1047,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 399,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 460,
+      "stdout": "1 3 6 10 15\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(l)\n  l\nwhen None\n  \"\"\nend\n\nlet n = string.len(line)\nmut i = 0\nmut output = \"\"\nmut running = 0\nmut first = true\nmut current = 0\nmut sign = 1\nmut in_num = false\nmut has_digit = false\n\nwhile i < n\n  let b = match string.byte_at(line, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if b == 32 or b == 9 or b == 13 or b == 10\n    if has_digit\n      running = running + sign * current\n      if first\n        output = \"#{running}\"\n        first = false\n      else\n        output = \"#{output} #{running}\"\n      end\n    end\n    current = 0\n    sign = 1\n    in_num = false\n    has_digit = false\n  else if b == 45 and not in_num\n    sign = -1\n    in_num = true\n  else if b == 43 and not in_num\n    sign = 1\n    in_num = true\n  else\n    current = current * 10 + (b - 48)\n    in_num = true\n    has_digit = true\n  end\n  i = i + 1\nend\n\nif has_digit\n  running = running + sign * current\n  if first\n    output = \"#{running}\"\n  else\n    output = \"#{output} #{running}\"\n  end\nend\n\nprintln(output)",
+  "overall": "pass"
+}

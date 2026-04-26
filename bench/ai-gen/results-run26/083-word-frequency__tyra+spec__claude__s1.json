@@ -1,0 +1,36 @@
+{
+  "prompt_id": "083-word-frequency",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777200531,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 89469,
+      "code_len": 1906,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 401,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 507,
+      "stdout": "top=the=4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn is_ws_byte(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nlet input = io.read_to_end()\nlet n = string.len(input)\n\nmut starts: List<Int> = []\nmut lens: List<Int> = []\nmut counts: List<Int> = []\n\nmut i = 0\nmut tok_start = -1\n\nwhile i <= n\n  mut at_boundary = false\n  if i == n\n    at_boundary = true\n  else\n    match string.byte_at(input, i)\n    when Some(b)\n      if is_ws_byte(b)\n        at_boundary = true\n      end\n    when None\n      at_boundary = true\n    end\n  end\n\n  if at_boundary\n    if tok_start >= 0\n      let tok = string.substring(input, tok_start, i)\n      mut found = -1\n      mut k = 0\n      let nk = list.len(starts)\n      while k < nk\n        let s = starts[k]\n        let l = lens[k]\n        let existing = string.substring(input, s, s + l)\n        if existing == tok\n          found = k\n          k = nk\n        else\n          k = k + 1\n        end\n      end\n      if found >= 0\n        mut new_counts: List<Int> = []\n        mut j = 0\n        let nc = list.len(counts)\n        while j < nc\n          let c = counts[j]\n          if j == found\n            new_counts = list.push(new_counts, c + 1)\n          else\n            new_counts = list.push(new_counts, c)\n          end\n          j = j + 1\n        end\n        counts = new_counts\n      else\n        starts = list.push(starts, tok_start)\n        lens = list.push(lens, i - tok_start)\n        counts = list.push(counts, 1)\n      end\n      tok_start = -1\n    end\n  else\n    if tok_start < 0\n      tok_start = i\n    end\n  end\n\n  i = i + 1\nend\n\nmut best_idx = 0\nmut best_count = 0\nmut p = 0\nlet np = list.len(counts)\nwhile p < np\n  let c = counts[p]\n  if c > best_count\n    best_count = c\n    best_idx = p\n  end\n  p = p + 1\nend\n\nif np > 0\n  let s = starts[best_idx]\n  let l = lens[best_idx]\n  let tok = string.substring(input, s, s + l)\n  println(\"top=#{tok}=#{best_count}\")\nend",
+  "overall": "pass"
+}
