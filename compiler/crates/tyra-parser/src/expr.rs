@@ -127,6 +127,22 @@ fn parse_postfix(ts: &mut TokenStream, report: &mut Report, mut expr: Expr) -> E
                             span,
                         };
                     }
+                    // Contextual keywords as field names. Mirrors the
+                    // expression-position relaxation above so a record
+                    // declared with `value Foo ... value: Int ... end`
+                    // can be read back as `r.value`.
+                    TokenKind::Value | TokenKind::Data | TokenKind::Type
+                    | TokenKind::Trait | TokenKind::Impl => {
+                        let name = crate::token_stream::keyword_as_ident(ts.peek())
+                            .map(str::to_string)
+                            .unwrap_or_default();
+                        let end = ts.advance().span;
+                        let span = expr.span.merge(end);
+                        expr = Expr {
+                            kind: ExprKind::FieldAccess(Box::new(expr), name),
+                            span,
+                        };
+                    }
                     _ => {
                         let span = ts.peek_span();
                         report.add(
