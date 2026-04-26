@@ -1,0 +1,36 @@
+{
+  "prompt_id": "073-select-even-index",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777130202,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 14261,
+      "code_len": 926,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 356,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 443,
+      "stdout": "10 30 50 70\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line_opt = io.read_line()\n  let line = match line_opt\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let n = string.len(line)\n  mut out = \"\"\n  mut idx = 0\n  mut i = 0\n  mut tok = \"\"\n  mut first = true\n  while i < n\n    let b_opt = string.byte_at(line, i)\n    let b = match b_opt\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if b == 32 or b == 9\n      if string.len(tok) > 0\n        if idx % 2 == 0\n          if first\n            out = \"#{tok}\"\n            first = false\n          else\n            out = \"#{out} #{tok}\"\n          end\n        end\n        idx = idx + 1\n        tok = \"\"\n      end\n    else\n      tok = \"#{tok}#{string.from_byte(b)}\"\n    end\n    i = i + 1\n  end\n  if string.len(tok) > 0\n    if idx % 2 == 0\n      if first\n        out = \"#{tok}\"\n        first = false\n      else\n        out = \"#{out} #{tok}\"\n      end\n    end\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

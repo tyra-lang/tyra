@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777132159,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 71203,
+      "code_len": 1944,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 435,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 546,
+      "stdout": "9 6 5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  mut current = 0\n  mut sign = 1\n  mut has_digit = false\n  while i < n\n    let b = match string.byte_at(s, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if b == 32 or b == 9 or b == 10 or b == 13\n      if has_digit\n        result = list.push(result, current * sign)\n        current = 0\n        sign = 1\n        has_digit = false\n      end\n    else if b == 45 and not has_digit\n      sign = -1\n    else if b == 43 and not has_digit\n      sign = 1\n    else if b >= 48 and b <= 57\n      current = current * 10 + (b - 48)\n      has_digit = true\n    end\n    i = i + 1\n  end\n  if has_digit\n    result = list.push(result, current * sign)\n  end\n  result\nend\n\nfn get_at(_ xs: List<Int>, _ i: Int) -> Int\n  match xs.get(i)\n  when Some(v)\n    v\n  when None\n    0\n  end\nend\n\nfn max_index(_ xs: List<Int>) -> Int\n  mut idx = 0\n  mut best = get_at(xs, 0)\n  mut i = 1\n  let n = xs.len()\n  while i < n\n    let v = get_at(xs, i)\n    if v > best\n      best = v\n      idx = i\n    end\n    i = i + 1\n  end\n  idx\nend\n\nfn remove_at(_ xs: List<Int>, _ idx: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  let n = xs.len()\n  while i < n\n    if i != idx\n      result = list.push(result, get_at(xs, i))\n    end\n    i = i + 1\n  end\n  result\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut nums = parse_ints(line1)\nlet k = match string.parse_int(string.trim(line2))\nwhen Some(v)\n  v\nwhen None\n  0\nend\n\nlet total = nums.len()\nlet take = if k < total\n  k\nelse\n  total\nend\n\nmut output = \"\"\nmut i = 0\nwhile i < take\n  let mi = max_index(nums)\n  let v = get_at(nums, mi)\n  if i == 0\n    output = \"#{v}\"\n  else\n    output = \"#{output} #{v}\"\n  end\n  nums = remove_at(nums, mi)\n  i = i + 1\nend\nprintln(output)",
+  "overall": "pass"
+}

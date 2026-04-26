@@ -1,0 +1,36 @@
+{
+  "prompt_id": "011-unique-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777127180,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 27477,
+      "code_len": 1459,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 462,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 468,
+      "stdout": "1 2 3 4 5 6 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn insert_sorted(_ sorted: List<Int>, _ v: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut inserted = false\n  let slen = sorted.len()\n  mut k = 0\n  while k < slen\n    match sorted.get(k)\n    when Some(s)\n      if not inserted and v < s\n        result = list.push(result, v)\n        inserted = true\n      end\n      result = list.push(result, s)\n    when None\n      ()\n    end\n    k = k + 1\n  end\n  if not inserted\n    result = list.push(result, v)\n  end\n  result\nend\n\nfn add_token(_ nums: List<Int>, _ tok: String) -> List<Int>\n  if string.is_empty(tok)\n    nums\n  else\n    match string.parse_int(tok)\n    when Some(v)\n      if list.contains(nums, v)\n        nums\n      else\n        insert_sorted(nums, v)\n      end\n    when None\n      nums\n    end\n  end\nend\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut nums: List<Int> = []\nmut cur = \"\"\nmut i = 0\nwhile i < n\n  match string.byte_at(input, i)\n  when Some(b)\n    if is_ws(b)\n      nums = add_token(nums, cur)\n      cur = \"\"\n    else\n      cur = \"#{cur}#{string.from_byte(b)}\"\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\nnums = add_token(nums, cur)\n\nmut out = \"\"\nlet total = nums.len()\nmut m = 0\nwhile m < total\n  match nums.get(m)\n  when Some(v)\n    if m == 0\n      out = \"#{v}\"\n    else\n      out = \"#{out} #{v}\"\n    end\n  when None\n    ()\n  end\n  m = m + 1\nend\nprintln(out)",
+  "overall": "pass"
+}

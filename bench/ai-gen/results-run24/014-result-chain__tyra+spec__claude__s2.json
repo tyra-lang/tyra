@@ -1,0 +1,36 @@
+{
+  "prompt_id": "014-result-chain",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777127367,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8659,
+      "code_len": 444,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 457,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 462,
+      "stdout": "result=20\nerror=non-positive\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "fn double_positive(_ n: Int) -> Result<Int, String>\n  if n > 0\n    Ok(2 * n)\n  else\n    Err(\"non-positive\")\n  end\nend\n\nfn add_ten(_ n: Int) -> Result<Int, String>\n  Ok(n + 10)\nend\n\nfn run(_ n: Int) -> Result<Int, String>\n  let a = double_positive(n)?\n  let b = add_ten(a)?\n  Ok(b)\nend\n\nfn report(_ n: Int) -> Unit\n  match run(n)\n  when Ok(v)\n    println(\"result=#{v}\")\n  when Err(msg)\n    println(\"error=#{msg}\")\n  end\nend\n\nreport(5)\nreport(-3)",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "088-histogram",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777131905,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 15494,
+      "code_len": 1994,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 381,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 473,
+      "stdout": "0: \n1: ##\n2: #\n3: ###\n4: #\n5: ###\n6: #\n7: #\n8: #\n9: ###\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let n = string.len(line)\n  mut counts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n  mut i = 0\n  while i < n\n    let b = match string.byte_at(line, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if b >= 48 and b <= 57\n      let d = b - 48\n      mut new_counts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n      mut j = 0\n      while j < 10\n        let cur = match new_counts.get(j)\n        when Some(v)\n          v\n        when None\n          0\n        end\n        let old = match counts.get(j)\n        when Some(v)\n          v\n        when None\n          0\n        end\n        if j == d\n          new_counts = update_at(new_counts, j, old + 1)\n        else\n          new_counts = update_at(new_counts, j, old)\n        end\n        j = j + 1\n      end\n      counts = new_counts\n    end\n    i = i + 1\n  end\n  mut d = 0\n  while d < 10\n    let c = match counts.get(d)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    mut bars = \"\"\n    mut k = 0\n    while k < c\n      bars = \"#{bars}#\"\n      k = k + 1\n    end\n    println(\"#{d}: #{bars}\")\n    d = d + 1\n  end\nend\n\nfn update_at(_ xs: List<Int>, _ idx: Int, _ val: Int) -> List<Int>\n  mut result = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n  mut i = 0\n  while i < 10\n    if i == idx\n      result = set_slot(result, i, val)\n    else\n      let old = match xs.get(i)\n      when Some(v)\n        v\n      when None\n        0\n      end\n      result = set_slot(result, i, old)\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn set_slot(_ xs: List<Int>, _ idx: Int, _ val: Int) -> List<Int>\n  mut out: List<Int> = []\n  mut i = 0\n  while i < 10\n    if i == idx\n      out = list_push(out, val)\n    else\n      let old = match xs.get(i)\n      when Some(v)\n        v\n      when None\n        0\n      end\n      out = list_push(out, old)\n    end\n    i = i + 1\n  end\n  out\nend\n\nfn list_push(_ xs: List<Int>, _ x: Int) -> List<Int>\n  __list_int_push(xs, x)\nend",
+  "overall": "pass"
+}

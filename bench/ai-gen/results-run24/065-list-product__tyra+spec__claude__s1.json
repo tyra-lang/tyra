@@ -1,0 +1,36 @@
+{
+  "prompt_id": "065-list-product",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777129650,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 24658,
+      "code_len": 882,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 382,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 490,
+      "stdout": "product=210\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut product = 1\nmut i = 0\nlet n = string.len(line)\n\nwhile i < n\n  match string.byte_at(line, i)\n  when Some(b)\n    if b == 32 or b == 9 or b == 10 or b == 13\n      i = i + 1\n    else\n      mut sign = 1\n      if b == 45\n        sign = -1\n        i = i + 1\n      else if b == 43\n        i = i + 1\n      end\n      mut num = 0\n      mut digit_running = true\n      while digit_running and i < n\n        match string.byte_at(line, i)\n        when Some(c)\n          if c >= 48 and c <= 57\n            num = num * 10 + (c - 48)\n            i = i + 1\n          else\n            digit_running = false\n          end\n        when None\n          digit_running = false\n        end\n      end\n      product = product * sign * num\n    end\n  when None\n    i = i + 1\n  end\nend\n\nprintln(\"product=#{product}\")",
+  "overall": "pass"
+}

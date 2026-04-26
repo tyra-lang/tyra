@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777132060,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 45296,
+      "code_len": 2108,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 456,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 523,
+      "stdout": "9 6 5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn unwrap_int(_ opt: Option<Int>, _ default: Int) -> Int\n  match opt\n  when Some(v)\n    v\n  when None\n    default\n  end\nend\n\nfn unwrap_str(_ opt: Option<String>) -> String\n  match opt\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\nend\n\nfn is_space(_ c: Int) -> Bool\n  c == 32 or c == 9 or c == 13 or c == 10\nend\n\nfn flush_token(_ acc: List<Int>, _ token: String) -> List<Int>\n  if string.is_empty(token)\n    acc\n  else\n    match string.parse_int(token)\n    when Some(v)\n      list.push(acc, v)\n    when None\n      acc\n    end\n  end\nend\n\nfn parse_tokens(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut current = \"\"\n  mut i = 0\n  let n = string.len(s)\n  while i < n\n    let b = unwrap_int(string.byte_at(s, i), 0)\n    if is_space(b)\n      result = flush_token(result, current)\n      current = \"\"\n    else\n      current = \"#{current}#{string.from_byte(b)}\"\n    end\n    i = i + 1\n  end\n  result = flush_token(result, current)\n  result\nend\n\nfn remove_at(_ xs: List<Int>, _ idx: Int) -> List<Int>\n  mut out: List<Int> = []\n  mut i = 0\n  let n = xs.len()\n  while i < n\n    if i != idx\n      out = list.push(out, unwrap_int(xs.get(i), 0))\n    end\n    i = i + 1\n  end\n  out\nend\n\nfn max_index(_ xs: List<Int>) -> Int\n  mut best = 0\n  mut best_val = unwrap_int(xs.get(0), 0)\n  mut i = 1\n  let n = xs.len()\n  while i < n\n    let v = unwrap_int(xs.get(i), 0)\n    if v > best_val\n      best_val = v\n      best = i\n    end\n    i = i + 1\n  end\n  best\nend\n\nfn main() -> Unit\n  let line1 = unwrap_str(io.read_line())\n  let line2 = unwrap_str(io.read_line())\n  let nums = parse_tokens(line1)\n  let k_raw = unwrap_int(string.parse_int(string.trim(line2)), 0)\n  let total = nums.len()\n  mut k = k_raw\n  if k > total\n    k = total\n  end\n  if k < 0\n    k = 0\n  end\n\n  mut remaining = nums\n  mut result = \"\"\n  mut i = 0\n  while i < k\n    let idx = max_index(remaining)\n    let v = unwrap_int(remaining.get(idx), 0)\n    if i == 0\n      result = \"#{v}\"\n    else\n      result = \"#{result} #{v}\"\n    end\n    remaining = remove_at(remaining, idx)\n    i = i + 1\n  end\n  println(result)\nend",
+  "overall": "pass"
+}

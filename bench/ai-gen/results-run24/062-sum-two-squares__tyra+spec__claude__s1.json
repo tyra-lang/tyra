@@ -1,0 +1,26 @@
+{
+  "prompt_id": "062-sum-two-squares",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777129517,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 16891,
+      "code_len": 1568,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 175,
+      "stderr": "                 ^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:72:42\n   |\n72 |   let a = match nums.get(0) when Some(x) x when None 0 end\n   |                                          ^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:72:44\n   |\n72 |   let a = match nums.get(0) when Some(x) x when None 0 end\n   |                                            ^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:72:54\n   |\n72 |   let a = match nums.get(0) when Some(x) x when None 0 end\n   |                                                      ^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:72:56\n   |\n72 |   let a = match nums.get(0) when Some(x) x when None 0 end\n   |                                                        ^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:73:29\n   |\n73 |   let b = match nums.get(1) when Some(x) x when None 0 end\n   |                             ^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:73:42\n   |\n73 |   let b = match nums.get(1) when Some(x) x when None 0 end\n   |                                          ^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:73:44\n   |\n73 |   let b = match nums.get(1) when Some(x) x when None 0 end\n   |                                            ^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:73:54\n   |\n73 |   let b = match nums.get(1) when Some(x) x when None 0 end\n   |                                                      ^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:73:56\n   |\n73 |   let b = match nums.get(1) when Some(x) x when None 0 end\n   |                                                        ^^^ expected newline here\n\n15 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nfn parse_two(_ s: String) -> Result<Int, String>\n  let n = string.len(s)\n  mut i = 0\n  mut nums = [0, 0]\n  mut idx = 0\n  while idx < 2\n    while i < n\n      match string.byte_at(s, i)\n      when Some(b)\n        if b == 32 or b == 9 or b == 10 or b == 13\n          i = i + 1\n        else\n          i = n + 1\n        end\n      when None\n        i = n\n      end\n      if i == n + 1\n        i = i - 1\n        i = n\n      end\n    end\n    if i >= n\n      return Err(\"not enough\")\n    end\n    mut sign = 1\n    match string.byte_at(s, i)\n    when Some(b)\n      if b == 45\n        sign = -1\n        i = i + 1\n      else if b == 43\n        i = i + 1\n      end\n    when None\n      return Err(\"eof\")\n    end\n    mut val = 0\n    mut got = false\n    while i < n\n      match string.byte_at(s, i)\n      when Some(b)\n        if b >= 48 and b <= 57\n          val = val * 10 + (b - 48)\n          got = true\n          i = i + 1\n        else\n          i = n + 1\n        end\n      when None\n        i = n\n      end\n      if i == n + 1\n        i = n\n        i = i\n      end\n    end\n    if not got\n      return Err(\"no digit\")\n    end\n    if idx == 0\n      nums = [val * sign, 0]\n    else\n      let a = match nums.get(0) when Some(x) x when None 0 end\n      nums = [a, val * sign]\n    end\n    idx = idx + 1\n  end\n  let a = match nums.get(0) when Some(x) x when None 0 end\n  let b = match nums.get(1) when Some(x) x when None 0 end\n  Ok(a * a + b * b)\nend\n\nlet input = io.read_to_end()\nmatch parse_two(input)\nwhen Ok(r)\n  print(\"r=#{r}\")\nwhen Err(_)\n  print(\"r=0\")\nend",
+  "overall": "compile_fail"
+}

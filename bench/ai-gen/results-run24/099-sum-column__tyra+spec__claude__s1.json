@@ -1,0 +1,36 @@
+{
+  "prompt_id": "099-sum-column",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777132540,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 35652,
+      "code_len": 1384,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 375,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 518,
+      "stdout": "sum=39\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 13\nend\n\nfn skip_ws(_ s: String, _ start: Int, _ n: Int) -> Int\n  mut i = start\n  mut stop = false\n  while i < n and not stop\n    match string.byte_at(s, i)\n    when Some(b)\n      if is_ws(b)\n        i = i + 1\n      else\n        stop = true\n      end\n    when None\n      stop = true\n    end\n  end\n  i\nend\n\nfn skip_token(_ s: String, _ start: Int, _ n: Int) -> Int\n  mut i = start\n  mut stop = false\n  while i < n and not stop\n    match string.byte_at(s, i)\n    when Some(b)\n      if is_ws(b)\n        stop = true\n      else\n        i = i + 1\n      end\n    when None\n      stop = true\n    end\n  end\n  i\nend\n\nfn second_token(_ s: String) -> Option<String>\n  let n = string.len(s)\n  let a = skip_ws(s, 0, n)\n  let b = skip_token(s, a, n)\n  let c = skip_ws(s, b, n)\n  let d = skip_token(s, c, n)\n  if c == d\n    None\n  else\n    Some(string.substring(s, c, d))\n  end\nend\n\nfn line_value(_ line: String) -> Int\n  if string.is_empty(line)\n    0\n  else\n    match second_token(line)\n    when Some(tok)\n      match string.parse_int(tok)\n      when Some(n)\n        n\n      when None\n        0\n      end\n    when None\n      0\n    end\n  end\nend\n\nmut sum = 0\nmut eof = false\nwhile not eof\n  match io.read_line()\n  when Some(line)\n    sum = sum + line_value(line)\n  when None\n    eof = true\n  end\nend\nprintln(\"sum=#{sum}\")",
+  "overall": "pass"
+}

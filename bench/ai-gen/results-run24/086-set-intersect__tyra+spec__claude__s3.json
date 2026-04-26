@@ -1,0 +1,36 @@
+{
+  "prompt_id": "086-set-intersect",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777131694,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 52105,
+      "code_len": 2015,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 366,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 424,
+      "stdout": "1 3 4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  mut cur = 0\n  mut neg = false\n  mut in_num = false\n  while i < n\n    match string.byte_at(s, i)\n    when Some(b)\n      if b >= 48 and b <= 57\n        cur = cur * 10 + (b - 48)\n        in_num = true\n      else if b == 45 and not in_num\n        neg = true\n        in_num = true\n      else\n        if in_num\n          if neg\n            result = list.push(result, -cur)\n          else\n            result = list.push(result, cur)\n          end\n          cur = 0\n          neg = false\n          in_num = false\n        end\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if in_num\n    if neg\n      result = list.push(result, -cur)\n    else\n      result = list.push(result, cur)\n    end\n  end\n  result\nend\n\nfn sorted_insert(_ xs: List<Int>, _ x: Int) -> List<Int>\n  mut tmp: List<Int> = []\n  mut inserted = false\n  for y in xs\n    if not inserted and x < y\n      tmp = list.push(tmp, x)\n      inserted = true\n    end\n    tmp = list.push(tmp, y)\n  end\n  if not inserted\n    tmp = list.push(tmp, x)\n  end\n  tmp\nend\n\nfn sort_list(_ xs: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  for x in xs\n    result = sorted_insert(result, x)\n  end\n  result\nend\n\nfn intersect_unique(_ a: List<Int>, _ b: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  for x in a\n    if list.contains(b, x) and not list.contains(result, x)\n      result = list.push(result, x)\n    end\n  end\n  result\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet a = parse_ints(line1)\nlet b = parse_ints(line2)\nlet inter = intersect_unique(a, b)\nlet result = sort_list(inter)\n\nif result.len() == 0\n  println(\"empty\")\nelse\n  mut out = \"\"\n  mut first = true\n  for x in result\n    if first\n      out = \"#{x}\"\n      first = false\n    else\n      out = \"#{out} #{x}\"\n    end\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

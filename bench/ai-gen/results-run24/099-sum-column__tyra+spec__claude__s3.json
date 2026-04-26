@@ -1,0 +1,38 @@
+{
+  "prompt_id": "099-sum-column",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777132614,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 15641,
+      "code_len": 1734,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 383,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 437,
+      "stdout": "sum=0\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": false,
+      "check_details": [
+        "missing marker: 'sum=39'"
+      ]
+    }
+  },
+  "code": "import io\nimport string\n\nmut total = 0\nmut done = false\nwhile not done\n  match io.read_line()\n  when None\n    done = true\n  when Some(line)\n    let n = string.len(line)\n    mut i = 0\n    while i < n\n      match string.byte_at(line, i)\n      when Some(b)\n        if b == 32 or b == 9\n          i = i + 1\n        else\n          i = n + 1\n        end\n      when None\n        i = n\n      end\n    end\n    if i == n + 1\n      mut start = i - 1\n      while start < n\n        match string.byte_at(line, start)\n        when Some(b)\n          if b == 32 or b == 9\n            start = n + 2\n          else\n            start = start + 1\n          end\n        when None\n          start = n\n        end\n      end\n      let first_end = if start >= n + 2\n        start - 2\n      else\n        start\n      end\n      mut j = first_end\n      while j < n\n        match string.byte_at(line, j)\n        when Some(b)\n          if b == 32 or b == 9\n            j = j + 1\n          else\n            j = n + 1\n          end\n        when None\n          j = n\n        end\n      end\n      if j == n + 1\n        let tok_start = j - 1\n        mut k = tok_start\n        while k < n\n          match string.byte_at(line, k)\n          when Some(b)\n            if b == 32 or b == 9\n              k = n + 1\n            else\n              k = k + 1\n            end\n          when None\n            k = n\n          end\n        end\n        let tok_end = if k == n + 1\n          k - 1\n        else\n          k\n        end\n        let token = string.substring(line, tok_start, tok_end)\n        match string.parse_int(token)\n        when Some(v)\n          total = total + v\n        when None\n          total = total\n        end\n      end\n    end\n  end\nend\nprintln(\"sum=#{total}\")",
+  "overall": "check_fail"
+}

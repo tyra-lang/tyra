@@ -1,0 +1,26 @@
+{
+  "prompt_id": "055-two-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777129116,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 16211,
+      "code_len": 1511,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 11,
+      "stderr": "tyra:61:47\n   |\n61 | let line1 = match io.read_line() when Some(s) s when None \"\" end\n   |                                               ^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:61:49\n   |\n61 | let line1 = match io.read_line() when Some(s) s when None \"\" end\n   |                                                 ^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:61:59\n   |\n61 | let line1 = match io.read_line() when Some(s) s when None \"\" end\n   |                                                           ^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:61:62\n   |\n61 | let line1 = match io.read_line() when Some(s) s when None \"\" end\n   |                                                              ^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:62:34\n   |\n62 | let line2 = match io.read_line() when Some(s) s when None \"\" end\n   |                                  ^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:62:47\n   |\n62 | let line2 = match io.read_line() when Some(s) s when None \"\" end\n   |                                               ^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:62:49\n   |\n62 | let line2 = match io.read_line() when Some(s) s when None \"\" end\n   |                                                 ^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:62:59\n   |\n62 | let line2 = match io.read_line() when Some(s) s when None \"\" end\n   |                                                           ^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:62:62\n   |\n62 | let line2 = match io.read_line() when Some(s) s when None \"\" end\n   |                                                              ^^^ expected newline here\n\n20 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn split_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut start = 0\n  mut i = 0\n  while i < n\n    let b = match string.byte_at(s, i)\n      when Some(x)\n        x\n      when None\n        0\n      end\n    if b == 32 or b == 9\n      if start < i\n        let tok = string.substring(s, start, i)\n        match string.parse_int(tok)\n        when Some(v)\n          result = list.push(result, v)\n        when None\n          ()\n        end\n      end\n      start = i + 1\n    end\n    i = i + 1\n  end\n  if start < n\n    let tok = string.substring(s, start, n)\n    match string.parse_int(tok)\n    when Some(v)\n      result = list.push(result, v)\n    when None\n      ()\n    end\n  end\n  result\nend\n\nfn find_pair(_ xs: List<Int>, _ t: Int) -> Option<String>\n  let n = xs.len()\n  mut i = 0\n  while i < n\n    mut j = i + 1\n    while j < n\n      let a = match xs.get(i) when Some(v) v when None 0 end\n      let b = match xs.get(j) when Some(v) v when None 0 end\n      if a + b == t\n        return Some(\"found=#{i},#{j}\")\n      end\n      j = j + 1\n    end\n    i = i + 1\n  end\n  None\nend\n\nlet line1 = match io.read_line() when Some(s) s when None \"\" end\nlet line2 = match io.read_line() when Some(s) s when None \"\" end\n\nlet nums = split_ints(string.trim(line1))\nlet target = match string.parse_int(string.trim(line2))\n  when Some(v)\n    v\n  when None\n    0\n  end\n\nmatch find_pair(nums, target)\nwhen Some(msg)\n  println(msg)\nwhen None\n  println(\"none\")\nend",
+  "overall": "compile_fail"
+}

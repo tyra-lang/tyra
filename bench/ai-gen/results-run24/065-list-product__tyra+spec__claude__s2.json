@@ -1,0 +1,36 @@
+{
+  "prompt_id": "065-list-product",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777129676,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 32387,
+      "code_len": 753,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 515,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 530,
+      "stdout": "product=210\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line_opt = io.read_line()\nlet line = match line_opt\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut product = 1\nmut i = 0\nlet n = string.len(line)\nmut in_num = false\nmut sign = 1\nmut cur = 0\n\nwhile i < n\n  let b = match string.byte_at(line, i)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  if b == 32 or b == 9 or b == 13 or b == 10\n    if in_num\n      product = product * (sign * cur)\n      in_num = false\n      sign = 1\n      cur = 0\n    end\n  else if b == 45 and not in_num\n    sign = -1\n    in_num = true\n  else if b == 43 and not in_num\n    sign = 1\n    in_num = true\n  else\n    cur = cur * 10 + (b - 48)\n    in_num = true\n  end\n  i = i + 1\nend\n\nif in_num\n  product = product * (sign * cur)\nend\n\nprintln(\"product=#{product}\")",
+  "overall": "pass"
+}

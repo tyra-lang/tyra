@@ -1,0 +1,36 @@
+{
+  "prompt_id": "025-average",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777127801,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 28098,
+      "code_len": 1051,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 380,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 516,
+      "stdout": "avg=25\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn flush(_ cur: String, _ sum: Int, _ count: Int) -> List<Int>\n  if string.is_empty(cur)\n    [sum, count]\n  else\n    match string.parse_int(cur)\n    when Some(v)\n      [sum + v, count + 1]\n    when None\n      [sum, count]\n    end\n  end\nend\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut sum = 0\nmut count = 0\nmut cur = \"\"\nmut i = 0\nwhile i < n\n  match string.byte_at(input, i)\n  when Some(b)\n    if is_ws(b)\n      let r = flush(cur, sum, count)\n      match r.get(0)\n      when Some(s)\n        sum = s\n      when None\n        ()\n      end\n      match r.get(1)\n      when Some(c)\n        count = c\n      when None\n        ()\n      end\n      cur = \"\"\n    else\n      cur = \"#{cur}#{string.from_byte(b)}\"\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\nlet r = flush(cur, sum, count)\nmatch r.get(0)\nwhen Some(s)\n  sum = s\nwhen None\n  ()\nend\nmatch r.get(1)\nwhen Some(c)\n  count = c\nwhen None\n  ()\nend\nlet avg = sum / count\nprintln(\"avg=#{avg}\")",
+  "overall": "pass"
+}

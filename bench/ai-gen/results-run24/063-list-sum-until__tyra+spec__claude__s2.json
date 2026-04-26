@@ -1,0 +1,36 @@
+{
+  "prompt_id": "063-list-sum-until",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777129580,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 20297,
+      "code_len": 664,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 399,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 494,
+      "stdout": "total=100\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut total = 0\nmut current = 0\nmut have = false\nmut done = false\nmut i = 0\nlet n = string.len(line)\n\nwhile i <= n\n  mut b = -1\n  if i < n\n    b = match string.byte_at(line, i)\n    when Some(x)\n      x\n    when None\n      -1\n    end\n  end\n\n  let is_digit = b >= 48 and b <= 57\n\n  if is_digit\n    current = current * 10 + (b - 48)\n    have = true\n  else\n    if have and not done\n      if total + current > 100\n        done = true\n      else\n        total = total + current\n      end\n    end\n    current = 0\n    have = false\n  end\n\n  i = i + 1\nend\n\nprintln(\"total=#{total}\")",
+  "overall": "pass"
+}

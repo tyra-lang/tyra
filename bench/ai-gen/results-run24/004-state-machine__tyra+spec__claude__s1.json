@@ -1,0 +1,36 @@
+{
+  "prompt_id": "004-state-machine",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777126944,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 7900,
+      "code_len": 472,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 124,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 435,
+      "stdout": "Red\nGreen\nYellow\nRed\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "type Color =\n  | Red\n  | Green\n  | Yellow\n\nfn label(_ c: Color) -> String\n  match c\n  when Red\n    \"Red\"\n  when Green\n    \"Green\"\n  when Yellow\n    \"Yellow\"\n  end\nend\n\nfn next(_ c: Color) -> Color\n  match c\n  when Red\n    Color.Green\n  when Green\n    Color.Yellow\n  when Yellow\n    Color.Red\n  end\nend\n\nmut state = Color.Red\nprintln(label(state))\nstate = next(state)\nprintln(label(state))\nstate = next(state)\nprintln(label(state))\nstate = next(state)\nprintln(label(state))",
+  "overall": "pass"
+}

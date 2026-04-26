@@ -1,0 +1,36 @@
+{
+  "prompt_id": "074-string-chars",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777130556,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8078,
+      "code_len": 282,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 493,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 499,
+      "stdout": "abc",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nmatch io.read_line()\nwhen Some(line)\n  let n = string.len(line)\n  mut i = 0\n  while i < n\n    match string.byte_at(line, i)\n    when Some(b)\n      print(string.from_byte(b))\n    when None\n      print(\"\")\n    end\n    i = i + 1\n  end\nwhen None\n  print(\"\")\nend",
+  "overall": "pass"
+}

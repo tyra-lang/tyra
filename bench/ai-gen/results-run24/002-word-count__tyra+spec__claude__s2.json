@@ -1,0 +1,36 @@
+{
+  "prompt_id": "002-word-count",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777126893,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10793,
+      "code_len": 454,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 640,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 486,
+      "stdout": "9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet text = io.read_to_end()\nlet n = string.len(text)\nmut count = 0\nmut in_word = false\nmut i = 0\nwhile i < n\n  let b = string.byte_at(text, i)\n  match b\n  when Some(c)\n    if c == 32 or c == 9 or c == 10 or c == 13 or c == 11 or c == 12\n      in_word = false\n    else\n      if not in_word\n        count = count + 1\n        in_word = true\n      end\n    end\n  when None\n    in_word = false\n  end\n  i = i + 1\nend\nprintln(\"#{count}\")",
+  "overall": "pass"
+}

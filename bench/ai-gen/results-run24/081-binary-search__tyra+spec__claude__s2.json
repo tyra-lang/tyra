@@ -1,0 +1,36 @@
+{
+  "prompt_id": "081-binary-search",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777130924,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 48793,
+      "code_len": 1705,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 361,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 475,
+      "stdout": "index=6",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  let n = string.len(s)\n  mut start: Int = -1\n  while i < n\n    mut b = 0\n    match string.byte_at(s, i)\n    when Some(v)\n      b = v\n    when None\n      ()\n    end\n    let is_ws = b == 32 or b == 9 or b == 10 or b == 13\n    if is_ws\n      if start >= 0\n        let tok = string.substring(s, start, i)\n        mut num = 0\n        match string.parse_int(tok)\n        when Some(v)\n          num = v\n        when None\n          ()\n        end\n        result = list.push(result, num)\n        start = -1\n      end\n    else\n      if start < 0\n        start = i\n      end\n    end\n    i = i + 1\n  end\n  if start >= 0\n    let tok = string.substring(s, start, n)\n    mut num = 0\n    match string.parse_int(tok)\n    when Some(v)\n      num = v\n    when None\n      ()\n    end\n    result = list.push(result, num)\n  end\n  result\nend\n\nfn bsearch(_ xs: List<Int>, _ t: Int) -> Int\n  mut lo = 0\n  mut hi = xs.len()\n  mut found: Int = -1\n  while lo < hi\n    let mid = (lo + hi) / 2\n    mut v = 0\n    match xs.get(mid)\n    when Some(x)\n      v = x\n    when None\n      ()\n    end\n    if v == t\n      found = mid\n      lo = hi\n    else if v < t\n      lo = mid + 1\n    else\n      hi = mid\n    end\n  end\n  found\nend\n\nmut line1 = \"\"\nmatch io.read_line()\nwhen Some(s)\n  line1 = s\nwhen None\n  ()\nend\n\nmut line2 = \"\"\nmatch io.read_line()\nwhen Some(s)\n  line2 = s\nwhen None\n  ()\nend\n\nlet xs = parse_ints(line1)\nlet trimmed = string.trim(line2)\nmut t = 0\nmatch string.parse_int(trimmed)\nwhen Some(v)\n  t = v\nwhen None\n  ()\nend\n\nlet idx = bsearch(xs, t)\nif idx < 0\n  print(\"not_found\")\nelse\n  print(\"index=#{idx}\")\nend",
+  "overall": "pass"
+}

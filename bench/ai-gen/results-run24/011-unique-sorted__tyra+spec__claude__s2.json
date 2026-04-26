@@ -1,0 +1,36 @@
+{
+  "prompt_id": "011-unique-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777127208,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 29647,
+      "code_len": 1235,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 412,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 647,
+      "stdout": "1 2 3 4 5 6 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn try_add(_ acc: List<Int>, _ buf: String) -> List<Int>\n  if string.is_empty(buf)\n    acc\n  else\n    match string.parse_int(buf)\n    when Some(v)\n      if list.contains(acc, v)\n        acc\n      else\n        list.push(acc, v)\n      end\n    when None\n      acc\n    end\n  end\nend\n\nfn is_ws(_ c: Int) -> Bool\n  c == 32 or c == 9 or c == 10 or c == 13\nend\n\nlet input = io.read_to_end()\nlet n = string.len(input)\n\nmut nums: List<Int> = []\nmut buf = \"\"\nmut i = 0\nwhile i < n\n  match string.byte_at(input, i)\n  when Some(c)\n    if is_ws(c)\n      nums = try_add(nums, buf)\n      buf = \"\"\n    else\n      buf = \"#{buf}#{string.from_byte(c)}\"\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\nnums = try_add(nums, buf)\n\nmut sorted: List<Int> = []\nfor x in nums\n  mut new_list: List<Int> = []\n  mut inserted = false\n  for y in sorted\n    if not inserted and x < y\n      new_list = list.push(new_list, x)\n      inserted = true\n    end\n    new_list = list.push(new_list, y)\n  end\n  if not inserted\n    new_list = list.push(new_list, x)\n  end\n  sorted = new_list\nend\n\nmut out = \"\"\nmut first = true\nfor v in sorted\n  if first\n    out = \"#{v}\"\n    first = false\n  else\n    out = \"#{out} #{v}\"\n  end\nend\nprintln(out)",
+  "overall": "pass"
+}

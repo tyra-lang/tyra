@@ -1,0 +1,36 @@
+{
+  "prompt_id": "054-line-numbers",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777129025,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8858,
+      "code_len": 544,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 357,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 435,
+      "stdout": "1: alpha\n2: beta\n3: gamma\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\n\nfn main() -> Unit\n  let text = io.read_to_end()\n  let total = string.len(text)\n  mut i = 0\n  mut line_no = 1\n  mut start = 0\n  while i < total\n    let b = match string.byte_at(text, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if b == 10\n      let line = string.substring(text, start, i)\n      println(\"#{line_no}: #{line}\")\n      line_no = line_no + 1\n      start = i + 1\n    end\n    i = i + 1\n  end\n  if start < total\n    let line = string.substring(text, start, total)\n    println(\"#{line_no}: #{line}\")\n  end\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "099-sum-column",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777132576,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 37213,
+      "code_len": 1954,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 370,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 478,
+      "stdout": "sum=39",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut sum = 0\nmut i = 0\n\nwhile i < n\n  mut line = \"\"\n  mut in_line = true\n  while in_line\n    if i >= n\n      in_line = false\n    else\n      match string.byte_at(input, i)\n      when Some(b)\n        if b == 10\n          i = i + 1\n          in_line = false\n        else\n          if b == 13\n            i = i + 1\n          else\n            line = \"#{line}#{string.from_byte(b)}\"\n            i = i + 1\n          end\n        end\n      when None\n        in_line = false\n      end\n    end\n  end\n\n  let llen = string.len(line)\n  mut j = 0\n\n  mut s1 = true\n  while s1\n    if j >= llen\n      s1 = false\n    else\n      match string.byte_at(line, j)\n      when Some(b)\n        if b == 32 or b == 9\n          j = j + 1\n        else\n          s1 = false\n        end\n      when None\n        s1 = false\n      end\n    end\n  end\n\n  mut t1 = true\n  while t1\n    if j >= llen\n      t1 = false\n    else\n      match string.byte_at(line, j)\n      when Some(b)\n        if b == 32 or b == 9\n          t1 = false\n        else\n          j = j + 1\n        end\n      when None\n        t1 = false\n      end\n    end\n  end\n\n  mut s2 = true\n  while s2\n    if j >= llen\n      s2 = false\n    else\n      match string.byte_at(line, j)\n      when Some(b)\n        if b == 32 or b == 9\n          j = j + 1\n        else\n          s2 = false\n        end\n      when None\n        s2 = false\n      end\n    end\n  end\n\n  mut tok = \"\"\n  mut t2 = true\n  while t2\n    if j >= llen\n      t2 = false\n    else\n      match string.byte_at(line, j)\n      when Some(b)\n        if b == 32 or b == 9\n          t2 = false\n        else\n          tok = \"#{tok}#{string.from_byte(b)}\"\n          j = j + 1\n        end\n      when None\n        t2 = false\n      end\n    end\n  end\n\n  if not string.is_empty(tok)\n    match string.parse_int(tok)\n    when Some(v)\n      sum = sum + v\n    when None\n      ()\n    end\n  end\nend\n\nprint(\"sum=#{sum}\")",
+  "overall": "pass"
+}

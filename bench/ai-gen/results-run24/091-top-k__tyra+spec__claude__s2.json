@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777132106,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 52145,
+      "code_len": 2114,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 365,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 469,
+      "stdout": "9 6 5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import string\nimport io\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  let n = string.len(s)\n  mut token = \"\"\n  while i < n\n    match string.byte_at(s, i)\n    when Some(b)\n      if b == 32 or b == 9 or b == 10 or b == 13\n        if not string.is_empty(token)\n          match string.parse_int(token)\n          when Some(v)\n            result = list.push(result, v)\n          when None\n            ()\n          end\n          token = \"\"\n        end\n      else\n        token = \"#{token}#{string.from_byte(b)}\"\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if not string.is_empty(token)\n    match string.parse_int(token)\n    when Some(v)\n      result = list.push(result, v)\n    when None\n      ()\n    end\n  end\n  result\nend\n\nfn top_k_desc(_ xs: List<Int>, _ k: Int) -> List<Int>\n  mut remaining = xs\n  mut result: List<Int> = []\n  mut count = 0\n  let target = if k < xs.len()\n    k\n  else\n    xs.len()\n  end\n  while count < target\n    match list.max(remaining)\n    when Some(m)\n      result = list.push(result, m)\n      mut new_remaining: List<Int> = []\n      mut removed = false\n      mut j = 0\n      let rn = remaining.len()\n      while j < rn\n        match remaining.get(j)\n        when Some(v)\n          if v == m and not removed\n            removed = true\n          else\n            new_remaining = list.push(new_remaining, v)\n          end\n        when None\n          ()\n        end\n        j = j + 1\n      end\n      remaining = new_remaining\n      count = count + 1\n    when None\n      count = target\n    end\n  end\n  result\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet xs = parse_ints(line1)\nlet k = match string.parse_int(string.trim(line2))\nwhen Some(v)\n  v\nwhen None\n  0\nend\n\nlet top = top_k_desc(xs, k)\n\nmut out = \"\"\nmut idx = 0\nlet tlen = top.len()\nwhile idx < tlen\n  match top.get(idx)\n  when Some(v)\n    if idx == 0\n      out = \"#{v}\"\n    else\n      out = \"#{out} #{v}\"\n    end\n  when None\n    ()\n  end\n  idx = idx + 1\nend\nprintln(out)",
+  "overall": "pass"
+}

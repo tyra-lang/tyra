@@ -10,6 +10,6 @@ tags: [strings, collections, counting]
 execution:
   stdin: "the cat sat on the mat the cat sat on the mat\n"
   stdout_must_contain:
-    - "unique=6"
+    - "unique=5"
   stdout_must_not_contain: []
   timeout_seconds: 10

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "072-min-abs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777130124,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 25841,
+      "code_len": 884,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 447,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 456,
+      "stdout": "min_abs=-2\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws(_ s: String, _ i: Int) -> Bool\n  match string.byte_at(s, i)\n  when Some(b)\n    b == 32 or b == 9 or b == 10 or b == 13\n  when None\n    false\n  end\nend\n\nfn abs_of(_ v: Int) -> Int\n  if v < 0\n    -v\n  else\n    v\n  end\nend\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet n = string.len(line)\nmut i = 0\nmut have_min = false\nmut min_val = 0\nmut min_abs_val = 0\n\nwhile i < n\n  while i < n and is_ws(line, i)\n    i = i + 1\n  end\n  if i < n\n    let start = i\n    while i < n and not is_ws(line, i)\n      i = i + 1\n    end\n    let tok = string.substring(line, start, i)\n    match string.parse_int(tok)\n    when Some(v)\n      let a = abs_of(v)\n      if not have_min or a < min_abs_val\n        have_min = true\n        min_val = v\n        min_abs_val = a\n      end\n    when None\n      ()\n    end\n  end\nend\n\nprintln(\"min_abs=#{min_val}\")",
+  "overall": "pass"
+}
