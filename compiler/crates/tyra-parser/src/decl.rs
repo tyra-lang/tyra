@@ -304,10 +304,14 @@ fn parse_params(ts: &mut TokenStream, report: &mut Report) -> Vec<Param> {
 fn parse_param(ts: &mut TokenStream, report: &mut Report) -> Param {
     let start = ts.peek_span();
 
-    // `_ name: Type` — positional (label = None)
+    // `_ name: Type` — positional (label = None).
+    // Accept contextual keywords (`value`, `data`, `type`, `trait`, `impl`)
+    // as parameter names. They're reserved at the top level for
+    // declarations but inside `(...)` we're unambiguously in parameter
+    // position.
     if matches!(ts.peek(), TokenKind::Ident(s) if s == "_") {
         ts.advance();
-        let name = ts.expect_ident(report).unwrap_or_default();
+        let name = ts.expect_ident_or_field_keyword(report).unwrap_or_default();
         ts.expect(&TokenKind::Colon, report);
         let type_annotation = parse_type(ts, report);
         let end = type_annotation.span;
@@ -320,12 +324,12 @@ fn parse_param(ts: &mut TokenStream, report: &mut Report) -> Param {
     }
 
     // First identifier
-    let first = ts.expect_ident(report).unwrap_or_default();
+    let first = ts.expect_ident_or_field_keyword(report).unwrap_or_default();
 
     // Check if this is `label name: Type` (two idents before colon)
     if let TokenKind::Ident(_) = ts.peek() {
         let label = first;
-        let name = ts.expect_ident(report).unwrap_or_default();
+        let name = ts.expect_ident_or_field_keyword(report).unwrap_or_default();
         ts.expect(&TokenKind::Colon, report);
         let type_annotation = parse_type(ts, report);
         let end = type_annotation.span;
