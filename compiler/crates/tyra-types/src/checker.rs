@@ -854,13 +854,24 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             }
         }
         ExprKind::MapLit(entries) => {
-            if entries.is_empty() {
-                Ty::Generic("Map".into(), vec![Ty::Var(0), Ty::Var(1)])
-            } else {
-                let key_ty = infer_expr(&entries[0].0, env, report);
-                let val_ty = infer_expr(&entries[0].1, env, report);
-                Ty::Generic("Map".into(), vec![key_ty, val_ty])
+            // Walk children for error coverage, then reject: Map literals
+            // and the Map<K,V> type are spec'd (§Builtins) but not yet
+            // implemented in MIR/codegen. Without this gate the lowering
+            // silently produces a Unit and downstream LLVM emits broken IR
+            // (issue: 017-key-value-lookup, ai-gen Run 24).
+            for (k, v) in entries {
+                infer_expr(k, env, report);
+                infer_expr(v, env, report);
             }
+            report.add(
+                Diagnostic::error(
+                    "map literals `{ k: v, ... }` are not yet implemented \
+                     (Map<K, V> reserved by §Builtins, codegen pending)"
+                        .to_string(),
+                )
+                .with_label(Label::new(expr.span, "unsupported map literal")),
+            );
+            Ty::Error
         }
 
         // Identifier lookup
