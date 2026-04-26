@@ -78,6 +78,16 @@ pub fn compile_to_ir(source_path: &Path) -> CompileResult {
     // each pattern binding ensures one alloca per match arm.
     rename_pattern_bindings(&mut ast);
 
+    // Alpha-rename `let X` / `mut X` shadows of any name already
+    // introduced earlier in the same function. Mirrors the
+    // function-wide alloca hoist in MIR (`collect_let_binding_counts_
+    // in_stmts`): two `let X` with different types share a single
+    // alloca slot, and LLVM rejects the second Store as
+    // type-mismatched (E0500). Renaming the shadow produces two
+    // distinct names, each with count == 1 → no hoist needed, no
+    // type collision.
+    rename_let_shadows(&mut ast);
+
     // Resolve imports: parse module files and merge exported items (§13)
     let main_dir = source_path.parent().unwrap_or(Path::new("."));
     resolve_imports(&mut ast, main_dir, &mut sources, &mut report);
@@ -768,6 +778,235 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
             Item::ImplDef(impl_def) => {
                 for m in &mut impl_def.methods {
                     process_stmts(&mut m.body, &mut counter);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Rename `let X` / `mut X` whose name has already been introduced
+/// earlier in the same function — by a prior let/mut, parameter,
+/// match-pattern binding, or for-loop binding. The shadow is renamed
+/// to `<orig>__l<N>` and references in the lexical scope of the new
+/// binding are substituted to point at the renamed slot. References
+/// to the *outer* binding, in scopes that don't see the shadow, are
+/// untouched.
+///
+/// Without this pass two `let X` with different types collapse onto
+/// a single function-scoped `%X` alloca and LLVM rejects with E0500
+/// (`type i64 but expected '%struct.Option__Int'`, etc.). Companion
+/// to `rename_pattern_bindings` which handles the same problem for
+/// match-arm pattern bindings.
+fn rename_let_shadows(ast: &mut tyra_ast::SourceFile) {
+    use std::collections::{HashMap, HashSet};
+    use tyra_ast::{ElseBranch, Expr, ExprKind, Item, Pattern, PatternKind, Stmt, StringPart};
+
+    struct Pass {
+        counter: u32,
+        // Function-wide set of names already bound (mirrors MIR hoist).
+        // Only ever grows during a single function walk.
+        introduced: HashSet<String>,
+    }
+
+    impl Pass {
+        fn fresh(&mut self, orig: &str) -> String {
+            self.counter += 1;
+            format!("{orig}__l{}", self.counter)
+        }
+
+        // Apply active renames to a bare Ident reference.
+        fn rewrite_ident(name: &mut String, active: &HashMap<String, String>) {
+            if let Some(new) = active.get(name) {
+                *name = new.clone();
+            }
+        }
+
+        fn walk_stmts(&mut self, stmts: &mut [Stmt], active: &mut HashMap<String, String>) {
+            for stmt in stmts.iter_mut() {
+                match stmt {
+                    Stmt::Let(l) => {
+                        // RHS is evaluated under the *outer* scope (a `let X`
+                        // doesn't see itself). Walk it first; only after it's
+                        // lowered do we register the new binding.
+                        self.walk_expr(&mut l.value, active);
+                        if self.introduced.contains(&l.name) {
+                            let new = self.fresh(&l.name);
+                            active.insert(l.name.clone(), new.clone());
+                            l.name = new.clone();
+                            self.introduced.insert(new);
+                        } else {
+                            self.introduced.insert(l.name.clone());
+                        }
+                    }
+                    Stmt::Mut(m) => {
+                        self.walk_expr(&mut m.value, active);
+                        if self.introduced.contains(&m.name) {
+                            let new = self.fresh(&m.name);
+                            active.insert(m.name.clone(), new.clone());
+                            m.name = new.clone();
+                            self.introduced.insert(new);
+                        } else {
+                            self.introduced.insert(m.name.clone());
+                        }
+                    }
+                    Stmt::Expr(e) => self.walk_expr(&mut e.expr, active),
+                    Stmt::Return(r) => {
+                        if let Some(v) = &mut r.value {
+                            self.walk_expr(v, active);
+                        }
+                    }
+                    Stmt::Defer(d) => self.walk_expr(&mut d.expr, active),
+                }
+            }
+        }
+
+        fn walk_expr(&mut self, e: &mut Expr, active: &mut HashMap<String, String>) {
+            match &mut e.kind {
+                ExprKind::Ident(name) => Self::rewrite_ident(name, active),
+                ExprKind::Call(callee, args) => {
+                    self.walk_expr(callee, active);
+                    for a in args {
+                        self.walk_expr(&mut a.value, active);
+                    }
+                }
+                ExprKind::TurbofishCall(callee, _, args) => {
+                    self.walk_expr(callee, active);
+                    for a in args {
+                        self.walk_expr(&mut a.value, active);
+                    }
+                }
+                ExprKind::FieldAccess(obj, _) => self.walk_expr(obj, active),
+                ExprKind::BinaryOp(l, _, r) => {
+                    self.walk_expr(l, active);
+                    self.walk_expr(r, active);
+                }
+                ExprKind::UnaryOp(_, e) => self.walk_expr(e, active),
+                ExprKind::Assign(l, r) => {
+                    self.walk_expr(l, active);
+                    self.walk_expr(r, active);
+                }
+                ExprKind::If(i) => {
+                    self.walk_expr(&mut i.condition, active);
+                    let saved = active.clone();
+                    self.walk_stmts(&mut i.then_body, active);
+                    *active = saved.clone();
+                    if let Some(eb) = &mut i.else_body {
+                        self.walk_else(eb, active);
+                        *active = saved;
+                    }
+                }
+                ExprKind::Match(m) => {
+                    self.walk_expr(&mut m.subject, active);
+                    for arm in &mut m.arms {
+                        let saved = active.clone();
+                        // Pattern bindings already alpha-renamed to unique
+                        // names by rename_pattern_bindings; still register
+                        // them as introduced so a subsequent `let` of the
+                        // same final name (rare, but possible if the user
+                        // happened to pick `x__p1`) is detected as a shadow.
+                        let mut pat_names: Vec<String> = Vec::new();
+                        Self::collect_pattern_idents(&arm.pattern, &mut pat_names);
+                        for n in &pat_names {
+                            self.introduced.insert(n.clone());
+                        }
+                        self.walk_stmts(&mut arm.body, active);
+                        *active = saved;
+                    }
+                }
+                ExprKind::While(w) => {
+                    self.walk_expr(&mut w.condition, active);
+                    let saved = active.clone();
+                    self.walk_stmts(&mut w.body, active);
+                    *active = saved;
+                }
+                ExprKind::For(f) => {
+                    self.walk_expr(&mut f.iter, active);
+                    let saved = active.clone();
+                    // The for-binding lives in MIR as a single function-wide
+                    // alloca too, so treat it like a let for shadow purposes.
+                    if self.introduced.contains(&f.binding) {
+                        let new = self.fresh(&f.binding);
+                        active.insert(f.binding.clone(), new.clone());
+                        f.binding = new.clone();
+                        self.introduced.insert(new);
+                    } else {
+                        self.introduced.insert(f.binding.clone());
+                    }
+                    self.walk_stmts(&mut f.body, active);
+                    *active = saved;
+                }
+                ExprKind::ListLit(items) => {
+                    for it in items {
+                        self.walk_expr(it, active);
+                    }
+                }
+                ExprKind::StringInterp(parts) => {
+                    for p in parts {
+                        if let StringPart::Expr(e) = p {
+                            self.walk_expr(e, active);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        fn walk_else(&mut self, eb: &mut ElseBranch, active: &mut HashMap<String, String>) {
+            match eb {
+                ElseBranch::Else(stmts) => self.walk_stmts(stmts, active),
+                ElseBranch::ElseIf(i) => {
+                    self.walk_expr(&mut i.condition, active);
+                    let saved = active.clone();
+                    self.walk_stmts(&mut i.then_body, active);
+                    *active = saved.clone();
+                    if let Some(inner) = &mut i.else_body {
+                        self.walk_else(inner, active);
+                        *active = saved;
+                    }
+                }
+            }
+        }
+
+        fn collect_pattern_idents(p: &Pattern, out: &mut Vec<String>) {
+            match &p.kind {
+                PatternKind::Ident(name) => out.push(name.clone()),
+                PatternKind::Constructor(_, fields) => {
+                    for f in fields {
+                        Self::collect_pattern_idents(&f.pattern, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let mut pass = Pass {
+        counter: 0,
+        introduced: HashSet::new(),
+    };
+    for item in &mut ast.items {
+        match item {
+            Item::FnDef(f) => {
+                pass.introduced.clear();
+                for p in &f.params {
+                    pass.introduced.insert(p.name.clone());
+                }
+                let mut active = HashMap::new();
+                pass.walk_stmts(&mut f.body, &mut active);
+            }
+            Item::Stmt(s) => {
+                let mut active = HashMap::new();
+                pass.walk_stmts(std::slice::from_mut(s), &mut active);
+            }
+            Item::ImplDef(impl_def) => {
+                for m in &mut impl_def.methods {
+                    pass.introduced.clear();
+                    for p in &m.params {
+                        pass.introduced.insert(p.name.clone());
+                    }
+                    let mut active = HashMap::new();
+                    pass.walk_stmts(&mut m.body, &mut active);
                 }
             }
             _ => {}
