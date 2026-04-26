@@ -1,0 +1,36 @@
+{
+  "prompt_id": "095-flatmap-tokens",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777217896,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9524,
+      "code_len": 290,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 150,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 444,
+      "stdout": "red red green green blue blue",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet tokens = string.split_whitespace(line)\nmut out = \"\"\nmut first = true\nfor t in tokens\n  if first\n    out = \"#{t} #{t}\"\n    first = false\n  else\n    out = \"#{out} #{t} #{t}\"\n  end\nend\nprint(out)",
+  "overall": "pass"
+}

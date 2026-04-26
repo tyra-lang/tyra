@@ -1,0 +1,36 @@
+{
+  "prompt_id": "038-capitalize-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777215586,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 17470,
+      "code_len": 555,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 397,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 463,
+      "stdout": "Hello World From Tyra\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn cap(_ w: String) -> String\n  match string.byte_at(w, 0)\n  when Some(b)\n    if b >= 97 and b <= 122\n      let nb = b - 32\n      \"#{string.from_byte(nb)}#{string.substring(w, 1, string.len(w))}\"\n    else\n      w\n    end\n  when None\n    w\n  end\nend\n\nmatch io.read_line()\nwhen Some(line)\n  let words = string.split_whitespace(line)\n  mut out = \"\"\n  mut first = true\n  for w in words\n    if first\n      out = cap(w)\n      first = false\n    else\n      out = \"#{out} #{cap(w)}\"\n    end\n  end\n  println(out)\nwhen None\n  println(\"\")\nend",
+  "overall": "pass"
+}

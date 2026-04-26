@@ -1,0 +1,36 @@
+{
+  "prompt_id": "026-count-lines",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777215213,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9798,
+      "code_len": 470,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 371,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 457,
+      "stdout": "lines=3\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\n\nfn main() -> Unit\n  let text = io.read_to_end()\n  let n = string.len(text)\n  mut count = 0\n  mut i = 0\n  while i < n\n    match string.byte_at(text, i)\n    when Some(b)\n      if b == 10\n        count = count + 1\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if n > 0\n    match string.byte_at(text, n - 1)\n    when Some(b)\n      if b != 10\n        count = count + 1\n      end\n    when None\n      ()\n    end\n  end\n  println(\"lines=#{count}\")\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "080-collect-errors",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777216957,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 14374,
+      "code_len": 570,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 177,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 424,
+      "stdout": "errors=empty-name,negative-age\nok\nerrors=too-old\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "fn validate(_ name: String, _ age: Int) -> String\n  mut msgs = \"\"\n  mut count = 0\n  if name == \"\"\n    msgs = \"empty-name\"\n    count = count + 1\n  end\n  if age < 0\n    if count > 0\n      msgs = \"#{msgs},negative-age\"\n    else\n      msgs = \"negative-age\"\n    end\n    count = count + 1\n  end\n  if age > 150\n    if count > 0\n      msgs = \"#{msgs},too-old\"\n    else\n      msgs = \"too-old\"\n    end\n    count = count + 1\n  end\n  if count == 0\n    \"ok\"\n  else\n    \"errors=#{msgs}\"\n  end\nend\n\nprintln(validate(\"\", -5))\nprintln(validate(\"Alice\", 30))\nprintln(validate(\"Bob\", 200))",
+  "overall": "pass"
+}

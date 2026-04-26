@@ -1,0 +1,36 @@
+{
+  "prompt_id": "072-min-abs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777216712,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 12072,
+      "code_len": 735,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 373,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 447,
+      "stdout": "min_abs=-2\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn abs_int(_ n: Int) -> Int\n  if n < 0\n    -n\n  else\n    n\n  end\nend\n\nfn main() -> Result<Unit, String>\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let trimmed = string.trim(line)\n  let parts = string.split_whitespace(trimmed)\n  mut best: Int = 0\n  mut best_abs: Int = 0\n  mut found = false\n  for tok in parts\n    match string.parse_int(tok)\n    when Some(n)\n      let a = abs_int(n)\n      if not found\n        best = n\n        best_abs = a\n        found = true\n      else if a < best_abs\n        best = n\n        best_abs = a\n      end\n    when None\n      ()\n    end\n  end\n  if found\n    println(\"min_abs=#{best}\")\n    Ok(())\n  else\n    Err(\"no integers found\")\n  end\nend",
+  "overall": "pass"
+}

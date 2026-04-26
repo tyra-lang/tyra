@@ -1,0 +1,36 @@
+{
+  "prompt_id": "100-pipeline",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777218047,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11943,
+      "code_len": 422,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 175,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 426,
+      "stdout": "result=18\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Unit\n  let line = io.read_line()\n  match line\n  when Some(s)\n    let toks = string.split_whitespace(s)\n    mut total = 0\n    for t in toks\n      match string.parse_int(t)\n      when Some(n)\n        if n > 0\n          total = total + n * 2\n        end\n      when None\n        ()\n      end\n    end\n    println(\"result=#{total}\")\n  when None\n    println(\"result=0\")\n  end\nend",
+  "overall": "pass"
+}

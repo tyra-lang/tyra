@@ -1,0 +1,36 @@
+{
+  "prompt_id": "007-gcd",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777214571,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10554,
+      "code_len": 517,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 205,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 438,
+      "stdout": "gcd=6\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn gcd(_ a: Int, _ b: Int) -> Int\n  mut x = a\n  mut y = b\n  while y != 0\n    let t = x % y\n    x = y\n    y = t\n  end\n  x\nend\n\nfn main() -> Result<Unit, String>\n  let input = io.read_to_end()\n  let parts = string.split_whitespace(input)\n  let a_str = parts.get(0).ok_or(\"missing A\")?\n  let b_str = parts.get(1).ok_or(\"missing B\")?\n  let a = string.parse_int(a_str).ok_or(\"invalid A\")?\n  let b = string.parse_int(b_str).ok_or(\"invalid B\")?\n  let g = gcd(a, b)\n  println(\"gcd=#{g}\")\n  Ok(())\nend",
+  "overall": "pass"
+}

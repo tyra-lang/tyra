@@ -1,0 +1,36 @@
+{
+  "prompt_id": "038-capitalize-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777215553,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 15838,
+      "code_len": 588,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 375,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 447,
+      "stdout": "Hello World From Tyra\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet words = string.split_whitespace(line)\nmut result = \"\"\nmut first = true\nfor w in words\n  let head_opt = string.byte_at(w, 0)\n  let new_word = match head_opt\n  when Some(b)\n    if b >= 97 and b <= 122\n      let upper = b - 32\n      let rest = string.substring(w, 1, string.len(w))\n      \"#{string.from_byte(upper)}#{rest}\"\n    else\n      w\n    end\n  when None\n    w\n  end\n  if first\n    result = new_word\n    first = false\n  else\n    result = \"#{result} #{new_word}\"\n  end\nend\nprintln(result)",
+  "overall": "pass"
+}

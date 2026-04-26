@@ -1,0 +1,38 @@
+{
+  "prompt_id": "089-unique-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777217568,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 12907,
+      "code_len": 912,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 389,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 436,
+      "stdout": "unique=9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": false,
+      "check_details": [
+        "missing marker: 'unique=5'"
+      ]
+    }
+  },
+  "code": "import io\nimport string\n\nlet text = io.read_to_end()\nlet tokens = string.split_whitespace(text)\nmut seen: List<String> = []\nmut count = 0\nlet n = tokens.len()\nmut i = 0\nwhile i < n\n  match tokens.get(i)\n  when Some(tok)\n    mut found = false\n    mut j = 0\n    let m = seen.len()\n    while j < m\n      match seen.get(j)\n      when Some(s)\n        if s == tok\n          found = true\n        end\n      when None\n        found = found\n      end\n      j = j + 1\n    end\n    if not found\n      seen = list_push_str(seen, tok)\n      count = count + 1\n    end\n  when None\n    count = count\n  end\n  i = i + 1\nend\nprintln(\"unique=#{count}\")\n\nfn list_push_str(_ xs: List<String>, _ x: String) -> List<String>\n  mut result: List<String> = [x]\n  mut k = 0\n  let len = xs.len()\n  while k < len\n    match xs.get(k)\n    when Some(v)\n      result = [v]\n    when None\n      result = result\n    end\n    k = k + 1\n  end\n  result\nend",
+  "overall": "check_fail"
+}

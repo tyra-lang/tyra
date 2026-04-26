@@ -1,0 +1,36 @@
+{
+  "prompt_id": "073-select-even-index",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777216767,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10385,
+      "code_len": 516,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 179,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 442,
+      "stdout": "10 30 50 70\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(line)\n    let parts = string.split_whitespace(line)\n    let n = parts.len()\n    mut result = \"\"\n    mut i = 0\n    mut first = true\n    while i < n\n      match parts.get(i)\n      when Some(tok)\n        if first\n          result = tok\n          first = false\n        else\n          result = \"#{result} #{tok}\"\n        end\n      when None\n        ()\n      end\n      i = i + 2\n    end\n    println(result)\n  when None\n    println(\"\")\n  end\nend",
+  "overall": "pass"
+}

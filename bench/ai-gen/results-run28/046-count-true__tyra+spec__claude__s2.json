@@ -1,0 +1,36 @@
+{
+  "prompt_id": "046-count-true",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777215846,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 7785,
+      "code_len": 133,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 132,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 478,
+      "stdout": "trues=4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "mut count = 0\nfor b in [true, false, true, true, false, true, false]\n  if b\n    count = count + 1\n  end\nend\nprintln(\"trues=#{count}\")",
+  "overall": "pass"
+}

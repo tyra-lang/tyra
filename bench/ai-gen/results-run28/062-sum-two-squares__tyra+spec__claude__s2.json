@@ -1,0 +1,26 @@
+{
+  "prompt_id": "062-sum-two-squares",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777216411,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8571,
+      "code_len": 334,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 67,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-c1yfq75g/main.ll:628:59: error: '%_t55' defined with type '%struct.Result__String__String = type { i8, ptr, ptr }' but expected 'ptr'\n  628 |   %_t56 = call %struct.Option__Int @string__parse_int(ptr %_t55)\n      |                                                           ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet input = io.read_to_end()\nlet parts = string.split_whitespace(input)\nlet a = match string.parse_int(parts.get(0).ok_or(\"err\"))\nwhen Ok(n)\n  n\nwhen Err(_)\n  0\nend\nlet b = match string.parse_int(parts.get(1).ok_or(\"err\"))\nwhen Ok(n)\n  n\nwhen Err(_)\n  0\nend\nlet r = a * a + b * b\nprintln(\"r=#{r}\")",
+  "overall": "compile_fail"
+}

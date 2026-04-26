@@ -1,0 +1,36 @@
+{
+  "prompt_id": "022-linear-search",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777215055,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10003,
+      "code_len": 755,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 349,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 445,
+      "stdout": "index=2\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn find(_ xs: List<Int>, _ target: Int) -> Option<Int>\n  list.index_of(xs, target)\nend\n\nfn main() -> Result<Unit, String>\n  let line1 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let line2 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  let parts = string.split_whitespace(line1)\n  mut nums: List<Int> = []\n  for p in parts\n    match string.parse_int(p)\n    when Some(n)\n      nums = list.push(nums, n)\n    when None\n      ()\n    end\n  end\n\n  let target = match string.parse_int(string.trim(line2))\n  when Some(n)\n    n\n  when None\n    0\n  end\n\n  match find(nums, target)\n  when Some(i)\n    println(\"index=#{i}\")\n  when None\n    println(\"not_found\")\n  end\n  Ok(())\nend",
+  "overall": "pass"
+}

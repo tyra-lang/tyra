@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777217667,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 35514,
+      "code_len": 1629,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 466,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 494,
+      "stdout": "9 6 5",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn max_index(_ xs: List<Int>) -> Int\n  mut i = 1\n  mut best = 0\n  let n = xs.len()\n  while i < n\n    match xs.get(i)\n    when Some(v)\n      match xs.get(best)\n      when Some(b)\n        if v > b\n          best = i\n        end\n      when None\n        ()\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  best\nend\n\nfn remove_at(_ xs: List<Int>, _ idx: Int) -> List<Int>\n  mut out: List<Int> = []\n  mut i = 0\n  let n = xs.len()\n  while i < n\n    if i != idx\n      match xs.get(i)\n      when Some(v)\n        out = list.push(out, v)\n      when None\n        ()\n      end\n    end\n    i = i + 1\n  end\n  out\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet tokens = string.split_whitespace(line1)\nmut nums: List<Int> = []\nmut ti = 0\nlet tn = tokens.len()\nwhile ti < tn\n  match tokens.get(ti)\n  when Some(t)\n    match string.parse_int(t)\n    when Some(v)\n      nums = list.push(nums, v)\n    when None\n      ()\n    end\n  when None\n    ()\n  end\n  ti = ti + 1\nend\n\nlet k = match string.parse_int(string.trim(line2))\nwhen Some(n)\n  n\nwhen None\n  0\nend\n\nlet total = nums.len()\nlet limit = if k > total\n  total\nelse\n  k\nend\n\nmut remaining = nums\nmut taken = 0\nmut result = \"\"\nmut first = true\nwhile taken < limit\n  let idx = max_index(remaining)\n  match remaining.get(idx)\n  when Some(v)\n    if first\n      result = \"#{v}\"\n      first = false\n    else\n      result = \"#{result} #{v}\"\n    end\n  when None\n    ()\n  end\n  remaining = remove_at(remaining, idx)\n  taken = taken + 1\nend\n\nprint(result)",
+  "overall": "pass"
+}

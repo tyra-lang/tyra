@@ -1,0 +1,36 @@
+{
+  "prompt_id": "048-join-strings",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777215925,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8359,
+      "code_len": 174,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 134,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 434,
+      "stdout": "red, green, blue\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "mut result = \"\"\nmut first = true\nfor c in [\"red\", \"green\", \"blue\"]\n  if first\n    result = c\n    first = false\n  else\n    result = \"#{result}, #{c}\"\n  end\nend\nprintln(result)",
+  "overall": "pass"
+}

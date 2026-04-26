@@ -1,0 +1,36 @@
+{
+  "prompt_id": "041-sum-pairs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777215672,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 13467,
+      "code_len": 590,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 489,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 453,
+      "stdout": "1+10=11\n2+20=22\n3+30=33\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line1 = match io.read_line() when Some(s) s when None \"\" end\nlet line2 = match io.read_line() when Some(s) s when None \"\" end\n\nlet a = string.split_whitespace(line1)\nlet b = string.split_whitespace(line2)\n\nmut i = 0\nlet n = a.len()\nwhile i < n\n  let sa = match a.get(i) when Some(s) s when None \"\" end\n  let sb = match b.get(i) when Some(s) s when None \"\" end\n  let ia = match string.parse_int(sa) when Some(v) v when None 0 end\n  let ib = match string.parse_int(sb) when Some(v) v when None 0 end\n  let s = ia + ib\n  println(\"#{ia}+#{ib}=#{s}\")\n  i = i + 1\nend",
+  "overall": "pass"
+}

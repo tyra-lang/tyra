@@ -1,0 +1,36 @@
+{
+  "prompt_id": "070-roman",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777216657,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11484,
+      "code_len": 489,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 375,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 498,
+      "stdout": "IV\nIX\nXXVII\nXXXIX\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "fn to_roman(_ n: Int) -> String\n  mut x = n\n  mut result = \"\"\n  while x >= 10\n    result = \"#{result}X\"\n    x = x - 10\n  end\n  let ones = match x\n  when 0\n    \"\"\n  when 1\n    \"I\"\n  when 2\n    \"II\"\n  when 3\n    \"III\"\n  when 4\n    \"IV\"\n  when 5\n    \"V\"\n  when 6\n    \"VI\"\n  when 7\n    \"VII\"\n  when 8\n    \"VIII\"\n  when 9\n    \"IX\"\n  when _\n    \"\"\n  end\n  \"#{result}#{ones}\"\nend\n\nfn main() -> Unit\n  println(to_roman(4))\n  println(to_roman(9))\n  println(to_roman(27))\n  println(to_roman(39))\nend",
+  "overall": "pass"
+}

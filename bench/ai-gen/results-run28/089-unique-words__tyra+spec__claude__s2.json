@@ -1,0 +1,26 @@
+{
+  "prompt_id": "089-unique-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777217581,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 26812,
+      "code_len": 2504,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 20,
+      "stderr": "1\n   |\n81 | import string\n   | ^^^^^^ expected expression\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:81:8\n   |\n81 | import string\n   |        ^^^^^^ expected newline here\n\nerror[E0104]: expected expression, found error token\n    --> main.tyra:111:1\n    |\n111 | ```\n    | ^ expected expression\n\nerror[E0101]: expected newline or end of file\n    --> main.tyra:111:2\n    |\n111 | ```\n    |  ^ expected newline here\n\nerror[E0104]: expected expression, found error token\n    --> main.tyra:111:2\n    |\n111 | ```\n    |  ^ expected expression\n\nerror[E0101]: expected newline or end of file\n    --> main.tyra:111:3\n    |\n111 | ```\n    |   ^ expected newline here\n\nerror[E0104]: expected expression, found error token\n    --> main.tyra:111:3\n    |\n111 | ```\n    |   ^ expected expression\n\nerror[E0104]: expected expression, found `import`\n    --> main.tyra:113:1\n    |\n113 | import io\n    | ^^^^^^ expected expression\n\nerror[E0101]: expected newline or end of file\n    --> main.tyra:113:8\n    |\n113 | import io\n    |        ^^ expected newline here\n\nerror[E0104]: expected expression, found `import`\n    --> main.tyra:114:1\n    |\n114 | import string\n    | ^^^^^^ expected expression\n\nerror[E0101]: expected newline or end of file\n    --> main.tyra:114:8\n    |\n114 | import string\n    |        ^^^^^^ expected newline here\n\nerror[E0100]: expected `end`, found end of file\n    --> main.tyra:143:27\n    |\n143 | println(\"unique=#{count}\")\n    |                           ^ expected `end`\n\nerror[E0100]: expected `end`, found end of file\n    --> main.tyra:143:27\n    |\n143 | println(\"unique=#{count}\")\n    |                           ^ expected `end`\n\nerror[E0100]: expected `end`, found end of file\n    --> main.tyra:143:27\n    |\n143 | println(\"unique=#{count}\")\n    |                           ^ expected `end`\n\nerror[E0100]: expected `end`, found end of file\n    --> main.tyra:143:27\n    |\n143 | println(\"unique=#{count}\")\n    |                           ^ expected `end`\n\n124 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nlet text = io.read_to_end()\nlet tokens = string.split_whitespace(text)\nmut unique: List<String> = []\nfor tok in tokens\n  mut found = false\n  for u in unique\n    if u == tok\n      found = true\n    end\n  end\n  if not found\n    unique = [unique, [tok]].len() > 0 and false\n  end\nend\n\nWait, let me reconsider - need proper push for List<String>.\n\nActually let me rewrite:\n\nimport io\nimport string\n\nlet text = io.read_to_end()\nlet tokens = string.split_whitespace(text)\nmut unique: List<String> = []\nmut count = 0\nfor tok in tokens\n  mut found = false\n  for u in unique\n    if u == tok\n      found = true\n    end\n  end\n  if not found\n    count = count + 1\n  end\nend\nprintln(\"unique=#{count}\")\n\nHmm but I need to actually track unique tokens. Without push for List<String>, I can't add. Let me use a different approach - rebuild the list each iteration is hard too.\n\nActually I just need count. I can iterate tokens and for each token check if it appeared earlier in tokens before this index. Use indexed iteration.\n\n```\nmut count = 0\nmut i = 0\nlet n = tokens.len()\nwhile i < n\n  let tok = tokens.get(i)\n  mut seen = false\n  mut j = 0\n  while j < i\n    match tokens.get(j)\n    when Some(prev)\n      match tok\n      when Some(t)\n        if prev == t\n          seen = true\n        end\n      when None\n      end\n    when None\n    end\n    j = j + 1\n  end\n  if not seen\n    count = count + 1\n  end\n  i = i + 1\nend\nprintln(\"unique=#{count}\")\n```\n\nThis works without needing push.\n\n```tyra\nimport io\nimport string\n\nlet text = io.read_to_end()\nlet tokens = string.split_whitespace(text)\nlet n = tokens.len()\nmut count = 0\nmut i = 0\nwhile i < n\n  mut seen = false\n  mut j = 0\n  while j < i\n    match tokens.get(j)\n    when Some(prev)\n      match tokens.get(i)\n      when Some(cur)\n        if prev == cur\n          seen = true\n        end\n      when None\n      end\n    when None\n    end\n    j = j + 1\n  end\n  if not seen\n    count = count + 1\n  end\n  i = i + 1\nend\nprintln(\"unique=#{count}\")\n```\n\nimport io\nimport string\n\nlet text = io.read_to_end()\nlet tokens = string.split_whitespace(text)\nlet n = tokens.len()\nmut count = 0\nmut i = 0\nwhile i < n\n  mut seen = false\n  mut j = 0\n  while j < i\n    match tokens.get(j)\n    when Some(prev)\n      match tokens.get(i)\n      when Some(cur)\n        if prev == cur\n          seen = true\n        end\n      when None\n      end\n    when None\n    end\n    j = j + 1\n  end\n  if not seen\n    count = count + 1\n  end\n  i = i + 1\nend\nprintln(\"unique=#{count}\")",
+  "overall": "compile_fail"
+}

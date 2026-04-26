@@ -1,0 +1,26 @@
+{
+  "prompt_id": "083-word-frequency",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777217178,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 13041,
+      "code_len": 807,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 15,
+      "stderr": "error[E0101]: expected newline or end of file\n   --> main.tyra:34:38\n   |\n34 |         tokens = \"#{tokens}\" == \"\" ? tokens : tokens\n   |                                      ^^^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:34:45\n   |\n34 |         tokens = \"#{tokens}\" == \"\" ? tokens : tokens\n   |                                             ^ expected newline here\n\nerror[E0104]: expected expression, found `:`\n   --> main.tyra:34:45\n   |\n34 |         tokens = \"#{tokens}\" == \"\" ? tokens : tokens\n   |                                             ^ expected expression\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:34:47\n   |\n34 |         tokens = \"#{tokens}\" == \"\" ? tokens : tokens\n   |                                               ^^^^^^ expected newline here\n\n4 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nfn find_index(_ tokens: List<String>, _ target: String) -> Int\n  let n = tokens.len()\n  mut i = 0\n  mut found = -1\n  while i < n and found == -1\n    match tokens.get(i)\n    when Some(t)\n      if t == target\n        found = i\n      end\n    when None\n      found = found\n    end\n    i = i + 1\n  end\n  found\nend\n\nfn main() -> Unit\n  let text = io.read_to_end()\n  let toks = string.split_whitespace(text)\n  mut tokens: List<String> = []\n  mut counts: List<Int> = []\n  let n = toks.len()\n  mut i = 0\n  while i < n\n    match toks.get(i)\n    when Some(tok)\n      let idx = find_index(tokens, tok)\n      if idx == -1\n        tokens = \"#{tokens}\" == \"\" ? tokens : tokens\n      else\n        counts = counts\n      end\n    when None\n      i = i\n    end\n    i = i + 1\n  end\n  print(\"top==0\")\nend",
+  "overall": "compile_fail"
+}

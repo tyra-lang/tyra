@@ -1,0 +1,36 @@
+{
+  "prompt_id": "077-words-by-length",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777216899,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8727,
+      "code_len": 372,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 136,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 430,
+      "stdout": "longest=quick\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet words = string.split_whitespace(line)\nmut best = \"\"\nmut best_len = 0\nmut first = true\nfor w in words\n  let n = string.len(w)\n  if first\n    best = w\n    best_len = n\n    first = false\n  else if n > best_len\n    best = w\n    best_len = n\n  end\nend\n\nprintln(\"longest=#{best}\")",
+  "overall": "pass"
+}

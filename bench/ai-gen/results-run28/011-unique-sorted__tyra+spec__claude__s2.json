@@ -1,0 +1,36 @@
+{
+  "prompt_id": "011-unique-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777214697,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 21698,
+      "code_len": 774,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 401,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 439,
+      "stdout": "1 2 3 4 5 6 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet text = io.read_to_end()\nlet tokens = string.split_whitespace(text)\nmut sorted: List<Int> = []\nfor tok in tokens\n  match string.parse_int(tok)\n  when Some(n)\n    if not list.contains(sorted, n)\n      mut inserted: List<Int> = []\n      mut placed = false\n      for x in sorted\n        if not placed and n < x\n          inserted = list.push(inserted, n)\n          placed = true\n        end\n        inserted = list.push(inserted, x)\n      end\n      if not placed\n        inserted = list.push(inserted, n)\n      end\n      sorted = inserted\n    end\n  when None\n    ()\n  end\nend\n\nmut result = \"\"\nmut first = true\nfor x in sorted\n  if first\n    result = \"#{x}\"\n    first = false\n  else\n    result = \"#{result} #{x}\"\n  end\nend\nprintln(result)",
+  "overall": "pass"
+}

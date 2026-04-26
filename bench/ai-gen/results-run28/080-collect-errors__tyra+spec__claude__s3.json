@@ -1,0 +1,38 @@
+{
+  "prompt_id": "080-collect-errors",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777216989,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 12664,
+      "code_len": 1252,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 189,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 440,
+      "stdout": "errors=negative-ageokerrors=too-old",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": false,
+      "check_details": [
+        "missing marker: 'errors=empty-name,negative-age'"
+      ]
+    }
+  },
+  "code": "import string\n\nfn validate(_ name: String, _ age: Int) -> List<String>\n  mut errors: List<String> = []\n  if string.is_empty(name)\n    errors = append(errors, \"empty-name\")\n  end\n  if age < 0\n    errors = append(errors, \"negative-age\")\n  end\n  if age > 150\n    errors = append(errors, \"too-old\")\n  end\n  errors\nend\n\nfn append(_ xs: List<String>, _ x: String) -> List<String>\n  mut result: List<String> = []\n  for item in xs\n    result = push_str(result, item)\n  end\n  push_str(result, x)\nend\n\nfn push_str(_ xs: List<String>, _ x: String) -> List<String>\n  mut out: List<String> = []\n  for item in xs\n    out = single_append(out, item)\n  end\n  single_append(out, x)\nend\n\nfn single_append(_ xs: List<String>, _ x: String) -> List<String>\n  [x]\nend\n\nfn report(_ errors: List<String>) -> Unit\n  if errors.len() == 0\n    print(\"ok\")\n  else\n    mut joined = \"\"\n    mut i = 0\n    let n = errors.len()\n    while i < n\n      let e = match errors.get(i)\n      when Some(s)\n        s\n      when None\n        \"\"\n      end\n      if i == 0\n        joined = \"#{e}\"\n      else\n        joined = \"#{joined},#{e}\"\n      end\n      i = i + 1\n    end\n    print(\"errors=#{joined}\")\n  end\nend\n\nreport(validate(\"\", -5))\nreport(validate(\"Alice\", 30))\nreport(validate(\"Bob\", 200))",
+  "overall": "check_fail"
+}

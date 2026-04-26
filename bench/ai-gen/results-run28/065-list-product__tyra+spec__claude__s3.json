@@ -1,0 +1,36 @@
+{
+  "prompt_id": "065-list-product",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777216507,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9116,
+      "code_len": 492,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 136,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 445,
+      "stdout": "product=210",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let parts = string.split_whitespace(line)\n  mut product = 1\n  mut i = 0\n  let n = parts.len()\n  while i < n\n    let s = match parts.get(i)\n    when Some(v)\n      v\n    when None\n      \"\"\n    end\n    let x = match string.parse_int(s)\n    when Some(v)\n      v\n    when None\n      1\n    end\n    product = product * x\n    i = i + 1\n  end\n  print(\"product=#{product}\")\nend",
+  "overall": "pass"
+}

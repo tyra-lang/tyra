@@ -1,0 +1,36 @@
+{
+  "prompt_id": "069-max-positive",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777216638,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8540,
+      "code_len": 445,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 128,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 439,
+      "stdout": "max=7",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet tokens = string.split_whitespace(line)\nmut best = 0\nmut found = false\nfor tok in tokens\n  match string.parse_int(tok)\n  when Some(n)\n    if n > 0\n      if not found\n        best = n\n        found = true\n      else if n > best\n        best = n\n      end\n    end\n  when None\n    ()\n  end\nend\n\nif found\n  print(\"max=#{best}\")\nelse\n  print(\"none\")\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "064-count-down",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777216479,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 7767,
+      "code_len": 271,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 141,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 473,
+      "stdout": "3\n2\n1\n0\ndone\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line = io.read_line().ok_or(\"no input\")?\n  let n = string.parse_int(string.trim(line)).ok_or(\"invalid int\")?\n  mut i = n\n  while i >= 0\n    println(\"#{i}\")\n    i = i - 1\n  end\n  println(\"done\")\n  Ok(())\nend",
+  "overall": "pass"
+}

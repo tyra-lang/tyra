@@ -1,0 +1,36 @@
+{
+  "prompt_id": "099-sum-column",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777218038,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8336,
+      "code_len": 465,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 142,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 442,
+      "stdout": "sum=39\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet lines = string.split(input, \"\\n\")\nmut total = 0\nfor line in lines\n  let trimmed = string.trim(line)\n  if not string.is_empty(trimmed)\n    let tokens = string.split_whitespace(trimmed)\n    match tokens.get(1)\n    when Some(tok)\n      match string.parse_int(tok)\n      when Some(n)\n        total = total + n\n      when None\n        ()\n      end\n    when None\n      ()\n    end\n  end\nend\nprintln(\"sum=#{total}\")",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "090-balanced-parens",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777217646,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9777,
+      "code_len": 507,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 383,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 435,
+      "stdout": "YES",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\n\nlet line = io.read_line()\nmut s = \"\"\nmatch line\nwhen Some(x)\n  s = x\nwhen None\n  s = \"\"\nend\n\nmut depth = 0\nmut bad = false\nmut i = 0\nlet n = string.len(s)\nwhile i < n and not bad\n  let b = string.byte_at(s, i)\n  match b\n  when Some(c)\n    if c == 40\n      depth = depth + 1\n    else if c == 41\n      if depth == 0\n        bad = true\n      else\n        depth = depth - 1\n      end\n    end\n  when None\n    bad = true\n  end\n  i = i + 1\nend\n\nif bad or depth != 0\n  print(\"NO\")\nelse\n  print(\"YES\")\nend",
+  "overall": "pass"
+}

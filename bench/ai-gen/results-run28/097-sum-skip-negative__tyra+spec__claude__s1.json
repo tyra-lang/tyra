@@ -1,0 +1,36 @@
+{
+  "prompt_id": "097-sum-skip-negative",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777217955,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8699,
+      "code_len": 558,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 164,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 451,
+      "stdout": "partial=13\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line = io.read_line()\nmut sum = 0\nmatch line\nwhen Some(s)\n  let parts = string.split_whitespace(s)\n  mut stop = false\n  mut i = 0\n  let n = parts.len()\n  while i < n and not stop\n    match parts.get(i)\n    when Some(tok)\n      match string.parse_int(tok)\n      when Some(v)\n        if v < 0\n          stop = true\n        else\n          sum = sum + v\n        end\n      when None\n        stop = true\n      end\n    when None\n      stop = true\n    end\n    i = i + 1\n  end\nwhen None\n  sum = 0\nend\nprintln(\"partial=#{sum}\")",
+  "overall": "pass"
+}

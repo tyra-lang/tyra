@@ -1,0 +1,36 @@
+{
+  "prompt_id": "036-validate-age",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777215499,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 7281,
+      "code_len": 337,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 130,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 425,
+      "stdout": "err=negativeok=25err=too-large",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "fn validate_age(_ age: Int) -> Result<Int, String>\n  if age < 0\n    Err(\"negative\")\n  else if age > 150\n    Err(\"too-large\")\n  else\n    Ok(age)\n  end\nend\n\nfn report(_ age: Int) -> Unit\n  match validate_age(age)\n  when Ok(value)\n    print(\"ok=#{value}\")\n  when Err(msg)\n    print(\"err=#{msg}\")\n  end\nend\n\nreport(-1)\nreport(25)\nreport(200)",
+  "overall": "pass"
+}

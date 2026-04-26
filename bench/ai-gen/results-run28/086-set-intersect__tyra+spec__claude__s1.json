@@ -1,0 +1,36 @@
+{
+  "prompt_id": "086-set-intersect",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777217293,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 32101,
+      "code_len": 1288,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 407,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 611,
+      "stdout": "1 3 4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_line(_ s: String) -> List<Int>\n  let toks = string.split_whitespace(s)\n  mut result: List<Int> = []\n  for t in toks\n    match string.parse_int(t)\n    when Some(n)\n      result = list.push(result, n)\n    when None\n      ()\n    end\n  end\n  result\nend\n\nfn insert_sorted(_ sorted: List<Int>, _ x: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut inserted = false\n  for y in sorted\n    if not inserted and x <= y\n      result = list.push(result, x)\n      inserted = true\n    end\n    result = list.push(result, y)\n  end\n  if not inserted\n    result = list.push(result, x)\n  end\n  result\nend\n\nfn read_or_empty() -> String\n  match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\nend\n\nfn main() -> Result<Unit, String>\n  let line1 = read_or_empty()\n  let line2 = read_or_empty()\n  let a = parse_line(line1)\n  let b = parse_line(line2)\n  mut inter: List<Int> = []\n  for x in a\n    if list.contains(b, x) and not list.contains(inter, x)\n      inter = insert_sorted(inter, x)\n    end\n  end\n  if inter.len() == 0\n    println(\"empty\")\n  else\n    mut s = \"\"\n    mut first = true\n    for x in inter\n      if first\n        s = \"#{x}\"\n        first = false\n      else\n        s = \"#{s} #{x}\"\n      end\n    end\n    println(s)\n  end\n  Ok(())\nend",
+  "overall": "pass"
+}
