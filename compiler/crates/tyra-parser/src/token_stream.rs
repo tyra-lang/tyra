@@ -110,6 +110,11 @@ impl TokenStream {
     }
 
     /// Expect a newline or EOF as statement terminator.
+    ///
+    /// Also accepts `end`, `else`, and `when` as implicit terminators.
+    /// This lets one-line forms like `match e when Some(x) x when None 0 end`
+    /// parse: each arm body is a single expression with no trailing newline,
+    /// followed directly by the next `when` or by `end`.
     pub fn expect_newline_or_eof(&mut self, report: &mut Report) {
         if self.bracket_depth > 0 {
             return; // inside brackets, newlines are not required
@@ -118,7 +123,10 @@ impl TokenStream {
             TokenKind::Newline => {
                 self.pos += 1;
             }
-            TokenKind::Eof => {} // OK
+            TokenKind::Eof
+            | TokenKind::End
+            | TokenKind::Else
+            | TokenKind::When => {} // OK — implicit block terminator
             _ => {
                 let span = self.tokens[self.pos].span;
                 report.add(

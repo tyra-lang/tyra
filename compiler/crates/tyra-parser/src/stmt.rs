@@ -161,7 +161,10 @@ pub fn parse_match(ts: &mut TokenStream, report: &mut Report) -> MatchExpr {
 fn parse_match_arm(ts: &mut TokenStream, report: &mut Report) -> MatchArm {
     let start = ts.advance().span; // consume 'when'
     let pattern = crate::pattern::parse_pattern(ts, report);
-    ts.expect_newline_or_eof(report);
+    // No newline required after the pattern. parse_body skips leading
+    // newlines and stops at `when` / `end` / `else` / `eof`, so both
+    // multi-line `when PAT NL <stmts>` and single-line `when PAT EXPR`
+    // forms work.
     let body = parse_body(ts, report);
     let span = if let Some(last) = body.last() {
         start.merge(stmt_span(last))
