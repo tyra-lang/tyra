@@ -941,12 +941,36 @@ fn rename_let_shadows(ast: &mut tyra_ast::SourceFile) {
                         self.walk_expr(it, active);
                     }
                 }
+                ExprKind::MapLit(pairs) => {
+                    for (k, v) in pairs {
+                        self.walk_expr(k, active);
+                        self.walk_expr(v, active);
+                    }
+                }
                 ExprKind::StringInterp(parts) => {
                     for p in parts {
                         if let StringPart::Expr(e) = p {
                             self.walk_expr(e, active);
                         }
                     }
+                }
+                ExprKind::Index(obj, idx) => {
+                    self.walk_expr(obj, active);
+                    self.walk_expr(idx, active);
+                }
+                ExprKind::Propagate(inner) | ExprKind::Await(inner) | ExprKind::Spawn(inner) => {
+                    self.walk_expr(inner, active);
+                }
+                ExprKind::Lambda(lam) => {
+                    // Lambda introduces a fresh scope with its own params.
+                    let saved = active.clone();
+                    let saved_introduced = self.introduced.clone();
+                    for p in &lam.params {
+                        self.introduced.insert(p.name.clone());
+                    }
+                    self.walk_stmts(&mut lam.body, active);
+                    *active = saved;
+                    self.introduced = saved_introduced;
                 }
                 _ => {}
             }
@@ -981,6 +1005,10 @@ fn rename_let_shadows(ast: &mut tyra_ast::SourceFile) {
         }
     }
 
+    // Each function body / impl method / top-level scope is independent —
+    // shadowing only collides within a single MIR function (ADR-0006: top-
+    // level Stmts are desugared to one synthetic `fn main`). The counter
+    // is shared across scopes so renamed names stay globally unique.
     let mut pass = Pass {
         counter: 0,
         introduced: HashSet::new(),
@@ -995,10 +1023,6 @@ fn rename_let_shadows(ast: &mut tyra_ast::SourceFile) {
                 let mut active = HashMap::new();
                 pass.walk_stmts(&mut f.body, &mut active);
             }
-            Item::Stmt(s) => {
-                let mut active = HashMap::new();
-                pass.walk_stmts(std::slice::from_mut(s), &mut active);
-            }
             Item::ImplDef(impl_def) => {
                 for m in &mut impl_def.methods {
                     pass.introduced.clear();
@@ -1009,7 +1033,19 @@ fn rename_let_shadows(ast: &mut tyra_ast::SourceFile) {
                     pass.walk_stmts(&mut m.body, &mut active);
                 }
             }
+            // Item::Stmt handled in the second pass below — top-level
+            // Stmts share a single MIR function so they need one
+            // continuous `introduced` set.
             _ => {}
+        }
+    }
+    // Walk top-level statements as a single scope, with a fresh
+    // introduced set so prior function-local names don't bleed in.
+    pass.introduced.clear();
+    let mut active = HashMap::new();
+    for item in &mut ast.items {
+        if let Item::Stmt(s) = item {
+            pass.walk_stmts(std::slice::from_mut(s), &mut active);
         }
     }
 }
