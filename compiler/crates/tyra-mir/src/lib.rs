@@ -1214,6 +1214,45 @@ end
         );
     }
 
+    /// `let t = match ... when 0 -> "" when _ -> "X" end` must register
+    /// `t` as a String binding so subsequent interpolation `"#{t}..."`
+    /// formats with `%s` rather than `%ld`. Before the fix,
+    /// `is_string_expr` did not recurse into Match arms; the resulting
+    /// printf used `%ld` and printed the raw string pointer as an int.
+    #[test]
+    fn match_of_string_arms_propagates_string_var() {
+        let source = "\
+fn f() -> String
+  let t = match 0
+  when 0
+    \"\"
+  when _
+    \"X\"
+  end
+  \"#{t}IV\"
+end
+";
+        let prog = lower_str(source);
+        let f = prog.functions.iter().find(|f| f.name == "f").unwrap();
+        let format_ref = f
+            .body
+            .iter()
+            .find_map(|i| match i {
+                Instruction::StringFormat { format_ref, .. } => Some(*format_ref),
+                _ => None,
+            })
+            .expect("expected a StringFormat instruction");
+        let format_str = &prog.string_constants[format_ref];
+        assert!(
+            format_str.contains("%s"),
+            "expected %s for the match-of-strings binding `t`, got {format_str:?}"
+        );
+        assert!(
+            !format_str.contains("%ld"),
+            "expected no %ld; the only interp slot is the String binding `t`. got {format_str:?}"
+        );
+    }
+
     /// M11 phase 2 safety gate: passing a non-function value to
     /// `app.get` / `app.post` produces UB at request dispatch, because
     /// the stdlib types the handler slot as `String` (ptr) and the

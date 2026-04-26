@@ -51,6 +51,13 @@ impl super::LowerCtx {
                 false
             }
             ExprKind::Call(callee, _) => self.call_returns_type(callee, &Ty::String),
+            ExprKind::Match(m) => {
+                !m.arms.is_empty()
+                    && m.arms.iter().all(|arm| match arm.body.last() {
+                        Some(Stmt::Expr(es)) => self.is_string_expr(&es.expr),
+                        _ => false,
+                    })
+            }
             _ => false,
         }
     }
