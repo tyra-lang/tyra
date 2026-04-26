@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777187330,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 32923,
+      "code_len": 2157,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 447,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 564,
+      "stdout": "9 6 5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn read_line_or_empty() -> String\n  match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\nend\n\nfn parse_ints(_ line: String) -> List<Int>\n  mut xs: List<Int> = []\n  mut cur = \"\"\n  mut i = 0\n  let n = string.len(line)\n  while i < n\n    match string.byte_at(line, i)\n    when Some(b)\n      if b == 32 or b == 9 or b == 13 or b == 10\n        if not string.is_empty(cur)\n          match string.parse_int(cur)\n          when Some(v)\n            xs = list.push(xs, v)\n          when None\n            ()\n          end\n          cur = \"\"\n        end\n      else\n        cur = \"#{cur}#{string.from_byte(b)}\"\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if not string.is_empty(cur)\n    match string.parse_int(cur)\n    when Some(v)\n      xs = list.push(xs, v)\n    when None\n      ()\n    end\n  end\n  xs\nend\n\nfn remove_one(_ src: List<Int>, _ target: Int) -> List<Int>\n  mut out: List<Int> = []\n  mut removed = false\n  mut i = 0\n  let n = list.len(src)\n  while i < n\n    match list.get(src, i)\n    when Some(v)\n      if v == target and not removed\n        removed = true\n      else\n        out = list.push(out, v)\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  out\nend\n\nfn top_k_desc(_ xs: List<Int>, _ k: Int) -> List<Int>\n  mut remaining = xs\n  mut result: List<Int> = []\n  mut count = 0\n  while count < k and list.len(remaining) > 0\n    match list.max(remaining)\n    when Some(m)\n      result = list.push(result, m)\n      remaining = remove_one(remaining, m)\n      count = count + 1\n    when None\n      count = k\n    end\n  end\n  result\nend\n\nfn join_space(_ xs: List<Int>) -> String\n  mut out = \"\"\n  mut j = 0\n  let n = list.len(xs)\n  while j < n\n    match list.get(xs, j)\n    when Some(v)\n      if j == 0\n        out = \"#{v}\"\n      else\n        out = \"#{out} #{v}\"\n      end\n    when None\n      ()\n    end\n    j = j + 1\n  end\n  out\nend\n\nlet nums_line = read_line_or_empty()\nlet k_line = read_line_or_empty()\nlet xs = parse_ints(nums_line)\nlet k = match string.parse_int(string.trim(k_line))\nwhen Some(v)\n  v\nwhen None\n  0\nend\nlet picked = top_k_desc(xs, k)\nprintln(join_space(picked))",
+  "overall": "pass"
+}

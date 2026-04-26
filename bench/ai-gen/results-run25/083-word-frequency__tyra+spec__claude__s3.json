@@ -1,0 +1,36 @@
+{
+  "prompt_id": "083-word-frequency",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777186555,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 52745,
+      "code_len": 1670,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 350,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 526,
+      "stdout": "top=the=4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn is_ws_byte(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13 or b == 11 or b == 12\nend\n\nfn is_ws_at(_ s: String, _ i: Int) -> Bool\n  match string.byte_at(s, i)\n  when Some(b)\n    is_ws_byte(b)\n  when None\n    true\n  end\nend\n\nfn skip_ws(_ s: String, _ start: Int, _ n: Int) -> Int\n  mut i = start\n  while i < n and is_ws_at(s, i)\n    i = i + 1\n  end\n  i\nend\n\nfn token_end(_ s: String, _ start: Int, _ n: Int) -> Int\n  mut i = start\n  while i < n and not is_ws_at(s, i)\n    i = i + 1\n  end\n  i\nend\n\nfn count_token(_ s: String, _ tok: String, _ n: Int) -> Int\n  mut count = 0\n  mut p = 0\n  while p < n\n    p = skip_ws(s, p, n)\n    if p < n\n      let q = token_end(s, p, n)\n      if string.substring(s, p, q) == tok\n        count = count + 1\n      end\n      p = q\n    end\n  end\n  count\nend\n\nfn is_first_occurrence(_ s: String, _ tok: String, _ start: Int, _ n: Int) -> Bool\n  mut p = 0\n  mut found = false\n  while p < start and not found\n    p = skip_ws(s, p, n)\n    if p < start\n      let q = token_end(s, p, n)\n      if string.substring(s, p, q) == tok\n        found = true\n      end\n      p = q\n    end\n  end\n  not found\nend\n\nfn main() -> Unit\n  let s = io.read_to_end()\n  let n = string.len(s)\n  mut best_token = \"\"\n  mut best_count = 0\n  mut i = 0\n  while i < n\n    i = skip_ws(s, i, n)\n    if i < n\n      let j = token_end(s, i, n)\n      let tok = string.substring(s, i, j)\n      if is_first_occurrence(s, tok, i, n)\n        let c = count_token(s, tok, n)\n        if c > best_count\n          best_count = c\n          best_token = tok\n        end\n      end\n      i = j\n    end\n  end\n  println(\"top=#{best_token}=#{best_count}\")\nend",
+  "overall": "pass"
+}

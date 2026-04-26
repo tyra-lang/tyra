@@ -1,0 +1,36 @@
+{
+  "prompt_id": "076-running-max",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777185912,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 25455,
+      "code_len": 1512,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 599,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 621,
+      "stdout": "3 3 4 4 5 9 9 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Unit\n  let line_opt = io.read_line()\n  let line = match line_opt\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  mut nums: List<Int> = []\n  mut cur: Int = 0\n  mut has: Bool = false\n  mut neg: Bool = false\n  mut i: Int = 0\n  let n = string.len(line)\n  while i < n\n    let b = match string.byte_at(line, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if b >= 48 and b <= 57\n      cur = cur * 10 + (b - 48)\n      has = true\n    else if b == 45 and not has\n      neg = true\n    else\n      if has\n        if neg\n          nums = list.push(nums, -cur)\n        else\n          nums = list.push(nums, cur)\n        end\n        cur = 0\n        has = false\n        neg = false\n      end\n    end\n    i = i + 1\n  end\n  if has\n    if neg\n      nums = list.push(nums, -cur)\n    else\n      nums = list.push(nums, cur)\n    end\n  end\n\n  mut maxes: List<Int> = []\n  mut cmax: Int = 0\n  mut first: Bool = true\n  let m = nums.len()\n  mut j: Int = 0\n  while j < m\n    let v = match nums.get(j)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    if first\n      cmax = v\n      first = false\n    else\n      if v > cmax\n        cmax = v\n      end\n    end\n    maxes = list.push(maxes, cmax)\n    j = j + 1\n  end\n\n  mut out: String = \"\"\n  mut k: Int = 0\n  while k < m\n    let v = match maxes.get(k)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    if k == 0\n      out = \"#{v}\"\n    else\n      out = \"#{out} #{v}\"\n    end\n    k = k + 1\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

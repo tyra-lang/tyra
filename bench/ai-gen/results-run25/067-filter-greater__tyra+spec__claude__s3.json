@@ -1,0 +1,36 @@
+{
+  "prompt_id": "067-filter-greater",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777185367,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 34919,
+      "code_len": 1525,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 419,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 518,
+      "stdout": "5 8 10\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  let n = string.len(s)\n  mut current = 0\n  mut sign = 1\n  mut has_digit = false\n  while i < n\n    let bo = string.byte_at(s, i)\n    match bo\n    when Some(b)\n      if b == 32 or b == 9 or b == 10 or b == 13\n        if has_digit\n          result = list.push(result, current * sign)\n          current = 0\n          sign = 1\n          has_digit = false\n        end\n      else if b == 45\n        sign = -1\n      else if b == 43\n        sign = 1\n      else\n        current = current * 10 + (b - 48)\n        has_digit = true\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if has_digit\n    result = list.push(result, current * sign)\n  end\n  result\nend\n\nfn main() -> Unit\n  let line1_opt = io.read_line()\n  let line2_opt = io.read_line()\n  let line1 = match line1_opt\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let line2 = match line2_opt\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let nums = parse_ints(line1)\n  let threshold_list = parse_ints(line2)\n  let t = match threshold_list.get(0)\n  when Some(x)\n    x\n  when None\n    0\n  end\n\n  mut output = \"\"\n  mut first = true\n  let len = nums.len()\n  mut i = 0\n  while i < len\n    match nums.get(i)\n    when Some(v)\n      if v > t\n        if first\n          output = \"#{v}\"\n          first = false\n        else\n          output = \"#{output} #{v}\"\n        end\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  println(output)\nend",
+  "overall": "pass"
+}

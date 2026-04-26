@@ -1,0 +1,36 @@
+{
+  "prompt_id": "065-list-product",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777185136,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 62619,
+      "code_len": 845,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 438,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 496,
+      "stdout": "product=210\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  mut product = 1\n  mut current = 0\n  mut sign = 1\n  mut has_digit = false\n  mut i = 0\n  let n = string.len(line)\n\n  while i < n\n    let b = match string.byte_at(line, i)\n    when Some(v)\n      v\n    when None\n      0\n    end\n\n    if b == 32 or b == 9 or b == 13 or b == 10\n      if has_digit\n        product = product * (sign * current)\n        current = 0\n        sign = 1\n        has_digit = false\n      end\n    else if b == 45 and not has_digit\n      sign = 0 - 1\n    else if b == 43 and not has_digit\n      sign = 1\n    else\n      current = current * 10 + (b - 48)\n      has_digit = true\n    end\n\n    i = i + 1\n  end\n\n  if has_digit\n    product = product * (sign * current)\n  end\n\n  println(\"product=#{product}\")\nend",
+  "overall": "pass"
+}

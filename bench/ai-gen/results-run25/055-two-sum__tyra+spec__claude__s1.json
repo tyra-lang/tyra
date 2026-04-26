@@ -1,0 +1,36 @@
+{
+  "prompt_id": "055-two-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777184289,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 40787,
+      "code_len": 2006,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 737,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 587,
+      "stdout": "found=0,1",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 13 or b == 10\nend\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut start = 0\n  let n = string.len(s)\n  mut i = 0\n  while i < n\n    match string.byte_at(s, i)\n    when Some(b)\n      if is_ws(b)\n        if start < i\n          let tok = string.substring(s, start, i)\n          match string.parse_int(tok)\n          when Some(v)\n            result = list.push(result, v)\n          when None\n            ()\n          end\n        end\n        start = i + 1\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if start < n\n    let tok = string.substring(s, start, n)\n    match string.parse_int(tok)\n    when Some(v)\n      result = list.push(result, v)\n    when None\n      ()\n    end\n  end\n  result\nend\n\nfn find_pair(_ nums: List<Int>, _ t: Int) -> Option<String>\n  let n = list.len(nums)\n  mut i = 0\n  mut answer: Option<String> = None\n  while i < n\n    match answer\n    when Some(_)\n      i = n\n    when None\n      mut j = i + 1\n      while j < n\n        match answer\n        when Some(_)\n          j = n\n        when None\n          match list.get(nums, i)\n          when Some(a)\n            match list.get(nums, j)\n            when Some(b)\n              if a + b == t\n                answer = Some(\"found=#{i},#{j}\")\n              end\n            when None\n              ()\n            end\n          when None\n            ()\n          end\n          j = j + 1\n        end\n      end\n      i = i + 1\n    end\n  end\n  answer\nend\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(l1)\n    match io.read_line()\n    when Some(l2)\n      let nums = parse_ints(l1)\n      match string.parse_int(string.trim(l2))\n      when Some(t)\n        match find_pair(nums, t)\n        when Some(msg)\n          print(msg)\n        when None\n          print(\"none\")\n        end\n      when None\n        print(\"none\")\n      end\n    when None\n      print(\"none\")\n    end\n  when None\n    print(\"none\")\n  end\nend",
+  "overall": "pass"
+}

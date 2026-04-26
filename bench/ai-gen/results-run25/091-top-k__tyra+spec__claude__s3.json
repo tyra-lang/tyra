@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777187416,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 71681,
+      "code_len": 2355,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 428,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 529,
+      "stdout": "9 6 5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  mut start = -1\n  mut i = 0\n  let n = string.len(s)\n  while i < n\n    mut b = 0\n    match string.byte_at(s, i)\n    when Some(v)\n      b = v\n    when None\n      b = 0\n    end\n    let is_ws = b == 32 or b == 9 or b == 10 or b == 13\n    if is_ws\n      if start >= 0\n        let tok = string.substring(s, start, i)\n        match string.parse_int(tok)\n        when Some(v)\n          result = list.push(result, v)\n        when None\n          ()\n        end\n        start = -1\n      end\n    else\n      if start < 0\n        start = i\n      end\n    end\n    i = i + 1\n  end\n  if start >= 0\n    let tok = string.substring(s, start, n)\n    match string.parse_int(tok)\n    when Some(v)\n      result = list.push(result, v)\n    when None\n      ()\n    end\n  end\n  result\nend\n\nfn get_at(_ xs: List<Int>, _ i: Int) -> Int\n  match xs.get(i)\n  when Some(v)\n    v\n  when None\n    0\n  end\nend\n\nfn top_k_desc(_ nums: List<Int>, _ k: Int) -> List<Int>\n  mut remaining = nums\n  mut result: List<Int> = []\n  mut count = 0\n  let n = remaining.len()\n  let target = if k < n\n    k\n  else\n    n\n  end\n  while count < target\n    let rn = remaining.len()\n    mut max_idx = 0\n    mut max_val = get_at(remaining, 0)\n    mut j = 1\n    while j < rn\n      let cur = get_at(remaining, j)\n      if cur > max_val\n        max_val = cur\n        max_idx = j\n      end\n      j = j + 1\n    end\n    result = list.push(result, max_val)\n    mut new_remaining: List<Int> = []\n    mut p = 0\n    while p < rn\n      if p == max_idx\n        ()\n      else\n        new_remaining = list.push(new_remaining, get_at(remaining, p))\n      end\n      p = p + 1\n    end\n    remaining = new_remaining\n    count = count + 1\n  end\n  result\nend\n\nfn build_output(_ xs: List<Int>) -> String\n  mut output = \"\"\n  mut i = 0\n  let n = xs.len()\n  while i < n\n    let v = get_at(xs, i)\n    if i == 0\n      output = \"#{v}\"\n    else\n      output = \"#{output} #{v}\"\n    end\n    i = i + 1\n  end\n  output\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet nums = parse_ints(line1)\nlet k = match string.parse_int(string.trim(line2))\nwhen Some(v)\n  v\nwhen None\n  0\nend\n\nlet result = top_k_desc(nums, k)\nprintln(build_output(result))",
+  "overall": "pass"
+}

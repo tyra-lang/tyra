@@ -1,0 +1,36 @@
+{
+  "prompt_id": "083-word-frequency",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777186408,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 98815,
+      "code_len": 2587,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 322,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 517,
+      "stdout": "top=the=4",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn byte_of(_ s: String, _ i: Int) -> Int\n  match string.byte_at(s, i)\n  when Some(x)\n    x\n  when None\n    -1\n  end\nend\n\nfn is_ws(_ b: Int) -> Bool\n  b == 32 or b == 9 or b == 10 or b == 13\nend\n\nfn index_of(_ haystack: String, _ needle: String, _ from: Int) -> Int\n  let hlen = string.len(haystack)\n  let nlen = string.len(needle)\n  if nlen == 0\n    return from\n  end\n  mut i = from\n  let last = hlen - nlen\n  while i <= last\n    mut j = 0\n    mut ok = true\n    while j < nlen\n      if ok\n        if byte_of(haystack, i + j) != byte_of(needle, j)\n          ok = false\n        end\n      end\n      j = j + 1\n    end\n    if ok\n      return i\n    end\n    i = i + 1\n  end\n  -1\nend\n\nfn count_occurrences(_ haystack: String, _ needle: String) -> Int\n  let nlen = string.len(needle)\n  if nlen == 0\n    return 0\n  end\n  mut count = 0\n  mut pos = 0\n  mut done = false\n  while not done\n    let p = index_of(haystack, needle, pos)\n    if p < 0\n      done = true\n    else\n      count = count + 1\n      pos = p + nlen - 1\n    end\n  end\n  count\nend\n\nlet input = io.read_to_end()\nlet n = string.len(input)\n\nmut all_tokens = \" \"\nmut start = -1\nmut i = 0\nwhile i < n\n  let b = byte_of(input, i)\n  if is_ws(b)\n    if start >= 0\n      let tok = string.substring(input, start, i)\n      all_tokens = \"#{all_tokens}#{tok} \"\n      start = -1\n    end\n  else\n    if start < 0\n      start = i\n    end\n  end\n  i = i + 1\nend\nif start >= 0\n  let tok = string.substring(input, start, n)\n  all_tokens = \"#{all_tokens}#{tok} \"\nend\n\nmut uniq = \" \"\nmut start2 = -1\nmut i2 = 0\nwhile i2 < n\n  let b = byte_of(input, i2)\n  if is_ws(b)\n    if start2 >= 0\n      let tok = string.substring(input, start2, i2)\n      let key = \" #{tok} \"\n      if not string.contains(uniq, key)\n        uniq = \"#{uniq}#{tok} \"\n      end\n      start2 = -1\n    end\n  else\n    if start2 < 0\n      start2 = i2\n    end\n  end\n  i2 = i2 + 1\nend\nif start2 >= 0\n  let tok = string.substring(input, start2, n)\n  let key = \" #{tok} \"\n  if not string.contains(uniq, key)\n    uniq = \"#{uniq}#{tok} \"\n  end\nend\n\nmut best_token = \"\"\nmut best_count = 0\nlet ulen = string.len(uniq)\nmut k = 1\nwhile k < ulen\n  mut j = k\n  mut found_space = false\n  while j < ulen and not found_space\n    if byte_of(uniq, j) == 32\n      found_space = true\n    else\n      j = j + 1\n    end\n  end\n  if j > k\n    let tok = string.substring(uniq, k, j)\n    let key = \" #{tok} \"\n    let c = count_occurrences(all_tokens, key)\n    if c > best_count\n      best_count = c\n      best_token = tok\n    end\n  end\n  k = j + 1\nend\n\nprint(\"top=#{best_token}=#{best_count}\")",
+  "overall": "pass"
+}

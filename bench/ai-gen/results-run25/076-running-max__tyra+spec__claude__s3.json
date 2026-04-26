@@ -1,0 +1,36 @@
+{
+  "prompt_id": "076-running-max",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777185971,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 25779,
+      "code_len": 1293,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 319,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 447,
+      "stdout": "3 3 4 4 5 9 9 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut nums: List<Int> = []\nmut i = 0\nlet n = string.len(line)\nmut have = false\nmut cur = 0\nmut neg = false\n\nwhile i < n\n  let b = match string.byte_at(line, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if b == 32 or b == 9 or b == 10 or b == 13\n    if have\n      if neg\n        nums = list.push(nums, -cur)\n      else\n        nums = list.push(nums, cur)\n      end\n      have = false\n      cur = 0\n      neg = false\n    end\n  else if b == 45 and not have\n    neg = true\n    have = true\n  else\n    cur = cur * 10 + (b - 48)\n    have = true\n  end\n  i = i + 1\nend\n\nif have\n  if neg\n    nums = list.push(nums, -cur)\n  else\n    nums = list.push(nums, cur)\n  end\nend\n\nmut maxes: List<Int> = []\nmut cm = 0\nmut first = true\nlet m = list.len(nums)\nmut j = 0\nwhile j < m\n  let v = match list.get(nums, j)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if first\n    cm = v\n    first = false\n  else\n    if v > cm\n      cm = v\n    end\n  end\n  maxes = list.push(maxes, cm)\n  j = j + 1\nend\n\nmut out = \"\"\nmut k = 0\nwhile k < m\n  let v = match list.get(maxes, k)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if k == 0\n    out = \"#{v}\"\n  else\n    out = \"#{out} #{v}\"\n  end\n  k = k + 1\nend\nprintln(out)",
+  "overall": "pass"
+}

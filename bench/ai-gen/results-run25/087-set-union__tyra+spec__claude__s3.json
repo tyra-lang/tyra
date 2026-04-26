@@ -1,0 +1,36 @@
+{
+  "prompt_id": "087-set-union",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777187043,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 54548,
+      "code_len": 2225,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 496,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 843,
+      "stdout": "1 2 3 4 5 6 7\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ line: String) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  let n = string.len(line)\n  mut have = false\n  mut sign = 1\n  mut val = 0\n  while i < n\n    let b = match string.byte_at(line, i)\n            when Some(x)\n              x\n            when None\n              0\n            end\n    if b == 32 or b == 9 or b == 13\n      if have\n        result = list.push(result, val * sign)\n        have = false\n        sign = 1\n        val = 0\n      end\n    else if b == 45\n      if have\n        val = val\n      else\n        sign = -1\n        have = true\n      end\n    else\n      if b >= 48 and b <= 57\n        have = true\n        val = val * 10 + (b - 48)\n      end\n    end\n    i = i + 1\n  end\n  if have\n    result = list.push(result, val * sign)\n  end\n  result\nend\n\nfn solve(_ line1: String, _ line2: String) -> Unit\n  mut all: List<Int> = parse_ints(line1)\n  let bs = parse_ints(line2)\n  let bn = list.len(bs)\n  mut i = 0\n  while i < bn\n    match list.get(bs, i)\n    when Some(v)\n      all = list.push(all, v)\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  let total = list.len(all)\n  if total == 0\n    println(\"\")\n  else\n    match list.min(all)\n    when Some(m)\n      mut output = \"#{m}\"\n      mut last = m\n      mut done = false\n      while not done\n        mut has_best = false\n        mut best = 0\n        mut j = 0\n        while j < total\n          match list.get(all, j)\n          when Some(v)\n            if v > last\n              if has_best\n                if v < best\n                  best = v\n                end\n              else\n                best = v\n                has_best = true\n              end\n            end\n          when None\n            ()\n          end\n          j = j + 1\n        end\n        if has_best\n          output = \"#{output} #{best}\"\n          last = best\n        else\n          done = true\n        end\n      end\n      println(output)\n    when None\n      println(\"\")\n    end\n  end\nend\n\nlet l1 = match io.read_line()\n         when Some(s)\n           s\n         when None\n           \"\"\n         end\nlet l2 = match io.read_line()\n         when Some(s)\n           s\n         when None\n           \"\"\n         end\nsolve(l1, l2)",
+  "overall": "pass"
+}

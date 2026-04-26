@@ -1,0 +1,36 @@
+{
+  "prompt_id": "024-uppercase-ascii",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777182992,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 7971,
+      "code_len": 118,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 382,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 430,
+      "stdout": "HELLO, WORLD! 123",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nmatch io.read_line()\nwhen Some(line)\n  print(string.to_upper(line))\nwhen None\n  print(\"\")\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "097-sum-skip-negative",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777187746,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 24491,
+      "code_len": 985,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 408,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 449,
+      "stdout": "partial=13\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  mut sum = 0\n  mut i = 0\n  let n = string.len(line)\n  mut current = \"\"\n  mut stop = false\n\n  while i < n and not stop\n    let b = match string.byte_at(line, i)\n    when Some(x)\n      x\n    when None\n      0\n    end\n\n    if b == 32 or b == 9 or b == 10 or b == 13\n      if not string.is_empty(current)\n        let v = match string.parse_int(current)\n        when Some(x)\n          x\n        when None\n          0\n        end\n        if v < 0\n          stop = true\n        else\n          sum = sum + v\n          current = \"\"\n        end\n      end\n    else\n      current = \"#{current}#{string.from_byte(b)}\"\n    end\n    i = i + 1\n  end\n\n  if not stop and not string.is_empty(current)\n    let v = match string.parse_int(current)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    if v >= 0\n      sum = sum + v\n    end\n  end\n\n  println(\"partial=#{sum}\")\nend",
+  "overall": "pass"
+}

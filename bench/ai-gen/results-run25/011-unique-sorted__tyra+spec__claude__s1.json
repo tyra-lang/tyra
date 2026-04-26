@@ -1,0 +1,36 @@
+{
+  "prompt_id": "011-unique-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777182275,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 37810,
+      "code_len": 1450,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 414,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 1123,
+      "stdout": "1 2 3 4 5 6 9",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet input = io.read_to_end()\nlet n = string.len(input)\nmut nums: List<Int> = []\nmut cur = \"\"\nmut has = false\nmut i = 0\n\nwhile i < n\n  match string.byte_at(input, i)\n  when Some(b)\n    if b == 32 or b == 9 or b == 10 or b == 13\n      if has\n        match string.parse_int(cur)\n        when Some(v)\n          if not list.contains(nums, v)\n            nums = list.push(nums, v)\n          end\n        when None\n          ()\n        end\n        cur = \"\"\n        has = false\n      end\n    else\n      cur = \"#{cur}#{string.from_byte(b)}\"\n      has = true\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nif has\n  match string.parse_int(cur)\n  when Some(v)\n    if not list.contains(nums, v)\n      nums = list.push(nums, v)\n    end\n  when None\n    ()\n  end\nend\n\nlet count = list.len(nums)\nmut sorted: List<Int> = []\nmut placed = 0\nmut last_val: Int = 0\nmut have_last = false\n\nwhile placed < count\n  mut cur_min: Int = 0\n  mut found = false\n  for x in nums\n    let elig = if have_last\n      x > last_val\n    else\n      true\n    end\n    if elig\n      if not found\n        cur_min = x\n        found = true\n      else if x < cur_min\n        cur_min = x\n      end\n    end\n  end\n  sorted = list.push(sorted, cur_min)\n  last_val = cur_min\n  have_last = true\n  placed = placed + 1\nend\n\nmut out = \"\"\nmut first = true\nfor x in sorted\n  if first\n    out = \"#{x}\"\n    first = false\n  else\n    out = \"#{out} #{x}\"\n  end\nend\nprint(out)",
+  "overall": "pass"
+}

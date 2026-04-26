@@ -1,0 +1,36 @@
+{
+  "prompt_id": "001-fizzbuzz",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777181931,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8665,
+      "code_len": 407,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 784,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 480,
+      "stdout": "1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\n\nlet line = io.read_line()\nmatch line\nwhen Some(s)\n  match string.parse_int(string.trim(s))\n  when Some(n)\n    mut i = 1\n    while i <= n\n      if i % 15 == 0\n        println(\"FizzBuzz\")\n      else if i % 3 == 0\n        println(\"Fizz\")\n      else if i % 5 == 0\n        println(\"Buzz\")\n      else\n        println(\"#{i}\")\n      end\n      i = i + 1\n    end\n  when None\n    ()\n  end\nwhen None\n  ()\nend",
+  "overall": "pass"
+}

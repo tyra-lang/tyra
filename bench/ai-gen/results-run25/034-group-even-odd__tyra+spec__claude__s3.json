@@ -1,0 +1,36 @@
+{
+  "prompt_id": "034-group-even-odd",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777183415,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 26206,
+      "code_len": 892,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 352,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 462,
+      "stdout": "evens=4 2 6 8\nodds=7 1 9 3\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet raw = io.read_to_end()\nlet input = \"#{raw} \"\nlet n = string.len(input)\nmut evens = \"\"\nmut odds = \"\"\nmut tok = \"\"\nmut i = 0\nwhile i < n\n  mut b = 32\n  match string.byte_at(input, i)\n  when Some(x)\n    b = x\n  when None\n    b = 32\n  end\n  let is_ws = b == 32 or b == 9 or b == 10 or b == 13\n  if is_ws\n    if not string.is_empty(tok)\n      match string.parse_int(tok)\n      when Some(v)\n        if v % 2 == 0\n          if string.is_empty(evens)\n            evens = \"#{v}\"\n          else\n            evens = \"#{evens} #{v}\"\n          end\n        else\n          if string.is_empty(odds)\n            odds = \"#{v}\"\n          else\n            odds = \"#{odds} #{v}\"\n          end\n        end\n      when None\n        ()\n      end\n      tok = \"\"\n    end\n  else\n    tok = \"#{tok}#{string.from_byte(b)}\"\n  end\n  i = i + 1\nend\nprintln(\"evens=#{evens}\")\nprintln(\"odds=#{odds}\")",
+  "overall": "pass"
+}

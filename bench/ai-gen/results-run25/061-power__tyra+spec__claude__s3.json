@@ -1,0 +1,36 @@
+{
+  "prompt_id": "061-power",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777184798,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 7806,
+      "code_len": 252,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 117,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 431,
+      "stdout": "pow2_10=1024pow3_4=81",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "fn power(_ base: Int, _ exp: Int) -> Int\n  mut result = 1\n  mut i = 0\n  while i < exp\n    result = result * base\n    i = i + 1\n  end\n  result\nend\n\nlet pow2_10 = power(2, 10)\nlet pow3_4 = power(3, 4)\nprint(\"pow2_10=#{pow2_10}\")\nprint(\"pow3_4=#{pow3_4}\")",
+  "overall": "pass"
+}

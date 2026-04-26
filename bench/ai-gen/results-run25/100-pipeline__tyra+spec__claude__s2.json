@@ -1,0 +1,36 @@
+{
+  "prompt_id": "100-pipeline",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777188012,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 20645,
+      "code_len": 929,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 374,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 456,
+      "stdout": "result=18",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(line)\n    let n = string.len(line)\n    mut sum = 0\n    mut i = 0\n    mut cur = \"\"\n    while i < n\n      match string.byte_at(line, i)\n      when Some(b)\n        if b == 32 or b == 9 or b == 13\n          if not string.is_empty(cur)\n            match string.parse_int(cur)\n            when Some(v)\n              if v > 0\n                sum = sum + v * 2\n              end\n            when None\n              ()\n            end\n            cur = \"\"\n          end\n        else\n          cur = \"#{cur}#{string.from_byte(b)}\"\n        end\n      when None\n        ()\n      end\n      i = i + 1\n    end\n    if not string.is_empty(cur)\n      match string.parse_int(cur)\n      when Some(v)\n        if v > 0\n          sum = sum + v * 2\n        end\n      when None\n        ()\n      end\n    end\n    print(\"result=#{sum}\")\n  when None\n    print(\"result=0\")\n  end\nend",
+  "overall": "pass"
+}

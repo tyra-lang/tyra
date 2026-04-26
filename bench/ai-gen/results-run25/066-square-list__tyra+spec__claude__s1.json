@@ -1,0 +1,36 @@
+{
+  "prompt_id": "066-square-list",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777185221,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 27573,
+      "code_len": 957,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 434,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 414,
+      "stdout": "1 4 9 16 25\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  mut nums: List<Int> = []\n  mut current = \"\"\n  mut has_digit = false\n  mut i = 0\n  let n = string.len(line)\n  while i <= n\n    let b = if i < n\n      match string.byte_at(line, i)\n      when Some(v)\n        v\n      when None\n        32\n      end\n    else\n      32\n    end\n    if b == 32 or b == 9 or b == 10 or b == 13\n      if has_digit\n        match string.parse_int(current)\n        when Some(v)\n          nums = list.push(nums, v * v)\n        when None\n          ()\n        end\n        current = \"\"\n        has_digit = false\n      end\n    else\n      current = \"#{current}#{string.from_byte(b)}\"\n      has_digit = true\n    end\n    i = i + 1\n  end\n\n  mut out = \"\"\n  mut first = true\n  for x in nums\n    if first\n      out = \"#{x}\"\n      first = false\n    else\n      out = \"#{out} #{x}\"\n    end\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

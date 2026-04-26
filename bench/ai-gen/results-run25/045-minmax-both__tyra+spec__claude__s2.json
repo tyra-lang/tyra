@@ -1,0 +1,36 @@
+{
+  "prompt_id": "045-minmax-both",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777183921,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 13011,
+      "code_len": 332,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 449,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 443,
+      "stdout": "min=1\nmax=9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "value MinMax\n  min: Int\n  max: Int\nend\n\nfn min_max(_ xs: List<Int>) -> MinMax\n  mut lo = xs[0]\n  mut hi = xs[0]\n  for x in xs\n    if x < lo\n      lo = x\n    end\n    if x > hi\n      hi = x\n    end\n  end\n  MinMax(min: lo, max: hi)\nend\n\nlet result = min_max([5, 1, 9, 3, 7, 2])\nprintln(\"min=#{result.min}\")\nprintln(\"max=#{result.max}\")",
+  "overall": "pass"
+}

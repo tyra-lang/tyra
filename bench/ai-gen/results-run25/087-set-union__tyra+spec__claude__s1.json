@@ -1,0 +1,36 @@
+{
+  "prompt_id": "087-set-union",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777186934,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 53652,
+      "code_len": 2334,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 652,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 485,
+      "stdout": "1 2 3 4 5 6 7\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_line(_ s: String) -> List<Int>\n  mut result = []\n  let n = string.len(s)\n  mut i = 0\n  mut current = 0\n  mut has_digit = false\n  mut sign = 1\n  while i < n\n    let bopt = string.byte_at(s, i)\n    let b = match bopt\n    when Some(x)\n      x\n    when None\n      0\n    end\n    if b == 32 or b == 9 or b == 13\n      if has_digit\n        result = list.push(result, current * sign)\n        current = 0\n        has_digit = false\n        sign = 1\n      end\n    else if b == 45\n      sign = -1\n    else if b == 43\n      sign = 1\n    else\n      current = current * 10 + (b - 48)\n      has_digit = true\n    end\n    i = i + 1\n  end\n  if has_digit\n    result = list.push(result, current * sign)\n  end\n  result\nend\n\nfn read_one_line() -> String\n  match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\nend\n\nlet line1 = read_one_line()\nlet line2 = read_one_line()\n\nlet nums1 = parse_line(line1)\nlet nums2 = parse_line(line2)\n\nmut dedup = []\nmut i = 0\nwhile i < list.len(nums1)\n  let v = match list.get(nums1, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if not list.contains(dedup, v)\n    dedup = list.push(dedup, v)\n  end\n  i = i + 1\nend\n\nmut j = 0\nwhile j < list.len(nums2)\n  let v = match list.get(nums2, j)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if not list.contains(dedup, v)\n    dedup = list.push(dedup, v)\n  end\n  j = j + 1\nend\n\nmut sorted = []\nmut remaining = dedup\nwhile list.len(remaining) > 0\n  let first = match list.get(remaining, 0)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  mut min_val = first\n  mut k = 1\n  while k < list.len(remaining)\n    let v = match list.get(remaining, k)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    if v < min_val\n      min_val = v\n    end\n    k = k + 1\n  end\n  sorted = list.push(sorted, min_val)\n  mut new_remaining = []\n  mut m = 0\n  while m < list.len(remaining)\n    let v = match list.get(remaining, m)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    if v != min_val\n      new_remaining = list.push(new_remaining, v)\n    end\n    m = m + 1\n  end\n  remaining = new_remaining\nend\n\nmut out = \"\"\nmut p = 0\nwhile p < list.len(sorted)\n  let v = match list.get(sorted, p)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if p == 0\n    out = \"#{v}\"\n  else\n    out = \"#{out} #{v}\"\n  end\n  p = p + 1\nend\nprintln(out)",
+  "overall": "pass"
+}

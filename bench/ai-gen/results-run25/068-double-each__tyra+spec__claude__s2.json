@@ -1,0 +1,36 @@
+{
+  "prompt_id": "068-double-each",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777185431,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 28957,
+      "code_len": 938,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 417,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 501,
+      "stdout": "2 4 6 -8 10\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet n = string.len(line)\nmut i = 0\nmut result = \"\"\nmut first = true\nmut in_num = false\nmut sign = 1\nmut value = 0\n\nwhile i <= n\n  mut is_end = false\n  mut b = 0\n  if i == n\n    is_end = true\n  else\n    match string.byte_at(line, i)\n    when Some(x)\n      b = x\n    when None\n      b = 0\n    end\n  end\n\n  let is_ws = is_end or b == 32 or b == 9 or b == 13 or b == 10\n\n  if is_ws\n    if in_num\n      let doubled = sign * value * 2\n      if first\n        result = \"#{doubled}\"\n        first = false\n      else\n        result = \"#{result} #{doubled}\"\n      end\n      in_num = false\n      sign = 1\n      value = 0\n    end\n  else if b == 45 and not in_num\n    sign = -1\n    in_num = true\n  else if b == 43 and not in_num\n    sign = 1\n    in_num = true\n  else\n    value = value * 10 + (b - 48)\n    in_num = true\n  end\n\n  i = i + 1\nend\n\nprintln(result)",
+  "overall": "pass"
+}

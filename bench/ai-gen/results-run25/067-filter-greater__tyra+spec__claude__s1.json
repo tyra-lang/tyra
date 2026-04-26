@@ -1,0 +1,36 @@
+{
+  "prompt_id": "067-filter-greater",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777185304,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 37552,
+      "code_len": 1786,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 417,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 543,
+      "stdout": "5 8 10\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  mut has = false\n  mut neg = false\n  mut val = 0\n  while i < n\n    match string.byte_at(s, i)\n    when Some(c)\n      if c == 45\n        has = true\n        neg = true\n        val = 0\n      else if c >= 48 and c <= 57\n        if not has\n          has = true\n          neg = false\n          val = 0\n        end\n        val = val * 10 + (c - 48)\n      else\n        if has\n          if neg\n            result = list.push(result, 0 - val)\n          else\n            result = list.push(result, val)\n          end\n          has = false\n          neg = false\n          val = 0\n        end\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  if has\n    if neg\n      result = list.push(result, 0 - val)\n    else\n      result = list.push(result, val)\n    end\n  end\n  result\nend\n\nfn filter_gt(_ xs: List<Int>, _ t: Int) -> List<Int>\n  mut result: List<Int> = []\n  let n = list.len(xs)\n  mut i = 0\n  while i < n\n    match list.get(xs, i)\n    when Some(v)\n      if v > t\n        result = list.push(result, v)\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  result\nend\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet nums = parse_ints(line1)\nlet t = match string.parse_int(string.trim(line2))\nwhen Some(n)\n  n\nwhen None\n  0\nend\n\nlet filtered = filter_gt(nums, t)\n\nmut out = \"\"\nmut first = true\nmut i = 0\nlet m = list.len(filtered)\nwhile i < m\n  match list.get(filtered, i)\n  when Some(v)\n    if first\n      out = \"#{v}\"\n      first = false\n    else\n      out = \"#{out} #{v}\"\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\nprintln(out)",
+  "overall": "pass"
+}

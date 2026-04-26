@@ -1,0 +1,36 @@
+{
+  "prompt_id": "073-select-even-index",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777185819,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 25824,
+      "code_len": 1197,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 535,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 477,
+      "stdout": "10 30 50 70\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line_opt = io.read_line()\nlet line = match line_opt\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut result: List<Int> = []\nmut current = \"\"\nmut idx = 0\nmut i = 0\nlet n = string.len(line)\n\nwhile i < n\n  let b_opt = string.byte_at(line, i)\n  let b = match b_opt\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if b == 32 or b == 9 or b == 10 or b == 13\n    if not string.is_empty(current)\n      if idx % 2 == 0\n        let v_opt = string.parse_int(current)\n        match v_opt\n        when Some(v)\n          result = list.push(result, v)\n        when None\n          ()\n        end\n      end\n      idx = idx + 1\n      current = \"\"\n    end\n  else\n    current = \"#{current}#{string.from_byte(b)}\"\n  end\n  i = i + 1\nend\n\nif not string.is_empty(current)\n  if idx % 2 == 0\n    let v_opt = string.parse_int(current)\n    match v_opt\n    when Some(v)\n      result = list.push(result, v)\n    when None\n      ()\n    end\n  end\nend\n\nmut out = \"\"\nmut j = 0\nlet m = result.len()\nwhile j < m\n  let v_opt = result.get(j)\n  let v = match v_opt\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if j == 0\n    out = \"#{v}\"\n  else\n    out = \"#{out} #{v}\"\n  end\n  j = j + 1\nend\n\nprintln(out)",
+  "overall": "pass"
+}

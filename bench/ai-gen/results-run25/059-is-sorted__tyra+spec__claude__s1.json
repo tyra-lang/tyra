@@ -1,0 +1,36 @@
+{
+  "prompt_id": "059-is-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777184667,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 24142,
+      "code_len": 1093,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 412,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 443,
+      "stdout": "YES\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  let n = string.len(line)\n  mut i = 0\n  mut prev = 0\n  mut has_prev = false\n  mut sorted = true\n  mut in_num = false\n  mut sign = 1\n  mut num = 0\n\n  while i <= n\n    let b = if i < n\n      match string.byte_at(line, i)\n      when Some(x)\n        x\n      when None\n        32\n      end\n    else\n      32\n    end\n\n    let is_space = b == 32 or b == 9 or b == 10 or b == 13\n\n    if is_space\n      if in_num\n        let val = num * sign\n        if has_prev\n          if val < prev\n            sorted = false\n          end\n        end\n        prev = val\n        has_prev = true\n        in_num = false\n        num = 0\n        sign = 1\n      end\n    else\n      if not in_num and b == 45\n        sign = -1\n        in_num = true\n      else if not in_num and b == 43\n        sign = 1\n        in_num = true\n      else\n        num = num * 10 + (b - 48)\n        in_num = true\n      end\n    end\n\n    i = i + 1\n  end\n\n  if sorted\n    println(\"YES\")\n  else\n    println(\"NO\")\n  end\nend",
+  "overall": "pass"
+}

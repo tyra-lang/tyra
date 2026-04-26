@@ -1,0 +1,36 @@
+{
+  "prompt_id": "082-insertion-sort",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777186266,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 43163,
+      "code_len": 2095,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 253,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 484,
+      "stdout": "1 2 3 4 5 6 7 8 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let n = string.len(s)\n  mut i = 0\n  mut has_num = false\n  mut num = 0\n  mut neg = false\n  while i < n\n    mut b = 0\n    match string.byte_at(s, i)\n    when Some(v)\n      b = v\n    when None\n      b = 0\n    end\n    if b >= 48 and b <= 57\n      num = num * 10 + (b - 48)\n      has_num = true\n    else if b == 45 and not has_num\n      neg = true\n    else\n      if has_num\n        if neg\n          result = list.push(result, 0 - num)\n        else\n          result = list.push(result, num)\n        end\n        has_num = false\n        num = 0\n        neg = false\n      end\n    end\n    i = i + 1\n  end\n  if has_num\n    if neg\n      result = list.push(result, 0 - num)\n    else\n      result = list.push(result, num)\n    end\n  end\n  result\nend\n\nfn insert_sorted(_ sorted: List<Int>, _ x: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut inserted = false\n  let n = sorted.len()\n  mut i = 0\n  while i < n\n    mut v = 0\n    match sorted.get(i)\n    when Some(val)\n      v = val\n    when None\n      v = 0\n    end\n    if not inserted and x <= v\n      result = list.push(result, x)\n      inserted = true\n    end\n    result = list.push(result, v)\n    i = i + 1\n  end\n  if not inserted\n    result = list.push(result, x)\n  end\n  result\nend\n\nfn sort_list(_ xs: List<Int>) -> List<Int>\n  mut sorted: List<Int> = []\n  let n = xs.len()\n  mut i = 0\n  while i < n\n    mut v = 0\n    match xs.get(i)\n    when Some(val)\n      v = val\n    when None\n      v = 0\n    end\n    sorted = insert_sorted(sorted, v)\n    i = i + 1\n  end\n  sorted\nend\n\nfn format_list(_ xs: List<Int>) -> String\n  mut s = \"\"\n  let n = xs.len()\n  mut i = 0\n  while i < n\n    mut v = 0\n    match xs.get(i)\n    when Some(val)\n      v = val\n    when None\n      v = 0\n    end\n    if i == 0\n      s = \"#{v}\"\n    else\n      s = \"#{s} #{v}\"\n    end\n    i = i + 1\n  end\n  s\nend\n\nmut line = \"\"\nmatch io.read_line()\nwhen Some(l)\n  line = l\nwhen None\n  line = \"\"\nend\n\nlet nums = parse_ints(line)\nlet sorted = sort_list(nums)\nprintln(format_list(sorted))",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "005-sum-list",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777182076,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 7429,
+      "code_len": 100,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 265,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 450,
+      "stdout": "sum=55",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import list\n\nlet xs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\nlet total = list.sum(xs)\nprint(\"sum=#{total}\")",
+  "overall": "pass"
+}

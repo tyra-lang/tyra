@@ -1,0 +1,41 @@
+{
+  "prompt_id": "070-roman",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777185558,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 13009,
+      "code_len": 511,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 373,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 493,
+      "stdout": "43451481684345148187\n43451481684345148204\n43451481714345148195\n43451481744345148204\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": false,
+      "check_details": [
+        "missing marker: 'IV'",
+        "missing marker: 'IX'",
+        "missing marker: 'XXVII'",
+        "missing marker: 'XXXIX'"
+      ]
+    }
+  },
+  "code": "fn to_roman(_ n: Int) -> String\n  let tens = n / 10\n  let ones = n % 10\n  let t = match tens\n  when 0\n    \"\"\n  when 1\n    \"X\"\n  when 2\n    \"XX\"\n  when 3\n    \"XXX\"\n  when _\n    \"\"\n  end\n  let o = match ones\n  when 0\n    \"\"\n  when 1\n    \"I\"\n  when 2\n    \"II\"\n  when 3\n    \"III\"\n  when 4\n    \"IV\"\n  when 5\n    \"V\"\n  when 6\n    \"VI\"\n  when 7\n    \"VII\"\n  when 8\n    \"VIII\"\n  when 9\n    \"IX\"\n  when _\n    \"\"\n  end\n  \"#{t}#{o}\"\nend\n\nprintln(to_roman(4))\nprintln(to_roman(9))\nprintln(to_roman(27))\nprintln(to_roman(39))",
+  "overall": "check_fail"
+}

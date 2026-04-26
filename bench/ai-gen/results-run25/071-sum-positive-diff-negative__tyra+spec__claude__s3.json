@@ -1,0 +1,36 @@
+{
+  "prompt_id": "071-sum-positive-diff-negative",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777185660,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 18645,
+      "code_len": 846,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 432,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 464,
+      "stdout": "r=30",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet n = string.len(line)\nmut i = 0\nmut p = 0\nmut neg_abs = 0\nmut cur = 0\nmut sign = 1\nmut in_num = false\n\nwhile i < n\n  let b = match string.byte_at(line, i)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if b == 32 or b == 9 or b == 10 or b == 13\n    if in_num\n      let v = cur * sign\n      if v > 0\n        p = p + v\n      else if v < 0\n        neg_abs = neg_abs + (-v)\n      end\n      cur = 0\n      sign = 1\n      in_num = false\n    end\n  else if b == 45\n    sign = -1\n    in_num = true\n  else if b == 43\n    in_num = true\n  else\n    cur = cur * 10 + (b - 48)\n    in_num = true\n  end\n  i = i + 1\nend\n\nif in_num\n  let v = cur * sign\n  if v > 0\n    p = p + v\n  else if v < 0\n    neg_abs = neg_abs + (-v)\n  end\nend\n\nlet r = p + neg_abs\nprint(\"r=#{r}\")",
+  "overall": "pass"
+}

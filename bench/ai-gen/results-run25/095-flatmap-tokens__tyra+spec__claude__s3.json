@@ -1,0 +1,36 @@
+{
+  "prompt_id": "095-flatmap-tokens",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777187683,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 24202,
+      "code_len": 743,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 385,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 455,
+      "stdout": "red red green green blue blue\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line_opt = io.read_line()\nlet line = match line_opt\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut current = \"\"\nmut output = \"\"\nmut i = 0\nlet n = string.len(line)\nwhile i < n\n  let b_opt = string.byte_at(line, i)\n  let b = match b_opt\n  when Some(v)\n    v\n  when None\n    0\n  end\n  if b == 32 or b == 9\n    if not string.is_empty(current)\n      output = \"#{output}#{current} #{current} \"\n      current = \"\"\n    end\n  else\n    current = \"#{current}#{string.from_byte(b)}\"\n  end\n  i = i + 1\nend\n\nif not string.is_empty(current)\n  output = \"#{output}#{current} #{current} \"\nend\n\nlet out_len = string.len(output)\nlet final_out = if out_len > 0\n  string.substring(output, 0, out_len - 1)\nelse\n  output\nend\n\nprintln(final_out)",
+  "overall": "pass"
+}

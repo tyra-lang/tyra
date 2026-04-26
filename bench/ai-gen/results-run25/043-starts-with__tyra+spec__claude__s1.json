@@ -1,0 +1,36 @@
+{
+  "prompt_id": "043-starts-with",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777183823,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8290,
+      "code_len": 313,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 319,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 477,
+      "stdout": "YESNOYES",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nmatch io.read_line()\nwhen Some(prefix)\n  mut done = false\n  while not done\n    match io.read_line()\n    when Some(line)\n      if string.starts_with(line, prefix)\n        print(\"YES\")\n      else\n        print(\"NO\")\n      end\n    when None\n      done = true\n    end\n  end\nwhen None\n  ()\nend",
+  "overall": "pass"
+}
