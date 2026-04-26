@@ -214,6 +214,8 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare ptr @tyra_string_substring(ptr, i64, i64)").unwrap();
     writeln!(out, "declare ptr @tyra_string_reverse(ptr)").unwrap();
     writeln!(out, "declare ptr @tyra_string_from_byte(i64)").unwrap();
+    writeln!(out, "declare void @tyra_string_split_whitespace(ptr, ptr)").unwrap();
+    writeln!(out, "declare void @tyra_string_split(ptr, ptr, ptr)").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
     writeln!(out, "declare void @exit(i32)").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();

@@ -190,6 +190,8 @@ const PRELUDE_FUNCTIONS: &[&str] = &[
     "__string_substring",
     "__string_reverse",
     "__string_from_byte",
+    "__string_split_whitespace",
+    "__string_split",
     // §17.3.5: list stdlib backing (List<Int> only; LLVM-only, no runtime C ABI).
     "__list_int_push",
     "__list_int_sum",

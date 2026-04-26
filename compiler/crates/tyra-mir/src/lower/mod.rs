@@ -299,6 +299,15 @@ pub fn lower(file: &SourceFile) -> Program {
         .insert("__string_from_byte".into(), Ty::String);
     ctx.fn_param_types
         .insert("__string_from_byte".into(), vec![Ty::Int]);
+    let list_string = Ty::Generic("List".into(), vec![Ty::String]);
+    ctx.fn_return_types
+        .insert("__string_split_whitespace".into(), list_string.clone());
+    ctx.fn_param_types
+        .insert("__string_split_whitespace".into(), vec![Ty::String]);
+    ctx.fn_return_types
+        .insert("__string_split".into(), list_string);
+    ctx.fn_param_types
+        .insert("__string_split".into(), vec![Ty::String, Ty::String]);
 
     // §17.3.5: list stdlib intrinsics (List<Int> only).
     let list_int = Ty::Generic("List".into(), vec![Ty::Int]);

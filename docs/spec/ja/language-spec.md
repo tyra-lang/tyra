@@ -1397,6 +1397,8 @@ export fn byte_at(_ s: String, _ index: Int) -> Option<Int>
 export fn substring(_ s: String, _ start: Int, _ stop: Int) -> String
 export fn reverse(_ s: String) -> String
 export fn from_byte(_ b: Int) -> String
+export fn split_whitespace(_ s: String) -> List<String>
+export fn split(_ s: String, _ sep: String) -> List<String>
 ```
 
 - `len` は UTF-8 バイト長を返す。Unicode コードポイント数ではない
@@ -1424,9 +1426,15 @@ export fn from_byte(_ b: Int) -> String
 - `from_byte(b)` は `0..=255` の `Int` から 1 バイトの文字列を生成する。
   上位ビットは切り捨てられる (`b & 0xFF`)。`0x80..=0xFF` の単独バイトは
   UTF-8 として不正なので v0.1 では空文字列を返す。
-- `split` / `split_whitespace` / `replace` / `join` は本凍結には含まれない
-  (intrinsic → `List<String>` 構築の配管が必要なため次のマイルストーンに
-  繰延)。§22 の「`string` の拡張 API」として追跡する。
+- `split_whitespace(s)` は ASCII / Unicode 空白 (`char::is_whitespace`) の
+  連続を区切りとして分割する。連続する空白はまとめられ、先頭・末尾の
+  空白からは空要素が生じない。空文字列・空白のみの入力は空リストを返す。
+- `split(s, sep)` は `sep` の出現ごとに分割する (Rust の `str::split` と
+  同等のバイトレベル動作)。連続する区切りからは空文字列要素が生じる。
+  `sep` が空文字列の場合、v0.1 では文字単位での分割は行わず単一要素
+  リスト `[s]` を返す。
+- `replace` / `join` / `char_at` / 正規表現は本凍結には含まれない。§22
+  の「`string` の拡張 API」として追跡する。
 
 #### 17.3.5 list
 
@@ -1634,7 +1642,7 @@ end
 - `break` / `continue`
 - モジュールレベルの初期化セマンティクス (`let`/`mut` のモジュールスコープ)
 - Tier 2 標準ライブラリ API の詳細 (collections, time, test, log, float) — `fs`, `json`, `http`, `string` は §17.3 で v0.1 凍結済
-- `string` の拡張 API (split, split_whitespace, replace, join, char_at, 正規表現) — §17.3.4 で凍結した 9 関数の外側は v0.2 以降
+- `string` の拡張 API (replace, join, char_at, 正規表現) — `split` / `split_whitespace` は §17.3.4 に追加凍結、それ以外は v0.2 以降
 - `list` の拡張 API (ジェネリック `List<T>` 全般、`map` / `filter` / `fold`、`List<String>` 等) — §17.3.5 で凍結した `List<Int>` 専用 6 関数の外側は v0.2 以降 (要素型モノモーフィゼーションとラムダ C ABI 通し配管が必要)
 
 ---

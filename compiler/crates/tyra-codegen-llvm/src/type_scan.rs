@@ -578,7 +578,7 @@ fn pre_scan_struct_types(
             } => {
                 // Built-in functions with struct return types
                 match fname.as_str() {
-                    "sys__args" => {
+                    "sys__args" | "__string_split_whitespace" | "__string_split" => {
                         if struct_map.contains_key("List__String") {
                             struct_temps.insert(dest.clone(), "List__String".into());
                         }

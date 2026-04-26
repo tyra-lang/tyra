@@ -230,6 +230,79 @@ pub extern "C" fn tyra_string_from_byte(b: i64) -> *const c_char {
     }
 }
 
+/// Layout shared with codegen for List<String>-returning intrinsics.
+/// Mirrors `%struct.List__String = type { ptr, i64 }` in LLVM IR. The
+/// caller alloca's a 16-byte slot, passes its address, and we fill in
+/// (data, len). All string entries are GC-safe (Boehm-conservative)
+/// `CString::into_raw` leaks; the array itself is `Box::leak`'d.
+#[repr(C)]
+pub struct ListStringRet {
+    data: *mut *const c_char,
+    len: i64,
+}
+
+unsafe fn fill_list_string_ret(out: *mut ListStringRet, parts: Vec<*const c_char>) {
+    if out.is_null() {
+        return;
+    }
+    let len = parts.len() as i64;
+    let boxed = parts.into_boxed_slice();
+    let raw = Box::leak(boxed).as_mut_ptr();
+    unsafe {
+        (*out).data = raw;
+        (*out).len = len;
+    }
+}
+
+/// `__string_split_whitespace(s, out)` — fills `out` with a List<String>
+/// containing each maximal non-whitespace run in `s`. Whitespace follows
+/// Rust's `char::is_whitespace`. Empty / whitespace-only input → empty
+/// list.
+///
+/// # Safety
+/// `s` must be null-terminated UTF-8 (or null). `out` must point at a
+/// valid 16-byte (List<String>) slot.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_string_split_whitespace(
+    s: *const c_char,
+    out: *mut ListStringRet,
+) {
+    let input = borrow_utf8(s);
+    let parts: Vec<*const c_char> = input
+        .split_whitespace()
+        .map(|p| leak_cstring(p.to_string()))
+        .collect();
+    unsafe { fill_list_string_ret(out, parts) };
+}
+
+/// `__string_split(s, sep, out)` — fills `out` with a List<String>
+/// containing the parts of `s` separated by `sep`. Empty `sep` falls
+/// back to `[s]` (Tyra v0.1 does not split between every character).
+/// Adjacent separators yield empty-string entries, matching Rust's
+/// `str::split`.
+///
+/// # Safety
+/// `s` and `sep` must be null-terminated UTF-8 (or null). `out` must
+/// point at a valid 16-byte slot.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_string_split(
+    s: *const c_char,
+    sep: *const c_char,
+    out: *mut ListStringRet,
+) {
+    let input = borrow_utf8(s);
+    let separator = borrow_utf8(sep);
+    let parts: Vec<*const c_char> = if separator.is_empty() {
+        vec![leak_cstring(input.to_string())]
+    } else {
+        input
+            .split(separator)
+            .map(|p| leak_cstring(p.to_string()))
+            .collect()
+    };
+    unsafe { fill_list_string_ret(out, parts) };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -388,5 +461,44 @@ mod tests {
         // empty string in v0.1.
         let p = tyra_string_from_byte(0xE3);
         assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "");
+    }
+
+    fn read_list(out: &ListStringRet) -> Vec<String> {
+        let mut v = Vec::with_capacity(out.len as usize);
+        for i in 0..out.len as isize {
+            let p = unsafe { *out.data.offset(i) };
+            v.push(unsafe { CStr::from_ptr(p) }.to_str().unwrap().to_string());
+        }
+        v
+    }
+
+    #[test]
+    fn split_whitespace_collapses_runs() {
+        let mut out = ListStringRet { data: std::ptr::null_mut(), len: 0 };
+        unsafe {
+            tyra_string_split_whitespace(cs("  hello  world\t\n").as_ptr(), &mut out);
+        }
+        assert_eq!(read_list(&out), vec!["hello", "world"]);
+        // Empty input → empty list.
+        let mut out = ListStringRet { data: std::ptr::null_mut(), len: 0 };
+        unsafe {
+            tyra_string_split_whitespace(cs("").as_ptr(), &mut out);
+        }
+        assert_eq!(out.len, 0);
+    }
+
+    #[test]
+    fn split_separator_keeps_empties() {
+        let mut out = ListStringRet { data: std::ptr::null_mut(), len: 0 };
+        unsafe {
+            tyra_string_split(cs("a,b,,c").as_ptr(), cs(",").as_ptr(), &mut out);
+        }
+        assert_eq!(read_list(&out), vec!["a", "b", "", "c"]);
+        // Empty separator → single-element list of the original input.
+        let mut out = ListStringRet { data: std::ptr::null_mut(), len: 0 };
+        unsafe {
+            tyra_string_split(cs("hi").as_ptr(), cs("").as_ptr(), &mut out);
+        }
+        assert_eq!(read_list(&out), vec!["hi"]);
     }
 }

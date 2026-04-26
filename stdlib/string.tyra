@@ -104,3 +104,19 @@ end
 export fn from_byte(_ b: Int) -> String
   __string_from_byte(b)
 end
+
+# Split `s` on runs of ASCII / Unicode whitespace (Rust's
+# `char::is_whitespace`). Adjacent separators are collapsed; leading /
+# trailing whitespace produce no empty entries. Empty / whitespace-only
+# input returns an empty list.
+export fn split_whitespace(_ s: String) -> List<String>
+  __string_split_whitespace(s)
+end
+
+# Split `s` on every occurrence of `sep` (byte-level, like Rust's
+# `str::split`). Adjacent separators yield empty-string entries. An
+# empty `sep` is not split between characters in v0.1 — it returns the
+# single-element list `[s]`.
+export fn split(_ s: String, _ sep: String) -> List<String>
+  __string_split(s, sep)
+end

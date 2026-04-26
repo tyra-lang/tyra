@@ -222,6 +222,14 @@ pub(crate) fn emit_builtin_call(
             emit_string_i64_to_ptr(out, dest.as_deref(), "tyra_string_from_byte", args, func);
             true
         }
+        "__string_split_whitespace" => {
+            emit_string_split_ws(out, dest.as_deref(), args, func, ctx);
+            true
+        }
+        "__string_split" => {
+            emit_string_split(out, dest.as_deref(), args, func, ctx);
+            true
+        }
         // §17.3.5: list stdlib intrinsics (List<Int> only).
         "__list_int_push" => {
             emit_list_int_push(out, dest.as_deref(), args, func, ctx);
@@ -833,6 +841,67 @@ fn emit_string_i64_to_ptr(
         .map(|a| operand_ref(a, func))
         .unwrap_or_else(|| "0".into());
     writeln!(out, "  %{d} = call ptr @{callee}(i64 {n})").unwrap();
+}
+
+/// `__string_split_whitespace(s) -> List<String>`. Allocates a 16-byte
+/// stack slot for the {ptr, i64} result, hands it to the runtime by
+/// reference, then loads back the populated struct.
+fn emit_string_split_ws(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+    ctx: &EmitCtx,
+) {
+    let d = dest.unwrap_or("_split_ws");
+    let s = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    let list_ty = if let Some(info) = ctx.struct_map.get("List__String") {
+        info.llvm_name.clone()
+    } else {
+        "%struct.List__String".into()
+    };
+    writeln!(out, "  %{d}.slot = alloca {list_ty}").unwrap();
+    writeln!(
+        out,
+        "  call void @tyra_string_split_whitespace(ptr {s}, ptr %{d}.slot)"
+    )
+    .unwrap();
+    writeln!(out, "  %{d} = load {list_ty}, ptr %{d}.slot").unwrap();
+}
+
+/// `__string_split(s, sep) -> List<String>`. Same out-parameter shape
+/// as `__string_split_whitespace`.
+fn emit_string_split(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+    ctx: &EmitCtx,
+) {
+    let d = dest.unwrap_or("_split");
+    let s = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    let sep = args
+        .get(1)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    let list_ty = if let Some(info) = ctx.struct_map.get("List__String") {
+        info.llvm_name.clone()
+    } else {
+        "%struct.List__String".into()
+    };
+    writeln!(out, "  %{d}.slot = alloca {list_ty}").unwrap();
+    writeln!(
+        out,
+        "  call void @tyra_string_split(ptr {s}, ptr {sep}, ptr %{d}.slot)"
+    )
+    .unwrap();
+    writeln!(out, "  %{d} = load {list_ty}, ptr %{d}.slot").unwrap();
 }
 
 /// parse::<Int>(str) -> Option<Int>

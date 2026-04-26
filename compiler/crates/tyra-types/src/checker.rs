@@ -434,6 +434,15 @@ fn register_prelude(env: &mut TypeEnv) {
         "__string_from_byte".to_string(),
         Ty::Fn(vec![Ty::Int], Box::new(Ty::String)),
     );
+    let list_string = Ty::Generic("List".into(), vec![Ty::String]);
+    env.define(
+        "__string_split_whitespace".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(list_string.clone())),
+    );
+    env.define(
+        "__string_split".to_string(),
+        Ty::Fn(vec![Ty::String, Ty::String], Box::new(list_string.clone())),
+    );
 
     // §17.3.5: list stdlib intrinsics (List<Int> only). See stdlib/list.tyra.
     let list_int = Ty::Generic("List".into(), vec![Ty::Int]);

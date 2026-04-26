@@ -1412,6 +1412,8 @@ export fn byte_at(_ s: String, _ index: Int) -> Option<Int>
 export fn substring(_ s: String, _ start: Int, _ stop: Int) -> String
 export fn reverse(_ s: String) -> String
 export fn from_byte(_ b: Int) -> String
+export fn split_whitespace(_ s: String) -> List<String>
+export fn split(_ s: String, _ sep: String) -> List<String>
 ```
 
 - `len` returns the UTF-8 byte length, not the Unicode code-point
@@ -1444,10 +1446,16 @@ export fn from_byte(_ b: Int) -> String
   `0..=255` (higher bits are truncated via `b & 0xFF`). Standalone
   bytes in `0x80..=0xFF` are not valid UTF-8, so v0.1 returns an empty
   string for them.
-- `split` / `split_whitespace` / `replace` / `join` are NOT part of
-  this freeze (they require intrinsic → `List<String>` construction
-  plumbing that lands in a later milestone). Tracked in §22 as
-  "extended `string` API".
+- `split_whitespace(s)` splits on runs of ASCII / Unicode whitespace
+  (Rust's `char::is_whitespace`). Adjacent separators are collapsed and
+  leading / trailing whitespace produce no empty entries. Empty or
+  whitespace-only input returns an empty list.
+- `split(s, sep)` splits on every occurrence of `sep` (byte-level,
+  matching Rust's `str::split`). Adjacent separators yield empty-string
+  entries. An empty `sep` is NOT split between every character in v0.1
+  — the function returns the single-element list `[s]`.
+- `replace` / `join` / `char_at` / regex are NOT part of this freeze.
+  Tracked in §22 as "extended `string` API".
 
 #### 17.3.5 list
 
@@ -1657,7 +1665,7 @@ The following are postponed for later specification:
 - `break` / `continue`
 - Module-level initialization semantics (`let`/`mut` at module scope)
 - Detailed APIs for Tier 2 standard library modules (collections, time, test, log, float) — `fs`, `json`, `http`, and `string` are frozen in §17.3
-- Extended `string` API (split, split_whitespace, replace, join, char_at, regex) — the nine functions frozen in §17.3.4 are the only v0.1 surface
+- Extended `string` API (replace, join, char_at, regex) — `split` and `split_whitespace` are frozen in §17.3.4 alongside the other v0.1 functions
 - Extended `list` API (generic `List<T>`, `map` / `filter` / `fold`, `List<String>`, etc.) — the six `List<Int>`-only functions frozen in §17.3.5 are the only v0.1 surface (requires element-type monomorphization and lambda-through-C-ABI plumbing)
 
 ---
