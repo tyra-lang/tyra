@@ -1137,19 +1137,34 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             check_match_exhaustiveness(&subject_ty, m, env, report);
             check_nested_exhaustiveness(&subject_ty, m, env, report);
             check_redundant_arms(m, report);
-            let mut arm_ty = Ty::Unit;
+            // Unify arm types: divergent arms (Never — `return` / `?` / panic
+            // / nested match-of-Never) are absorbed by other arms. Without
+            // this, a single `when None return Err(...) end` arm would force
+            // the whole match to type as Unit and any subsequent use of the
+            // bound value would fail with E0305 (Unit vs Int comparison).
+            let mut arm_ty: Option<Ty> = None;
             for arm in &m.arms {
                 env.push();
                 bind_pattern_types(&arm.pattern, env);
                 for stmt in &arm.body {
                     check_stmt(stmt, env, report);
                 }
-                if let Some(last) = arm.body.last() {
-                    arm_ty = stmt_type(last, env, report);
-                }
+                let this_ty = arm
+                    .body
+                    .last()
+                    .map(|last| stmt_type(last, env, report))
+                    .unwrap_or(Ty::Unit);
                 env.pop();
+                arm_ty = Some(match arm_ty.take() {
+                    None => this_ty,
+                    Some(prev) => match (prev, this_ty) {
+                        (Ty::Never, t) | (t, Ty::Never) => t,
+                        (Ty::Error, t) | (t, Ty::Error) => t,
+                        (a, _) => a, // first non-divergent wins (matches existing if/else policy)
+                    },
+                });
             }
-            arm_ty
+            arm_ty.unwrap_or(Ty::Unit)
         }
         ExprKind::For(f) => {
             infer_expr(&f.iter, env, report);
@@ -1838,6 +1853,10 @@ fn check_redundant_arms(match_expr: &MatchExpr, report: &mut Report) {
 fn stmt_type(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) -> Ty {
     match stmt {
         Stmt::Expr(s) => infer_expr(&s.expr, env, report),
+        // `return` is divergent — control never falls through. Treat it as
+        // the bottom type so a match arm whose tail is a `return` doesn't
+        // pollute the match's overall type with Unit.
+        Stmt::Return(_) => Ty::Never,
         _ => Ty::Unit,
     }
 }
