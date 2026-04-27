@@ -1,0 +1,36 @@
+{
+  "prompt_id": "085-rot13",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777286520,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 12045,
+      "code_len": 694,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 407,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 444,
+      "stdout": "Uryyb, Jbeyq!\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn rot_byte(_ b: Int) -> Int\n  if b >= 97 and b <= 122\n    let r = b - 97 + 13\n    if r >= 26\n      r - 26 + 97\n    else\n      r + 97\n    end\n  else if b >= 65 and b <= 90\n    let r = b - 65 + 13\n    if r >= 26\n      r - 26 + 65\n    else\n      r + 65\n    end\n  else\n    b\n  end\nend\n\nfn transform(_ s: String) -> String\n  mut result = \"\"\n  mut i = 0\n  let n = string.len(s)\n  while i < n\n    match string.byte_at(s, i)\n    when Some(b)\n      let r = rot_byte(b)\n      result = \"#{result}#{string.from_byte(r)}\"\n    when None\n      i = i\n    end\n    i = i + 1\n  end\n  result\nend\n\nmatch io.read_line()\nwhen Some(line)\n  println(transform(line))\nwhen None\n  println(\"\")\nend",
+  "overall": "pass"
+}

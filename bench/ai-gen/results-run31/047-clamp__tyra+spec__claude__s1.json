@@ -1,0 +1,36 @@
+{
+  "prompt_id": "047-clamp",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777285061,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 7419,
+      "code_len": 252,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 135,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 475,
+      "stdout": "clamp=0\nclamp=7\nclamp=10\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "fn clamp(_ x: Int, _ lo: Int, _ hi: Int) -> Int\n  if x < lo\n    lo\n  else if x > hi\n    hi\n  else\n    x\n  end\nend\n\nfn main() -> Unit\n  println(\"clamp=#{clamp(-5, 0, 10)}\")\n  println(\"clamp=#{clamp(7, 0, 10)}\")\n  println(\"clamp=#{clamp(42, 0, 10)}\")\nend",
+  "overall": "pass"
+}

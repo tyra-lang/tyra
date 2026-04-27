@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777291627,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 37657,
+      "code_len": 1957,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 442,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 536,
+      "stdout": "9 6 5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn set_at(_ xs: List<Int>, _ i: Int, _ v: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut j = 0\n  let n = xs.len()\n  while j < n\n    if j == i\n      result = list.push(result, v)\n    else\n      match xs.get(j)\n      when Some(x)\n        result = list.push(result, x)\n      when None\n        result = result\n      end\n    end\n    j = j + 1\n  end\n  result\nend\n\nfn read_or_empty() -> String\n  match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\nend\n\nfn get_or(_ xs: List<Int>, _ i: Int, _ d: Int) -> Int\n  match xs.get(i)\n  when Some(v)\n    v\n  when None\n    d\n  end\nend\n\nfn main() -> Result<Unit, String>\n  let line1 = read_or_empty()\n  let line2 = read_or_empty()\n\n  let tokens = string.split_whitespace(line1)\n  mut nums: List<Int> = []\n  mut i = 0\n  let tn = tokens.len()\n  while i < tn\n    match tokens.get(i)\n    when Some(t)\n      match string.parse_int(t)\n      when Some(v)\n        nums = list.push(nums, v)\n      when None\n        nums = nums\n      end\n    when None\n      nums = nums\n    end\n    i = i + 1\n  end\n\n  let k_parsed = match string.parse_int(string.trim(line2))\n  when Some(v)\n    v\n  when None\n    0\n  end\n\n  let n = nums.len()\n  mut k = k_parsed\n  if k > n\n    k = n\n  end\n\n  mut used: List<Int> = []\n  mut j = 0\n  while j < n\n    used = list.push(used, 0)\n    j = j + 1\n  end\n\n  mut output = \"\"\n  mut taken = 0\n  while taken < k\n    mut best_idx = -1\n    mut best_val = 0\n    mut p = 0\n    while p < n\n      let u = get_or(used, p, 1)\n      if u == 0\n        let v = get_or(nums, p, 0)\n        if best_idx == -1\n          best_idx = p\n          best_val = v\n        else if v > best_val\n          best_idx = p\n          best_val = v\n        end\n      end\n      p = p + 1\n    end\n    used = set_at(used, best_idx, 1)\n    if taken == 0\n      output = \"#{best_val}\"\n    else\n      output = \"#{output} #{best_val}\"\n    end\n    taken = taken + 1\n  end\n\n  println(output)\n  Ok(())\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "094-last-line",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777291725,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 28751,
+      "code_len": 469,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 921,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 803,
+      "stdout": "gamma\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet content = io.read_to_end()\nlet lines = string.split(content, \"\\n\")\nlet n = lines.len()\nmut last_idx = -1\nmut i = 0\nwhile i < n\n  match lines.get(i)\n  when Some(line)\n    let trimmed = string.trim(line)\n    if not string.is_empty(trimmed)\n      last_idx = i\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nif last_idx < 0\n  println(\"(none)\")\nelse\n  match lines.get(last_idx)\n  when Some(line)\n    println(line)\n  when None\n    ()\n  end\nend",
+  "overall": "pass"
+}

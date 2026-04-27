@@ -1,0 +1,36 @@
+{
+  "prompt_id": "021-sum-evens",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777288827,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10336,
+      "code_len": 350,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 202,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 465,
+      "stdout": "sum_even=30\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet text = io.read_to_end()\nlet tokens = string.split_whitespace(text)\nmut total = 0\nmut i = 0\nwhile i < tokens.len()\n  match string.parse_int(tokens.get(i).ok_or(0)?)\n  when Some(n)\n    if n % 2 == 0\n      total = total + n\n    end\n  when None\n    total = total\n  end\n  i = i + 1\nend\nprintln(\"sum_even=#{total}\")",
+  "overall": "pass"
+}

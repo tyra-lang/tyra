@@ -1,0 +1,36 @@
+{
+  "prompt_id": "059-is-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777290112,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11312,
+      "code_len": 711,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 377,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 456,
+      "stdout": "YES\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet tokens = string.split_whitespace(line)\nmut nums: List<Int> = []\nmut i = 0\nwhile i < tokens.len()\n  let t = tokens.get(i)\n  match t\n  when Some(s)\n    match string.parse_int(s)\n    when Some(n)\n      nums = list.push(nums, n)\n    when None\n      ()\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nmut sorted = true\nmut j = 1\nwhile j < nums.len()\n  let a = match nums.get(j - 1)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  let b = match nums.get(j)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  if b < a\n    sorted = false\n  end\n  j = j + 1\nend\n\nif sorted\n  println(\"YES\")\nelse\n  println(\"NO\")\nend",
+  "overall": "pass"
+}

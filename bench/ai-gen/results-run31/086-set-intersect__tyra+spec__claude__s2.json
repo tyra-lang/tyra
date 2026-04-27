@@ -1,0 +1,36 @@
+{
+  "prompt_id": "086-set-intersect",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777286579,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 29899,
+      "code_len": 1952,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 368,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 565,
+      "stdout": "1 3 4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_line(_ s: String) -> List<Int>\n  let tokens = string.split_whitespace(s)\n  mut result: List<Int> = []\n  mut i = 0\n  while i < tokens.len()\n    let tok = match tokens.get(i)\n              when Some(t)\n                t\n              when None\n                \"\"\n              end\n    match string.parse_int(tok)\n    when Some(n)\n      result = list.push(result, n)\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn get_at(_ xs: List<Int>, _ i: Int) -> Int\n  match xs.get(i)\n  when Some(v)\n    v\n  when None\n    0\n  end\nend\n\nfn main() -> Unit\n  let line1 = match io.read_line()\n              when Some(s)\n                s\n              when None\n                \"\"\n              end\n  let line2 = match io.read_line()\n              when Some(s)\n                s\n              when None\n                \"\"\n              end\n  let a = parse_line(line1)\n  let b = parse_line(line2)\n\n  mut inter: List<Int> = []\n  mut i = 0\n  while i < a.len()\n    let x = get_at(a, i)\n    if list.contains(b, x) and not list.contains(inter, x)\n      inter = list.push(inter, x)\n    end\n    i = i + 1\n  end\n\n  mut sorted: List<Int> = []\n  mut j = 0\n  while j < inter.len()\n    let x = get_at(inter, j)\n    mut new_sorted: List<Int> = []\n    mut k = 0\n    mut inserted = false\n    while k < sorted.len()\n      let y = get_at(sorted, k)\n      if not inserted and x < y\n        new_sorted = list.push(new_sorted, x)\n        inserted = true\n      end\n      new_sorted = list.push(new_sorted, y)\n      k = k + 1\n    end\n    if not inserted\n      new_sorted = list.push(new_sorted, x)\n    end\n    sorted = new_sorted\n    j = j + 1\n  end\n\n  if sorted.len() == 0\n    println(\"empty\")\n  else\n    mut out = \"\"\n    mut m = 0\n    while m < sorted.len()\n      let v = get_at(sorted, m)\n      if m == 0\n        out = \"#{v}\"\n      else\n        out = \"#{out} #{v}\"\n      end\n      m = m + 1\n    end\n    println(out)\n  end\nend",
+  "overall": "pass"
+}

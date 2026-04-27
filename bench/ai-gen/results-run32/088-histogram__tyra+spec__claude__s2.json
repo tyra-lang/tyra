@@ -1,0 +1,36 @@
+{
+  "prompt_id": "088-histogram",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777291403,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 21235,
+      "code_len": 505,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 1257,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 492,
+      "stdout": "0: \n1: ##\n2: #\n3: ###\n4: #\n5: ###\n6: #\n7: #\n8: #\n9: ###\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nmut d = 0\nwhile d < 10\n  let target = 48 + d\n  mut count = 0\n  mut i = 0\n  let n = string.len(line)\n  while i < n\n    match string.byte_at(line, i)\n    when Some(b)\n      if b == target\n        count = count + 1\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  mut hashes = \"\"\n  mut k = 0\n  while k < count\n    hashes = \"#{hashes}#\"\n    k = k + 1\n  end\n  println(\"#{d}: #{hashes}\")\n  d = d + 1\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "037-tree-depth",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777289350,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10781,
+      "code_len": 431,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 395,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 537,
+      "stdout": "depth=3",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "type Tree =\n  | Leaf\n  | Node(left: Tree, right: Tree)\n\nfn max_int(_ a: Int, _ b: Int) -> Int\n  if a >= b\n    a\n  else\n    b\n  end\nend\n\nfn depth(_ tree: Tree) -> Int\n  match tree\n  when Leaf\n    0\n  when Node(left: l, right: r)\n    1 + max_int(depth(l), depth(r))\n  end\nend\n\nlet t = Tree.Node(\n  left: Tree.Node(left: Tree.Leaf, right: Tree.Node(left: Tree.Leaf, right: Tree.Leaf)),\n  right: Tree.Leaf,\n)\nprint(\"depth=#{depth(t)}\")",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "063-list-sum-until",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777290240,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10411,
+      "code_len": 589,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 368,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 458,
+      "stdout": "total=100\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line = io.read_line()\nmatch line\nwhen Some(s)\n  let parts = string.split_whitespace(s)\n  mut total = 0\n  mut i = 0\n  mut stop = false\n  let n = parts.len()\n  while i < n and not stop\n    match parts.get(i)\n    when Some(tok)\n      match string.parse_int(tok)\n      when Some(x)\n        if total + x > 100\n          stop = true\n        else\n          total = total + x\n        end\n      when None\n        stop = true\n      end\n    when None\n      stop = true\n    end\n    i = i + 1\n  end\n  println(\"total=#{total}\")\nwhen None\n  println(\"total=0\")\nend",
+  "overall": "pass"
+}

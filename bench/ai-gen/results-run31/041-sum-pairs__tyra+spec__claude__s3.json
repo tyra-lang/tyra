@@ -1,0 +1,36 @@
+{
+  "prompt_id": "041-sum-pairs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777284847,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9828,
+      "code_len": 551,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 173,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 436,
+      "stdout": "1+10=11\n2+20=22\n3+30=33\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Result<Unit, String>\n  let l1 = io.read_line().ok_or(\"missing line 1\")?\n  let l2 = io.read_line().ok_or(\"missing line 2\")?\n  let a = string.split_whitespace(l1)\n  let b = string.split_whitespace(l2)\n  let n = a.len()\n  mut k = 0\n  while k < n\n    let sa = a.get(k).ok_or(\"oob a\")?\n    let sb = b.get(k).ok_or(\"oob b\")?\n    let i = string.parse_int(sa).ok_or(\"parse a\")?\n    let j = string.parse_int(sb).ok_or(\"parse b\")?\n    let s = i + j\n    println(\"#{i}+#{j}=#{s}\")\n    k = k + 1\n  end\n  Ok(())\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "050-bank-account",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777289780,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 12642,
+      "code_len": 904,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 378,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 470,
+      "stdout": "final_balance=120\nlast_status=overdraft\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "value Account\n  balance: Int\nend\n\ntype TxError =\n  | Overdraft\n\nfn deposit(_ acc: Account, _ amount: Int) -> Result<Account, TxError>\n  Ok(Account(balance: acc.balance + amount))\nend\n\nfn withdraw(_ acc: Account, _ amount: Int) -> Result<Account, TxError>\n  if amount > acc.balance\n    Err(TxError.Overdraft)\n  else\n    Ok(Account(balance: acc.balance - amount))\n  end\nend\n\nfn apply(_ acc: Account, _ res: Result<Account, TxError>) -> Account\n  match res\n  when Ok(next)\n    next\n  when Err(_)\n    acc\n  end\nend\n\nfn status(_ res: Result<Account, TxError>) -> String\n  match res\n  when Ok(_)\n    \"ok\"\n  when Err(Overdraft)\n    \"overdraft\"\n  end\nend\n\nmut acc = Account(balance: 100)\n\nlet r1 = deposit(acc, 50)\nacc = apply(acc, r1)\n\nlet r2 = withdraw(acc, 30)\nacc = apply(acc, r2)\n\nlet r3 = withdraw(acc, 500)\nacc = apply(acc, r3)\n\nprintln(\"final_balance=#{acc.balance}\")\nprintln(\"last_status=#{status(r3)}\")",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "020-echo-args",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777284114,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9068,
+      "code_len": 438,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 136,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 458,
+      "stdout": "[0] alpha\n[1] beta\n[2] gamma\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet content = io.read_to_end()\nlet parts = string.split(content, \"\\n\")\nlet n = list.len(parts)\nmut count = n\nif n > 0\n  match list.get(parts, n - 1)\n  when Some(last)\n    if string.is_empty(last)\n      count = n - 1\n    end\n  when None\n    count = n\n  end\nend\nmut i = 0\nwhile i < count\n  match list.get(parts, i)\n  when Some(line)\n    println(\"[#{i}] #{line}\")\n  when None\n    ()\n  end\n  i = i + 1\nend",
+  "overall": "pass"
+}

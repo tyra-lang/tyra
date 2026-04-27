@@ -1,0 +1,36 @@
+{
+  "prompt_id": "096-rate-limit",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777291876,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 12079,
+      "code_len": 306,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 1033,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 590,
+      "stdout": "ALLOW\nALLOW\nALLOW\nDENY\nDENY\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "data Bucket\n  mut tokens: Int\nend\n\nfn allow(_ b: Bucket) -> Bool\n  mut bb = b\n  if bb.tokens >= 1\n    bb.tokens = bb.tokens - 1\n    true\n  else\n    false\n  end\nend\n\nlet bucket = Bucket(tokens: 3)\nmut i = 0\nwhile i < 5\n  if allow(bucket)\n    println(\"ALLOW\")\n  else\n    println(\"DENY\")\n  end\n  i = i + 1\nend",
+  "overall": "pass"
+}

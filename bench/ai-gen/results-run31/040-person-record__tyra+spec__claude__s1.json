@@ -1,0 +1,36 @@
+{
+  "prompt_id": "040-person-record",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777284793,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 15554,
+      "code_len": 197,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 361,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 448,
+      "stdout": "name=Aliceage=30email=alice@example.com",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "data Person\n  name: String\n  age: Int\n  email: String\nend\n\nlet p = Person(name: \"Alice\", age: 30, email: \"alice@example.com\")\nprint(\"name=#{p.name}\")\nprint(\"age=#{p.age}\")\nprint(\"email=#{p.email}\")",
+  "overall": "pass"
+}

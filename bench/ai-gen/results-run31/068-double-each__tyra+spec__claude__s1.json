@@ -1,0 +1,36 @@
+{
+  "prompt_id": "068-double-each",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777285779,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10608,
+      "code_len": 676,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 363,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 471,
+      "stdout": "2 4 6 -8 10\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line = io.read_line()\nmatch line\nwhen Some(s)\n  let parts = string.split_whitespace(s)\n  mut nums: List<Int> = []\n  mut i = 0\n  while i < parts.len()\n    match parts.get(i)\n    when Some(p)\n      match string.parse_int(p)\n      when Some(n)\n        nums = list.push(nums, n * 2)\n      when None\n        ()\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  mut out = \"\"\n  mut j = 0\n  while j < nums.len()\n    match nums.get(j)\n    when Some(v)\n      if j == 0\n        out = \"#{v}\"\n      else\n        out = \"#{out} #{v}\"\n      end\n    when None\n      ()\n    end\n    j = j + 1\n  end\n  println(out)\nwhen None\n  println(\"\")\nend",
+  "overall": "pass"
+}

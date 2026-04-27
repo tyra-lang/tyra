@@ -1,0 +1,36 @@
+{
+  "prompt_id": "057-uniq-adjacent",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777290055,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 20077,
+      "code_len": 506,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 393,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 459,
+      "stdout": "1 2 3 2 4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line_opt = io.read_line()\nlet line = match line_opt\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet tokens = string.split_whitespace(line)\nmut result = \"\"\nmut prev = \"\"\nmut first = true\nmut i = 0\nwhile i < tokens.len()\n  match tokens.get(i)\n  when Some(t)\n    if first or t != prev\n      if first\n        result = t\n        first = false\n      else\n        result = \"#{result} #{t}\"\n      end\n      prev = t\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\nprintln(result)",
+  "overall": "pass"
+}

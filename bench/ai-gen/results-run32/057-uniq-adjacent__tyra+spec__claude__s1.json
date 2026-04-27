@@ -1,0 +1,36 @@
+{
+  "prompt_id": "057-uniq-adjacent",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777290025,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 14132,
+      "code_len": 958,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 415,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 456,
+      "stdout": "1 2 3 2 4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line = io.read_line()\nmatch line\nwhen Some(s)\n  let toks = string.split_whitespace(s)\n  mut result: List<Int> = []\n  mut prev: Option<Int> = None\n  mut i = 0\n  while i < toks.len()\n    let tok = toks.get(i)\n    match tok\n    when Some(t)\n      match string.parse_int(t)\n      when Some(n)\n        match prev\n        when Some(p)\n          if p == n\n            ()\n          else\n            result = list.push(result, n)\n            prev = Some(n)\n          end\n        when None\n          result = list.push(result, n)\n          prev = Some(n)\n        end\n      when None\n        ()\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  mut out = \"\"\n  mut j = 0\n  while j < result.len()\n    match result.get(j)\n    when Some(v)\n      if j == 0\n        out = \"#{v}\"\n      else\n        out = \"#{out} #{v}\"\n      end\n    when None\n      ()\n    end\n    j = j + 1\n  end\n  println(out)\nwhen None\n  println(\"\")\nend",
+  "overall": "pass"
+}

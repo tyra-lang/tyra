@@ -1,0 +1,36 @@
+{
+  "prompt_id": "084-range-stride",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777286476,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 16256,
+      "code_len": 741,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 351,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 460,
+      "stdout": "0 3 6 9 12 15 18\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet parts = string.split_whitespace(input)\n\nlet a_str = match parts.get(0)\nwhen Some(s)\n  s\nwhen None\n  \"0\"\nend\n\nlet b_str = match parts.get(1)\nwhen Some(s)\n  s\nwhen None\n  \"0\"\nend\n\nlet s_str = match parts.get(2)\nwhen Some(s)\n  s\nwhen None\n  \"1\"\nend\n\nlet a = match string.parse_int(a_str)\nwhen Some(n)\n  n\nwhen None\n  0\nend\n\nlet b = match string.parse_int(b_str)\nwhen Some(n)\n  n\nwhen None\n  0\nend\n\nlet s = match string.parse_int(s_str)\nwhen Some(n)\n  n\nwhen None\n  1\nend\n\nmut result = \"\"\nmut current = a\nmut first = true\nwhile current < b\n  if first\n    result = \"#{current}\"\n    first = false\n  else\n    result = \"#{result} #{current}\"\n  end\n  current = current + s\nend\nprintln(result)",
+  "overall": "pass"
+}

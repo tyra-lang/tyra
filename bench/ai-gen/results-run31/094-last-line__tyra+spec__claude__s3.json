@@ -1,0 +1,36 @@
+{
+  "prompt_id": "094-last-line",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777287116,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 19642,
+      "code_len": 424,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 418,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 444,
+      "stdout": "gamma\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet text = io.read_to_end()\nlet lines = string.split(text, \"\\n\")\nmut i = 0\nmut found = -1\nmut last_line = \"\"\nlet n = list.len(lines)\nwhile i < n\n  match list.get(lines, i)\n  when Some(line)\n    if not string.is_empty(string.trim(line))\n      found = i\n      last_line = line\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nif found < 0\n  println(\"(none)\")\nelse\n  println(last_line)\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "066-square-list",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777285703,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 13140,
+      "code_len": 454,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 170,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 455,
+      "stdout": "1 4 9 16 25\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet parts = string.split_whitespace(line)\nmut out = \"\"\nmut i = 0\nwhile i < parts.len()\n  let tok = match parts.get(i)\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let n = match string.parse_int(tok)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  let sq = n * n\n  if i == 0\n    out = \"#{sq}\"\n  else\n    out = \"#{out} #{sq}\"\n  end\n  i = i + 1\nend\nprintln(out)",
+  "overall": "pass"
+}

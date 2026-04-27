@@ -1,0 +1,36 @@
+{
+  "prompt_id": "099-sum-column",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777292019,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 12402,
+      "code_len": 545,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 454,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 487,
+      "stdout": "sum=39\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet text = io.read_to_end()\nlet lines = string.split(text, \"\\n\")\nmut total = 0\nmut i = 0\nwhile i < lines.len()\n  let line = lines.get(i)\n  match line\n  when Some(l)\n    let toks = string.split_whitespace(l)\n    if toks.len() >= 2\n      match toks.get(1)\n      when Some(t)\n        match string.parse_int(t)\n        when Some(n)\n          total = total + n\n        when None\n          ()\n        end\n      when None\n        ()\n      end\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\nprintln(\"sum=#{total}\")",
+  "overall": "pass"
+}

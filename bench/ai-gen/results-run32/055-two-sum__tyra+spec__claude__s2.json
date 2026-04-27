@@ -1,0 +1,36 @@
+{
+  "prompt_id": "055-two-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777289952,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 13232,
+      "code_len": 1001,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 396,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 459,
+      "stdout": "found=0,1\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Result<Unit, String>\n  let line1 = io.read_line().ok_or(\"missing line 1\")?\n  let line2 = io.read_line().ok_or(\"missing line 2\")?\n  let tokens = string.split_whitespace(line1)\n  let target = string.parse_int(string.trim(line2)).ok_or(\"invalid target\")?\n  mut nums: List<Int> = []\n  mut ti = 0\n  while ti < tokens.len()\n    let tok = tokens.get(ti).ok_or(\"oob\")?\n    let n = string.parse_int(tok).ok_or(\"invalid int\")?\n    nums = list.push(nums, n)\n    ti = ti + 1\n  end\n  mut found = false\n  mut fi = 0\n  mut fj = 0\n  mut i = 0\n  let n_len = list.len(nums)\n  while i < n_len and not found\n    mut j = i + 1\n    while j < n_len and not found\n      let a = list.get(nums, i).ok_or(\"oob\")?\n      let b = list.get(nums, j).ok_or(\"oob\")?\n      if a + b == target\n        found = true\n        fi = i\n        fj = j\n      end\n      j = j + 1\n    end\n    i = i + 1\n  end\n  if found\n    println(\"found=#{fi},#{fj}\")\n  else\n    println(\"none\")\n  end\n  Ok(())\nend",
+  "overall": "pass"
+}

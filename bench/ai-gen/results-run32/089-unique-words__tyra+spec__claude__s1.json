@@ -1,0 +1,36 @@
+{
+  "prompt_id": "089-unique-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777291445,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 24068,
+      "code_len": 533,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 1200,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 1019,
+      "stdout": "unique=5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet text = io.read_to_end()\nlet tokens = string.split_whitespace(text)\nlet n = tokens.len()\nmut unique = 0\nmut i = 0\nwhile i < n\n  match tokens.get(i)\n  when Some(t)\n    mut found = false\n    mut j = 0\n    while j < i\n      match tokens.get(j)\n      when Some(p)\n        if p == t\n          found = true\n        end\n      when None\n        ()\n      end\n      j = j + 1\n    end\n    if not found\n      unique = unique + 1\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\nprintln(\"unique=#{unique}\")",
+  "overall": "pass"
+}

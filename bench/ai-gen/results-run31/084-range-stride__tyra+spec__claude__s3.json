@@ -1,0 +1,36 @@
+{
+  "prompt_id": "084-range-stride",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777286493,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10458,
+      "code_len": 547,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 388,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 440,
+      "stdout": "0 3 6 9 12 15 18\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet input = io.read_to_end()\nlet parts = string.split_whitespace(input)\n\nfn get_int(_ xs: List<String>, _ i: Int) -> Int\n  match xs.get(i)\n  when Some(s)\n    match string.parse_int(s)\n    when Some(n)\n      n\n    when None\n      0\n    end\n  when None\n    0\n  end\nend\n\nlet a = get_int(parts, 0)\nlet b = get_int(parts, 1)\nlet s = get_int(parts, 2)\n\nmut out = \"\"\nmut x = a\nmut first = true\nwhile x < b\n  if first\n    out = \"#{x}\"\n    first = false\n  else\n    out = \"#{out} #{x}\"\n  end\n  x = x + s\nend\nprintln(out)",
+  "overall": "pass"
+}

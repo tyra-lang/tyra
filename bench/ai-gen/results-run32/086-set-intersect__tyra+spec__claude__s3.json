@@ -1,0 +1,36 @@
+{
+  "prompt_id": "086-set-intersect",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777291235,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 34891,
+      "code_len": 1707,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 458,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 531,
+      "stdout": "1 3 4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ line: String) -> List<Int>\n  let toks = string.split_whitespace(line)\n  mut result: List<Int> = []\n  mut i = 0\n  while i < toks.len()\n    match toks.get(i)\n    when Some(s)\n      match string.parse_int(s)\n      when Some(n)\n        result = list.push(result, n)\n      when None\n        ()\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn read_line_or_empty() -> String\n  match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\nend\n\nlet line1 = read_line_or_empty()\nlet line2 = read_line_or_empty()\nlet a = parse_ints(line1)\nlet b = parse_ints(line2)\n\nmut inter: List<Int> = []\nmut i = 0\nwhile i < a.len()\n  match a.get(i)\n  when Some(x)\n    if list.contains(b, x) and not list.contains(inter, x)\n      inter = list.push(inter, x)\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nmut sorted: List<Int> = []\nmut remaining = inter\nwhile remaining.len() > 0\n  match list.min(remaining)\n  when Some(m)\n    sorted = list.push(sorted, m)\n    mut new_rem: List<Int> = []\n    mut j = 0\n    mut removed = false\n    while j < remaining.len()\n      match remaining.get(j)\n      when Some(v)\n        if v == m and not removed\n          removed = true\n        else\n          new_rem = list.push(new_rem, v)\n        end\n      when None\n        ()\n      end\n      j = j + 1\n    end\n    remaining = new_rem\n  when None\n    ()\n  end\nend\n\nif sorted.len() == 0\n  println(\"empty\")\nelse\n  mut out = \"\"\n  mut k = 0\n  while k < sorted.len()\n    match sorted.get(k)\n    when Some(v)\n      if k == 0\n        out = \"#{v}\"\n      else\n        out = \"#{out} #{v}\"\n      end\n    when None\n      ()\n    end\n    k = k + 1\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

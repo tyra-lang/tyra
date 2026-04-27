@@ -1,0 +1,36 @@
+{
+  "prompt_id": "018-count-positive",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777284032,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9475,
+      "code_len": 406,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 362,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 480,
+      "stdout": "positive=5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet text = io.read_to_end()\nlet tokens = string.split_whitespace(text)\nmut count = 0\nmut i = 0\nwhile i < tokens.len()\n  let tok = tokens.get(i)\n  match tok\n  when Some(s)\n    match string.parse_int(s)\n    when Some(n)\n      if n > 0\n        count = count + 1\n      end\n    when None\n      ()\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\nprintln(\"positive=#{count}\")",
+  "overall": "pass"
+}

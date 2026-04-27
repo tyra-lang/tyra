@@ -1,0 +1,36 @@
+{
+  "prompt_id": "028-range-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777284422,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9023,
+      "code_len": 252,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 170,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 457,
+      "stdout": "sum=5050",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = io.read_line()\nmatch line\nwhen Some(s)\n  match string.parse_int(string.trim(s))\n  when Some(n)\n    let sum = n * (n + 1) / 2\n    print(\"sum=#{sum}\")\n  when None\n    print(\"sum=0\")\n  end\nwhen None\n  print(\"sum=0\")\nend",
+  "overall": "pass"
+}

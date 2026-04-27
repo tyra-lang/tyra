@@ -1,0 +1,36 @@
+{
+  "prompt_id": "034-group-even-odd",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777284578,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10224,
+      "code_len": 853,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 400,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 484,
+      "stdout": "evens=4 2 6 8\nodds=7 1 9 3\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Unit\n  let text = io.read_to_end()\n  let tokens = string.split_whitespace(text)\n  mut evens = \"\"\n  mut odds = \"\"\n  mut even_count = 0\n  mut odd_count = 0\n  mut i = 0\n  let n = tokens.len()\n  while i < n\n    match tokens.get(i)\n    when Some(tok)\n      match string.parse_int(tok)\n      when Some(v)\n        if v % 2 == 0\n          if even_count == 0\n            evens = \"#{v}\"\n          else\n            evens = \"#{evens} #{v}\"\n          end\n          even_count = even_count + 1\n        else\n          if odd_count == 0\n            odds = \"#{v}\"\n          else\n            odds = \"#{odds} #{v}\"\n          end\n          odd_count = odd_count + 1\n        end\n      when None\n        ()\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  println(\"evens=#{evens}\")\n  println(\"odds=#{odds}\")\nend",
+  "overall": "pass"
+}

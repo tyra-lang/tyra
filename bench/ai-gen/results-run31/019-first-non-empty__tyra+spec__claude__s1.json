@@ -1,0 +1,36 @@
+{
+  "prompt_id": "019-first-non-empty",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777284063,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9335,
+      "code_len": 296,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 374,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 459,
+      "stdout": "hello\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nmut found = false\nmut result = \"\"\nwhile not found\n  match io.read_line()\n  when Some(line)\n    let t = string.trim(line)\n    if not string.is_empty(t)\n      result = t\n      found = true\n    end\n  when None\n    result = \"(none)\"\n    found = true\n  end\nend\nprintln(result)",
+  "overall": "pass"
+}

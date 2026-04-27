@@ -1,0 +1,36 @@
+{
+  "prompt_id": "083-word-frequency",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777291020,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 35380,
+      "code_len": 898,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 441,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 534,
+      "stdout": "top=the=4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet input = io.read_to_end()\nlet tokens = string.split_whitespace(input)\nlet n = tokens.len()\n\nmut best_token = \"\"\nmut best_count = 0\nmut i = 0\nwhile i < n\n  match tokens.get(i)\n  when Some(t)\n    mut seen_before = false\n    mut j = 0\n    while j < i\n      match tokens.get(j)\n      when Some(t2)\n        if t == t2\n          seen_before = true\n        end\n      when None\n        ()\n      end\n      j = j + 1\n    end\n    if not seen_before\n      mut count = 0\n      mut k = i\n      while k < n\n        match tokens.get(k)\n        when Some(t3)\n          if t == t3\n            count = count + 1\n          end\n        when None\n          ()\n        end\n        k = k + 1\n      end\n      if count > best_count\n        best_count = count\n        best_token = t\n      end\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nprintln(\"top=#{best_token}=#{best_count}\")",
+  "overall": "pass"
+}

@@ -1,0 +1,26 @@
+{
+  "prompt_id": "084-range-stride",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777291083,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 13489,
+      "code_len": 682,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 173,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-prum7tyw/main.ll:710:59: error: '%_t80' defined with type 'i64' but expected 'ptr'\n  710 |   %_t81 = call %struct.Option__Int @string__parse_int(ptr %_t80)\n      |                                                           ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet input = io.read_to_end()\nlet tokens = string.split_whitespace(input)\nlet a = match string.parse_int(tokens.get(0).ok_or(0).unwrap_or_else_panic())\nwhen Some(v)\n  v\nwhen None\n  0\nend\n\nfn parse_at(_ tokens: List<String>, _ i: Int) -> Int\n  match tokens.get(i)\n  when Some(s)\n    match string.parse_int(s)\n    when Some(v)\n      v\n    when None\n      0\n    end\n  when None\n    0\n  end\nend\n\nlet aa = parse_at(tokens, 0)\nlet bb = parse_at(tokens, 1)\nlet ss = parse_at(tokens, 2)\n\nmut out = \"\"\nmut x = aa\nmut first = true\nwhile x < bb\n  if first\n    out = \"#{x}\"\n    first = false\n  else\n    out = \"#{out} #{x}\"\n  end\n  x = x + ss\nend\nprintln(out)",
+  "overall": "compile_fail"
+}

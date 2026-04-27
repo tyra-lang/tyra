@@ -1,0 +1,36 @@
+{
+  "prompt_id": "044-key-value-parse",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777289583,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9566,
+      "code_len": 634,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 405,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 455,
+      "stdout": "host:localhostport:8080name:tyra",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet input = io.read_to_end()\nlet lines = string.split(input, \"\\n\")\nmut i = 0\nwhile i < lines.len()\n  match lines.get(i)\n  when Some(line)\n    if string.contains(line, \"=\")\n      let parts = string.split(line, \"=\")\n      match parts.get(0)\n      when Some(key)\n        if string.is_empty(key)\n          print(\"\")\n        else\n          let total = string.len(line)\n          let klen = string.len(key)\n          let value = string.substring(line, klen + 1, total)\n          print(\"#{key}:#{value}\")\n        end\n      when None\n        print(\"\")\n      end\n    end\n  when None\n    print(\"\")\n  end\n  i = i + 1\nend",
+  "overall": "pass"
+}

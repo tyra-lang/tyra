@@ -1,0 +1,36 @@
+{
+  "prompt_id": "012-max-min",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777283855,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9915,
+      "code_len": 506,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 356,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 450,
+      "stdout": "max=9\nmin=-2\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet input = io.read_to_end()\nlet tokens = string.split_whitespace(input)\nmut nums: List<Int> = []\nmut i = 0\nwhile i < tokens.len()\n  match tokens.get(i)\n  when Some(t)\n    match string.parse_int(t)\n    when Some(n)\n      nums = list.push(nums, n)\n    when None\n      ()\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nmatch list.max(nums)\nwhen Some(m)\n  println(\"max=#{m}\")\nwhen None\n  ()\nend\nmatch list.min(nums)\nwhen Some(n)\n  println(\"min=#{n}\")\nwhen None\n  ()\nend",
+  "overall": "pass"
+}

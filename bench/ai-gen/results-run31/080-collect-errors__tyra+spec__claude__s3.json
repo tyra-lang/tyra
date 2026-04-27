@@ -1,0 +1,26 @@
+{
+  "prompt_id": "080-collect-errors",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777286219,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10505,
+      "code_len": 803,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 16,
+      "stderr": "pected expression\n\nerror[E0103]: expected field name or `await` after `.`\n   --> main.tyra:10:18\n   |\n10 |     errs = [errs..., \"negative-age\"]\n   |                  ^ expected identifier\n\nerror[E0100]: expected `]`, found `.`\n   --> main.tyra:10:18\n   |\n10 |     errs = [errs..., \"negative-age\"]\n   |                  ^ expected `]`\n\nerror[E0103]: expected field name or `await` after `.`\n   --> main.tyra:10:19\n   |\n10 |     errs = [errs..., \"negative-age\"]\n   |                   ^ expected identifier\n\nerror[E0103]: expected field name or `await` after `.`\n   --> main.tyra:10:20\n   |\n10 |     errs = [errs..., \"negative-age\"]\n   |                    ^ expected identifier\n\nerror[E0104]: expected expression, found `,`\n   --> main.tyra:10:20\n   |\n10 |     errs = [errs..., \"negative-age\"]\n   |                    ^ expected expression\n\nerror[E0104]: expected expression, found `]`\n   --> main.tyra:10:36\n   |\n10 |     errs = [errs..., \"negative-age\"]\n   |                                    ^ expected expression\n\nerror[E0103]: expected field name or `await` after `.`\n   --> main.tyra:13:18\n   |\n13 |     errs = [errs..., \"too-old\"]\n   |                  ^ expected identifier\n\nerror[E0100]: expected `]`, found `.`\n   --> main.tyra:13:18\n   |\n13 |     errs = [errs..., \"too-old\"]\n   |                  ^ expected `]`\n\nerror[E0103]: expected field name or `await` after `.`\n   --> main.tyra:13:19\n   |\n13 |     errs = [errs..., \"too-old\"]\n   |                   ^ expected identifier\n\nerror[E0103]: expected field name or `await` after `.`\n   --> main.tyra:13:20\n   |\n13 |     errs = [errs..., \"too-old\"]\n   |                    ^ expected identifier\n\nerror[E0104]: expected expression, found `,`\n   --> main.tyra:13:20\n   |\n13 |     errs = [errs..., \"too-old\"]\n   |                    ^ expected expression\n\nerror[E0104]: expected expression, found `]`\n   --> main.tyra:13:31\n   |\n13 |     errs = [errs..., \"too-old\"]\n   |                               ^ expected expression\n\n18 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import string\nimport list\n\nfn validate(_ name: String, _ age: Int) -> List<String>\n  mut errs: List<String> = []\n  if string.is_empty(name)\n    errs = [errs..., \"empty-name\"]\n  end\n  if age < 0\n    errs = [errs..., \"negative-age\"]\n  end\n  if age > 150\n    errs = [errs..., \"too-old\"]\n  end\n  errs\nend\n\nfn report(_ name: String, _ age: Int) -> Unit\n  let errs = validate(name, age)\n  let n = errs.len()\n  if n == 0\n    print(\"ok\")\n  else\n    mut joined = \"\"\n    mut i = 0\n    while i < n\n      match errs.get(i)\n      when Some(s)\n        if i == 0\n          joined = \"#{s}\"\n        else\n          joined = \"#{joined},#{s}\"\n        end\n      when None\n        joined = joined\n      end\n      i = i + 1\n    end\n    print(\"errors=#{joined}\")\n  end\nend\n\nreport(\"\", -5)\nreport(\"Alice\", 30)\nreport(\"Bob\", 200)",
+  "overall": "compile_fail"
+}

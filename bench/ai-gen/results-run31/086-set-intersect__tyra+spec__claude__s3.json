@@ -1,0 +1,36 @@
+{
+  "prompt_id": "086-set-intersect",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777286609,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 38202,
+      "code_len": 1563,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 365,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 694,
+      "stdout": "1 3 4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_line(_ s: String) -> List<Int>\n  mut nums: List<Int> = []\n  let tokens = string.split_whitespace(s)\n  mut i = 0\n  while i < tokens.len()\n    match tokens.get(i)\n    when Some(t)\n      match string.parse_int(t)\n      when Some(n)\n        nums = list.push(nums, n)\n      when None\n      end\n    when None\n    end\n    i = i + 1\n  end\n  nums\nend\n\nfn insert_sorted(_ xs: List<Int>, _ x: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut inserted = false\n  mut i = 0\n  while i < xs.len()\n    match xs.get(i)\n    when Some(v)\n      if not inserted and x < v\n        result = list.push(result, x)\n        inserted = true\n      end\n      result = list.push(result, v)\n    when None\n    end\n    i = i + 1\n  end\n  if not inserted\n    result = list.push(result, x)\n  end\n  result\nend\n\nfn read_line_or_empty() -> String\n  match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\nend\n\nlet line1 = read_line_or_empty()\nlet line2 = read_line_or_empty()\nlet a = parse_line(line1)\nlet b = parse_line(line2)\n\nmut result: List<Int> = []\nmut i = 0\nwhile i < a.len()\n  match a.get(i)\n  when Some(v)\n    if list.contains(b, v) and not list.contains(result, v)\n      result = insert_sorted(result, v)\n    end\n  when None\n  end\n  i = i + 1\nend\n\nif result.len() == 0\n  println(\"empty\")\nelse\n  mut out = \"\"\n  mut j = 0\n  while j < result.len()\n    match result.get(j)\n    when Some(v)\n      if j == 0\n        out = \"#{v}\"\n      else\n        out = \"#{out} #{v}\"\n      end\n    when None\n    end\n    j = j + 1\n  end\n  println(out)\nend",
+  "overall": "pass"
+}

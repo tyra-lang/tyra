@@ -1,0 +1,36 @@
+{
+  "prompt_id": "054-line-numbers",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777285294,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8462,
+      "code_len": 380,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 139,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 442,
+      "stdout": "1: alpha\n2: beta\n3: gamma\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\n\nmut i = 1\nlet text = io.read_to_end()\nlet lines = string.split(text, \"\\n\")\nimport string\nlet n = list.len(lines)\nimport list\nmut idx = 0\nwhile idx < n\n  match lines.get(idx)\n  when Some(line)\n    if idx == n - 1 and string.is_empty(line)\n      idx = idx\n    else\n      println(\"#{i}: #{line}\")\n      i = i + 1\n    end\n  when None\n    idx = idx\n  end\n  idx = idx + 1\nend",
+  "overall": "pass"
+}
