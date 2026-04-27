@@ -216,6 +216,11 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare ptr @tyra_string_from_byte(i64)").unwrap();
     writeln!(out, "declare void @tyra_string_split_whitespace(ptr, ptr)").unwrap();
     writeln!(out, "declare void @tyra_string_split(ptr, ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_map_new_string_int()").unwrap();
+    writeln!(out, "declare ptr @tyra_map_insert_string_int(ptr, ptr, i64)").unwrap();
+    writeln!(out, "declare i64 @tyra_map_get_string_int(ptr, ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_map_contains_string_int(ptr, ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_map_get_present()").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
     writeln!(out, "declare void @exit(i32)").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();

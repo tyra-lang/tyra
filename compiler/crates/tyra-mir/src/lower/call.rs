@@ -191,6 +191,58 @@ impl super::LowerCtx {
             return dest;
         }
 
+        // §17.3.6 Map<String, Int> method dispatch.
+        // - m.get(k)         → Option<Int> via MapGetOption (uses runtime
+        //                      presence flag to disambiguate `0 / Some(0)` /
+        //                      `i64::MIN / None`).
+        // - m.contains_key(k) → Bool
+        if let ExprKind::FieldAccess(obj, method) = &callee.kind {
+            if matches!(method.as_str(), "get" | "contains_key")
+                && args.len() == 1
+                && self.infer_map_type(obj).is_some()
+            {
+                let obj_val = self.lower_expr(obj, body);
+                let handle = self.fresh_temp();
+                body.push(Instruction::FieldGet {
+                    dest: handle.clone(),
+                    obj: Operand::Var(obj_val),
+                    type_name: "Map__String__Int".into(),
+                    field_index: 0,
+                });
+                self.string_vars.insert(handle.clone());
+                let key_val = self.lower_expr(&args[0].value, body);
+                match method.as_str() {
+                    "contains_key" => {
+                        let dest = self.fresh_temp();
+                        body.push(Instruction::Call {
+                            dest: Some(dest.clone()),
+                            func: "__map_contains_string_int".into(),
+                            args: vec![
+                                Operand::Var(handle),
+                                Operand::Var(key_val),
+                            ],
+                        });
+                        return dest;
+                    }
+                    "get" => {
+                        let opt_ty = Ty::Generic("Option".into(), vec![Ty::Int]);
+                        self.register_adt_type(&opt_ty);
+                        let dest = self.fresh_temp();
+                        body.push(Instruction::MapGetOption {
+                            dest: dest.clone(),
+                            handle: Operand::Var(handle),
+                            key: Operand::Var(key_val),
+                        });
+                        self.generic_var_types.insert(dest.clone(), opt_ty.clone());
+                        self.var_types
+                            .insert(dest.clone(), opt_ty.monomorphized_name());
+                        return dest;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         // Check for .len() on List<T> (spec §11)
         if let ExprKind::FieldAccess(obj, method) = &callee.kind
             && method == "len"

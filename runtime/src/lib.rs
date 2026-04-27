@@ -51,6 +51,12 @@ pub use stdlib_http_server::{
 mod stdlib_io;
 pub use stdlib_io::{tyra_io_eof, tyra_io_read_line, tyra_io_read_to_end};
 
+mod stdlib_map;
+pub use stdlib_map::{
+    tyra_map_contains_string_int, tyra_map_get_present, tyra_map_get_string_int,
+    tyra_map_insert_string_int, tyra_map_new_string_int,
+};
+
 mod stdlib_string;
 pub use stdlib_string::{
     tyra_string_byte_at, tyra_string_contains, tyra_string_ends_with, tyra_string_from_byte,

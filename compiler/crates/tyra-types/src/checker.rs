@@ -443,6 +443,25 @@ fn register_prelude(env: &mut TypeEnv) {
         "__string_split".to_string(),
         Ty::Fn(vec![Ty::String, Ty::String], Box::new(list_string.clone())),
     );
+    // §17.3.6 Map intrinsics (Map<String, Int> only). The "handle" is a
+    // raw pointer; we surface it as Ty::String here since v0.1 has no
+    // dedicated Ty::Ptr (mirrors the List<T> data-pointer convention).
+    env.define(
+        "__map_new_string_int".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::String)),
+    );
+    env.define(
+        "__map_insert_string_int".to_string(),
+        Ty::Fn(vec![Ty::String, Ty::String, Ty::Int], Box::new(Ty::String)),
+    );
+    env.define(
+        "__map_get_string_int".to_string(),
+        Ty::Fn(vec![Ty::String, Ty::String], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__map_contains_string_int".to_string(),
+        Ty::Fn(vec![Ty::String, Ty::String], Box::new(Ty::Bool)),
+    );
 
     // §17.3.5: list stdlib intrinsics (List<Int> only). See stdlib/list.tyra.
     let list_int = Ty::Generic("List".into(), vec![Ty::Int]);
@@ -863,24 +882,35 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             }
         }
         ExprKind::MapLit(entries) => {
-            // Walk children for error coverage, then reject: Map literals
-            // and the Map<K,V> type are spec'd (§Builtins) but not yet
-            // implemented in MIR/codegen. Without this gate the lowering
-            // silently produces a Unit and downstream LLVM emits broken IR
-            // (issue: 017-key-value-lookup, ai-gen Run 24).
-            for (k, v) in entries {
+            // v0.1 supports `Map<String, Int>` only — the runtime backs it
+            // with a linked-list-of-(key, value) (see runtime/src/stdlib_map.rs).
+            // Other K / V combinations are tracked in §22 as deferred.
+            if entries.is_empty() {
+                // Empty literal needs a type annotation to disambiguate.
+                // Without a binding hint, fall back to Map<String, Int>.
+                return Ty::Generic("Map".into(), vec![Ty::String, Ty::Int]);
+            }
+            let key_ty = infer_expr(&entries[0].0, env, report);
+            let val_ty = infer_expr(&entries[0].1, env, report);
+            for (k, v) in entries.iter().skip(1) {
                 infer_expr(k, env, report);
                 infer_expr(v, env, report);
             }
-            report.add(
-                Diagnostic::error(
-                    "map literals `{ k: v, ... }` are not yet implemented \
-                     (Map<K, V> reserved by §Builtins, codegen pending)"
-                        .to_string(),
-                )
-                .with_label(Label::new(expr.span, "unsupported map literal")),
-            );
-            Ty::Error
+            if !matches!(key_ty, Ty::String | Ty::Error)
+                || !matches!(val_ty, Ty::Int | Ty::Error)
+            {
+                report.add(
+                    Diagnostic::error(format!(
+                        "map literals are restricted to `Map<String, Int>` in v0.1, \
+                         got `Map<{}, {}>`",
+                        key_ty.display_name(),
+                        val_ty.display_name()
+                    ))
+                    .with_label(Label::new(expr.span, "unsupported key/value type")),
+                );
+                return Ty::Error;
+            }
+            Ty::Generic("Map".into(), vec![Ty::String, Ty::Int])
         }
 
         // Identifier lookup

@@ -639,6 +639,58 @@ pub(crate) fn emit_instruction(
             emit_list_instruction(out, inst, func, ctx);
         }
 
+        Instruction::MapGetOption { dest, handle, key } => {
+            let h = operand_ref(handle, func);
+            let k = operand_ref(key, func);
+            let opt_ty = "Option__Int";
+            let opt_llvm = if let Some(info) = ctx.struct_map.get(opt_ty) {
+                info.llvm_name.clone()
+            } else {
+                "%struct.Option__Int".into()
+            };
+            // raw = call __map_get_string_int(handle, key)
+            writeln!(
+                out,
+                "  %{dest}.raw = call i64 @tyra_map_get_string_int(ptr {h}, ptr {k})"
+            )
+            .unwrap();
+            // present = call __map_get_present()  (i32 → i1)
+            writeln!(
+                out,
+                "  %{dest}.present.i32 = call i32 @tyra_map_get_present()"
+            )
+            .unwrap();
+            writeln!(
+                out,
+                "  %{dest}.present = icmp ne i32 %{dest}.present.i32, 0"
+            )
+            .unwrap();
+            // tag = present ? 0 (Some) : 1 (None) — Option layout is {i8, i64}.
+            writeln!(
+                out,
+                "  %{dest}.tag = select i1 %{dest}.present, i8 0, i8 1"
+            )
+            .unwrap();
+            // value = present ? raw : 0  (zero out the unused payload for None
+            // so Hash/Eq derivations behave deterministically)
+            writeln!(
+                out,
+                "  %{dest}.val = select i1 %{dest}.present, i64 %{dest}.raw, i64 0"
+            )
+            .unwrap();
+            // Build Option<Int>.
+            writeln!(
+                out,
+                "  %{dest}.s0 = insertvalue {opt_llvm} undef, i8 %{dest}.tag, 0"
+            )
+            .unwrap();
+            writeln!(
+                out,
+                "  %{dest} = insertvalue {opt_llvm} %{dest}.s0, i64 %{dest}.val, 1"
+            )
+            .unwrap();
+        }
+
         Instruction::Spawn {
             dest,
             func: target_fn,

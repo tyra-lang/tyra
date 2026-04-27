@@ -308,6 +308,28 @@ pub fn lower(file: &SourceFile) -> Program {
         .insert("__string_split".into(), list_string);
     ctx.fn_param_types
         .insert("__string_split".into(), vec![Ty::String, Ty::String]);
+    // §17.3.6 Map<String, Int> intrinsics (handle = ptr surfaced as
+    // Ty::String).
+    ctx.fn_return_types
+        .insert("__map_new_string_int".into(), Ty::String);
+    ctx.fn_param_types
+        .insert("__map_new_string_int".into(), vec![]);
+    ctx.fn_return_types
+        .insert("__map_insert_string_int".into(), Ty::String);
+    ctx.fn_param_types.insert(
+        "__map_insert_string_int".into(),
+        vec![Ty::String, Ty::String, Ty::Int],
+    );
+    ctx.fn_return_types
+        .insert("__map_get_string_int".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__map_get_string_int".into(), vec![Ty::String, Ty::String]);
+    ctx.fn_return_types
+        .insert("__map_contains_string_int".into(), Ty::Bool);
+    ctx.fn_param_types.insert(
+        "__map_contains_string_int".into(),
+        vec![Ty::String, Ty::String],
+    );
 
     // §17.3.5: list stdlib intrinsics (List<Int> only).
     let list_int = Ty::Generic("List".into(), vec![Ty::Int]);

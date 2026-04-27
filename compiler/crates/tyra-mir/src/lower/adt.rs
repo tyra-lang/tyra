@@ -29,6 +29,14 @@ impl super::LowerCtx {
                     ("err_value".into(), err_ty.clone()),
                 ],
             );
+        } else if matches!(ty, Ty::Generic(n, _) if n == "Map") {
+            // Map<String, Int> v0.1 = { handle: ptr } — opaque handle to a
+            // runtime-managed linked list of (key, value) nodes. Other K/V
+            // combinations are rejected at type-check (§22 deferred).
+            self.adt_struct_defs.insert(
+                mono_name,
+                vec![("handle".into(), Ty::String)], // ptr in LLVM
+            );
         } else if let Some(elem_ty) = ty.list_elem() {
             // List<T> = { data: ptr, len: Int } (§11)
             // data is a heap-allocated array of T. We use Ty::String as a proxy for

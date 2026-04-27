@@ -210,6 +210,17 @@ pub enum Instruction {
         elem_type: Ty,
     },
 
+    /// `dest = map_get_option(handle, key)` — call `__map_get_string_int`,
+    /// then construct `Option<Int>` based on the runtime presence flag
+    /// (`__map_get_present`). Tag is 0 for Some, 1 for None.
+    /// Codegen emits a 4-step sequence (call, presence, select, struct).
+    /// Used for `m.get(k)` on `Map<String, Int>` — see §17.3.6.
+    MapGetOption {
+        dest: String,
+        handle: Operand,
+        key: Operand,
+    },
+
     /// `dest = spawn func(args...)` — submit a task to the async runtime (§14.4, M9).
     /// Codegen emits a synthetic thunk that unboxes args, calls `func`, and boxes
     /// the result. `arg_types` and `result_type` drive the LLVM layout of the

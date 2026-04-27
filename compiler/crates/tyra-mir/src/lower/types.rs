@@ -346,6 +346,19 @@ impl super::LowerCtx {
         ImplMethodResult::NotFound
     }
 
+    /// Infer if an expression is a Map<K, V> type from variable tracking.
+    /// Returns the full generic Ty so callers can dispatch on K/V.
+    pub(super) fn infer_map_type(&self, expr: &Expr) -> Option<Ty> {
+        match &expr.kind {
+            ExprKind::Ident(name) => self
+                .generic_var_types
+                .get(name)
+                .filter(|t| matches!(t, Ty::Generic(n, _) if n == "Map"))
+                .cloned(),
+            _ => None,
+        }
+    }
+
     /// Infer if an expression is a List<T> type from variable tracking.
     pub(super) fn infer_list_type(&self, expr: &Expr) -> Option<Ty> {
         match &expr.kind {

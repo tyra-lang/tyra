@@ -1667,6 +1667,7 @@ The following are postponed for later specification:
 - Detailed APIs for Tier 2 standard library modules (collections, time, test, log, float) — `fs`, `json`, `http`, and `string` are frozen in §17.3
 - Extended `string` API (replace, join, char_at, regex) — `split` and `split_whitespace` are frozen in §17.3.4 alongside the other v0.1 functions
 - Extended `list` API (generic `List<T>`, `map` / `filter` / `fold`, `List<String>`, etc.) — the six `List<Int>`-only functions frozen in §17.3.5 are the only v0.1 surface (requires element-type monomorphization and lambda-through-C-ABI plumbing)
+- Extended `Map` API (arbitrary K / V, `put` / `remove` / iteration, hash-table backing) — only `Map<String, Int>` literals plus `get` / `contains_key` are frozen in §17.3.6; everything else is v0.2+
 
 ---
 

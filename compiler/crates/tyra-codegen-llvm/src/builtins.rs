@@ -230,6 +230,47 @@ pub(crate) fn emit_builtin_call(
             emit_string_split(out, dest.as_deref(), args, func, ctx);
             true
         }
+        // §17.3.6 Map<String, Int> intrinsics — handle is a ptr.
+        "__map_new_string_int" => {
+            let d = dest.as_deref().unwrap_or("_map");
+            writeln!(out, "  %{d} = call ptr @tyra_map_new_string_int()").unwrap();
+            true
+        }
+        "__map_insert_string_int" => {
+            let d = dest.as_deref().unwrap_or("_map_ins");
+            let m = args.first().map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            let k = args.get(1).map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            let v = args.get(2).map(|a| operand_ref(a, func)).unwrap_or_else(|| "0".into());
+            writeln!(
+                out,
+                "  %{d} = call ptr @tyra_map_insert_string_int(ptr {m}, ptr {k}, i64 {v})"
+            )
+            .unwrap();
+            true
+        }
+        "__map_get_string_int" => {
+            let d = dest.as_deref().unwrap_or("_map_get");
+            let m = args.first().map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            let k = args.get(1).map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            writeln!(
+                out,
+                "  %{d} = call i64 @tyra_map_get_string_int(ptr {m}, ptr {k})"
+            )
+            .unwrap();
+            true
+        }
+        "__map_contains_string_int" => {
+            let d = dest.as_deref().unwrap_or("_map_has");
+            let m = args.first().map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            let k = args.get(1).map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            writeln!(
+                out,
+                "  %{d}.i32 = call i32 @tyra_map_contains_string_int(ptr {m}, ptr {k})"
+            )
+            .unwrap();
+            writeln!(out, "  %{d} = icmp ne i32 %{d}.i32, 0").unwrap();
+            true
+        }
         // §17.3.5: list stdlib intrinsics (List<Int> only).
         "__list_int_push" => {
             emit_list_int_push(out, dest.as_deref(), args, func, ctx);

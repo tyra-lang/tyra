@@ -788,15 +788,52 @@ impl super::LowerCtx {
             }
 
             ExprKind::MapLit(entries) => {
-                for (k, v) in entries {
-                    self.lower_expr(k, body);
-                    self.lower_expr(v, body);
-                }
-                let dest = self.fresh_temp();
-                body.push(Instruction::Const {
-                    dest: dest.clone(),
-                    value: Constant::Unit,
+                // §17.3.6 v0.1: Map<String, Int> only. Build via
+                //   handle = __map_new_string_int()
+                //   handle = __map_insert_string_int(handle, k, v)  (×N)
+                //   wrap in Map__String__Int { handle }
+                // Type checker has already rejected non-(String, Int) shapes.
+                let map_ty = Ty::Generic(
+                    "Map".into(),
+                    vec![Ty::String, Ty::Int],
+                );
+                self.register_adt_type(&map_ty);
+
+                // Start with an empty handle.
+                let mut handle = self.fresh_temp();
+                body.push(Instruction::Call {
+                    dest: Some(handle.clone()),
+                    func: "__map_new_string_int".into(),
+                    args: vec![],
                 });
+                self.string_vars.insert(handle.clone()); // ptr-typed
+
+                for (k, v) in entries {
+                    let k_val = self.lower_expr(k, body);
+                    let v_val = self.lower_expr(v, body);
+                    let next = self.fresh_temp();
+                    body.push(Instruction::Call {
+                        dest: Some(next.clone()),
+                        func: "__map_insert_string_int".into(),
+                        args: vec![
+                            Operand::Var(handle.clone()),
+                            Operand::Var(k_val),
+                            Operand::Var(v_val),
+                        ],
+                    });
+                    self.string_vars.insert(next.clone());
+                    handle = next;
+                }
+
+                // Wrap the handle in Map__String__Int { handle }.
+                let dest = self.fresh_temp();
+                body.push(Instruction::StructInit {
+                    dest: dest.clone(),
+                    type_name: "Map__String__Int".into(),
+                    fields: vec![Operand::Var(handle)],
+                });
+                self.var_types.insert(dest.clone(), "Map__String__Int".into());
+                self.generic_var_types.insert(dest.clone(), map_ty);
                 dest
             }
 

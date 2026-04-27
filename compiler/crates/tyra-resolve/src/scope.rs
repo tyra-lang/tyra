@@ -192,6 +192,11 @@ const PRELUDE_FUNCTIONS: &[&str] = &[
     "__string_from_byte",
     "__string_split_whitespace",
     "__string_split",
+    // §17.3.6 (v0.1, Map<String, Int> only). See runtime/src/stdlib_map.rs.
+    "__map_new_string_int",
+    "__map_insert_string_int",
+    "__map_get_string_int",
+    "__map_contains_string_int",
     // §17.3.5: list stdlib backing (List<Int> only; LLVM-only, no runtime C ABI).
     "__list_int_push",
     "__list_int_sum",

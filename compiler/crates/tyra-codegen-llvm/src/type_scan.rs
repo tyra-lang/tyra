@@ -60,7 +60,7 @@ fn builtin_primitive_return(fname: &str) -> Option<Ty> {
         // §17.3.5: list stdlib intrinsics (List<Int> only). Int / List<Int> /
         // Option<Int> returns are tracked via struct_temps in
         // pre_scan_struct_types; only the Bool return needs registration here.
-        "__list_int_contains" => Some(Ty::Bool),
+        "__list_int_contains" | "__map_contains_string_int" => Some(Ty::Bool),
         _ => None,
     }
 }

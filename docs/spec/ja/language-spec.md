@@ -1206,6 +1206,7 @@ ADT バリアント:
 
 - `string` — 文字列操作 (len, trim, contains, starts_with 等。§17.3.4 で v0.1 API 凍結)
 - `list` — `List<Int>` の操作 (push, sum, max, min, contains, index_of。§17.3.5 で v0.1 API 凍結、`List<T>` 全般は §22 で延期)
+- `Map<K, V>` — リテラル `{"k": v, ...}` と最小参照 API (`get` / `contains_key`)。§17.3.6 で **`Map<String, Int>` のみ** 凍結。任意の K / V とハッシュテーブル化は §22 で延期。
 - `collections` — `List`, `Map`, `Set` のメソッド (sort_by, min_by, max_by, map, filter 等)
 - `float` — Float の比較関数 (eq, approx_eq, is_nan 等。ADR-0002 参照)
 - `json` — JSON パース (§17.3 で v0.1 API 凍結)
@@ -1470,6 +1471,37 @@ export fn index_of(_ list: List<Int>, _ x: Int) -> Option<Int>
   で行い、C ABI ランタイムは経由しない。`List<Int>` のレイアウト
   (`{ptr data, i64 len}`) はコンパイラ専有のため、これが安全に可能。
 
+#### 17.3.6 map
+
+`Map<K, V>` リテラル `{"key": value, ...}` と最小限の参照 API を
+v0.1 では **`Map<String, Int>` のみ** で凍結する。他の K / V 組み合わせは
+§22 「Map 拡張 API」として延期する。
+
+```tyra
+let table: Map<String, Int> = {"one": 1, "two": 2}
+match table.get("one")
+when Some(n)
+  println("got #{n}")
+when None
+  println("absent")
+end
+table.contains_key("two")  # Bool
+```
+
+- `m.get(k: String) -> Option<Int>`: 線形走査でキーを検索し、見つかれば
+  `Some(value)`、なければ `None`。値が `i64::MIN` であっても正しく
+  `Some(i64::MIN)` を返す (ランタイム thread-local の "present" フラグで
+  判定するためセンチネルの曖昧性なし)。
+- `m.contains_key(k: String) -> Bool`: 線形走査の存在確認。
+- 同一キーが複数ある場合、ソース順で**後**に書かれた値が `get` の対象
+  (リテラルは末尾から先頭へリンクリストを構築する)。
+- `m.put(k, v)` / `m.remove(k)` / イテレーションは v0.1 範囲外。書き換えが
+  必要な場合は新しいマップリテラルを作って再束縛する。
+- 実装は C ABI ランタイム (`runtime/src/stdlib_map.rs`) のリンクリスト
+  ベース。ハッシュテーブル化は v0.2 以降。
+- 内部レイアウトは `Map<K, V> = { handle: ptr }` の単一 ptr ラッパー。
+  `handle` フィールドはユーザコードからは隠蔽されている。
+
 ---
 
 ## 18. ツールチェーン
@@ -1644,6 +1676,7 @@ end
 - Tier 2 標準ライブラリ API の詳細 (collections, time, test, log, float) — `fs`, `json`, `http`, `string` は §17.3 で v0.1 凍結済
 - `string` の拡張 API (replace, join, char_at, 正規表現) — `split` / `split_whitespace` は §17.3.4 に追加凍結、それ以外は v0.2 以降
 - `list` の拡張 API (ジェネリック `List<T>` 全般、`map` / `filter` / `fold`、`List<String>` 等) — §17.3.5 で凍結した `List<Int>` 専用 6 関数の外側は v0.2 以降 (要素型モノモーフィゼーションとラムダ C ABI 通し配管が必要)
+- `Map` の拡張 API (任意の K / V、`put` / `remove` / イテレーション、ハッシュテーブル化) — §17.3.6 で `Map<String, Int>` リテラル + `get` / `contains_key` のみ凍結。それ以外は v0.2 以降
 
 ---
 
