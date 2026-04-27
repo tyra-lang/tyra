@@ -1,0 +1,36 @@
+{
+  "prompt_id": "081-binary-search",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777258448,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 19229,
+      "code_len": 921,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 408,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 516,
+      "stdout": "index=6",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line1 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet line2 = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet tokens = string.split_whitespace(line1)\nmut nums: List<Int> = []\nmut i = 0\nwhile i < tokens.len()\n  let tok = match tokens.get(i)\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let n = match string.parse_int(tok)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  nums = list.push(nums, n)\n  i = i + 1\nend\n\nlet target = match string.parse_int(string.trim(line2))\nwhen Some(v)\n  v\nwhen None\n  0\nend\n\nmut lo = 0\nmut hi = nums.len()\nmut found = -1\nwhile lo < hi\n  let mid = (lo + hi) / 2\n  let v = match nums.get(mid)\n  when Some(x)\n    x\n  when None\n    0\n  end\n  if v == target\n    found = mid\n    lo = hi\n  else if v < target\n    lo = mid + 1\n  else\n    hi = mid\n  end\nend\n\nif found >= 0\n  print(\"index=#{found}\")\nelse\n  print(\"not_found\")\nend",
+  "overall": "pass"
+}

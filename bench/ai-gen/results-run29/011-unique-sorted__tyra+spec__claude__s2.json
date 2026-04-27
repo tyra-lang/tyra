@@ -1,0 +1,36 @@
+{
+  "prompt_id": "011-unique-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777250909,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 25088,
+      "code_len": 1108,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 368,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 461,
+      "stdout": "1 2 3 4 5 6 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet text = io.read_to_end()\nlet tokens = string.split_whitespace(text)\nmut nums: List<Int> = []\nmut i = 0\nwhile i < tokens.len()\n  match tokens.get(i)\n  when Some(t)\n    match string.parse_int(t)\n    when Some(n)\n      if not list.contains(nums, n)\n        mut sorted: List<Int> = []\n        mut inserted = false\n        mut j = 0\n        while j < list.len(nums)\n          match list.get(nums, j)\n          when Some(v)\n            if not inserted and n < v\n              sorted = list.push(sorted, n)\n              inserted = true\n            end\n            sorted = list.push(sorted, v)\n          when None\n            ()\n          end\n          j = j + 1\n        end\n        if not inserted\n          sorted = list.push(sorted, n)\n        end\n        nums = sorted\n      end\n    when None\n      ()\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nmut out = \"\"\nmut k = 0\nwhile k < list.len(nums)\n  match list.get(nums, k)\n  when Some(v)\n    if k == 0\n      out = \"#{v}\"\n    else\n      out = \"#{out} #{v}\"\n    end\n  when None\n    ()\n  end\n  k = k + 1\nend\nprintln(out)",
+  "overall": "pass"
+}

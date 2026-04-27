@@ -1,0 +1,26 @@
+{
+  "prompt_id": "089-unique-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777259882,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10902,
+      "code_len": 571,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 195,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-dtedmqfv/main.ll:731:64: error: '%_t94' defined with type '%struct.List__String = type { ptr, i64 }' but expected '%struct.List__Int = type { ptr, i64 }'\n  731 |   %_t96 = call %struct.List__Int @list__push(%struct.List__Int %_t94, i64 %_t95)\n      |                                                                ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet text = io.read_to_end()\nlet tokens = string.split_whitespace(text)\nmut seen: List<String> = []\nmut i = 0\nwhile i < tokens.len()\n  let tok = match tokens.get(i)\n  when Some(t)\n    t\n  when None\n    \"\"\n  end\n  mut found = false\n  mut j = 0\n  while j < seen.len()\n    let s = match seen.get(j)\n    when Some(v)\n      v\n    when None\n      \"\"\n    end\n    if s == tok\n      found = true\n    end\n    j = j + 1\n  end\n  if not found\n    seen = list.push(seen, 0)\n    seen = [\"#{tok}\"]\n  end\n  i = i + 1\nend\nprintln(\"unique=#{seen.len()}\")",
+  "overall": "compile_fail"
+}

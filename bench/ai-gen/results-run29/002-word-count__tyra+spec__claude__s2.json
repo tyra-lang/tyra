@@ -1,0 +1,36 @@
+{
+  "prompt_id": "002-word-count",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777250617,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 7687,
+      "code_len": 106,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 675,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 472,
+      "stdout": "9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\n\nlet text = io.read_to_end()\nlet words = string.split_whitespace(text)\nprintln(\"#{words.len()}\")",
+  "overall": "pass"
+}

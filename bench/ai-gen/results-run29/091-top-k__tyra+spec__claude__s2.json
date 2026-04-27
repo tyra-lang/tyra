@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777260001,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 53425,
+      "code_len": 1502,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 392,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 542,
+      "stdout": "9 6 5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  let tokens = string.split_whitespace(s)\n  mut result: List<Int> = []\n  mut i = 0\n  while i < tokens.len()\n    match tokens.get(i)\n    when Some(tok)\n      match string.parse_int(tok)\n      when Some(n)\n        result = list.push(result, n)\n      when None\n        ()\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn remove_at(_ xs: List<Int>, _ idx: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  while i < xs.len()\n    if i != idx\n      match xs.get(i)\n      when Some(v)\n        result = list.push(result, v)\n      when None\n        ()\n      end\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn read_line_or_empty() -> String\n  match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\nend\n\nfn main() -> Unit\n  let line1 = read_line_or_empty()\n  let line2 = read_line_or_empty()\n\n  mut nums = parse_ints(line1)\n  let k = match string.parse_int(string.trim(line2))\n  when Some(n)\n    n\n  when None\n    0\n  end\n\n  mut take = k\n  if take > nums.len()\n    take = nums.len()\n  end\n\n  mut output = \"\"\n  mut i = 0\n  while i < take\n    match list.max(nums)\n    when Some(m)\n      match list.index_of(nums, m)\n      when Some(idx)\n        nums = remove_at(nums, idx)\n        if i == 0\n          output = \"#{m}\"\n        else\n          output = \"#{output} #{m}\"\n        end\n      when None\n        ()\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n\n  println(output)\nend",
+  "overall": "pass"
+}

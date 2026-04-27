@@ -1,0 +1,36 @@
+{
+  "prompt_id": "034-group-even-odd",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777253638,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10137,
+      "code_len": 745,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 175,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 450,
+      "stdout": "evens=4 2 6 8\nodds=7 1 9 3\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet input = io.read_to_end()\nlet tokens = string.split_whitespace(input)\n\nmut evens = \"\"\nmut odds = \"\"\nmut first_even = true\nmut first_odd = true\n\nmut i = 0\nwhile i < tokens.len()\n  let tok = tokens.get(i)\n  match tok\n  when Some(t)\n    match string.parse_int(t)\n    when Some(n)\n      if n % 2 == 0\n        if first_even\n          evens = \"#{n}\"\n          first_even = false\n        else\n          evens = \"#{evens} #{n}\"\n        end\n      else\n        if first_odd\n          odds = \"#{n}\"\n          first_odd = false\n        else\n          odds = \"#{odds} #{n}\"\n        end\n      end\n    when None\n      ()\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nprintln(\"evens=#{evens}\")\nprintln(\"odds=#{odds}\")",
+  "overall": "pass"
+}

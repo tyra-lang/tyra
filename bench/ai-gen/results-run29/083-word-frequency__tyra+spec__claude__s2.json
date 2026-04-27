@@ -1,0 +1,26 @@
+{
+  "prompt_id": "083-word-frequency",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777258557,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11678,
+      "code_len": 690,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 32,
+      "stderr": "error[E0101]: expected newline or end of file\n   --> main.tyra:35:32\n   |\n35 |       keys = \"#{keys}\" == \"\" ? keys : keys\n   |                                ^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:35:37\n   |\n35 |       keys = \"#{keys}\" == \"\" ? keys : keys\n   |                                     ^ expected newline here\n\nerror[E0104]: expected expression, found `:`\n   --> main.tyra:35:37\n   |\n35 |       keys = \"#{keys}\" == \"\" ? keys : keys\n   |                                     ^ expected expression\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:35:39\n   |\n35 |       keys = \"#{keys}\" == \"\" ? keys : keys\n   |                                       ^^^^ expected newline here\n\n4 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn find_index(_ keys: List<String>, _ target: String) -> Int\n  mut i = 0\n  let n = keys.len()\n  while i < n\n    match keys.get(i)\n    when Some(k)\n      if k == target\n        return i\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  -1\nend\n\nlet input = io.read_to_end()\nlet tokens = string.split_whitespace(input)\n\nmut keys: List<String> = []\nmut counts: List<Int> = []\n\nmut i = 0\nlet total = tokens.len()\nwhile i < total\n  match tokens.get(i)\n  when Some(tok)\n    let idx = find_index(keys, tok)\n    if idx < 0\n      keys = \"#{keys}\" == \"\" ? keys : keys\n    else\n      ()\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nprint(\"top==0\")",
+  "overall": "compile_fail"
+}

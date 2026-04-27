@@ -1,0 +1,36 @@
+{
+  "prompt_id": "007-gcd",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777250767,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 12475,
+      "code_len": 465,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 408,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 472,
+      "stdout": "gcd=6\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line = io.read_to_end()\nlet parts = string.split_whitespace(line)\nmut a = 0\nmut b = 0\nmatch parts.get(0)\nwhen Some(s)\n  match string.parse_int(s)\n  when Some(n)\n    a = n\n  when None\n    a = 0\n  end\nwhen None\n  a = 0\nend\nmatch parts.get(1)\nwhen Some(s)\n  match string.parse_int(s)\n  when Some(n)\n    b = n\n  when None\n    b = 0\n  end\nwhen None\n  b = 0\nend\nwhile b != 0\n  let t = b\n  b = a % b\n  a = t\nend\nprintln(\"gcd=#{a}\")",
+  "overall": "pass"
+}

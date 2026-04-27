@@ -1,0 +1,36 @@
+{
+  "prompt_id": "032-divide-safe",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777252645,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 917538,
+      "code_len": 423,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 387,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 522,
+      "stdout": "ok=6\nerr=DivByZero\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "type DivError =\n  | DivByZero\n  | Overflow\n\nfn safe_div(_ a: Int, _ b: Int) -> Result<Int, DivError>\n  if b == 0\n    Err(DivError.DivByZero)\n  else\n    Ok(a / b)\n  end\nend\n\nfn report(_ r: Result<Int, DivError>) -> Unit\n  match r\n  when Ok(v)\n    println(\"ok=#{v}\")\n  when Err(DivByZero)\n    println(\"err=DivByZero\")\n  when Err(Overflow)\n    println(\"err=Overflow\")\n  end\nend\n\nreport(safe_div(42, 7))\nreport(safe_div(10, 0))",
+  "overall": "pass"
+}

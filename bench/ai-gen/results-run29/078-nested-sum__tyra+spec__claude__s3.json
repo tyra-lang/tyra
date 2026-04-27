@@ -1,0 +1,36 @@
+{
+  "prompt_id": "078-nested-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777258357,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8671,
+      "code_len": 257,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 168,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 502,
+      "stdout": "total=45",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import list\n\nlet data = [[1, 2, 3], [4, 5], [], [6, 7, 8, 9]]\nmut total = 0\nmut i = 0\nwhile i < data.len()\n  match data.get(i)\n  when Some(inner)\n    total = total + list.sum(inner)\n  when None\n    total = total\n  end\n  i = i + 1\nend\nprint(\"total=#{total}\")",
+  "overall": "pass"
+}

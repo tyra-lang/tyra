@@ -1,0 +1,36 @@
+{
+  "prompt_id": "059-is-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777256042,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 14713,
+      "code_len": 606,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 386,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 492,
+      "stdout": "YES\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line = io.read_line()\nlet text = match line\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet tokens = string.split_whitespace(text)\nmut sorted = true\nmut prev = 0\nmut first = true\nmut i = 0\nlet n = tokens.len()\nwhile i < n\n  let tok = match tokens.get(i)\n  when Some(t)\n    t\n  when None\n    \"\"\n  end\n  let cur = match string.parse_int(tok)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  if first\n    first = false\n    prev = cur\n  else\n    if cur < prev\n      sorted = false\n    end\n    prev = cur\n  end\n  i = i + 1\nend\n\nif sorted\n  println(\"YES\")\nelse\n  println(\"NO\")\nend",
+  "overall": "pass"
+}

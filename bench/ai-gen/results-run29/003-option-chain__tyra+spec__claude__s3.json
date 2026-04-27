@@ -1,0 +1,36 @@
+{
+  "prompt_id": "003-option-chain",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777250658,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8081,
+      "code_len": 319,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 370,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 486,
+      "stdout": "OK=5\nNONE\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "fn safe_divide(_ a: Int, _ b: Int) -> Option<Int>\n  if b == 0\n    None\n  else\n    Some(a / b)\n  end\nend\n\nfn describe(_ r: Option<Int>) -> String\n  match r\n  when Some(v)\n    \"OK=#{v}\"\n  when None\n    \"NONE\"\n  end\nend\n\nfn main() -> Unit\n  println(describe(safe_divide(10, 2)))\n  println(describe(safe_divide(10, 0)))\nend",
+  "overall": "pass"
+}

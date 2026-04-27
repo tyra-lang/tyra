@@ -1,0 +1,36 @@
+{
+  "prompt_id": "025-average",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777251455,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10993,
+      "code_len": 511,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 195,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 479,
+      "stdout": "avg=25",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Result<Unit, String>\n  let text = io.read_to_end()\n  let tokens = string.split_whitespace(text)\n  mut sum = 0\n  mut count = 0\n  mut i = 0\n  let n = tokens.len()\n  while i < n\n    match tokens.get(i)\n    when Some(t)\n      match string.parse_int(t)\n      when Some(v)\n        sum = sum + v\n        count = count + 1\n      when None\n        ()\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  let avg = sum / count\n  print(\"avg=#{avg}\")\n  Ok(())\nend",
+  "overall": "pass"
+}

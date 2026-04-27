@@ -1,0 +1,36 @@
+{
+  "prompt_id": "071-sum-positive-diff-negative",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777256447,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9139,
+      "code_len": 474,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 148,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 502,
+      "stdout": "r=30",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet parts = string.split_whitespace(line)\nmut p = 0\nmut n = 0\nmut i = 0\nwhile i < list.len(parts)\n  let tok = match list.get(parts, i)\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  match string.parse_int(tok)\n  when Some(v)\n    if v > 0\n      p = p + v\n    else if v < 0\n      n = n + v\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend\n\nlet r = p - n\nprint(\"r=#{r}\")",
+  "overall": "pass"
+}

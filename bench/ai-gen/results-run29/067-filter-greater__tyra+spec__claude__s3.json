@@ -1,0 +1,36 @@
+{
+  "prompt_id": "067-filter-greater",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777256325,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11807,
+      "code_len": 835,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 185,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 497,
+      "stdout": "5 8 10",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Result<Unit, String>\n  let line1 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let line2 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  let t = match string.parse_int(string.trim(line2))\n  when Some(n)\n    n\n  when None\n    0\n  end\n\n  let tokens = string.split_whitespace(line1)\n  mut output = \"\"\n  mut first = true\n  mut i = 0\n  let n = tokens.len()\n  while i < n\n    let tok = match tokens.get(i)\n    when Some(s)\n      s\n    when None\n      \"\"\n    end\n    let v = match string.parse_int(tok)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    if v > t\n      if first\n        output = \"#{v}\"\n        first = false\n      else\n        output = \"#{output} #{v}\"\n      end\n    end\n    i = i + 1\n  end\n  print(output)\n  Ok(())\nend",
+  "overall": "pass"
+}

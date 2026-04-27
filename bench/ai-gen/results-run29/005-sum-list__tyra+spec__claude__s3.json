@@ -1,0 +1,36 @@
+{
+  "prompt_id": "005-sum-list",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777250711,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 6698,
+      "code_len": 114,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 168,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 788,
+      "stdout": "sum=55\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "let xs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\nmut total = 0\nfor x in xs\n  total = total + x\nend\nprintln(\"sum=#{total}\")",
+  "overall": "pass"
+}

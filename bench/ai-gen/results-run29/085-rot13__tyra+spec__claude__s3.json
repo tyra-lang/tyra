@@ -1,0 +1,36 @@
+{
+  "prompt_id": "085-rot13",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777259619,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 12498,
+      "code_len": 486,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 185,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 451,
+      "stdout": "Uryyb, Jbeyq!",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn rot(_ b: Int) -> Int\n  if b >= 97 and b <= 122\n    ((b - 97 + 13) % 26) + 97\n  else if b >= 65 and b <= 90\n    ((b - 65 + 13) % 26) + 65\n  else\n    b\n  end\nend\n\nlet line = match io.read_line()\nwhen Some(s)\n  s\nwhen None\n  \"\"\nend\n\nlet n = string.len(line)\nmut result = \"\"\nmut i = 0\nwhile i < n\n  let b = match string.byte_at(line, i)\n  when Some(v)\n    v\n  when None\n    0\n  end\n  result = \"#{result}#{string.from_byte(rot(b))}\"\n  i = i + 1\nend\n\nprint(result)",
+  "overall": "pass"
+}

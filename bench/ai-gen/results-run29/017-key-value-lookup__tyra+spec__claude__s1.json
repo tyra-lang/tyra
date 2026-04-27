@@ -1,0 +1,26 @@
+{
+  "prompt_id": "017-key-value-lookup",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777251137,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11039,
+      "code_len": 244,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 19,
+      "stderr": "error: map literals `{ k: v, ... }` are not yet implemented (Map<K, V> reserved by \u00a7Builtins, codegen pending)\n  --> main.tyra:3:31\n  |\n3 | let table: Map<String, Int> = {\"one\": 1, \"two\": 2, \"three\": 3}\n  |                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsupported map literal\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\n\nlet table: Map<String, Int> = {\"one\": 1, \"two\": 2, \"three\": 3}\n\nmatch io.read_line()\nwhen Some(key)\n  match table.get(key)\n  when Some(n)\n    print(\"value=#{n}\")\n  when None\n    print(\"missing\")\n  end\nwhen None\n  print(\"missing\")\nend",
+  "overall": "compile_fail"
+}

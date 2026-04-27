@@ -1,0 +1,36 @@
+{
+  "prompt_id": "053-toggle-case",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777255843,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10173,
+      "code_len": 465,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 189,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 498,
+      "stdout": "hELLO, wORLD!\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nmatch io.read_line()\nwhen Some(line)\n  mut result = \"\"\n  mut i = 0\n  let n = string.len(line)\n  while i < n\n    match string.byte_at(line, i)\n    when Some(b)\n      mut out = b\n      if b >= 65 and b <= 90\n        out = b + 32\n      else if b >= 97 and b <= 122\n        out = b - 32\n      end\n      result = \"#{result}#{string.from_byte(out)}\"\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  println(result)\nwhen None\n  println(\"\")\nend",
+  "overall": "pass"
+}

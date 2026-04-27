@@ -1,0 +1,36 @@
+{
+  "prompt_id": "023-repeat-string",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777251356,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 12747,
+      "code_len": 384,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 417,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 470,
+      "stdout": "ababab\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet s_opt = io.read_line()\nlet n_opt = io.read_line()\n\nmut s = \"\"\nmatch s_opt\nwhen Some(v)\n  s = v\nwhen None\n  s = \"\"\nend\n\nmut n = 0\nmatch n_opt\nwhen Some(v)\n  match string.parse_int(v)\n  when Some(k)\n    n = k\n  when None\n    n = 0\n  end\nwhen None\n  n = 0\nend\n\nmut result = \"\"\nmut i = 0\nwhile i < n\n  result = \"#{result}#{s}\"\n  i = i + 1\nend\n\nprintln(result)",
+  "overall": "pass"
+}

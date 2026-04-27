@@ -1,0 +1,36 @@
+{
+  "prompt_id": "041-sum-pairs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777254522,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9674,
+      "code_len": 611,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 164,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 419,
+      "stdout": "1+10=11\n2+20=22\n3+30=33\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Result<Unit, String>\n  let line1 = io.read_line().ok_or(\"missing line 1\")?\n  let line2 = io.read_line().ok_or(\"missing line 2\")?\n  let toks1 = string.split_whitespace(line1)\n  let toks2 = string.split_whitespace(line2)\n  let n = toks1.len()\n  mut i = 0\n  while i < n\n    let a_str = toks1.get(i).ok_or(\"missing token\")?\n    let b_str = toks2.get(i).ok_or(\"missing token\")?\n    let a = string.parse_int(a_str).ok_or(\"bad int\")?\n    let b = string.parse_int(b_str).ok_or(\"bad int\")?\n    let s = a + b\n    println(\"#{a}+#{b}=#{s}\")\n    i = i + 1\n  end\n  Ok(())\nend",
+  "overall": "pass"
+}
