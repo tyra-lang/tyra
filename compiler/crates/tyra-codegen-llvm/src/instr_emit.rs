@@ -635,7 +635,8 @@ pub(crate) fn emit_instruction(
         Instruction::ListInit { .. }
         | Instruction::ListLen { .. }
         | Instruction::ListGet { .. }
-        | Instruction::ListGetSafe { .. } => {
+        | Instruction::ListGetSafe { .. }
+        | Instruction::ListPush { .. } => {
             emit_list_instruction(out, inst, func, ctx);
         }
 

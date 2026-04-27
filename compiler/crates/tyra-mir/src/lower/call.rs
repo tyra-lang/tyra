@@ -680,7 +680,7 @@ impl super::LowerCtx {
             if let ExprKind::Ident(module_name) = &obj.kind {
                 if module_name == "list"
                     && self.imported_modules.contains("list")
-                    && matches!(fn_name.as_str(), "len" | "get")
+                    && matches!(fn_name.as_str(), "len" | "get" | "push" | "push_str")
                     && !args.is_empty()
                 {
                     let first = &args[0].value;
@@ -695,6 +695,33 @@ impl super::LowerCtx {
                     };
                     if !elem_is_int {
                         match fn_name.as_str() {
+                            "push" | "push_str" if args.len() == 2 => {
+                                let elem_type = if let ExprKind::Ident(name) = &first.kind {
+                                    self.generic_var_types
+                                        .get(name)
+                                        .and_then(|t| t.list_elem().cloned())
+                                        .unwrap_or(Ty::Int)
+                                } else {
+                                    Ty::Int
+                                };
+                                let list_val = self.lower_expr(first, body);
+                                let elem_val = self.lower_expr(&args[1].value, body);
+                                let list_ty =
+                                    Ty::Generic("List".into(), vec![elem_type.clone()]);
+                                self.register_adt_type(&list_ty);
+                                let dest = self.fresh_temp();
+                                body.push(Instruction::ListPush {
+                                    dest: dest.clone(),
+                                    list: Operand::Var(list_val),
+                                    elem: Operand::Var(elem_val),
+                                    elem_type,
+                                });
+                                self.generic_var_types
+                                    .insert(dest.clone(), list_ty.clone());
+                                self.var_types
+                                    .insert(dest.clone(), list_ty.monomorphized_name());
+                                return dest;
+                            }
                             "len" if args.len() == 1 => {
                                 let obj_val = self.lower_expr(first, body);
                                 let dest = self.fresh_temp();
@@ -786,6 +813,20 @@ impl super::LowerCtx {
                             self.var_types.insert(dest.clone(), fn_name.clone());
                             return dest;
                         }
+                    }
+                    // Reject unknown module-qualified functions early. Without
+                    // this check, an undefined call (e.g. `list.bogus(xs)`,
+                    // or a hallucinated method like `xs.unwrap_value()` that
+                    // routes through this branch) silently emits an LLVM
+                    // call to an undefined symbol and surfaces as a generic
+                    // E0500 clang failure. The driver catches the panic and
+                    // reports it cleanly.
+                    if !self.fn_return_types.contains_key(&qualified_name) {
+                        panic!(
+                            "[E0204] unknown function `{module_name}.{fn_name}`: \
+                             no exported function with that name in module `{module_name}`. \
+                             Check spelling and the module's `export fn` declarations."
+                        );
                     }
                     let arg_operands: Vec<Operand> = args
                         .iter()

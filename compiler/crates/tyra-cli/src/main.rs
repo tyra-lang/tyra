@@ -17,6 +17,28 @@ use std::process;
 use tyra_runtime as _;
 
 fn main() {
+    // Catch MIR panics (e.g. E0204 unknown module function) and present them
+    // as a clean diagnostic rather than the default "thread 'main' panicked"
+    // backtrace dump. Strips the location-prefix that `panic!` prepends so a
+    // user sees the canonical "error[E0xxx]: ..." line.
+    std::panic::set_hook(Box::new(|info| {
+        let msg = info
+            .payload()
+            .downcast_ref::<&str>()
+            .map(|s| s.to_string())
+            .or_else(|| info.payload().downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "internal compiler error".to_string());
+        if let Some(rest) = msg.strip_prefix("[E") {
+            if let Some(close) = rest.find(']') {
+                let code = &rest[..close];
+                let body = rest[close + 1..].trim_start_matches([':', ' ']);
+                eprintln!("error[E{code}]: {body}");
+                return;
+            }
+        }
+        eprintln!("error: {msg}");
+    }));
+
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() < 2 {

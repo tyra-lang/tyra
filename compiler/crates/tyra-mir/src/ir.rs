@@ -210,6 +210,17 @@ pub enum Instruction {
         elem_type: Ty,
     },
 
+    /// `dest = list_push(list, elem, elem_type)` — immutable append (§17.3.5).
+    /// Allocates a fresh buffer of (len+1) elements, copies the input, and
+    /// stores `elem` at the tail. Returns a new {ptr, i64} struct. Input is
+    /// never mutated. Polymorphic over `elem_type` (Int, String, Bool, ...).
+    ListPush {
+        dest: String,
+        list: Operand,
+        elem: Operand,
+        elem_type: Ty,
+    },
+
     /// `dest = map_get_option(handle, key)` — call `__map_get_string_int`,
     /// then construct `Option<Int>` based on the runtime presence flag
     /// (`__map_get_present`). Tag is 0 for Some, 1 for None.

@@ -53,6 +53,16 @@ pub(crate) fn emit_list_instruction(
             true
         }
 
+        Instruction::ListPush {
+            dest,
+            list,
+            elem,
+            elem_type,
+        } => {
+            emit_list_push(out, dest, list, elem, elem_type, func, ctx);
+            true
+        }
+
         _ => false,
     }
 }
@@ -317,6 +327,125 @@ fn emit_list_get_safe(
     writeln!(
         out,
         "  %{dest} = load {opt_llvm_ty}, ptr %{dest}.slot"
+    )
+    .unwrap();
+}
+
+// ── ListPush ───────────────────────────────────────────────────────────
+
+fn emit_list_push(
+    out: &mut String,
+    dest: &str,
+    list: &Operand,
+    elem: &Operand,
+    elem_type: &Ty,
+    func: &Function,
+    ctx: &EmitCtx,
+) {
+    let list_val = operand_ref(list, func);
+    let elem_val = operand_ref(elem, func);
+    let elem_llvm_ty = llvm_type_str(elem_type, ctx.struct_map);
+    let llvm_struct_ty = list_struct_type_from_elem(elem_type, list, ctx);
+
+    // Element stride. Aggregate types use sizeof-via-null-GEP; primitives
+    // use the fixed table from llvm_elem_size().
+    let stride_var = if elem_llvm_ty.starts_with("%struct.") {
+        writeln!(
+            out,
+            "  %{dest}.esz_ptr = getelementptr {elem_llvm_ty}, ptr null, i64 1"
+        )
+        .unwrap();
+        writeln!(out, "  %{dest}.esz = ptrtoint ptr %{dest}.esz_ptr to i64").unwrap();
+        format!("%{dest}.esz")
+    } else {
+        llvm_elem_size(elem_type).to_string()
+    };
+
+    writeln!(
+        out,
+        "  %{dest}.olddata = extractvalue {llvm_struct_ty} {list_val}, 0"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{dest}.oldlen = extractvalue {llvm_struct_ty} {list_val}, 1"
+    )
+    .unwrap();
+    writeln!(out, "  %{dest}.newlen = add i64 %{dest}.oldlen, 1").unwrap();
+    writeln!(out, "  %{dest}.size = mul i64 %{dest}.newlen, {stride_var}").unwrap();
+    writeln!(
+        out,
+        "  %{dest}.newdata = call ptr @GC_malloc(i64 %{dest}.size)"
+    )
+    .unwrap();
+    writeln!(out, "  %{dest}.null = icmp eq ptr %{dest}.newdata, null").unwrap();
+    writeln!(
+        out,
+        "  br i1 %{dest}.null, label %{dest}.oom, label %{dest}.copy"
+    )
+    .unwrap();
+    writeln!(out, "{dest}.oom:").unwrap();
+    writeln!(out, "  call void @abort()").unwrap();
+    writeln!(out, "  unreachable").unwrap();
+    writeln!(out, "{dest}.copy:").unwrap();
+    writeln!(out, "  %{dest}.ctr = alloca i64").unwrap();
+    writeln!(out, "  store i64 0, ptr %{dest}.ctr").unwrap();
+    writeln!(out, "  br label %{dest}.loop").unwrap();
+    writeln!(out, "{dest}.loop:").unwrap();
+    writeln!(out, "  %{dest}.i = load i64, ptr %{dest}.ctr").unwrap();
+    writeln!(
+        out,
+        "  %{dest}.done = icmp sge i64 %{dest}.i, %{dest}.oldlen"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  br i1 %{dest}.done, label %{dest}.tail, label %{dest}.body"
+    )
+    .unwrap();
+    writeln!(out, "{dest}.body:").unwrap();
+    writeln!(
+        out,
+        "  %{dest}.srcp = getelementptr {elem_llvm_ty}, ptr %{dest}.olddata, i64 %{dest}.i"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{dest}.v = load {elem_llvm_ty}, ptr %{dest}.srcp"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{dest}.dstp = getelementptr {elem_llvm_ty}, ptr %{dest}.newdata, i64 %{dest}.i"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  store {elem_llvm_ty} %{dest}.v, ptr %{dest}.dstp"
+    )
+    .unwrap();
+    writeln!(out, "  %{dest}.next = add i64 %{dest}.i, 1").unwrap();
+    writeln!(out, "  store i64 %{dest}.next, ptr %{dest}.ctr").unwrap();
+    writeln!(out, "  br label %{dest}.loop").unwrap();
+    writeln!(out, "{dest}.tail:").unwrap();
+    writeln!(
+        out,
+        "  %{dest}.tailp = getelementptr {elem_llvm_ty}, ptr %{dest}.newdata, i64 %{dest}.oldlen"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  store {elem_llvm_ty} {elem_val}, ptr %{dest}.tailp"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{dest}.s0 = insertvalue {llvm_struct_ty} undef, ptr %{dest}.newdata, 0"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{dest} = insertvalue {llvm_struct_ty} %{dest}.s0, i64 %{dest}.newlen, 1"
     )
     .unwrap();
 }
