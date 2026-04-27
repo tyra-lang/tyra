@@ -1,0 +1,36 @@
+{
+  "prompt_id": "055-two-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777299001,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 28028,
+      "code_len": 1228,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 429,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 538,
+      "stdout": "found=0,1",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Result<Unit, String>\n  let line1 = io.read_line().ok_or(\"no input\")?\n  let line2 = io.read_line().ok_or(\"no second line\")?\n\n  let parts = string.split_whitespace(line1)\n\n  mut nums: List<Int> = []\n  mut pi = 0\n  while pi < parts.len()\n    let part = match parts.get(pi)\n    when Some(s)\n      s\n    when None\n      \"\"\n    end\n    let n = match string.parse_int(part)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    nums = list.push(nums, n)\n    pi = pi + 1\n  end\n\n  let t = match string.parse_int(string.trim(line2))\n  when Some(v)\n    v\n  when None\n    return Err(\"invalid target\")\n  end\n\n  let total = nums.len()\n  mut found = false\n  mut ri = 0\n  mut rj = 0\n  mut i = 0\n  while i < total and not found\n    mut j = i + 1\n    while j < total and not found\n      let vi = match nums.get(i)\n      when Some(v)\n        v\n      when None\n        0\n      end\n      let vj = match nums.get(j)\n      when Some(v)\n        v\n      when None\n        0\n      end\n      if vi + vj == t\n        found = true\n        ri = i\n        rj = j\n      end\n      j = j + 1\n    end\n    i = i + 1\n  end\n\n  if found\n    print(\"found=#{ri},#{rj}\")\n  else\n    print(\"none\")\n  end\n\n  Ok(())\nend",
+  "overall": "pass"
+}

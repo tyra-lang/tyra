@@ -1,0 +1,36 @@
+{
+  "prompt_id": "022-linear-search",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777297245,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 38265,
+      "code_len": 959,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 362,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 500,
+      "stdout": "index=2",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn find_target(_ tokens: List<String>, _ target: Int) -> Option<Int>\n  mut i = 0\n  mut result: Option<Int> = None\n  mut found = false\n  while i < tokens.len()\n    let s = match tokens.get(i)\n    when Some(v)\n      v\n    when None\n      \"\"\n    end\n    let n = match string.parse_int(s)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if n == target and not found\n      result = Some(i)\n      found = true\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn main() -> Result<Unit, String>\n  let line1 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let line2 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let target = match string.parse_int(string.trim(line2))\n  when Some(n)\n    n\n  when None\n    0\n  end\n  let tokens = string.split_whitespace(line1)\n  match find_target(tokens, target)\n  when Some(idx)\n    print(\"index=#{idx}\")\n  when None\n    print(\"not_found\")\n  end\n  Ok(())\nend",
+  "overall": "pass"
+}

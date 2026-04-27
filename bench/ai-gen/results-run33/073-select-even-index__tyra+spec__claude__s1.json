@@ -1,0 +1,36 @@
+{
+  "prompt_id": "073-select-even-index",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777300052,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 31696,
+      "code_len": 542,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 381,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 551,
+      "stdout": "10 30 50 70\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(l)\n    l\n  when None\n    \"\"\n  end\n\n  let tokens = string.split_whitespace(line)\n  let n = tokens.len()\n\n  mut result = \"\"\n  mut i = 0\n  mut first = true\n\n  while i < n\n    if i % 2 == 0\n      let tok = match tokens.get(i)\n      when Some(t)\n        t\n      when None\n        \"\"\n      end\n      if first\n        result = tok\n        first = false\n      else\n        result = \"#{result} #{tok}\"\n      end\n    end\n    i = i + 1\n  end\n\n  println(result)\nend",
+  "overall": "pass"
+}

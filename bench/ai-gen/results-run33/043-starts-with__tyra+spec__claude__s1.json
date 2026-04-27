@@ -1,0 +1,36 @@
+{
+  "prompt_id": "043-starts-with",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777298421,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9863,
+      "code_len": 451,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 388,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 447,
+      "stdout": "YES\nNO\nYES\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let first = io.read_line()\n  let p = match first\n  when Some(line)\n    line\n  when None\n    Ok(())\n    return Ok(())\n  end\n\n  mut running = true\n  while running\n    let opt = io.read_line()\n    match opt\n    when Some(line)\n      if string.starts_with(line, p)\n        println(\"YES\")\n      else\n        println(\"NO\")\n      end\n    when None\n      running = false\n    end\n  end\n\n  Ok(())\nend",
+  "overall": "pass"
+}

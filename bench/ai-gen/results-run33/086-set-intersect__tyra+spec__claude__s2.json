@@ -1,0 +1,36 @@
+{
+  "prompt_id": "086-set-intersect",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777300972,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 71713,
+      "code_len": 2206,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 361,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 535,
+      "stdout": "1 3 4",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_line(_ line: String) -> List<Int>\n  let tokens = string.split_whitespace(line)\n  mut result: List<Int> = []\n  mut i = 0\n  while i < tokens.len()\n    let tok = tokens.get(i)\n    match tok\n    when Some(t)\n      let n = string.parse_int(t)\n      match n\n      when Some(num)\n        result = list.push(result, num)\n      when None\n      end\n    when None\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn intersect(_ a: List<Int>, _ b: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  while i < a.len()\n    let elem = a.get(i)\n    match elem\n    when Some(x)\n      if list.contains(b, x) and not list.contains(result, x)\n        result = list.push(result, x)\n      end\n    when None\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn remove_first(_ xs: List<Int>, _ val: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut found = false\n  mut i = 0\n  while i < xs.len()\n    let elem = xs.get(i)\n    match elem\n    when Some(x)\n      if not found and x == val\n        found = true\n      else\n        result = list.push(result, x)\n      end\n    when None\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn sort_list(_ xs: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  mut remaining = xs\n  while remaining.len() > 0\n    let m = list.min(remaining)\n    match m\n    when Some(min_val)\n      result = list.push(result, min_val)\n      remaining = remove_first(remaining, min_val)\n    when None\n      remaining = []\n    end\n  end\n  result\nend\n\nfn format_result(_ xs: List<Int>) -> String\n  if xs.len() == 0\n    \"empty\"\n  else\n    mut s = \"\"\n    mut i = 0\n    while i < xs.len()\n      let elem = xs.get(i)\n      match elem\n      when Some(x)\n        if i == 0\n          s = \"#{x}\"\n        else\n          s = \"#{s} #{x}\"\n        end\n      when None\n      end\n      i = i + 1\n    end\n    s\n  end\nend\n\nfn main() -> Unit\n  let line1 = io.read_line()\n  let line2 = io.read_line()\n\n  let l1 = match line1\n  when Some(l)\n    parse_line(l)\n  when None\n    []\n  end\n\n  let l2 = match line2\n  when Some(l)\n    parse_line(l)\n  when None\n    []\n  end\n\n  let inter = intersect(l1, l2)\n  let sorted = sort_list(inter)\n  let output = format_result(sorted)\n  print(output)\nend",
+  "overall": "pass"
+}

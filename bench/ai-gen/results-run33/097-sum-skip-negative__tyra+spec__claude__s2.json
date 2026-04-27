@@ -1,0 +1,36 @@
+{
+  "prompt_id": "097-sum-skip-negative",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777301812,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9142,
+      "code_len": 665,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 419,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 443,
+      "stdout": "partial=13",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line_opt = io.read_line()\n  let line = match line_opt\n  when Some(l)\n    l\n  when None\n    \"\"\n  end\n  let parts = string.split_whitespace(line)\n  mut sum = 0\n  mut i = 0\n  mut done = false\n  while i < parts.len() and not done\n    let part_opt = parts.get(i)\n    let part = match part_opt\n    when Some(p)\n      p\n    when None\n      \"\"\n    end\n    let num_opt = string.parse_int(part)\n    let num = match num_opt\n    when Some(n)\n      n\n    when None\n      0\n    end\n    if num < 0\n      done = true\n    else\n      sum = sum + num\n      i = i + 1\n    end\n  end\n  print(\"partial=#{sum}\")\n  Ok(())\nend",
+  "overall": "pass"
+}

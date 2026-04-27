@@ -1,0 +1,36 @@
+{
+  "prompt_id": "099-sum-column",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777301886,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10440,
+      "code_len": 840,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 377,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 431,
+      "stdout": "sum=39",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let all = io.read_to_end()\n  let lines = string.split(all, \"\\n\")\n  mut sum = 0\n  mut i = 0\n  while i < list.len(lines)\n    let line_opt = lines.get(i)\n    i = i + 1\n    match line_opt\n    when None\n      # skip\n    when Some(line)\n      let trimmed = string.trim(line)\n      if not string.is_empty(trimmed)\n        let parts = string.split_whitespace(trimmed)\n        if parts.len() >= 2\n          let tok_opt = parts.get(1)\n          match tok_opt\n          when None\n            # skip\n          when Some(tok)\n            let n_opt = string.parse_int(tok)\n            match n_opt\n            when None\n              # skip\n            when Some(n)\n              sum = sum + n\n            end\n          end\n        end\n      end\n    end\n  end\n  print(\"sum=#{sum}\")\n  Ok(())\nend",
+  "overall": "pass"
+}

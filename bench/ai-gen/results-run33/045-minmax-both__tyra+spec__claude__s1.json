@@ -1,0 +1,36 @@
+{
+  "prompt_id": "045-minmax-both",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777298544,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 17105,
+      "code_len": 403,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 375,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 457,
+      "stdout": "min=1max=9",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import list\n\nvalue MinMax\n  min: Int\n  max: Int\nend\n\nfn min_max(_ xs: List<Int>) -> MinMax\n  let mn = match list.min(xs)\n  when Some(v)\n    v\n  when None\n    panic(\"empty list\")\n  end\n  let mx = match list.max(xs)\n  when Some(v)\n    v\n  when None\n    panic(\"empty list\")\n  end\n  MinMax(min: mn, max: mx)\nend\n\nlet result = min_max([5, 1, 9, 3, 7, 2])\nprint(\"min=#{result.min}\")\nprint(\"max=#{result.max}\")",
+  "overall": "pass"
+}

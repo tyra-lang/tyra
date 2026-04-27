@@ -1,0 +1,36 @@
+{
+  "prompt_id": "048-join-strings",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777298711,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 13431,
+      "code_len": 287,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 414,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 441,
+      "stdout": "red, green, blue",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import string\n\nlet colors = [\"red\", \"green\", \"blue\"]\nmut result = \"\"\nmut i = 0\nwhile i < colors.len()\n  let item = match colors.get(i)\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  if i == 0\n    result = item\n  else\n    result = \"#{result}, #{item}\"\n  end\n  i = i + 1\nend\nprint(result)",
+  "overall": "pass"
+}

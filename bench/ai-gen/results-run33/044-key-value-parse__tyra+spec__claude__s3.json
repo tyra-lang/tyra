@@ -1,0 +1,36 @@
+{
+  "prompt_id": "044-key-value-parse",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777298507,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 36174,
+      "code_len": 718,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 381,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 503,
+      "stdout": "host:localhostport:8080name:tyra",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn find_first_eq(_ s: String) -> Int\n  let len = string.len(s)\n  mut i = 0\n  mut pos = -1\n  mut found = false\n  while i < len and not found\n    match string.byte_at(s, i)\n    when Some(b)\n      if b == 61\n        pos = i\n        found = true\n      end\n    when None\n      found = true\n    end\n    i = i + 1\n  end\n  pos\nend\n\nfn main() -> Unit\n  mut running = true\n  while running\n    match io.read_line()\n    when Some(line)\n      let pos = find_first_eq(line)\n      if pos >= 0\n        let key = string.substring(line, 0, pos)\n        let value = string.substring(line, pos + 1, string.len(line))\n        print(\"#{key}:#{value}\")\n      end\n    when None\n      running = false\n    end\n  end\nend",
+  "overall": "pass"
+}

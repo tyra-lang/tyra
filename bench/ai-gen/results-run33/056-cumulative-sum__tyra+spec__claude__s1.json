@@ -1,0 +1,36 @@
+{
+  "prompt_id": "056-cumulative-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777299077,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 27279,
+      "code_len": 823,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 356,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 469,
+      "stdout": "1 3 6 10 15\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Result<Unit, String>\n  let line = match io.read_line()\n  when Some(l)\n    l\n  when None\n    \"\"\n  end\n\n  let parts = string.split_whitespace(line)\n  let n = parts.len()\n\n  mut sums: List<Int> = []\n  mut running = 0\n  mut i = 0\n\n  while i < n\n    let part = match parts.get(i)\n    when Some(p)\n      p\n    when None\n      \"\"\n    end\n    let val = match string.parse_int(part)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    running = running + val\n    sums = list.push(sums, running)\n    i = i + 1\n  end\n\n  mut out = \"\"\n  mut j = 0\n  while j < sums.len()\n    let v = match sums.get(j)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    if j == 0\n      out = \"#{v}\"\n    else\n      out = \"#{out} #{v}\"\n    end\n    j = j + 1\n  end\n\n  println(out)\n  Ok(())\nend",
+  "overall": "pass"
+}

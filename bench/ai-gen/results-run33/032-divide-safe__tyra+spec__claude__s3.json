@@ -1,0 +1,36 @@
+{
+  "prompt_id": "032-divide-safe",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777297785,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11670,
+      "code_len": 531,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 412,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 462,
+      "stdout": "ok=6err=DivByZero",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "type DivError =\n  | DivByZero\n  | Overflow\n\nfn safe_div(_ a: Int, _ b: Int) -> Result<Int, DivError>\n  if b == 0\n    Err(DivError.DivByZero)\n  else\n    Ok(a / b)\n  end\nend\n\nfn main() -> Unit\n  match safe_div(42, 7)\n  when Ok(value)\n    print(\"ok=#{value}\")\n  when Err(DivByZero)\n    print(\"err=DivByZero\")\n  when Err(Overflow)\n    print(\"err=Overflow\")\n  end\n\n  match safe_div(10, 0)\n  when Ok(value)\n    print(\"ok=#{value}\")\n  when Err(DivByZero)\n    print(\"err=DivByZero\")\n  when Err(Overflow)\n    print(\"err=Overflow\")\n  end\nend",
+  "overall": "pass"
+}

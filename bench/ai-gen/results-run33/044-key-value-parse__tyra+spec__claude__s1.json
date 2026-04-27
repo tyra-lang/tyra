@@ -1,0 +1,36 @@
+{
+  "prompt_id": "044-key-value-parse",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777298453,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11267,
+      "code_len": 947,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 446,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 453,
+      "stdout": "host:localhostport:8080name:tyra",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  mut line_opt = io.read_line()\n  while true\n    match line_opt\n    when None\n      return Ok(())\n    when Some(line)\n      if string.contains(line, \"=\")\n        let parts = string.split(line, \"=\")\n        let key = match parts.get(0)\n        when Some(k)\n          k\n        when None\n          \"\"\n        end\n        if not string.is_empty(key)\n          mut value = \"\"\n          mut i = 1\n          mut first = true\n          while i < parts.len()\n            let part = match parts.get(i)\n            when Some(p)\n              p\n            when None\n              \"\"\n            end\n            if first\n              value = part\n              first = false\n            else\n              value = \"#{value}=#{part}\"\n            end\n            i = i + 1\n          end\n          print(\"#{key}:#{value}\")\n        end\n      end\n    end\n    line_opt = io.read_line()\n  end\n  Ok(())\nend",
+  "overall": "pass"
+}

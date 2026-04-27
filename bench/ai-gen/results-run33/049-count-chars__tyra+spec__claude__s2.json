@@ -1,0 +1,36 @@
+{
+  "prompt_id": "049-count-chars",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777298735,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10090,
+      "code_len": 648,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 380,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 449,
+      "stdout": "count=4",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\n\nfn main() -> Result<Unit, String>\n  let haystack = match io.read_line()\n  when Some(line)\n    line\n  when None\n    \"\"\n  end\n\n  let needle = match io.read_line()\n  when Some(line)\n    line\n  when None\n    \"\"\n  end\n\n  let needle_byte = match string.byte_at(needle, 0)\n  when Some(b)\n    b\n  when None\n    -1\n  end\n\n  mut count = 0\n  mut i = 0\n  let hay_len = string.len(haystack)\n\n  while i < hay_len\n    let b = match string.byte_at(haystack, i)\n    when Some(x)\n      x\n    when None\n      -1\n    end\n    if b == needle_byte and needle_byte >= 0\n      count = count + 1\n    end\n    i = i + 1\n  end\n\n  print(\"count=#{count}\")\n  Ok(())\nend",
+  "overall": "pass"
+}

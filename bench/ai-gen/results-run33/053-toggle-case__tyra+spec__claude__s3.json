@@ -1,0 +1,36 @@
+{
+  "prompt_id": "053-toggle-case",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777298946,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 23705,
+      "code_len": 588,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 402,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 436,
+      "stdout": "hELLO, wORLD!\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line_opt = io.read_line()\n  let line = match line_opt\n  when Some(l)\n    l\n  when None\n    \"\"\n  end\n\n  let len = string.len(line)\n  mut result = \"\"\n  mut i = 0\n  while i < len\n    let b_opt = string.byte_at(line, i)\n    let b = match b_opt\n    when Some(v)\n      v\n    when None\n      0\n    end\n    let toggled = if b >= 65 and b <= 90\n      b + 32\n    else if b >= 97 and b <= 122\n      b - 32\n    else\n      b\n    end\n    result = \"#{result}#{string.from_byte(toggled)}\"\n    i = i + 1\n  end\n  println(result)\n  Ok(())\nend",
+  "overall": "pass"
+}

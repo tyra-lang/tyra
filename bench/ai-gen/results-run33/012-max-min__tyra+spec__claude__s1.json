@@ -1,0 +1,36 @@
+{
+  "prompt_id": "012-max-min",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777296640,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11071,
+      "code_len": 974,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 393,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 453,
+      "stdout": "max=9min=-2",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let all = io.read_to_end()\n  let tokens = string.split_whitespace(all)\n  if tokens.len() == 0\n    Err(\"no input\")\n  else\n    let first_str = match tokens.get(0)\n    when Some(s)\n      s\n    when None\n      return Err(\"no input\")\n    end\n    let first = match string.parse_int(first_str)\n    when Some(n)\n      n\n    when None\n      return Err(\"parse error\")\n    end\n    mut max_val = first\n    mut min_val = first\n    mut i = 1\n    while i < tokens.len()\n      let tok = match tokens.get(i)\n      when Some(s)\n        s\n      when None\n        return Err(\"index error\")\n      end\n      let n = match string.parse_int(tok)\n      when Some(v)\n        v\n      when None\n        return Err(\"parse error\")\n      end\n      if n > max_val\n        max_val = n\n      end\n      if n < min_val\n        min_val = n\n      end\n      i = i + 1\n    end\n    print(\"max=#{max_val}\")\n    print(\"min=#{min_val}\")\n    Ok(())\n  end\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,26 @@
+{
+  "prompt_id": "054-line-numbers",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777298992,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8889,
+      "code_len": 357,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 178,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-hh78fqag/main.ll:142:32: error: '%_t15' defined with type '%struct.Option__Int = type { i8, i64 }' but expected '%struct.Option__String = type { i8, ptr }'\n  142 |   store %struct.Option__String %_t15, ptr %line\n      |                                ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\n\nmut line_num = 1\nmut line = io.read_line()\nwhile true\n  match line\n  when None\n    line = None\n  when Some(text)\n    print(\"#{line_num}: #{text}\")\n    line_num = line_num + 1\n    line = io.read_line()\n  end\n  match line\n  when None\n    line_num = 0\n  when Some(_)\n    line_num = line_num\n  end\n  if line_num == 0\n    line_num = line_num\n  end\nend",
+  "overall": "compile_fail"
+}

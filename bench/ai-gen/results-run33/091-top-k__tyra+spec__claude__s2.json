@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777301458,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 79701,
+      "code_len": 1934,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 375,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 503,
+      "stdout": "9 6 5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn remove_at(_ xs: List<Int>, _ target_idx: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  while i < xs.len()\n    if i != target_idx\n      match xs.get(i)\n      when Some(v)\n        result = list.push(result, v)\n      when None\n        # skip\n      end\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn main() -> Result<Unit, String>\n  let line1 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  let line2 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  let tokens = string.split_whitespace(line1)\n\n  mut nums: List<Int> = []\n  mut ti = 0\n  while ti < tokens.len()\n    match tokens.get(ti)\n    when Some(tok)\n      match string.parse_int(tok)\n      when Some(n)\n        nums = list.push(nums, n)\n      when None\n        # skip non-integer tokens\n      end\n    when None\n      # skip\n    end\n    ti = ti + 1\n  end\n\n  let k_str = string.trim(line2)\n  mut k = 0\n  match string.parse_int(k_str)\n  when Some(n)\n    k = n\n  when None\n    k = 0\n  end\n\n  let total = nums.len()\n  let take = if k < total\n    k\n  else\n    total\n  end\n\n  mut remaining = nums\n  mut result: List<Int> = []\n  mut taken = 0\n\n  while taken < take and remaining.len() > 0\n    match list.max(remaining)\n    when Some(max_val)\n      result = list.push(result, max_val)\n      mut remove_idx = 0\n      match list.index_of(remaining, max_val)\n      when Some(i)\n        remove_idx = i\n      when None\n        # max_val came from list.max so index_of must succeed\n      end\n      remaining = remove_at(remaining, remove_idx)\n      taken = taken + 1\n    when None\n      taken = take\n    end\n  end\n\n  mut output = \"\"\n  mut ri = 0\n  while ri < result.len()\n    match result.get(ri)\n    when Some(v)\n      if ri == 0\n        output = \"#{v}\"\n      else\n        output = \"#{output} #{v}\"\n      end\n    when None\n      # skip\n    end\n    ri = ri + 1\n  end\n\n  println(output)\n  Ok(())\nend",
+  "overall": "pass"
+}

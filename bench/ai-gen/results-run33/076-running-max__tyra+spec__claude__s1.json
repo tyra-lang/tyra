@@ -1,0 +1,36 @@
+{
+  "prompt_id": "076-running-max",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777300263,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10626,
+      "code_len": 888,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 430,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 432,
+      "stdout": "3 3 4 4 5 9 9 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let parts = string.split_whitespace(line)\n  let n = parts.len()\n  if n == 0\n    print(\"\")\n    Ok(())\n  else\n    mut i = 0\n    mut result = \"\"\n    mut current_max = 0\n    mut first = true\n    while i < n\n      let part = match parts.get(i)\n      when Some(s)\n        s\n      when None\n        \"\"\n      end\n      let val = match string.parse_int(part)\n      when Some(v)\n        v\n      when None\n        0\n      end\n      if first\n        current_max = val\n        first = false\n      else\n        if val > current_max\n          current_max = val\n        end\n      end\n      if i == 0\n        result = \"#{current_max}\"\n      else\n        result = \"#{result} #{current_max}\"\n      end\n      i = i + 1\n    end\n    println(result)\n    Ok(())\n  end\nend",
+  "overall": "pass"
+}

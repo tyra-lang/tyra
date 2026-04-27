@@ -1,0 +1,26 @@
+{
+  "prompt_id": "026-count-lines",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777297482,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 19720,
+      "code_len": 498,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 197,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-r1nawbbo/main.ll:120:24: error: expected value token\n  120 |   store i64 %_t12, ptr %\n      |                        ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let input = io.read_to_end()\n  let len = string.len(input)\n  mut newlines = 0\n  mut i = 0\n  while i < len\n    let b = string.byte_at(input, i)\n    match b\n    when Some(10)\n      newlines = newlines + 1\n    when _\n      ()\n    end\n    i = i + 1\n  end\n  mut lines = newlines\n  if len > 0\n    let last = string.byte_at(input, len - 1)\n    match last\n    when Some(10)\n      ()\n    when _\n      lines = lines + 1\n    end\n  end\n  print(\"lines=#{lines}\")\nend",
+  "overall": "compile_fail"
+}

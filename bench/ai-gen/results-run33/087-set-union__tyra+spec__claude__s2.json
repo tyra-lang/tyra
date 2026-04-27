@@ -1,0 +1,36 @@
+{
+  "prompt_id": "087-set-union",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777301185,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 51151,
+      "code_len": 2616,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 900,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 506,
+      "stdout": "1 2 3 4 5 6 7\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_line(line: String) -> List<Int>\n  let words = string.split_whitespace(line)\n  mut result: List<Int> = []\n  mut i = 0\n  while i < words.len()\n    let word = words.get(i)\n    match word\n    when Some(w)\n      let n = string.parse_int(w)\n      match n\n      when Some(v)\n        result = list.push(result, v)\n      when None\n      end\n    when None\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn remove_at(xs: List<Int>, idx: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  while i < xs.len()\n    if i != idx\n      let val = xs.get(i)\n      match val\n      when Some(v)\n        result = list.push(result, v)\n      when None\n      end\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn find_min_idx(xs: List<Int>) -> Int\n  mut min_val = 0\n  mut min_idx = 0\n  let first = xs.get(0)\n  match first\n  when Some(v)\n    min_val = v\n    min_idx = 0\n  when None\n  end\n  mut i = 1\n  while i < xs.len()\n    let cur = xs.get(i)\n    match cur\n    when Some(v)\n      if v < min_val\n        min_val = v\n        min_idx = i\n      end\n    when None\n    end\n    i = i + 1\n  end\n  min_idx\nend\n\nfn sort_asc(xs: List<Int>) -> List<Int>\n  mut remaining = xs\n  mut sorted: List<Int> = []\n  while remaining.len() > 0\n    let idx = find_min_idx(remaining)\n    let val = remaining.get(idx)\n    match val\n    when Some(v)\n      sorted = list.push(sorted, v)\n    when None\n    end\n    remaining = remove_at(remaining, idx)\n  end\n  sorted\nend\n\nfn add_unique(xs: List<Int>, x: Int) -> List<Int>\n  if list.contains(xs, x)\n    xs\n  else\n    list.push(xs, x)\n  end\nend\n\nfn build_union(a: List<Int>, b: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  while i < a.len()\n    let val = a.get(i)\n    match val\n    when Some(v)\n      result = add_unique(result, v)\n    when None\n    end\n    i = i + 1\n  end\n  mut j = 0\n  while j < b.len()\n    let val = b.get(j)\n    match val\n    when Some(v)\n      result = add_unique(result, v)\n    when None\n    end\n    j = j + 1\n  end\n  result\nend\n\nfn main() -> Result<Unit, String>\n  let line1 = io.read_line()\n  let line2 = io.read_line()\n  let l1 = match line1\n  when Some(s)\n    parse_line(s)\n  when None\n    []\n  end\n  let l2 = match line2\n  when Some(s)\n    parse_line(s)\n  when None\n    []\n  end\n  let merged = build_union(l1, l2)\n  let sorted = sort_asc(merged)\n  mut output = \"\"\n  mut i = 0\n  while i < sorted.len()\n    let val = sorted.get(i)\n    match val\n    when Some(v)\n      if i == 0\n        output = \"#{v}\"\n      else\n        output = \"#{output} #{v}\"\n      end\n    when None\n    end\n    i = i + 1\n  end\n  println(output)\n  Ok(())\nend",
+  "overall": "pass"
+}

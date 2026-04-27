@@ -1,0 +1,36 @@
+{
+  "prompt_id": "007-gcd",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777296219,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 14687,
+      "code_len": 757,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 378,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 456,
+      "stdout": "gcd=6",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn gcd(_ a: Int, _ b: Int) -> Int\n  if b == 0\n    a\n  else\n    gcd(b, a % b)\n  end\nend\n\nfn main() -> Result<Unit, String>\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    return Err(\"no input\")\n  end\n  let parts = string.split_whitespace(line)\n  let a_str = match parts.get(0)\n  when Some(s)\n    s\n  when None\n    return Err(\"missing A\")\n  end\n  let b_str = match parts.get(1)\n  when Some(s)\n    s\n  when None\n    return Err(\"missing B\")\n  end\n  let a = match string.parse_int(a_str)\n  when Some(n)\n    n\n  when None\n    return Err(\"invalid A\")\n  end\n  let b = match string.parse_int(b_str)\n  when Some(n)\n    n\n  when None\n    return Err(\"invalid B\")\n  end\n  let g = gcd(a, b)\n  print(\"gcd=#{g}\")\n  Ok(())\nend",
+  "overall": "pass"
+}

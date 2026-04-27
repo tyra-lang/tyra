@@ -1,0 +1,36 @@
+{
+  "prompt_id": "027-fizzbuzz-string",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777297566,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 16727,
+      "code_len": 314,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 356,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 458,
+      "stdout": "12Fizz4BuzzFizz78FizzBuzz11Fizz1314FizzBuzz",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "mut i = 1\nmut fizz = 0\nmut buzz = 0\n\nwhile i <= 15\n  fizz = fizz + 1\n  buzz = buzz + 1\n\n  if fizz == 3 and buzz == 5\n    print(\"FizzBuzz\")\n    fizz = 0\n    buzz = 0\n  else if fizz == 3\n    print(\"Fizz\")\n    fizz = 0\n  else if buzz == 5\n    print(\"Buzz\")\n    buzz = 0\n  else\n    print(\"#{i}\")\n  end\n\n  i = i + 1\nend",
+  "overall": "pass"
+}

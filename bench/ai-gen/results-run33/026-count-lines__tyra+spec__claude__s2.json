@@ -1,0 +1,36 @@
+{
+  "prompt_id": "026-count-lines",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777297501,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 29365,
+      "code_len": 244,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 354,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 488,
+      "stdout": "lines=3",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet content = io.read_to_end()\nlet parts = string.split(content, \"\\n\")\nlet count = if string.is_empty(content)\n  0\nelse if string.ends_with(content, \"\\n\")\n  parts.len() - 1\nelse\n  parts.len()\nend\nprint(\"lines=#{count}\")",
+  "overall": "pass"
+}

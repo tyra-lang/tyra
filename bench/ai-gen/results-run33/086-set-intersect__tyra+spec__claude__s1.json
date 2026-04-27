@@ -1,0 +1,36 @@
+{
+  "prompt_id": "086-set-intersect",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777300908,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 63723,
+      "code_len": 2519,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 397,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 574,
+      "stdout": "1 3 4",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_ints(_ s: String) -> List<Int>\n  let tokens = string.split_whitespace(s)\n  mut result: List<Int> = []\n  mut i = 0\n  while i < tokens.len()\n    match tokens.get(i)\n    when Some(tok)\n      match string.parse_int(tok)\n      when Some(n)\n        result = list.push(result, n)\n      when None\n        # skip invalid token\n      end\n    when None\n      # skip\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn dedup(_ xs: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  while i < xs.len()\n    match xs.get(i)\n    when Some(x)\n      if not list.contains(result, x)\n        result = list.push(result, x)\n      end\n    when None\n      # skip\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn intersect(_ a: List<Int>, _ b: List<Int>) -> List<Int>\n  let a_dedup = dedup(a)\n  let b_dedup = dedup(b)\n  mut result: List<Int> = []\n  mut i = 0\n  while i < a_dedup.len()\n    match a_dedup.get(i)\n    when Some(x)\n      if list.contains(b_dedup, x)\n        result = list.push(result, x)\n      end\n    when None\n      # skip\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn insert_sorted(_ sorted: List<Int>, _ x: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  mut inserted = false\n  while i < sorted.len()\n    match sorted.get(i)\n    when Some(curr)\n      if not inserted and x <= curr\n        result = list.push(result, x)\n        inserted = true\n      end\n      result = list.push(result, curr)\n    when None\n      # skip\n    end\n    i = i + 1\n  end\n  if not inserted\n    result = list.push(result, x)\n  end\n  result\nend\n\nfn sort_ints(_ xs: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  while i < xs.len()\n    match xs.get(i)\n    when Some(x)\n      result = insert_sorted(result, x)\n    when None\n      # skip\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn format_result(_ xs: List<Int>) -> String\n  if xs.len() == 0\n    \"empty\"\n  else\n    mut s = \"\"\n    mut i = 0\n    while i < xs.len()\n      match xs.get(i)\n      when Some(x)\n        if i == 0\n          s = \"#{x}\"\n        else\n          s = \"#{s} #{x}\"\n        end\n      when None\n        # skip\n      end\n      i = i + 1\n    end\n    s\n  end\nend\n\nfn main() -> Unit\n  let line1 = match io.read_line()\n  when Some(l)\n    l\n  when None\n    \"\"\n  end\n  let line2 = match io.read_line()\n  when Some(l)\n    l\n  when None\n    \"\"\n  end\n  let ints1 = parse_ints(line1)\n  let ints2 = parse_ints(line2)\n  let inter = intersect(ints1, ints2)\n  let sorted = sort_ints(inter)\n  print(format_result(sorted))\nend",
+  "overall": "pass"
+}

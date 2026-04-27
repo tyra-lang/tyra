@@ -1,0 +1,36 @@
+{
+  "prompt_id": "017-key-value-lookup",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777296922,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 15509,
+      "code_len": 338,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 401,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 448,
+      "stdout": "value=2",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let m: Map<String, Int> = {\"one\": 1, \"two\": 2, \"three\": 3}\n  let raw = io.read_line()\n  match raw\n  when None\n    print(\"missing\")\n  when Some(key)\n    let k = string.trim(key)\n    match m.get(k)\n    when Some(n)\n      print(\"value=#{n}\")\n    when None\n      print(\"missing\")\n    end\n  end\nend",
+  "overall": "pass"
+}

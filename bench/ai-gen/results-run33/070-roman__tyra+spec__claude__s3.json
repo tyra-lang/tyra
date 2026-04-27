@@ -1,0 +1,36 @@
+{
+  "prompt_id": "070-roman",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777299916,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 32933,
+      "code_len": 595,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 362,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 543,
+      "stdout": "IV\nIX\nXXVII\nXXXIX\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "fn to_roman(_ n: Int) -> String\n  mut result = \"\"\n  mut remaining = n\n\n  while remaining >= 10\n    result = \"#{result}X\"\n    remaining = remaining - 10\n  end\n\n  if remaining >= 9\n    result = \"#{result}IX\"\n    remaining = remaining - 9\n  end\n\n  if remaining >= 5\n    result = \"#{result}V\"\n    remaining = remaining - 5\n  end\n\n  if remaining >= 4\n    result = \"#{result}IV\"\n    remaining = remaining - 4\n  end\n\n  while remaining >= 1\n    result = \"#{result}I\"\n    remaining = remaining - 1\n  end\n\n  result\nend\n\nprintln(to_roman(4))\nprintln(to_roman(9))\nprintln(to_roman(27))\nprintln(to_roman(39))",
+  "overall": "pass"
+}

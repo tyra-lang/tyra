@@ -1,0 +1,36 @@
+{
+  "prompt_id": "071-sum-positive-diff-negative",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777299963,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9744,
+      "code_len": 656,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 422,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 507,
+      "stdout": "r=30",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line_opt = io.read_line()\n  let line = match line_opt\n  when Some(l)\n    l\n  when None\n    \"\"\n  end\n  let parts = string.split_whitespace(line)\n  mut p = 0\n  mut n = 0\n  mut i = 0\n  while i < parts.len()\n    let part_opt = parts.get(i)\n    let part = match part_opt\n    when Some(s)\n      s\n    when None\n      \"\"\n    end\n    let num_opt = string.parse_int(part)\n    let num = match num_opt\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if num > 0\n      p = p + num\n    else if num < 0\n      n = n + num\n    end\n    i = i + 1\n  end\n  let r = p - n\n  print(\"r=#{r}\")\n  Ok(())\nend",
+  "overall": "pass"
+}

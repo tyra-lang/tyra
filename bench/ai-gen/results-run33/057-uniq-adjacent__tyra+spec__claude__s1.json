@@ -1,0 +1,26 @@
+{
+  "prompt_id": "057-uniq-adjacent",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777299152,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11932,
+      "code_len": 1267,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 174,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-t2_sjfos/main.ll:258:38: error: '%_t60' defined with type 'i64' but expected '%struct.Result__Unit__String = type { i8, i64, ptr }'\n  258 |   store %struct.Result__Unit__String %_t60, ptr %_t35\n      |                                      ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line_opt = io.read_line()\n  let line = match line_opt\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  let trimmed = string.trim(line)\n  if string.is_empty(trimmed)\n    println(\"\")\n    Ok(())\n  else\n    let parts = string.split_whitespace(trimmed)\n    mut result: List<Int> = []\n    mut i = 0\n    mut prev_opt: Option<Int> = None\n\n    while i < parts.len()\n      let word_opt = parts.get(i)\n      match word_opt\n      when Some(word)\n        let n_opt = string.parse_int(word)\n        match n_opt\n        when Some(n)\n          let should_add = match prev_opt\n          when Some(p)\n            n != p\n          when None\n            true\n          end\n          if should_add\n            result = list.push(result, n)\n            prev_opt = Some(n)\n          end\n        when None\n          Ok(())\n        end\n      when None\n        Ok(())\n      end\n      i = i + 1\n    end\n\n    mut out = \"\"\n    mut j = 0\n    while j < result.len()\n      let v_opt = result.get(j)\n      match v_opt\n      when Some(v)\n        if j == 0\n          out = \"#{v}\"\n        else\n          out = \"#{out} #{v}\"\n        end\n      when None\n        Ok(())\n      end\n      j = j + 1\n    end\n    println(out)\n    Ok(())\n  end\nend",
+  "overall": "compile_fail"
+}

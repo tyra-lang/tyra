@@ -1,0 +1,36 @@
+{
+  "prompt_id": "041-sum-pairs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777298336,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 19703,
+      "code_len": 1012,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 362,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 476,
+      "stdout": "1+10=112+20=223+30=33",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line1 = match io.read_line()\n  when Some(l)\n    l\n  when None\n    return Err(\"missing line 1\")\n  end\n\n  let line2 = match io.read_line()\n  when Some(l)\n    l\n  when None\n    return Err(\"missing line 2\")\n  end\n\n  let parts1 = string.split_whitespace(line1)\n  let parts2 = string.split_whitespace(line2)\n\n  mut i = 0\n  while i < parts1.len()\n    let s1 = match parts1.get(i)\n    when Some(s)\n      s\n    when None\n      return Err(\"index out of range in line 1\")\n    end\n\n    let s2 = match parts2.get(i)\n    when Some(s)\n      s\n    when None\n      return Err(\"index out of range in line 2\")\n    end\n\n    let n1 = match string.parse_int(s1)\n    when Some(n)\n      n\n    when None\n      return Err(\"parse error in line 1\")\n    end\n\n    let n2 = match string.parse_int(s2)\n    when Some(n)\n      n\n    when None\n      return Err(\"parse error in line 2\")\n    end\n\n    let sum = n1 + n2\n    print(\"#{n1}+#{n2}=#{sum}\")\n    i = i + 1\n  end\n\n  Ok(())\nend",
+  "overall": "pass"
+}

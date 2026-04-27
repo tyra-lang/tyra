@@ -1,0 +1,36 @@
+{
+  "prompt_id": "087-set-union",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777301116,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 68423,
+      "code_len": 2570,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 373,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 502,
+      "stdout": "1 2 3 4 5 6 7\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_line(_ line: String) -> List<Int>\n  let parts = string.split_whitespace(line)\n  mut result: List<Int> = []\n  mut i = 0\n  while i < parts.len()\n    let part_opt = parts.get(i)\n    match part_opt\n    when Some(part)\n      let n_opt = string.parse_int(part)\n      match n_opt\n      when Some(n)\n        result = list.push(result, n)\n      when None\n        # skip unparseable token\n      end\n    when None\n      # skip\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn merge_unique(_ a: List<Int>, _ b: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  while i < a.len()\n    let x_opt = a.get(i)\n    match x_opt\n    when Some(x)\n      if not list.contains(result, x)\n        result = list.push(result, x)\n      end\n    when None\n      # skip\n    end\n    i = i + 1\n  end\n  mut j = 0\n  while j < b.len()\n    let x_opt = b.get(j)\n    match x_opt\n    when Some(x)\n      if not list.contains(result, x)\n        result = list.push(result, x)\n      end\n    when None\n      # skip\n    end\n    j = j + 1\n  end\n  result\nend\n\nfn remove_first(_ xs: List<Int>, _ target: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut found = false\n  mut i = 0\n  while i < xs.len()\n    let x_opt = xs.get(i)\n    match x_opt\n    when Some(x)\n      if x == target and not found\n        found = true\n      else\n        result = list.push(result, x)\n      end\n    when None\n      # skip\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn sort_list(_ xs: List<Int>) -> List<Int>\n  mut remaining = xs\n  mut sorted: List<Int> = []\n  while remaining.len() > 0\n    let min_opt = list.min(remaining)\n    match min_opt\n    when Some(min_val)\n      sorted = list.push(sorted, min_val)\n      remaining = remove_first(remaining, min_val)\n    when None\n      remaining = []\n    end\n  end\n  sorted\nend\n\nfn format_list(_ xs: List<Int>) -> String\n  let n = xs.len()\n  mut result = \"\"\n  mut i = 0\n  while i < n\n    let x_opt = xs.get(i)\n    match x_opt\n    when Some(x)\n      if i == 0\n        result = \"#{x}\"\n      else\n        result = \"#{result} #{x}\"\n      end\n    when None\n      # skip\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn main() -> Unit\n  let line1_opt = io.read_line()\n  let line2_opt = io.read_line()\n\n  let line1 = match line1_opt\n  when Some(l)\n    l\n  when None\n    \"\"\n  end\n\n  let line2 = match line2_opt\n  when Some(l)\n    l\n  when None\n    \"\"\n  end\n\n  let nums1 = parse_line(line1)\n  let nums2 = parse_line(line2)\n  let union_list = merge_unique(nums1, nums2)\n  let sorted_list = sort_list(union_list)\n  println(format_list(sorted_list))\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "034-group-even-odd",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777297944,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 39574,
+      "code_len": 925,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 416,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 504,
+      "stdout": "evens=4 2 6 8odds=7 1 9 3",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn join_strings(_ strs: List<String>) -> String\n  mut result = \"\"\n  mut i = 0\n  while i < strs.len()\n    let s = match strs.get(i)\n    when Some(v)\n      v\n    when None\n      \"\"\n    end\n    if i == 0\n      result = s\n    else\n      result = \"#{result} #{s}\"\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn main() -> Unit\n  let input = io.read_to_end()\n  let tokens = string.split_whitespace(input)\n\n  mut evens: List<String> = []\n  mut odds: List<String> = []\n\n  mut i = 0\n  while i < tokens.len()\n    let tok = match tokens.get(i)\n    when Some(t)\n      t\n    when None\n      \"\"\n    end\n    let n = match string.parse_int(tok)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    if n % 2 == 0\n      evens = list.push(evens, tok)\n    else\n      odds = list.push(odds, tok)\n    end\n    i = i + 1\n  end\n\n  print(\"evens=#{join_strings(evens)}\")\n  print(\"odds=#{join_strings(odds)}\")\nend",
+  "overall": "pass"
+}

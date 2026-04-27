@@ -1,0 +1,26 @@
+{
+  "prompt_id": "064-count-down",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777299566,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8446,
+      "code_len": 369,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 71,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-612tj5y9/main.ll:133:13: error: '%_t17' defined with type 'i64' but expected 'ptr'\n  133 |   store ptr %_t17, ptr %_t1\n      |             ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    Err(\"no input\")?\n  end\n  let n = match string.parse_int(string.trim(line))\n  when Some(v)\n    v\n  when None\n    Err(\"invalid integer\")?\n  end\n  mut i = n\n  while i >= 0\n    println(\"#{i}\")\n    i = i - 1\n  end\n  println(\"done\")\n  Ok(())\nend",
+  "overall": "compile_fail"
+}

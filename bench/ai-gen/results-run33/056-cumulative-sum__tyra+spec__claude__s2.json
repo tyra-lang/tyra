@@ -1,0 +1,36 @@
+{
+  "prompt_id": "056-cumulative-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777299106,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 25915,
+      "code_len": 639,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 368,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 560,
+      "stdout": "1 3 6 10 15\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line_opt = io.read_line()\n  let line = match line_opt\n  when Some(l)\n    l\n  when None\n    \"\"\n  end\n\n  let parts = string.split_whitespace(line)\n  let n = parts.len()\n\n  mut result = \"\"\n  mut sum = 0\n  mut i = 0\n  while i < n\n    let part = match parts.get(i)\n    when Some(p)\n      p\n    when None\n      \"\"\n    end\n    let val = match string.parse_int(part)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    sum = sum + val\n    if i == 0\n      result = \"#{sum}\"\n    else\n      result = \"#{result} #{sum}\"\n    end\n    i = i + 1\n  end\n\n  println(result)\n  Ok(())\nend",
+  "overall": "pass"
+}
