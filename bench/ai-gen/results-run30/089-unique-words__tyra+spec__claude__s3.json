@@ -1,0 +1,36 @@
+{
+  "prompt_id": "089-unique-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777267776,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11335,
+      "code_len": 640,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 371,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 811,
+      "stdout": "unique=5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet text = io.read_to_end()\nlet tokens = string.split_whitespace(text)\nmut seen_hashes: List<Int> = []\nmut count = 0\nmut i = 0\nwhile i < tokens.len()\n  let tok = match tokens.get(i)\n  when Some(t)\n    t\n  when None\n    \"\"\n  end\n  mut h = 0\n  mut j = 0\n  let n = string.len(tok)\n  while j < n\n    let b = match string.byte_at(tok, j)\n    when Some(x)\n      x\n    when None\n      0\n    end\n    h = h * 131 + b\n    j = j + 1\n  end\n  h = h * 1000003 + n\n  if not list.contains(seen_hashes, h)\n    seen_hashes = list.push(seen_hashes, h)\n    count = count + 1\n  end\n  i = i + 1\nend\nprintln(\"unique=#{count}\")",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "052-three-grade",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777266112,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8517,
+      "code_len": 382,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 126,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 458,
+      "stdout": "B\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = io.read_line()\nmatch line\nwhen Some(s)\n  let trimmed = string.trim(s)\n  match string.parse_int(trimmed)\n  when Some(score)\n    if score >= 90\n      println(\"A\")\n    else if score >= 75\n      println(\"B\")\n    else if score >= 60\n      println(\"C\")\n    else\n      println(\"F\")\n    end\n  when None\n    println(\"F\")\n  end\nwhen None\n  println(\"F\")\nend",
+  "overall": "pass"
+}

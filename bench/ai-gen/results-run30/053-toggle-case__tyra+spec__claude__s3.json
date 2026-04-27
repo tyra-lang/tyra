@@ -1,0 +1,26 @@
+{
+  "prompt_id": "053-toggle-case",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777266146,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 12306,
+      "code_len": 563,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 16,
+      "stderr": "error[E0002]: unexpected character `^`\n   --> main.tyra:14:27\n   |\n14 |           let toggled = b ^ 32\n   |                           ^ not valid in Tyra source\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:14:27\n   |\n14 |           let toggled = b ^ 32\n   |                           ^ expected newline here\n\nerror[E0104]: expected expression, found error token\n   --> main.tyra:14:27\n   |\n14 |           let toggled = b ^ 32\n   |                           ^ expected expression\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:14:29\n   |\n14 |           let toggled = b ^ 32\n   |                             ^^ expected newline here\n\n4 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(line)\n    let n = string.len(line)\n    mut result = \"\"\n    mut i = 0\n    while i < n\n      match string.byte_at(line, i)\n      when Some(b)\n        if (b >= 65 and b <= 90) or (b >= 97 and b <= 122)\n          let toggled = b ^ 32\n          result = \"#{result}#{string.from_byte(toggled)}\"\n        else\n          result = \"#{result}#{string.from_byte(b)}\"\n        end\n      when None\n        ()\n      end\n      i = i + 1\n    end\n    println(result)\n  when None\n    println(\"\")\n  end\nend",
+  "overall": "compile_fail"
+}

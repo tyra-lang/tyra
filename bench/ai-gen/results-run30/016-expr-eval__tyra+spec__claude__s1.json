@@ -1,0 +1,36 @@
+{
+  "prompt_id": "016-expr-eval",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777264880,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11234,
+      "code_len": 474,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 417,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 503,
+      "stdout": "result=45\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "type Expr =\n  | Num(value: Int)\n  | Add(left: Expr, right: Expr)\n  | Mul(left: Expr, right: Expr)\n\nfn eval(_ expr: Expr) -> Int\n  match expr\n  when Num(value: v)\n    v\n  when Add(left: l, right: r)\n    eval(l) + eval(r)\n  when Mul(left: l, right: r)\n    eval(l) * eval(r)\n  end\nend\n\nlet e = Expr.Mul(\n  left: Expr.Add(left: Expr.Num(value: 2), right: Expr.Num(value: 3)),\n  right: Expr.Add(left: Expr.Num(value: 4), right: Expr.Num(value: 5)),\n)\nprintln(\"result=#{eval(e)}\")",
+  "overall": "pass"
+}

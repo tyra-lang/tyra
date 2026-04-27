@@ -1,0 +1,36 @@
+{
+  "prompt_id": "076-running-max",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777266978,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11957,
+      "code_len": 1177,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 375,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 446,
+      "stdout": "3 3 4 4 5 9 9 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Unit\n  let line = io.read_line()\n  match line\n  when Some(s)\n    let trimmed = string.trim(s)\n    let parts = string.split_whitespace(trimmed)\n    let n = parts.len()\n    mut nums: List<Int> = []\n    mut i = 0\n    while i < n\n      match parts.get(i)\n      when Some(p)\n        match string.parse_int(p)\n        when Some(v)\n          nums = list.push(nums, v)\n        when None\n          ()\n        end\n      when None\n        ()\n      end\n      i = i + 1\n    end\n    mut result: List<Int> = []\n    mut cur = 0\n    mut j = 0\n    let m = nums.len()\n    while j < m\n      match nums.get(j)\n      when Some(v)\n        if j == 0\n          cur = v\n        else if v > cur\n          cur = v\n        end\n        result = list.push(result, cur)\n      when None\n        ()\n      end\n      j = j + 1\n    end\n    mut out = \"\"\n    mut k = 0\n    let r = result.len()\n    while k < r\n      match result.get(k)\n      when Some(v)\n        if k == 0\n          out = \"#{v}\"\n        else\n          out = \"#{out} #{v}\"\n        end\n      when None\n        ()\n      end\n      k = k + 1\n    end\n    println(out)\n  when None\n    println(\"\")\n  end\nend",
+  "overall": "pass"
+}

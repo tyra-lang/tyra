@@ -1,0 +1,36 @@
+{
+  "prompt_id": "038-capitalize-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777265592,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 20701,
+      "code_len": 807,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 384,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 450,
+      "stdout": "Hello World From Tyra\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nmatch io.read_line()\nwhen Some(line)\n  let words = string.split_whitespace(line)\n  mut result = \"\"\n  mut i = 0\n  let n = words.len()\n  while i < n\n    match words.get(i)\n    when Some(w)\n      mut transformed = w\n      let wlen = string.len(w)\n      if wlen > 0\n        match string.byte_at(w, 0)\n        when Some(b)\n          if b >= 97 and b <= 122\n            let upper = b - 32\n            let rest = string.substring(w, 1, wlen)\n            transformed = \"#{string.from_byte(upper)}#{rest}\"\n          end\n        when None\n          ()\n        end\n      end\n      if i == 0\n        result = transformed\n      else\n        result = \"#{result} #{transformed}\"\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  println(result)\nwhen None\n  println(\"\")\nend",
+  "overall": "pass"
+}

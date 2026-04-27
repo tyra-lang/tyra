@@ -1,0 +1,36 @@
+{
+  "prompt_id": "080-collect-errors",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777267083,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 18736,
+      "code_len": 2477,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 374,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 487,
+      "stdout": "errors=empty-name,negative-ageokerrors=too-old",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import list\n\nfn validate(_ name: String, _ age: Int) -> List<String>\n  mut errs: List<String> = []\n  if name == \"\"\n    errs = append_str(errs, \"empty-name\")\n  end\n  if age < 0\n    errs = append_str(errs, \"negative-age\")\n  end\n  if age > 150\n    errs = append_str(errs, \"too-old\")\n  end\n  errs\nend\n\nfn append_str(_ xs: List<String>, _ s: String) -> List<String>\n  mut result: List<String> = []\n  mut i = 0\n  while i < xs.len()\n    match xs.get(i)\n    when Some(v)\n      result = push_str(result, v)\n    when None\n      result = result\n    end\n    i = i + 1\n  end\n  push_str(result, s)\nend\n\nfn push_str(_ xs: List<String>, _ s: String) -> List<String>\n  mut out: List<String> = [s]\n  mut tmp: List<String> = []\n  mut i = 0\n  while i < xs.len()\n    match xs.get(i)\n    when Some(v)\n      tmp = append_one(tmp, v)\n    when None\n      tmp = tmp\n    end\n    i = i + 1\n  end\n  # prepend xs to [s]\n  mut final: List<String> = []\n  mut j = 0\n  while j < xs.len()\n    match xs.get(j)\n    when Some(v)\n      final = append_one(final, v)\n    when None\n      final = final\n    end\n    j = j + 1\n  end\n  append_one(final, s)\nend\n\nfn append_one(_ xs: List<String>, _ s: String) -> List<String>\n  mut out: List<String> = []\n  mut i = 0\n  while i < xs.len()\n    match xs.get(i)\n    when Some(v)\n      out = cons_end(out, v)\n    when None\n      out = out\n    end\n    i = i + 1\n  end\n  cons_end(out, s)\nend\n\nfn cons_end(_ xs: List<String>, _ s: String) -> List<String>\n  # base case: build via literal expansion is impossible generically\n  # use recursion-free approach: rebuild using fixed-size accumulator pattern\n  # Since we cannot truly append without intrinsic, use match on length\n  let n = xs.len()\n  if n == 0\n    [s]\n  else if n == 1\n    [get_or(xs, 0), s]\n  else if n == 2\n    [get_or(xs, 0), get_or(xs, 1), s]\n  else if n == 3\n    [get_or(xs, 0), get_or(xs, 1), get_or(xs, 2), s]\n  else\n    [get_or(xs, 0), get_or(xs, 1), get_or(xs, 2), get_or(xs, 3), s]\n  end\nend\n\nfn get_or(_ xs: List<String>, _ i: Int) -> String\n  match xs.get(i)\n  when Some(v)\n    v\n  when None\n    \"\"\n  end\nend\n\nfn render(_ errs: List<String>) -> String\n  if errs.len() == 0\n    \"ok\"\n  else\n    mut s = \"errors=\"\n    mut i = 0\n    while i < errs.len()\n      let v = get_or(errs, i)\n      if i == 0\n        s = \"#{s}#{v}\"\n      else\n        s = \"#{s},#{v}\"\n      end\n      i = i + 1\n    end\n    s\n  end\nend\n\nprint(render(validate(\"\", -5)))\nprint(render(validate(\"Alice\", 30)))\nprint(render(validate(\"Bob\", 200)))",
+  "overall": "pass"
+}

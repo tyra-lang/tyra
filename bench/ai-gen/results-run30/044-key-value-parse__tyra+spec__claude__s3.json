@@ -1,0 +1,36 @@
+{
+  "prompt_id": "044-key-value-parse",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777265800,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 23153,
+      "code_len": 695,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 451,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 458,
+      "stdout": "host:localhost\nport:8080\nname:tyra\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet input = io.read_to_end()\nlet lines = string.split(input, \"\\n\")\nlet n = lines.len()\nmut i = 0\nwhile i < n\n  match lines.get(i)\n  when Some(line)\n    let llen = string.len(line)\n    mut j = 0\n    mut found = -1\n    while j < llen and found == -1\n      match string.byte_at(line, j)\n      when Some(b)\n        if b == 61\n          found = j\n        end\n      when None\n        ()\n      end\n      j = j + 1\n    end\n    if found >= 0\n      let key = string.substring(line, 0, found)\n      let val = string.substring(line, found + 1, llen)\n      if string.len(key) > 0\n        println(\"#{key}:#{val}\")\n      end\n    end\n  when None\n    ()\n  end\n  i = i + 1\nend",
+  "overall": "pass"
+}

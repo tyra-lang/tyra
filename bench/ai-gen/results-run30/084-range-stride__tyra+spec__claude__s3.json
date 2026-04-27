@@ -1,0 +1,36 @@
+{
+  "prompt_id": "084-range-stride",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777267391,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11531,
+      "code_len": 642,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 394,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 452,
+      "stdout": "0 3 6 9 12 15 18\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet input = io.read_to_end()\nlet parts = string.split_whitespace(input)\nlet a = match string.parse_int(match parts.get(0) when Some(s) s when None \"0\" end)\nwhen Some(n)\n  n\nwhen None\n  0\nend\nlet b = match string.parse_int(match parts.get(1) when Some(s) s when None \"0\" end)\nwhen Some(n)\n  n\nwhen None\n  0\nend\nlet s = match string.parse_int(match parts.get(2) when Some(s) s when None \"1\" end)\nwhen Some(n)\n  n\nwhen None\n  1\nend\n\nmut out = \"\"\nmut cur = a\nmut first = true\nwhile cur < b\n  if first\n    out = \"#{cur}\"\n    first = false\n  else\n    out = \"#{out} #{cur}\"\n  end\n  cur = cur + s\nend\nprintln(out)",
+  "overall": "pass"
+}

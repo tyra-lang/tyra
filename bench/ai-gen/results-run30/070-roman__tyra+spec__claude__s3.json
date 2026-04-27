@@ -1,0 +1,36 @@
+{
+  "prompt_id": "070-roman",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777266747,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9822,
+      "code_len": 483,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 413,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 461,
+      "stdout": "IV\nIX\nXXVII\nXXXIX\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "fn to_roman(_ n: Int) -> String\n  mut result = \"\"\n  mut x = n\n  while x >= 10\n    result = \"#{result}X\"\n    x = x - 10\n  end\n  if x == 9\n    result = \"#{result}IX\"\n    x = 0\n  end\n  if x >= 5\n    result = \"#{result}V\"\n    x = x - 5\n  end\n  if x == 4\n    result = \"#{result}IV\"\n    x = 0\n  end\n  while x >= 1\n    result = \"#{result}I\"\n    x = x - 1\n  end\n  result\nend\n\nfn main() -> Unit\n  println(to_roman(4))\n  println(to_roman(9))\n  println(to_roman(27))\n  println(to_roman(39))\nend",
+  "overall": "pass"
+}

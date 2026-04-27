@@ -1,0 +1,36 @@
+{
+  "prompt_id": "087-set-union",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777267545,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 43725,
+      "code_len": 1552,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 402,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 497,
+      "stdout": "1 2 3 4 5 6 7\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn parse_line(_ s: String) -> List<Int>\n  mut result: List<Int> = []\n  let parts = string.split_whitespace(s)\n  mut i = 0\n  while i < parts.len()\n    match parts.get(i)\n    when Some(tok)\n      match string.parse_int(tok)\n      when Some(n)\n        result = list.push(result, n)\n      when None\n        ()\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn read_or_empty() -> String\n  match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\nend\n\nfn main() -> Unit\n  let line1 = read_or_empty()\n  let line2 = read_or_empty()\n  let a = parse_line(line1)\n  let b = parse_line(line2)\n  mut all: List<Int> = a\n  mut j = 0\n  while j < b.len()\n    match b.get(j)\n    when Some(x)\n      all = list.push(all, x)\n    when None\n      ()\n    end\n    j = j + 1\n  end\n\n  match list.min(all)\n  when None\n    println(\"\")\n  when Some(start)\n    mut output = \"#{start}\"\n    mut current = start\n    mut done = false\n    while not done\n      mut next_val = 0\n      mut found = false\n      mut k = 0\n      while k < all.len()\n        match all.get(k)\n        when Some(v)\n          if v > current\n            if not found\n              next_val = v\n              found = true\n            else if v < next_val\n              next_val = v\n            end\n          end\n        when None\n          ()\n        end\n        k = k + 1\n      end\n      if found\n        output = \"#{output} #{next_val}\"\n        current = next_val\n      else\n        done = true\n      end\n    end\n    println(output)\n  end\nend",
+  "overall": "pass"
+}

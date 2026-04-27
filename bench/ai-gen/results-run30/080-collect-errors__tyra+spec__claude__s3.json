@@ -1,0 +1,26 @@
+{
+  "prompt_id": "080-collect-errors",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777267124,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 15521,
+      "code_len": 2058,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 24,
+      "stderr": "error[E0104]: expected expression, found `+`\n   --> main.tyra:71:18\n   |\n71 |       acc = [v] ++ acc\n   |                  ^ expected expression\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:71:20\n   |\n71 |       acc = [v] ++ acc\n   |                    ^^^ expected newline here\n\n2 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import string\nimport list\n\nfn validate(_ name: String, _ age: Int) -> List<String>\n  mut errors: List<String> = []\n  if string.is_empty(name)\n    errors = append_str(errors, \"empty-name\")\n  end\n  if age < 0\n    errors = append_str(errors, \"negative-age\")\n  end\n  if age > 150\n    errors = append_str(errors, \"too-old\")\n  end\n  errors\nend\n\nfn append_str(_ xs: List<String>, _ s: String) -> List<String>\n  mut result: List<String> = []\n  mut i = 0\n  while i < xs.len()\n    match xs.get(i)\n    when Some(v)\n      result = push_str(result, v)\n    when None\n      result = result\n    end\n    i = i + 1\n  end\n  result = push_str(result, s)\n  result\nend\n\nfn push_str(_ xs: List<String>, _ s: String) -> List<String>\n  mut out: List<String> = [s]\n  mut i = 0\n  while i < xs.len()\n    match xs.get(i)\n    when Some(v)\n      out = prepend_into(out, v, i)\n    when None\n      out = out\n    end\n    i = i + 1\n  end\n  rebuild(xs, s)\nend\n\nfn rebuild(_ xs: List<String>, _ s: String) -> List<String>\n  mut tmp: List<String> = []\n  mut i = 0\n  while i < xs.len()\n    match xs.get(i)\n    when Some(v)\n      tmp = cons_at_end(tmp, v)\n    when None\n      tmp = tmp\n    end\n    i = i + 1\n  end\n  cons_at_end(tmp, s)\nend\n\nfn cons_at_end(_ xs: List<String>, _ s: String) -> List<String>\n  mut n = xs.len()\n  mut acc: List<String> = [s]\n  while n > 0\n    n = n - 1\n    match xs.get(n)\n    when Some(v)\n      acc = [v] ++ acc\n    when None\n      acc = acc\n    end\n  end\n  acc\nend\n\nfn prepend_into(_ xs: List<String>, _ v: String, _ idx: Int) -> List<String>\n  xs\nend\n\nfn main() -> Unit\n  run_case(\"\", -5)\n  run_case(\"Alice\", 30)\n  run_case(\"Bob\", 200)\nend\n\nfn run_case(_ name: String, _ age: Int) -> Unit\n  let errs = validate(name, age)\n  if errs.len() == 0\n    print(\"ok\")\n  else\n    mut msg = \"errors=\"\n    mut i = 0\n    while i < errs.len()\n      match errs.get(i)\n      when Some(v)\n        if i == 0\n          msg = \"#{msg}#{v}\"\n        else\n          msg = \"#{msg},#{v}\"\n        end\n      when None\n        msg = msg\n      end\n      i = i + 1\n    end\n    print(msg)\n  end\nend",
+  "overall": "compile_fail"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "088-histogram",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777267693,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 18312,
+      "code_len": 1228,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 421,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 434,
+      "stdout": "0: \n1: ##\n2: #\n3: ###\n4: #\n5: ###\n6: #\n7: #\n8: #\n9: ###\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  mut counts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n  let n = string.len(line)\n  mut i = 0\n  while i < n\n    let b = match string.byte_at(line, i)\n    when Some(v)\n      v\n    when None\n      -1\n    end\n    if b >= 48 and b <= 57\n      let d = b - 48\n      mut new_counts: List<Int> = []\n      mut j = 0\n      while j < 10\n        let cur = match counts.get(j)\n        when Some(v)\n          v\n        when None\n          0\n        end\n        if j == d\n          new_counts = list_push(new_counts, cur + 1)\n        else\n          new_counts = list_push(new_counts, cur)\n        end\n        j = j + 1\n      end\n      counts = new_counts\n    end\n    i = i + 1\n  end\n\n  mut d = 0\n  while d < 10\n    let c = match counts.get(d)\n    when Some(v)\n      v\n    when None\n      0\n    end\n    mut hashes = \"\"\n    mut k = 0\n    while k < c\n      hashes = \"#{hashes}#\"\n      k = k + 1\n    end\n    println(\"#{d}: #{hashes}\")\n    d = d + 1\n  end\nend\n\nfn list_push(_ xs: List<Int>, _ x: Int) -> List<Int>\n  import_list_push(xs, x)\nend\n\nfn import_list_push(_ xs: List<Int>, _ x: Int) -> List<Int>\n  __list_int_push(xs, x)\nend",
+  "overall": "pass"
+}

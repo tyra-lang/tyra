@@ -1,0 +1,36 @@
+{
+  "prompt_id": "065-list-product",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777266557,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 7065,
+      "code_len": 426,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 156,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 475,
+      "stdout": "product=210\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line = io.read_line()\nmut p = 1\nmatch line\nwhen Some(s)\n  let parts = string.split_whitespace(s)\n  mut i = 0\n  while i < parts.len()\n    match parts.get(i)\n    when Some(tok)\n      match string.parse_int(tok)\n      when Some(n)\n        p = p * n\n      when None\n        p = p\n      end\n    when None\n      p = p\n    end\n    i = i + 1\n  end\nwhen None\n  p = p\nend\nprintln(\"product=#{p}\")",
+  "overall": "pass"
+}

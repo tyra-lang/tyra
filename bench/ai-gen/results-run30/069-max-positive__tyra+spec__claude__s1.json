@@ -1,0 +1,36 @@
+{
+  "prompt_id": "069-max-positive",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777266685,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9925,
+      "code_len": 562,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 391,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 474,
+      "stdout": "max=7\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Result<Unit, String>\n  let line = io.read_line().ok_or(\"no input\")?\n  let trimmed = string.trim(line)\n  let parts = string.split_whitespace(trimmed)\n  mut positives: List<Int> = []\n  mut i = 0\n  while i < parts.len()\n    let p = parts.get(i).ok_or(\"bad index\")?\n    let n = string.parse_int(p).ok_or(\"bad int\")?\n    if n > 0\n      positives = list.push(positives, n)\n    end\n    i = i + 1\n  end\n  match list.max(positives)\n  when Some(m)\n    println(\"max=#{m}\")\n  when None\n    println(\"none\")\n  end\n  Ok(())\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "096-rate-limit",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777268113,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11501,
+      "code_len": 441,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 374,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 498,
+      "stdout": "ALLOW\nALLOW\nALLOW\nDENY\nDENY\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "data Bucket\n  mut tokens: Int\nend\n\nfn allow(_ b: Bucket) -> Bool\n  mut bucket = b\n  if bucket.tokens >= 1\n    bucket.tokens = bucket.tokens - 1\n    true\n  else\n    false\n  end\nend\n\nfn label(_ ok: Bool) -> String\n  if ok\n    \"ALLOW\"\n  else\n    \"DENY\"\n  end\nend\n\nlet bucket = Bucket(tokens: 3)\nprintln(label(allow(bucket)))\nprintln(label(allow(bucket)))\nprintln(label(allow(bucket)))\nprintln(label(allow(bucket)))\nprintln(label(allow(bucket)))",
+  "overall": "pass"
+}

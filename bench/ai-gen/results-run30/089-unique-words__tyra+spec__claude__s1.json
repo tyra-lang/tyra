@@ -1,0 +1,26 @@
+{
+  "prompt_id": "089-unique-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777267739,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 16087,
+      "code_len": 871,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 199,
+      "stderr": "error[E0500]: clang failed: /var/folders/n2/3jxclfrj4_1b31dkx_l4q7nh0000gn/T/aigen-tyra-16pbpxct/main.ll:763:30: error: '%_t105' defined with type 'i64' but expected '%struct.List__String = type { ptr, i64 }'\n  763 |   store %struct.List__String %_t105, ptr %new_seen\n      |                              ^\n1 error generated.\n\n\n1 error emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet text = io.read_to_end()\nlet tokens = string.split_whitespace(text)\nmut seen: List<String> = []\nmut i = 0\nwhile i < tokens.len()\n  match tokens.get(i)\n  when Some(tok)\n    mut found = false\n    mut j = 0\n    while j < seen.len()\n      match seen.get(j)\n      when Some(s)\n        if s == tok\n          found = true\n        end\n      when None\n        found = found\n      end\n      j = j + 1\n    end\n    if not found\n      mut new_seen: List<String> = []\n      mut k = 0\n      while k < seen.len()\n        match seen.get(k)\n        when Some(s)\n          new_seen = list.push_str(new_seen, s)\n        when None\n          new_seen = new_seen\n        end\n        k = k + 1\n      end\n      new_seen = list.push_str(new_seen, tok)\n      seen = new_seen\n    end\n  when None\n    i = i\n  end\n  i = i + 1\nend\nprintln(\"unique=#{seen.len()}\")",
+  "overall": "compile_fail"
+}

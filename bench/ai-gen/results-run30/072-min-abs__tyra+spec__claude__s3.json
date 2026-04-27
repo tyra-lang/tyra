@@ -1,0 +1,36 @@
+{
+  "prompt_id": "072-min-abs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777266822,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11326,
+      "code_len": 725,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 408,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 454,
+      "stdout": "min_abs=-2\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Result<Unit, String>\n  let line = io.read_line().ok_or(\"no input\")?\n  let tokens = string.split_whitespace(line)\n  let n = tokens.len()\n  if n == 0\n    Err(\"no input\")\n  else\n    mut best = 0\n    mut best_abs = 0\n    mut have = false\n    mut i = 0\n    while i < n\n      let tok = tokens.get(i).ok_or(\"bug\")?\n      let v = string.parse_int(tok).ok_or(\"parse error\")?\n      mut a = v\n      if a < 0\n        a = 0 - a\n      end\n      if not have\n        best = v\n        best_abs = a\n        have = true\n      else\n        if a < best_abs\n          best = v\n          best_abs = a\n        end\n      end\n      i = i + 1\n    end\n    println(\"min_abs=#{best}\")\n    Ok(())\n  end\nend",
+  "overall": "pass"
+}

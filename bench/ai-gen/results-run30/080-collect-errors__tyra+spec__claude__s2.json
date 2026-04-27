@@ -1,0 +1,36 @@
+{
+  "prompt_id": "080-collect-errors",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777267103,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 20542,
+      "code_len": 603,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 461,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 448,
+      "stdout": "errors=empty-name,negative-ageokerrors=too-old",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import string\n\nfn build_msg(_ name: String, _ age: Int) -> String\n  mut msg = \"\"\n  mut count = 0\n  if string.is_empty(name)\n    msg = \"#{msg}empty-name\"\n    count = count + 1\n  end\n  if age < 0\n    if count > 0\n      msg = \"#{msg},negative-age\"\n    else\n      msg = \"#{msg}negative-age\"\n    end\n    count = count + 1\n  end\n  if age > 150\n    if count > 0\n      msg = \"#{msg},too-old\"\n    else\n      msg = \"#{msg}too-old\"\n    end\n    count = count + 1\n  end\n  if count == 0\n    \"ok\"\n  else\n    \"errors=#{msg}\"\n  end\nend\n\nprint(build_msg(\"\", -5))\nprint(build_msg(\"Alice\", 30))\nprint(build_msg(\"Bob\", 200))",
+  "overall": "pass"
+}

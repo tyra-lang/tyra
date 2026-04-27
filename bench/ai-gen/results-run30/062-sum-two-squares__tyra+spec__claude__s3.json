@@ -1,0 +1,36 @@
+{
+  "prompt_id": "062-sum-two-squares",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777266472,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11439,
+      "code_len": 284,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 406,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 462,
+      "stdout": "r=25",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet line = io.read_to_end()\nlet parts = string.split_whitespace(line)\nlet a = match string.parse_int(parts[0])\nwhen Some(v)\n  v\nwhen None\n  0\nend\nlet b = match string.parse_int(parts[1])\nwhen Some(v)\n  v\nwhen None\n  0\nend\nlet r = a * a + b * b\nprint(\"r=#{r}\")",
+  "overall": "pass"
+}

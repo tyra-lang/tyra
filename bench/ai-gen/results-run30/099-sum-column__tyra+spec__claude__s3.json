@@ -1,0 +1,36 @@
+{
+  "prompt_id": "099-sum-column",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777268238,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9735,
+      "code_len": 645,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 404,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 496,
+      "stdout": "sum=39\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Result<Unit, String>\n  let text = io.read_to_end()\n  let lines = string.split(text, \"\\n\")\n  mut sum = 0\n  mut i = 0\n  while i < lines.len()\n    let line = match lines.get(i)\n    when Some(s)\n      s\n    when None\n      \"\"\n    end\n    let tokens = string.split_whitespace(line)\n    if tokens.len() >= 2\n      let tok = match tokens.get(1)\n      when Some(s)\n        s\n      when None\n        \"\"\n      end\n      let n = match string.parse_int(tok)\n      when Some(v)\n        v\n      when None\n        0\n      end\n      sum = sum + n\n    end\n    i = i + 1\n  end\n  println(\"sum=#{sum}\")\n  Ok(())\nend",
+  "overall": "pass"
+}

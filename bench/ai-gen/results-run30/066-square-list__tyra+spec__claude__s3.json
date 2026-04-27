@@ -1,0 +1,36 @@
+{
+  "prompt_id": "066-square-list",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777266597,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11098,
+      "code_len": 695,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 374,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 449,
+      "stdout": "1 4 9 16 25\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet line = io.read_line()\nmatch line\nwhen Some(s)\n  let parts = string.split_whitespace(s)\n  mut squares: List<Int> = []\n  mut i = 0\n  while i < parts.len()\n    match parts.get(i)\n    when Some(tok)\n      match string.parse_int(tok)\n      when Some(n)\n        squares = list.push(squares, n * n)\n      when None\n        ()\n      end\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  mut out = \"\"\n  mut j = 0\n  while j < squares.len()\n    match squares.get(j)\n    when Some(v)\n      if j == 0\n        out = \"#{v}\"\n      else\n        out = \"#{out} #{v}\"\n      end\n    when None\n      ()\n    end\n    j = j + 1\n  end\n  println(out)\nwhen None\n  println(\"\")\nend",
+  "overall": "pass"
+}

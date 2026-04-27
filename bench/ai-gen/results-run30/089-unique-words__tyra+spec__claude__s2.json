@@ -1,0 +1,26 @@
+{
+  "prompt_id": "089-unique-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777267755,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 21224,
+      "code_len": 2409,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 17,
+      "stderr": "]: expected newline or end of file\n   --> main.tyra:73:75\n   |\n73 | This works! Tokens don't contain whitespace (including \\n) since we split on whitespace.\n   |                                                                           ^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:73:78\n   |\n73 | This works! Tokens don't contain whitespace (including \\n) since we split on whitespace.\n   |                                                                              ^^^^^^^^^^ expected newline here\n\nerror[E0103]: expected field name or `await` after `.`\n   --> main.tyra:73:89\n   |\n73 | This works! Tokens don't contain whitespace (including \\n) since we split on whitespace.\n   |                                                                                         ^ expected identifier\n\nerror[E0104]: expected expression, found `import`\n   --> main.tyra:75:1\n   |\n75 | import io\n   | ^^^^^^ expected expression\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:75:8\n   |\n75 | import io\n   |        ^^ expected newline here\n\nerror[E0104]: expected expression, found `import`\n   --> main.tyra:76:1\n   |\n76 | import string\n   | ^^^^^^ expected expression\n\nerror[E0101]: expected newline or end of file\n   --> main.tyra:76:8\n   |\n76 | import string\n   |        ^^^^^^ expected newline here\n\nerror[E0100]: expected `end`, found end of file\n   --> main.tyra:97:27\n   |\n97 | println(\"unique=#{count}\")\n   |                           ^ expected `end`\n\nerror[E0100]: expected `end`, found end of file\n   --> main.tyra:97:27\n   |\n97 | println(\"unique=#{count}\")\n   |                           ^ expected `end`\n\nerror[E0100]: expected `end`, found end of file\n   --> main.tyra:97:27\n   |\n97 | println(\"unique=#{count}\")\n   |                           ^ expected `end`\n\nerror[E0100]: expected `end`, found end of file\n   --> main.tyra:97:27\n   |\n97 | println(\"unique=#{count}\")\n   |                           ^ expected `end`\n\n208 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nlet text = io.read_to_end()\nlet tokens = string.split_whitespace(text)\nmut seen: List<String> = []\nmut i = 0\nwhile i < tokens.len()\n  let tok = match tokens.get(i)\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  mut found = false\n  mut j = 0\n  while j < seen.len()\n    let s = match seen.get(j)\n    when Some(x)\n      x\n    when None\n      \"\"\n    end\n    if s == tok\n      found = true\n    end\n    j = j + 1\n  end\n  if not found\n    seen = list.push(seen, 0)\n    mut tmp: List<String> = []\n    mut k = 0\n    while k < seen.len() - 1\n      let prev = match seen.get(k)\n      when Some(x)\n        x\n      when None\n        \"\"\n      end\n      tmp = list.push(tmp, 0)\n      k = k + 1\n    end\n  end\n  i = i + 1\nend\n\nWait, I need to rethink. `list.push` is List<Int> only. I can't push to List<String>.\n\nLet me use a different approach. Use Map<String, Int> \u2014 but it's read-only after literal construction. Can't accumulate.\n\nHmm. Need to count distinct tokens without mutable List<String> or Map.\n\nOptions:\n- Sort tokens then count unique adjacent \u2014 but no sort.\n- Convert each token to a hash Int, store in List<Int> via list.push and list.contains.\n\nUse a hash. Compute hash of each token (sum of byte_at values? collisions possible). For correctness, need a real hash or just accept... \n\nActually I could use a string hash. Use polynomial rolling hash to Int. Collisions possible but for typical input...\n\nBetter: use a stringified concatenation with separators and search via string.contains. Build a sentinel-separated big string of seen tokens, check if \"\\x01tok\\x01\" is contained.\n\nLet me do that. Use newline separator (assuming tokens don't contain newlines \u2014 they're whitespace-split, so they can't).\n\nmut seen_str = \"\\n\"\nfor each token tok:\n  let needle = \"\\n#{tok}\\n\"\n  if not string.contains(seen_str, needle):\n    count = count + 1\n    seen_str = \"#{seen_str}#{tok}\\n\"\n\nThis works! Tokens don't contain whitespace (including \\n) since we split on whitespace.\n\nimport io\nimport string\n\nlet text = io.read_to_end()\nlet tokens = string.split_whitespace(text)\nmut seen = \"\\n\"\nmut count = 0\nmut i = 0\nwhile i < tokens.len()\n  let tok = match tokens.get(i)\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let needle = \"\\n#{tok}\\n\"\n  if not string.contains(seen, needle)\n    count = count + 1\n    seen = \"#{seen}#{tok}\\n\"\n  end\n  i = i + 1\nend\nprintln(\"unique=#{count}\")",
+  "overall": "compile_fail"
+}

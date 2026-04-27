@@ -1,0 +1,36 @@
+{
+  "prompt_id": "039-sum-digits",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777265638,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9906,
+      "code_len": 402,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 420,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 444,
+      "stdout": "digit_sum=15\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line = match io.read_line()\n  when Some(s) s\n  when None \"\"\n  end\n  let trimmed = string.trim(line)\n  let n = match string.parse_int(trimmed)\n  when Some(v) v\n  when None 0\n  end\n  mut x = n\n  mut sum = 0\n  if x == 0\n    sum = 0\n  end\n  while x > 0\n    sum = sum + (x % 10)\n    x = x / 10\n  end\n  println(\"digit_sum=#{sum}\")\n  Ok(())\nend",
+  "overall": "pass"
+}
