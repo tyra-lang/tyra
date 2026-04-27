@@ -933,6 +933,42 @@ let y = xs.get(0)\n";
     }
 
     #[test]
+    fn nested_list_with_empty_inner_picks_correct_elem_type() {
+        // Regression: `let data: List<List<Int>> = [[1,2], []]` previously
+        // typed the empty inner literal as List<List<Int>> (the outer
+        // hint), tripping an LLVM struct-type mismatch in the outer list's
+        // insertvalue. The hint must be peeled one level when recursing
+        // into ListLit items.
+        let source = "let data: List<List<Int>> = [[1, 2], []]\n";
+        let prog = lower_str(source);
+        // Both List__Int and List__List__Int should appear, and exactly one
+        // ListInit at each level. The inner empty must lower with
+        // elem_type Int, not List<Int>.
+        let has_inner = prog.struct_defs.iter().any(|sd| sd.name == "List__Int");
+        let has_outer = prog
+            .struct_defs
+            .iter()
+            .any(|sd| sd.name == "List__List__Int");
+        assert!(has_inner, "expected struct def List__Int");
+        assert!(has_outer, "expected struct def List__List__Int");
+        let main = prog.functions.iter().find(|f| f.is_main).unwrap();
+        // Find the empty ListInit and assert its elem_type is Int.
+        let empty_elem_ty = main.body.iter().find_map(|inst| match inst {
+            Instruction::ListInit {
+                elements,
+                elem_type,
+                ..
+            } if elements.is_empty() => Some(elem_type.clone()),
+            _ => None,
+        });
+        assert_eq!(
+            empty_elem_ty,
+            Some(tyra_types::Ty::Int),
+            "empty inner list should pick Int from the peeled List<List<Int>> hint"
+        );
+    }
+
+    #[test]
     fn for_loop_over_list_generates_loop() {
         // for x in xs should generate BranchIf + ListGet for List iteration
         let source = "\

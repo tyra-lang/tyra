@@ -744,6 +744,23 @@ impl super::LowerCtx {
 
             ExprKind::ListLit(items) => {
                 // §11: List literal [a, b, c]
+                //
+                // Peel one level off the active binding hint before
+                // recursing into items so a nested empty literal (e.g. the
+                // `[]` inside `let data: List<List<Int>> = [[1,2],[]]`)
+                // sees `List<Int>` as its hint, not the outer
+                // `List<List<Int>>`. Without this, the inner `[]` is
+                // typed as the outer element type and the outer list's
+                // `insertvalue` trips an LLVM struct-type mismatch.
+                let peeled_hint = self
+                    .binding_type_hint
+                    .as_ref()
+                    .filter(|t| t.is_list())
+                    .and_then(|t| t.list_elem().cloned());
+                let prev_hint = self.binding_type_hint.clone();
+                if peeled_hint.is_some() {
+                    self.binding_type_hint = peeled_hint.clone();
+                }
                 let elem_operands: Vec<Operand> = items
                     .iter()
                     .map(|item| {
@@ -751,6 +768,7 @@ impl super::LowerCtx {
                         Operand::Var(t)
                     })
                     .collect();
+                self.binding_type_hint = prev_hint;
 
                 // Infer element type from first item, or from the active
                 // binding annotation hint when the literal is empty
@@ -759,12 +777,7 @@ impl super::LowerCtx {
                 // into the annotated `List<String>` slot trips E0500.
                 let elem_type = if let Some(first) = items.first() {
                     self.infer_expr_type(first).unwrap_or(Ty::Int)
-                } else if let Some(hint) = self
-                    .binding_type_hint
-                    .as_ref()
-                    .filter(|t| t.is_list())
-                    .and_then(|t| t.list_elem().cloned())
-                {
+                } else if let Some(hint) = peeled_hint {
                     hint
                 } else {
                     Ty::Int
