@@ -615,6 +615,77 @@ impl super::LowerCtx {
             return self.lower_expr(list_expr, body);
         }
 
+        // §17.3.5 polymorphic-method redirect: the v0.1 `list` module exposes
+        // `len`/`get` as `List<Int>`-typed wrappers that delegate to the
+        // polymorphic `xs.len()` / `xs.get(i)` method. When the model writes
+        // `list.len(words)` with `words: List<String>` (e.g. from
+        // `string.split_whitespace`), the wrapper's `List<Int>` param makes
+        // LLVM reject the call as type-mismatched (E0500). Redirect to the
+        // element-type-agnostic `Instruction::ListLen` / `ListGetSafe`.
+        // `contains` / `index_of` stay List<Int>-only (they go through
+        // `__list_int_*` intrinsics, no polymorphic codegen yet).
+        if let ExprKind::FieldAccess(obj, fn_name) = &callee.kind {
+            if let ExprKind::Ident(module_name) = &obj.kind {
+                if module_name == "list"
+                    && self.imported_modules.contains("list")
+                    && matches!(fn_name.as_str(), "len" | "get")
+                    && !args.is_empty()
+                {
+                    let first = &args[0].value;
+                    let elem_is_int = match &first.kind {
+                        ExprKind::Ident(name) => self
+                            .generic_var_types
+                            .get(name)
+                            .map(|t| matches!(t, Ty::Generic(n, ta)
+                                if n == "List" && matches!(ta.first(), Some(Ty::Int))))
+                            .unwrap_or(true),
+                        _ => true,
+                    };
+                    if !elem_is_int {
+                        match fn_name.as_str() {
+                            "len" if args.len() == 1 => {
+                                let obj_val = self.lower_expr(first, body);
+                                let dest = self.fresh_temp();
+                                body.push(Instruction::ListLen {
+                                    dest: dest.clone(),
+                                    list: Operand::Var(obj_val),
+                                });
+                                return dest;
+                            }
+                            "get" if args.len() == 2 => {
+                                let elem_type = if let ExprKind::Ident(name) = &first.kind {
+                                    self.generic_var_types
+                                        .get(name)
+                                        .and_then(|t| t.list_elem().cloned())
+                                        .unwrap_or(Ty::Int)
+                                } else {
+                                    Ty::Int
+                                };
+                                let obj_val = self.lower_expr(first, body);
+                                let idx_val = self.lower_expr(&args[1].value, body);
+                                let option_type =
+                                    Ty::Generic("Option".into(), vec![elem_type.clone()]);
+                                self.register_adt_type(&option_type);
+                                let dest = self.fresh_temp();
+                                body.push(Instruction::ListGetSafe {
+                                    dest: dest.clone(),
+                                    list: Operand::Var(obj_val),
+                                    index: Operand::Var(idx_val),
+                                    elem_type,
+                                });
+                                self.generic_var_types
+                                    .insert(dest.clone(), option_type.clone());
+                                self.var_types
+                                    .insert(dest.clone(), option_type.monomorphized_name());
+                                return dest;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
         // Check for module-qualified call: math.square() → math__square() (§13)
         if let ExprKind::FieldAccess(obj, fn_name) = &callee.kind {
             if let ExprKind::Ident(module_name) = &obj.kind {
