@@ -1,0 +1,36 @@
+{
+  "prompt_id": "050-bank-account",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777309637,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 26382,
+      "code_len": 872,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 360,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 430,
+      "stdout": "final_balance=120last_status=overdraft",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "type WithdrawError =\n  | Overdraft\n\nvalue BankAccount\n  balance: Int\nend\n\nfn deposit(_ account: BankAccount, _ amount: Int) -> BankAccount\n  account.copy(balance: account.balance + amount)\nend\n\nfn withdraw(_ account: BankAccount, _ amount: Int) -> Result<BankAccount, WithdrawError>\n  if amount > account.balance\n    Err(WithdrawError.Overdraft)\n  else\n    Ok(account.copy(balance: account.balance - amount))\n  end\nend\n\nmut account = BankAccount(balance: 100)\nmut last_status = \"ok\"\n\naccount = deposit(account, 50)\n\nmatch withdraw(account, 30)\nwhen Ok(new_account)\n  account = new_account\n  last_status = \"ok\"\nwhen Err(_)\n  last_status = \"overdraft\"\nend\n\nmatch withdraw(account, 500)\nwhen Ok(new_account)\n  account = new_account\n  last_status = \"ok\"\nwhen Err(_)\n  last_status = \"overdraft\"\nend\n\nprint(\"final_balance=#{account.balance}\")\nprint(\"last_status=#{last_status}\")",
+  "overall": "pass"
+}

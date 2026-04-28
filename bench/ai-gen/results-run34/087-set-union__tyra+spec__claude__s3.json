@@ -1,0 +1,36 @@
+{
+  "prompt_id": "087-set-union",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777313212,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 117681,
+      "code_len": 2089,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 547,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 555,
+      "stdout": "1 2 3 4 5 6 7\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn swap_at(_ xs: List<Int>, _ i: Int, _ j: Int) -> List<Int>\n  let n = xs.len()\n  mut result: List<Int> = []\n  mut k = 0\n  while k < n\n    if k == i\n      result = list.push(result, xs[j])\n    else if k == j\n      result = list.push(result, xs[i])\n    else\n      result = list.push(result, xs[k])\n    end\n    k = k + 1\n  end\n  result\nend\n\nfn bubble_sort(_ xs: List<Int>) -> List<Int>\n  let n = xs.len()\n  mut arr = xs\n  mut i = 0\n  while i < n\n    mut j = 0\n    while j < n - i - 1\n      if arr[j] > arr[j + 1]\n        arr = swap_at(arr, j, j + 1)\n      end\n      j = j + 1\n    end\n    i = i + 1\n  end\n  arr\nend\n\nfn dedup_sorted(_ xs: List<Int>) -> List<Int>\n  let n = xs.len()\n  if n == 0\n    []\n  else\n    mut result: List<Int> = [xs[0]]\n    mut i = 1\n    while i < n\n      let v = xs[i]\n      let prev = result[result.len() - 1]\n      if v != prev\n        result = list.push(result, v)\n      end\n      i = i + 1\n    end\n    result\n  end\nend\n\nfn parse_line(_ line: String) -> List<Int>\n  let tokens = string.split_whitespace(line)\n  let n = tokens.len()\n  mut result: List<Int> = []\n  mut i = 0\n  while i < n\n    let tok = match tokens.get(i)\n    when Some(s)\n      s\n    when None\n      \"\"\n    end\n    match string.parse_int(tok)\n    when Some(val)\n      result = list.push(result, val)\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn main() -> Result<Unit, String>\n  let line1 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let line2 = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n\n  let nums1 = parse_line(line1)\n  let nums2 = parse_line(line2)\n\n  mut merged: List<Int> = nums1\n  let n2 = nums2.len()\n  mut i = 0\n  while i < n2\n    merged = list.push(merged, nums2[i])\n    i = i + 1\n  end\n\n  let sorted = bubble_sort(merged)\n  let unique = dedup_sorted(sorted)\n\n  let m = unique.len()\n  mut output = \"\"\n  mut j = 0\n  while j < m\n    if j == 0\n      output = \"#{unique[j]}\"\n    else\n      output = \"#{output} #{unique[j]}\"\n    end\n    j = j + 1\n  end\n\n  println(output)\n  Ok(())\nend",
+  "overall": "pass"
+}

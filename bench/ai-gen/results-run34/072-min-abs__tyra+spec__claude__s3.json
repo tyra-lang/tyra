@@ -1,0 +1,36 @@
+{
+  "prompt_id": "072-min-abs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777310960,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 25841,
+      "code_len": 836,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 448,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 461,
+      "stdout": "min_abs=-2",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn abs_val(_ n: Int) -> Int\n  if n < 0\n    -n\n  else\n    n\n  end\nend\n\nfn main() -> Result<Unit, String>\n  let line = match io.read_line()\n  when Some(l)\n    l\n  when None\n    return Err(\"no input\")\n  end\n\n  let tokens = string.split_whitespace(line)\n\n  mut best_val = 0\n  mut best_abs = 0\n  mut first = true\n  mut i = 0\n\n  while i < tokens.len()\n    let tok = match tokens.get(i)\n    when Some(t)\n      t\n    when None\n      return Err(\"index error\")\n    end\n\n    let n = match string.parse_int(tok)\n    when Some(v)\n      v\n    when None\n      return Err(\"parse error\")\n    end\n\n    let a = abs_val(n)\n\n    if first\n      best_val = n\n      best_abs = a\n      first = false\n    else if a < best_abs\n      best_val = n\n      best_abs = a\n    end\n\n    i = i + 1\n  end\n\n  print(\"min_abs=#{best_val}\")\n  Ok(())\nend",
+  "overall": "pass"
+}

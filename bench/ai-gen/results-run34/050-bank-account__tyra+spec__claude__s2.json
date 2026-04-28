@@ -1,0 +1,36 @@
+{
+  "prompt_id": "050-bank-account",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777309601,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 35743,
+      "code_len": 772,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 371,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 473,
+      "stdout": "final_balance=120last_status=overdraft",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "type BankError =\n  | Overdraft\n\ndata BankAccount\n  mut balance: Int\nend\n\nfn deposit(_ account: BankAccount, _ amount: Int) -> Result<Unit, BankError>\n  mut acc = account\n  acc.balance = acc.balance + amount\n  Ok(())\nend\n\nfn withdraw(_ account: BankAccount, _ amount: Int) -> Result<Unit, BankError>\n  if amount > account.balance\n    Err(BankError.Overdraft)\n  else\n    mut acc = account\n    acc.balance = acc.balance - amount\n    Ok(())\n  end\nend\n\nfn main() -> Unit\n  let account = BankAccount(balance: 100)\n\n  deposit(account, 50)\n  withdraw(account, 30)\n  let last_result = withdraw(account, 500)\n\n  let status = match last_result\n  when Ok(_)\n    \"ok\"\n  when Err(_)\n    \"overdraft\"\n  end\n\n  print(\"final_balance=#{account.balance}\")\n  print(\"last_status=#{status}\")\nend",
+  "overall": "pass"
+}

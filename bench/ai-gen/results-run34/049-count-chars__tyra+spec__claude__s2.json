@@ -1,0 +1,36 @@
+{
+  "prompt_id": "049-count-chars",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777309535,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9741,
+      "code_len": 630,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 357,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 451,
+      "stdout": "count=4",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let haystack = match io.read_line()\n  when Some(line)\n    line\n  when None\n    \"\"\n  end\n\n  let needle = match io.read_line()\n  when Some(line)\n    line\n  when None\n    \"\"\n  end\n\n  let haystack_len = string.len(haystack)\n  let needle_len = string.len(needle)\n\n  if needle_len == 0\n    print(\"count=0\")\n    Ok(())\n  else\n    mut count = 0\n    mut i = 0\n    while i < haystack_len\n      let ch = string.substring(haystack, i, i + needle_len)\n      if ch == needle\n        count = count + 1\n      end\n      i = i + 1\n    end\n    print(\"count=#{count}\")\n    Ok(())\n  end\nend",
+  "overall": "pass"
+}

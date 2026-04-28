@@ -1,0 +1,36 @@
+{
+  "prompt_id": "043-starts-with",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777308061,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 10239,
+      "code_len": 466,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 373,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 472,
+      "stdout": "YES\nNO\nYES\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let maybe_prefix = io.read_line()\n  let prefix = match maybe_prefix\n  when Some(p)\n    p\n  when None\n    return Ok(())\n  end\n\n  mut going = true\n  while going\n    let maybe_line = io.read_line()\n    match maybe_line\n    when Some(line)\n      if string.starts_with(line, prefix)\n        println(\"YES\")\n      else\n        println(\"NO\")\n      end\n    when None\n      going = false\n    end\n  end\n\n  Ok(())\nend",
+  "overall": "pass"
+}

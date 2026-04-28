@@ -1,0 +1,36 @@
+{
+  "prompt_id": "020-echo-args",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777303945,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 43947,
+      "code_len": 222,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 454,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 593,
+      "stdout": "[0] alpha[1] beta[2] gamma",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\n\nfn main() -> Unit\n  mut i = 0\n  mut running = true\n  while running\n    match io.read_line()\n    when Some(line)\n      print(\"[#{i}] #{line}\")\n      i = i + 1\n    when None\n      running = false\n    end\n  end\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "008-reverse-string",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777303171,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 12055,
+      "code_len": 167,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 388,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 457,
+      "stdout": "dlrow olleh\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  let line = io.read_line()\n  match line\n  when Some(s)\n    println(string.reverse(s))\n  when None\n    println(\"\")\n  end\nend",
+  "overall": "pass"
+}

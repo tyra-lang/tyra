@@ -1,0 +1,36 @@
+{
+  "prompt_id": "080-collect-errors",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777312141,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 51142,
+      "code_len": 1020,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 543,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 501,
+      "stdout": "errors=empty-name,negative-ageokerrors=too-old",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import string\nimport list\n\nfn validate(_ name: String, _ age: Int) -> List<String>\n  mut errors: List<String> = []\n  if string.is_empty(name)\n    errors = list.push(errors, \"empty-name\")\n  end\n  if age < 0\n    errors = list.push(errors, \"negative-age\")\n  end\n  if age > 150\n    errors = list.push(errors, \"too-old\")\n  end\n  errors\nend\n\nfn join_errors(_ errors: List<String>) -> String\n  mut result = \"\"\n  mut i = 0\n  while i < errors.len()\n    let e = match errors.get(i)\n    when Some(x)\n      x\n    when None\n      \"\"\n    end\n    if i == 0\n      result = e\n    else\n      result = \"#{result},#{e}\"\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn main() -> Unit\n  let e1 = validate(\"\", -5)\n  let e2 = validate(\"Alice\", 30)\n  let e3 = validate(\"Bob\", 200)\n\n  if e1.len() == 0\n    print(\"ok\")\n  else\n    print(\"errors=#{join_errors(e1)}\")\n  end\n\n  if e2.len() == 0\n    print(\"ok\")\n  else\n    print(\"errors=#{join_errors(e2)}\")\n  end\n\n  if e3.len() == 0\n    print(\"ok\")\n  else\n    print(\"errors=#{join_errors(e3)}\")\n  end\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "072-min-abs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777310912,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 25177,
+      "code_len": 800,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 493,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 440,
+      "stdout": "min_abs=-2",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn abs_val(_ x: Int) -> Int\n  if x < 0\n    -x\n  else\n    x\n  end\nend\n\nfn main() -> Result<Unit, String>\n  let line = match io.read_line()\n  when Some(l)\n    l\n  when None\n    return Err(\"no input\")\n  end\n\n  let tokens = string.split_whitespace(line)\n  mut i = 0\n  mut best_val = 0\n  mut best_abs = 0\n  mut found = false\n\n  while i < tokens.len()\n    let tok = match tokens.get(i)\n    when Some(t)\n      t\n    when None\n      \"\"\n    end\n\n    let val = match string.parse_int(tok)\n    when Some(v)\n      v\n    when None\n      0\n    end\n\n    let a = abs_val(val)\n\n    if not found\n      best_val = val\n      best_abs = a\n      found = true\n    else if a < best_abs\n      best_val = val\n      best_abs = a\n    end\n\n    i = i + 1\n  end\n\n  print(\"min_abs=#{best_val}\")\n  Ok(())\nend",
+  "overall": "pass"
+}

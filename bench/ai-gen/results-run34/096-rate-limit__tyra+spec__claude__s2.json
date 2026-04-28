@@ -1,0 +1,36 @@
+{
+  "prompt_id": "096-rate-limit",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777314076,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 28174,
+      "code_len": 508,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 372,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 447,
+      "stdout": "ALLOWALLOWALLOWDENYDENY",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "data Bucket\n  mut tokens: Int\nend\n\nfn allow(_ bucket: Bucket) -> Bool\n  if bucket.tokens >= 1\n    mut b = bucket\n    b.tokens = b.tokens - 1\n    true\n  else\n    false\n  end\nend\n\nlet bucket = Bucket(tokens: 3)\n\nif allow(bucket)\n  print(\"ALLOW\")\nelse\n  print(\"DENY\")\nend\n\nif allow(bucket)\n  print(\"ALLOW\")\nelse\n  print(\"DENY\")\nend\n\nif allow(bucket)\n  print(\"ALLOW\")\nelse\n  print(\"DENY\")\nend\n\nif allow(bucket)\n  print(\"ALLOW\")\nelse\n  print(\"DENY\")\nend\n\nif allow(bucket)\n  print(\"ALLOW\")\nelse\n  print(\"DENY\")\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "089-unique-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777313429,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 29737,
+      "code_len": 705,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 366,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 561,
+      "stdout": "unique=5",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn contains_str(_ xs: List<String>, _ target: String) -> Bool\n  mut i = 0\n  mut found = false\n  while i < xs.len()\n    let item = xs.get(i)\n    match item\n    when Some(s)\n      if s == target\n        found = true\n      end\n    when None\n    end\n    i = i + 1\n  end\n  found\nend\n\nfn main() -> Unit\n  let text = io.read_to_end()\n  let tokens = string.split_whitespace(text)\n  mut seen: List<String> = []\n  mut i = 0\n  while i < tokens.len()\n    let tok_opt = tokens.get(i)\n    match tok_opt\n    when Some(tok)\n      if not contains_str(seen, tok)\n        seen = list.push(seen, tok)\n      end\n    when None\n    end\n    i = i + 1\n  end\n  print(\"unique=#{seen.len()}\")\nend",
+  "overall": "pass"
+}

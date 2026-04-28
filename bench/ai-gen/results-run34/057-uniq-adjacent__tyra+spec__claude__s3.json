@@ -1,0 +1,36 @@
+{
+  "prompt_id": "057-uniq-adjacent",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777310161,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 14346,
+      "code_len": 1246,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 421,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 468,
+      "stdout": "1 2 3 2 4\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line_opt = io.read_line()\n  let line = match line_opt\n  when Some(l)\n    l\n  when None\n    \"\"\n  end\n  let trimmed = string.trim(line)\n  if string.is_empty(trimmed)\n    println(\"\")\n    Ok(())\n  else\n    let parts = string.split_whitespace(trimmed)\n    mut result: List<Int> = []\n    mut i = 0\n    mut prev: Option<Int> = None\n    while i < parts.len()\n      let part_opt = parts.get(i)\n      let part = match part_opt\n      when Some(p)\n        p\n      when None\n        \"\"\n      end\n      let n_opt = string.parse_int(part)\n      let n = match n_opt\n      when Some(v)\n        v\n      when None\n        0\n      end\n      let should_add = match prev\n      when Some(p)\n        not (p == n)\n      when None\n        true\n      end\n      if should_add\n        result = list.push(result, n)\n        prev = Some(n)\n      end\n      i = i + 1\n    end\n    mut out = \"\"\n    mut j = 0\n    while j < result.len()\n      let val_opt = result.get(j)\n      let val = match val_opt\n      when Some(v)\n        v\n      when None\n        0\n      end\n      if j == 0\n        out = \"#{val}\"\n      else\n        out = \"#{out} #{val}\"\n      end\n      j = j + 1\n    end\n    println(out)\n    Ok(())\n  end\nend",
+  "overall": "pass"
+}

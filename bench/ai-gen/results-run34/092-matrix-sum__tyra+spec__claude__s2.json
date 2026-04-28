@@ -1,0 +1,36 @@
+{
+  "prompt_id": "092-matrix-sum",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777313863,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 16886,
+      "code_len": 162,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 378,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 461,
+      "stdout": "total=45",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import list\n\nlet matrix = [\n  [1, 2, 3],\n  [4, 5, 6],\n  [7, 8, 9],\n]\n\nmut total = 0\nfor row in matrix\n  total = total + list.sum(row)\nend\n\nprint(\"total=#{total}\")",
+  "overall": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "prompt_id": "038-capitalize-words",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777304929,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 41106,
+      "code_len": 827,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 379,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 520,
+      "stdout": "Hello World From Tyra\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn capitalize_word(_ word: String) -> String\n  match string.byte_at(word, 0)\n  when Some(b)\n    if b >= 97 and b <= 122\n      let upper = string.from_byte(b - 32)\n      let rest = string.substring(word, 1, string.len(word))\n      \"#{upper}#{rest}\"\n    else\n      word\n    end\n  when None\n    word\n  end\nend\n\nfn main() -> Unit\n  match io.read_line()\n  when Some(line)\n    let words = string.split_whitespace(line)\n    let n = words.len()\n    if n == 0\n      println(\"\")\n    else\n      mut result = capitalize_word(words[0])\n      mut i = 1\n      while i < n\n        match words.get(i)\n        when Some(word)\n          result = \"#{result} #{capitalize_word(word)}\"\n        when None\n          ()\n        end\n        i = i + 1\n      end\n      println(result)\n    end\n  when None\n    println(\"\")\n  end\nend",
+  "overall": "pass"
+}

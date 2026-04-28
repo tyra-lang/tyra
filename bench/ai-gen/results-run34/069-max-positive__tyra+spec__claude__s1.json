@@ -1,0 +1,36 @@
+{
+  "prompt_id": "069-max-positive",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777310752,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 29294,
+      "code_len": 705,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 365,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 566,
+      "stdout": "max=7\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line = match io.read_line()\n  when Some(l)\n    l\n  when None\n    \"\"\n  end\n\n  let tokens = string.split_whitespace(line)\n  mut max_val = 0\n  mut found = false\n  mut i = 0\n\n  while i < tokens.len()\n    let token = match tokens.get(i)\n    when Some(t)\n      t\n    when None\n      \"\"\n    end\n    let num = match string.parse_int(token)\n    when Some(n)\n      n\n    when None\n      0\n    end\n    if num > 0\n      if not found\n        max_val = num\n        found = true\n      else if num > max_val\n        max_val = num\n      end\n    end\n    i = i + 1\n  end\n\n  if found\n    println(\"max=#{max_val}\")\n  else\n    println(\"none\")\n  end\n\n  Ok(())\nend",
+  "overall": "pass"
+}

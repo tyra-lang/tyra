@@ -1,0 +1,36 @@
+{
+  "prompt_id": "020-echo-args",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777303898,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 45270,
+      "code_len": 610,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 576,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 502,
+      "stdout": "[0] alpha[1] beta[2] gamma",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport list\nimport string\n\nfn main() -> Unit\n  mut lines: List<String> = []\n  mut running = true\n  while running\n    match io.read_line()\n    when Some(line)\n      lines = list.push(lines, line)\n    when None\n      running = false\n    end\n  end\n\n  let n = lines.len()\n  mut count = n\n  if n > 0\n    match lines.get(n - 1)\n    when Some(last)\n      if string.is_empty(last)\n        count = n - 1\n      end\n    when None\n      ()\n    end\n  end\n\n  mut i = 0\n  while i < count\n    match lines.get(i)\n    when Some(line)\n      print(\"[#{i}] #{line}\")\n    when None\n      ()\n    end\n    i = i + 1\n  end\nend",
+  "overall": "pass"
+}

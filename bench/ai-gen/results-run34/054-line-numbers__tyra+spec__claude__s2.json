@@ -1,0 +1,36 @@
+{
+  "prompt_id": "054-line-numbers",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777309888,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8751,
+      "code_len": 272,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 150,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 448,
+      "stdout": "1: alpha2: beta3: gamma",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\n\nfn main() -> Result<Unit, String>\n  mut n = 1\n  mut line = io.read_line()\n  while true\n    match line\n    when None\n      return Ok(())\n    when Some(content)\n      print(\"#{n}: #{content}\")\n      n = n + 1\n      line = io.read_line()\n    end\n  end\n  Ok(())\nend",
+  "overall": "pass"
+}

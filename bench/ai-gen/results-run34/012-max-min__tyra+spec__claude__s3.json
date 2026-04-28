@@ -1,0 +1,36 @@
+{
+  "prompt_id": "012-max-min",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777303561,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 11614,
+      "code_len": 852,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 357,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 453,
+      "stdout": "max=9\nmin=-2\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn main() -> Result<Unit, String>\n  let input = io.read_to_end()\n  let tokens = string.split_whitespace(input)\n  let n = tokens.len()\n  if n == 0\n    Err(\"no input\")\n  else\n    mut i = 0\n    mut max_val = 0\n    mut min_val = 0\n    mut first = true\n    while i < n\n      let tok = match tokens.get(i)\n      when Some(t)\n        t\n      when None\n        \"\"\n      end\n      let parsed = string.parse_int(tok)\n      let v = match parsed\n      when Some(x)\n        x\n      when None\n        0\n      end\n      if first\n        max_val = v\n        min_val = v\n        first = false\n      else\n        if v > max_val\n          max_val = v\n        end\n        if v < min_val\n          min_val = v\n        end\n      end\n      i = i + 1\n    end\n    println(\"max=#{max_val}\")\n    println(\"min=#{min_val}\")\n    Ok(())\n  end\nend",
+  "overall": "pass"
+}

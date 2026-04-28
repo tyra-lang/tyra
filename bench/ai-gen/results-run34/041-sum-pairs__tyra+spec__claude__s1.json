@@ -1,0 +1,36 @@
+{
+  "prompt_id": "041-sum-pairs",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777306999,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 13860,
+      "code_len": 626,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 443,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 542,
+      "stdout": "1+10=11\n2+20=22\n3+30=33\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line1 = io.read_line().ok_or(\"failed to read line 1\")?\n  let line2 = io.read_line().ok_or(\"failed to read line 2\")?\n\n  let parts1 = string.split_whitespace(line1)\n  let parts2 = string.split_whitespace(line2)\n\n  mut i = 0\n  while i < parts1.len()\n    let s1 = parts1.get(i).ok_or(\"index out of bounds\")?\n    let s2 = parts2.get(i).ok_or(\"index out of bounds\")?\n    let n1 = string.parse_int(s1).ok_or(\"parse error\")?\n    let n2 = string.parse_int(s2).ok_or(\"parse error\")?\n    let sum = n1 + n2\n    println(\"#{n1}+#{n2}=#{sum}\")\n    i = i + 1\n  end\n  Ok(())\nend",
+  "overall": "pass"
+}

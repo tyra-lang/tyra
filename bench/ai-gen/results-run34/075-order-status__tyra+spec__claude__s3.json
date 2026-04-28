@@ -1,0 +1,36 @@
+{
+  "prompt_id": "075-order-status",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777311850,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 26815,
+      "code_len": 986,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 459,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 457,
+      "stdout": "PaidShippedShippedDelivered",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "type OrderStatus =\n  | Pending\n  | Paid\n  | Shipped\n  | Delivered\n  | Cancelled\n\nfn next(_ status: OrderStatus, _ event: String) -> OrderStatus\n  if event == \"cancel\"\n    OrderStatus.Cancelled\n  else\n    match status\n    when Pending\n      if event == \"pay\"\n        OrderStatus.Paid\n      else\n        status\n      end\n    when Paid\n      if event == \"ship\"\n        OrderStatus.Shipped\n      else\n        status\n      end\n    when Shipped\n      if event == \"deliver\"\n        OrderStatus.Delivered\n      else\n        status\n      end\n    when _\n      status\n    end\n  end\nend\n\nfn label(_ status: OrderStatus) -> String\n  match status\n  when Pending\n    \"Pending\"\n  when Paid\n    \"Paid\"\n  when Shipped\n    \"Shipped\"\n  when Delivered\n    \"Delivered\"\n  when Cancelled\n    \"Cancelled\"\n  end\nend\n\nfn main() -> Unit\n  mut status = OrderStatus.Pending\n  let events = [\"pay\", \"ship\", \"unknown\", \"deliver\"]\n  for event in events\n    status = next(status, event)\n    print(label(status))\n  end\nend",
+  "overall": "pass"
+}

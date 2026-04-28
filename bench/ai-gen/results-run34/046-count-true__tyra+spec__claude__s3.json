@@ -1,0 +1,36 @@
+{
+  "prompt_id": "046-count-true",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777309409,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 22658,
+      "code_len": 205,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 397,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 454,
+      "stdout": "trues=4",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "fn main() -> Unit\n  let items: List<Bool> = [true, false, true, true, false, true, false]\n  mut count = 0\n  for item in items\n    if item\n      count = count + 1\n    end\n  end\n  print(\"trues=#{count}\")\nend",
+  "overall": "pass"
+}

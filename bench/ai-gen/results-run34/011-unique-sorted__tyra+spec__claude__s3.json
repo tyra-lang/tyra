@@ -1,0 +1,36 @@
+{
+  "prompt_id": "011-unique-sorted",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777303457,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 63926,
+      "code_len": 1505,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 400,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 496,
+      "stdout": "1 2 3 4 5 6 9\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport list\nimport string\n\nfn remove_first(_ nums: List<Int>, _ target: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut found = false\n  mut i = 0\n  let n = nums.len()\n  while i < n\n    match nums.get(i)\n    when Some(val)\n      if val == target and not found\n        found = true\n      else\n        result = list.push(result, val)\n      end\n    when None\n      i = n\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn dedup(_ nums: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  for n in nums\n    if not list.contains(result, n)\n      result = list.push(result, n)\n    end\n  end\n  result\nend\n\nfn sort_asc(_ nums: List<Int>) -> List<Int>\n  mut sorted: List<Int> = []\n  mut remaining = nums\n  while remaining.len() > 0\n    match list.min(remaining)\n    when Some(min_val)\n      sorted = list.push(sorted, min_val)\n      remaining = remove_first(remaining, min_val)\n    when None\n      remaining = []\n    end\n  end\n  sorted\nend\n\nlet input = io.read_to_end()\nlet tokens = string.split_whitespace(input)\nmut nums: List<Int> = []\nfor token in tokens\n  match string.parse_int(token)\n  when Some(n)\n    nums = list.push(nums, n)\n  when None\n    # skip non-integer tokens\n  end\nend\n\nlet unique = dedup(nums)\nlet sorted = sort_asc(unique)\n\nmut output = \"\"\nmut i = 0\nlet total = sorted.len()\nwhile i < total\n  match sorted.get(i)\n  when Some(val)\n    if i == 0\n      output = \"#{val}\"\n    else\n      output = \"#{output} #{val}\"\n    end\n  when None\n    i = total\n  end\n  i = i + 1\nend\nprintln(output)",
+  "overall": "pass"
+}

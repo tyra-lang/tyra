@@ -1,0 +1,36 @@
+{
+  "prompt_id": "035-string-length",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777304817,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 9286,
+      "code_len": 200,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 387,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 454,
+      "stdout": "len=5\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let line = match io.read_line()\n  when Some(s)\n    s\n  when None\n    \"\"\n  end\n  let n = string.len(line)\n  println(\"len=#{n}\")\n  Ok(())\nend",
+  "overall": "pass"
+}

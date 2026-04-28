@@ -1,0 +1,36 @@
+{
+  "prompt_id": "029-count-word",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777304490,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 23304,
+      "code_len": 425,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 388,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 443,
+      "stdout": "count=3",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nlet maybe_target = io.read_line()\nlet target = match maybe_target\nwhen Some(t)\n  string.trim(t)\nwhen None\n  \"\"\nend\n\nlet body = io.read_to_end()\nlet tokens = string.split_whitespace(body)\n\nmut count = 0\nmut i = 0\nwhile i < tokens.len()\n  let tok = match tokens.get(i)\n  when Some(t)\n    t\n  when None\n    \"\"\n  end\n  if tok == target\n    count = count + 1\n  end\n  i = i + 1\nend\n\nprint(\"count=#{count}\")",
+  "overall": "pass"
+}

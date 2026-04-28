@@ -1,0 +1,36 @@
+{
+  "prompt_id": "094-last-line",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777313932,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 40318,
+      "code_len": 413,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 387,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 512,
+      "stdout": "gamma",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Unit\n  mut running = true\n  mut last_line: Option<String> = None\n\n  while running\n    match io.read_line()\n    when None\n      running = false\n    when Some(l)\n      let stripped = string.trim(l)\n      if not string.is_empty(stripped)\n        last_line = Some(l)\n      end\n    end\n  end\n\n  match last_line\n  when Some(l)\n    print(l)\n  when None\n    print(\"(none)\")\n  end\nend",
+  "overall": "pass"
+}

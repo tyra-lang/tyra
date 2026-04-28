@@ -1,0 +1,36 @@
+{
+  "prompt_id": "026-count-lines",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777304338,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 8388,
+      "code_len": 497,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 393,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 436,
+      "stdout": "lines=3",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn main() -> Result<Unit, String>\n  let content = io.read_to_end()\n  if string.is_empty(content)\n    print(\"lines=0\")\n    Ok(())\n  else\n    let lines = string.split(content, \"\\n\")\n    let total = lines.len()\n    let last_index = total - 1\n    let last = match lines.get(last_index)\n    when Some(s)\n      s\n    when None\n      \"\"\n    end\n    let count = if string.is_empty(last)\n      total - 1\n    else\n      total\n    end\n    print(\"lines=#{count}\")\n    Ok(())\n  end\nend",
+  "overall": "pass"
+}

@@ -1,0 +1,26 @@
+{
+  "prompt_id": "039-sum-digits",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777306083,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 889970,
+      "code_len": 58,
+      "error": null
+    },
+    "compile": {
+      "ok": false,
+      "duration_ms": 13,
+      "stderr": "error[E0101]: expected newline or end of file\n  --> main.tyra:1:5\n  |\n1 | API Error: Stream idle timeout - partial response received\n  |     ^^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n  --> main.tyra:1:10\n  |\n1 | API Error: Stream idle timeout - partial response received\n  |          ^ expected newline here\n\nerror[E0104]: expected expression, found `:`\n  --> main.tyra:1:10\n  |\n1 | API Error: Stream idle timeout - partial response received\n  |          ^ expected expression\n\nerror[E0101]: expected newline or end of file\n  --> main.tyra:1:12\n  |\n1 | API Error: Stream idle timeout - partial response received\n  |            ^^^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n  --> main.tyra:1:19\n  |\n1 | API Error: Stream idle timeout - partial response received\n  |                   ^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n  --> main.tyra:1:24\n  |\n1 | API Error: Stream idle timeout - partial response received\n  |                        ^^^^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n  --> main.tyra:1:42\n  |\n1 | API Error: Stream idle timeout - partial response received\n  |                                          ^^^^^^^^ expected newline here\n\nerror[E0101]: expected newline or end of file\n  --> main.tyra:1:51\n  |\n1 | API Error: Stream idle timeout - partial response received\n  |                                                   ^^^^^^^^ expected newline here\n\n8 errors emitted\n",
+      "exit_code": 1,
+      "note": ""
+    }
+  },
+  "code": "API Error: Stream idle timeout - partial response received",
+  "overall": "compile_fail"
+}

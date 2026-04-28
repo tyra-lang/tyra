@@ -1,0 +1,36 @@
+{
+  "prompt_id": "087-set-union",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 2,
+  "timestamp": 1777313074,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 137349,
+      "code_len": 2046,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 402,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 572,
+      "stdout": "1 2 3 4 5 6 7\n",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn insert_sorted(_ sorted: List<Int>, _ x: Int) -> List<Int>\n  mut result: List<Int> = []\n  let n = sorted.len()\n  mut inserted = false\n  mut i = 0\n  while i < n\n    let current = match sorted.get(i)\n      when Some(v) v\n      when None 0\n    end\n    if not inserted and x <= current\n      result = list.push(result, x)\n      inserted = true\n    end\n    result = list.push(result, current)\n    i = i + 1\n  end\n  if not inserted\n    result = list.push(result, x)\n  end\n  result\nend\n\nfn sort_unique(_ xs: List<Int>) -> List<Int>\n  mut result: List<Int> = []\n  let n = xs.len()\n  mut i = 0\n  while i < n\n    let x = match xs.get(i)\n      when Some(v) v\n      when None 0\n    end\n    if not list.contains(result, x)\n      result = insert_sorted(result, x)\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn parse_line(_ line: String) -> List<Int>\n  let parts = string.split_whitespace(line)\n  mut nums: List<Int> = []\n  let n = parts.len()\n  mut i = 0\n  while i < n\n    let part = match parts.get(i)\n      when Some(s) s\n      when None \"\"\n    end\n    match string.parse_int(part)\n    when Some(num)\n      nums = list.push(nums, num)\n    when None\n      ()\n    end\n    i = i + 1\n  end\n  nums\nend\n\nfn join_ints(_ xs: List<Int>) -> String\n  let n = xs.len()\n  mut result = \"\"\n  mut i = 0\n  while i < n\n    let x = match xs.get(i)\n      when Some(v) v\n      when None 0\n    end\n    if i == 0\n      result = \"#{x}\"\n    else\n      result = \"#{result} #{x}\"\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn main() -> Unit\n  let line1 = match io.read_line()\n    when Some(s) s\n    when None \"\"\n  end\n  let line2 = match io.read_line()\n    when Some(s) s\n    when None \"\"\n  end\n  let nums1 = parse_line(line1)\n  let nums2 = parse_line(line2)\n  mut combined: List<Int> = nums1\n  let n2 = nums2.len()\n  mut i = 0\n  while i < n2\n    let x = match nums2.get(i)\n      when Some(v) v\n      when None 0\n    end\n    combined = list.push(combined, x)\n    i = i + 1\n  end\n  let result = sort_unique(combined)\n  println(join_ints(result))\nend",
+  "overall": "pass"
+}

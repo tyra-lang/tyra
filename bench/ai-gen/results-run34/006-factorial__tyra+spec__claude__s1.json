@@ -1,0 +1,36 @@
+{
+  "prompt_id": "006-factorial",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 1,
+  "timestamp": 1777303094,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 12666,
+      "code_len": 360,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 457,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 429,
+      "stdout": "6!=720",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\n\nfn factorial(_ n: Int) -> Int\n  if n == 0\n    1\n  else\n    n * factorial(n - 1)\n  end\nend\n\nfn main() -> Result<Unit, String>\n  let line = io.read_line().ok_or(\"no input\")?\n  let trimmed = string.trim(line)\n  let n = string.parse_int(trimmed).ok_or(\"invalid integer\")?\n  let result = factorial(n)\n  print(\"#{n}!=#{result}\")\n  Ok(())\nend",
+  "overall": "pass"
+}

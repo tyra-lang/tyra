@@ -1,0 +1,36 @@
+{
+  "prompt_id": "091-top-k",
+  "language": "tyra",
+  "generator": "claude",
+  "seed": 3,
+  "timestamp": 1777313718,
+  "inject_tyra_spec": true,
+  "model": "2.1.119 (Claude Code)",
+  "stages": {
+    "generate": {
+      "ok": true,
+      "duration_ms": 127446,
+      "code_len": 2132,
+      "error": null
+    },
+    "compile": {
+      "ok": true,
+      "duration_ms": 363,
+      "stderr": "",
+      "exit_code": 0,
+      "note": ""
+    },
+    "execute": {
+      "ok": true,
+      "duration_ms": 566,
+      "stdout": "9 6 5",
+      "stderr": "",
+      "exit_code": 0,
+      "note": "",
+      "checks_passed": true,
+      "check_details": []
+    }
+  },
+  "code": "import io\nimport string\nimport list\n\nfn find_max_idx(xs: List<Int>) -> Int\n  mut max_idx = 0\n  mut max_val = 0\n  match xs.get(0)\n  when Some(v)\n    max_val = v\n  when None\n    # empty, shouldn't happen\n  end\n  mut i = 1\n  while i < xs.len()\n    match xs.get(i)\n    when Some(v)\n      if v > max_val\n        max_val = v\n        max_idx = i\n      end\n    when None\n      # skip\n    end\n    i = i + 1\n  end\n  max_idx\nend\n\nfn remove_at(xs: List<Int>, target_idx: Int) -> List<Int>\n  mut result: List<Int> = []\n  mut i = 0\n  while i < xs.len()\n    if i != target_idx\n      match xs.get(i)\n      when Some(v)\n        result = list.push(result, v)\n      when None\n        # skip\n      end\n    end\n    i = i + 1\n  end\n  result\nend\n\nfn main() -> Result<Unit, String>\n  let line1 = match io.read_line()\n  when Some(l)\n    l\n  when None\n    \"\"\n  end\n\n  let line2 = match io.read_line()\n  when Some(l)\n    l\n  when None\n    \"\"\n  end\n\n  let parts = string.split_whitespace(line1)\n  mut nums: List<Int> = []\n  mut i = 0\n  while i < parts.len()\n    match parts.get(i)\n    when Some(s)\n      match string.parse_int(s)\n      when Some(n)\n        nums = list.push(nums, n)\n      when None\n        # skip non-integer tokens\n      end\n    when None\n      # skip\n    end\n    i = i + 1\n  end\n\n  let k = match string.parse_int(string.trim(line2))\n  when Some(n)\n    n\n  when None\n    0\n  end\n\n  let actual_k = if k > nums.len()\n    nums.len()\n  else\n    k\n  end\n\n  mut remaining = nums\n  mut result: List<Int> = []\n  mut count = 0\n\n  while count < actual_k\n    if remaining.len() == 0\n      count = actual_k\n    else\n      let idx = find_max_idx(remaining)\n      match remaining.get(idx)\n      when Some(v)\n        result = list.push(result, v)\n        remaining = remove_at(remaining, idx)\n      when None\n        count = actual_k\n      end\n      count = count + 1\n    end\n  end\n\n  mut output = \"\"\n  mut j = 0\n  while j < result.len()\n    match result.get(j)\n    when Some(v)\n      if j == 0\n        output = \"#{v}\"\n      else\n        output = \"#{output} #{v}\"\n      end\n    when None\n      # skip\n    end\n    j = j + 1\n  end\n  print(output)\n  Ok(())\nend",
+  "overall": "pass"
+}
