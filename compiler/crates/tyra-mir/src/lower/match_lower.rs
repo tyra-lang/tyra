@@ -313,6 +313,57 @@ impl super::LowerCtx {
                                     });
                                 }
                             }
+                        } else if let Some(pf) = pat_fields.first() {
+                            // Inner pattern is a literal (e.g. `when Some(10)`): after the
+                            // tag check, extract the payload and compare with the literal
+                            // value. Wildcard / Ident skip the value comparison.
+                            let inner_lit_val: Option<i64> = match &pf.pattern.kind {
+                                PatternKind::IntLit(n) => Some(*n),
+                                PatternKind::BoolLit(b) => Some(if *b { 1 } else { 0 }),
+                                _ => None,
+                            };
+                            if let Some(lit_val) = inner_lit_val {
+                                // tag matched → extract payload → compare with literal
+                                let inner_check = self.fresh_label("inner_lit_check");
+                                body.push(Instruction::BranchIf {
+                                    cond: Operand::Var(cond),
+                                    true_label: inner_check.clone(),
+                                    false_label: next_label.clone(),
+                                });
+                                body.push(Instruction::Label(inner_check));
+                                let field_index = if variant_name == "Err" { 2 } else { 1 };
+                                let payload = self.fresh_temp();
+                                body.push(Instruction::AdtPayload {
+                                    dest: payload.clone(),
+                                    obj: Operand::Var(subject.clone()),
+                                    type_name: subject_type_name,
+                                    field_index,
+                                });
+                                let lit_temp = self.fresh_temp();
+                                body.push(Instruction::Const {
+                                    dest: lit_temp.clone(),
+                                    value: Constant::Int(lit_val),
+                                });
+                                let val_cond = self.fresh_temp();
+                                body.push(Instruction::BinOp {
+                                    dest: val_cond.clone(),
+                                    op: MirBinOp::EqInt,
+                                    lhs: Operand::Var(payload),
+                                    rhs: Operand::Var(lit_temp),
+                                });
+                                body.push(Instruction::BranchIf {
+                                    cond: Operand::Var(val_cond),
+                                    true_label: arm_label.clone(),
+                                    false_label: next_label.clone(),
+                                });
+                            } else {
+                                // Ident / Wildcard inner — tag match is sufficient
+                                body.push(Instruction::BranchIf {
+                                    cond: Operand::Var(cond),
+                                    true_label: arm_label.clone(),
+                                    false_label: next_label.clone(),
+                                });
+                            }
                         } else {
                             body.push(Instruction::BranchIf {
                                 cond: Operand::Var(cond),
@@ -421,9 +472,19 @@ impl super::LowerCtx {
                 let inner_is_constructor = fields.iter().any(|pf| {
                     matches!(pf.pattern.kind, PatternKind::Constructor(_, _))
                 });
+                // Skip payload binding when inner pattern is a literal or wildcard
+                // (e.g., `when Some(10)`) — there is no named variable to bind into,
+                // and emitting `Store { dest: "" }` generates malformed LLVM IR.
+                let inner_is_literal = !fields.is_empty() && matches!(
+                    fields[0].pattern.kind,
+                    PatternKind::IntLit(_) | PatternKind::FloatLit(_)
+                        | PatternKind::StringLit(_) | PatternKind::BoolLit(_)
+                        | PatternKind::Wildcard
+                );
                 if is_prelude && !fields.is_empty()
                     && fields[0].field_name != "_"
                     && !inner_is_constructor
+                    && !inner_is_literal
                 {
                     let subject_type_name = match self
                         .generic_var_types

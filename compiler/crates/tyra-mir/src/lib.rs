@@ -1633,4 +1633,39 @@ end
             run.body
         );
     }
+
+    /// Regression: `when Some(literal)` should emit a payload value comparison
+    /// after the tag check. Previously the payload Store was emitted with empty
+    /// destination (E0500), and the literal value was never compared.
+    #[test]
+    fn some_literal_pattern_emits_payload_comparison() {
+        let source = "\
+fn check(_ opt: Option<Int>) -> Int
+  match opt
+  when Some(42)
+    1
+  when _
+    0
+  end
+end
+";
+        let prog = lower_str(source);
+        let f = prog.functions.iter().find(|f| f.name == "check").unwrap();
+        // Must emit at least one AdtPayload (extract payload for comparison)
+        // and at least one Const { value: Int(42) } for the literal check.
+        let has_payload = f.body.iter().any(|i| matches!(i, Instruction::AdtPayload { .. }));
+        let has_lit_42 = f.body.iter().any(|i| {
+            matches!(i, Instruction::Const { value: crate::ir::Constant::Int(42), .. })
+        });
+        assert!(
+            has_payload,
+            "expected AdtPayload in Some(42) arm; body = {:#?}",
+            f.body
+        );
+        assert!(
+            has_lit_42,
+            "expected Const(42) for literal comparison; body = {:#?}",
+            f.body
+        );
+    }
 }

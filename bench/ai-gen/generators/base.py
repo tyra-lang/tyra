@@ -150,6 +150,16 @@ def _load_tyra_context() -> str:
         "- **No `.unwrap()` / `.unwrap_value()` methods**. Always pattern "
         "match: `match opt when Some(x) x when None default end`. "
         "`Option`/`Result` have NO unwrap-style methods in v0.1.\n"
+        "- **`mut` declares a new binding; it is not an assignment prefix**. "
+        "Write `mut running = true` once at the outer scope. Inside loops "
+        "or match arms, update the variable with a bare assignment "
+        "`running = false` — NOT `mut running = false`. Re-using `mut` "
+        "inside an inner scope creates a new shadow variable and the outer "
+        "binding is never updated, causing logic errors.\n"
+        "- **`let` bindings are immutable**. Once `let x = expr` is "
+        "written, assigning `x = new_val` is a compile error (E0206). "
+        "If you need to mutate a binding, declare it with `mut` from the "
+        "start.\n"
     )
     _load_tyra_context._cache = context  # type: ignore[attr-defined]
     return context

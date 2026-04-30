@@ -79,6 +79,23 @@ pub(crate) fn emit_instruction(
         Instruction::BinOp { dest, op, lhs, rhs } => {
             let l = operand_ref(lhs, func);
             let r = operand_ref(rhs, func);
+
+            // If either operand is an Option/Result struct, compare discriminants
+            // (field 0, i8 tag) rather than treating the struct as i64.
+            // Handles patterns like `option_expr == None` / `option_expr != None`.
+            if matches!(op, MirBinOp::EqInt | MirBinOp::NeqInt) {
+                let lhs_stype = if let Operand::Var(n) = lhs { ctx.struct_temps.get(n.as_str()) } else { None };
+                let rhs_stype = if let Operand::Var(n) = rhs { ctx.struct_temps.get(n.as_str()) } else { None };
+                if let Some(stype) = lhs_stype.or(rhs_stype) {
+                    let llvm_ty = &ctx.struct_map[stype.as_str()].llvm_name;
+                    let cmp = if matches!(op, MirBinOp::EqInt) { "eq" } else { "ne" };
+                    writeln!(out, "  %{dest}.l_tag = extractvalue {llvm_ty} {l}, 0").unwrap();
+                    writeln!(out, "  %{dest}.r_tag = extractvalue {llvm_ty} {r}, 0").unwrap();
+                    writeln!(out, "  %{dest} = icmp {cmp} i8 %{dest}.l_tag, %{dest}.r_tag").unwrap();
+                    return;
+                }
+            }
+
             let instr = match op {
                 MirBinOp::AddInt => format!("add i64 {l}, {r}"),
                 MirBinOp::SubInt => format!("sub i64 {l}, {r}"),

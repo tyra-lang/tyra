@@ -733,6 +733,13 @@ fn pre_scan_struct_types(
                     }
                 }
             }
+            // MapGetOption produces Option<Int> — register so downstream Copy
+            // uses the struct-aware alloca+store+load path instead of `add i64`.
+            Instruction::MapGetOption { dest, .. } => {
+                if struct_map.contains_key("Option__Int") {
+                    struct_temps.insert(dest.clone(), "Option__Int".into());
+                }
+            }
             _ => {}
         }
     }

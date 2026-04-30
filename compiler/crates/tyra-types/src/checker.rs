@@ -41,6 +41,9 @@ use crate::ty::{Ability, Ty, types_compatible};
 #[derive(Debug)]
 pub struct TypeEnv {
     bindings: Vec<HashMap<String, Ty>>,
+    /// Per-scope set of `let`-bound (immutable) variable names. Parallel to
+    /// `bindings`. Assignment to these names is rejected with E0206.
+    let_bindings: Vec<HashSet<String>>,
     /// ADT variant names keyed by type name (§10.3 exhaustiveness).
     /// - User-defined: `type Color = | Red | Green | Blue` → "Color" → ["Red", "Green", "Blue"]
     /// - Prelude: "Option" → ["Some", "None"], "Result" → ["Ok", "Err"]
@@ -72,6 +75,7 @@ impl TypeEnv {
     pub fn new() -> Self {
         Self {
             bindings: vec![HashMap::new()],
+            let_bindings: vec![HashSet::new()],
             adt_variants: HashMap::new(),
             return_type_stack: Vec::new(),
             trait_methods: HashMap::new(),
@@ -96,14 +100,32 @@ impl TypeEnv {
 
     pub fn push(&mut self) {
         self.bindings.push(HashMap::new());
+        self.let_bindings.push(HashSet::new());
     }
 
     pub fn pop(&mut self) {
         self.bindings.pop();
+        self.let_bindings.pop();
     }
 
     pub fn define(&mut self, name: String, ty: Ty) {
         self.bindings.last_mut().unwrap().insert(name, ty);
+    }
+
+    pub fn define_let(&mut self, name: String, ty: Ty) {
+        self.bindings.last_mut().unwrap().insert(name.clone(), ty);
+        self.let_bindings.last_mut().unwrap().insert(name);
+    }
+
+    /// Returns true if `name` resolves to a `let` (immutable) binding
+    /// in the innermost scope where it is defined.
+    pub fn is_let_bound(&self, name: &str) -> bool {
+        for (bindings, lets) in self.bindings.iter().zip(self.let_bindings.iter()).rev() {
+            if bindings.contains_key(name) {
+                return lets.contains(name);
+            }
+        }
+        false
     }
 
     pub fn lookup(&self, name: &str) -> Option<&Ty> {
@@ -812,7 +834,7 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
                 let expected = Ty::from_type_expr(annotation);
                 check_type_match(&expected, &value_ty, s.span, report);
             }
-            env.define(s.name.clone(), value_ty);
+            env.define_let(s.name.clone(), value_ty);
         }
         Stmt::Mut(s) => {
             let value_ty = infer_expr(&s.value, env, report);
@@ -964,6 +986,18 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
 
         // Assignment
         ExprKind::Assign(lhs, rhs) => {
+            // Reject assignment to `let`-bound (immutable) variables (E0206).
+            if let ExprKind::Ident(name) = &lhs.kind {
+                if env.is_let_bound(name) {
+                    report.add(
+                        Diagnostic::error(format!(
+                            "cannot assign to `{name}` because it is not declared `mut`"
+                        ))
+                        .with_code("E0206")
+                        .with_label(Label::new(expr.span, "assignment to immutable variable")),
+                    );
+                }
+            }
             infer_expr(lhs, env, report);
             infer_expr(rhs, env, report);
             Ty::Unit
