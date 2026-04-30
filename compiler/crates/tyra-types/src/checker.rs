@@ -1221,10 +1221,25 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 env.pop();
                 arm_ty = Some(match arm_ty.take() {
                     None => this_ty,
-                    Some(prev) => match (prev, this_ty) {
-                        (Ty::Never, t) | (t, Ty::Never) => t,
-                        (Ty::Error, t) | (t, Ty::Error) => t,
-                        (a, _) => a, // first non-divergent wins (matches existing if/else policy)
+                    Some(prev) => match (&prev, &this_ty) {
+                        (Ty::Never, _) => this_ty,
+                        (_, Ty::Never) => prev,
+                        (Ty::Error, _) => this_ty,
+                        (_, Ty::Error) => prev,
+                        _ => {
+                            if !types_compatible(&prev, &this_ty) {
+                                report.add(
+                                    Diagnostic::error(format!(
+                                        "match arms have incompatible types: `{}` vs `{}`",
+                                        prev.display_name(),
+                                        this_ty.display_name()
+                                    ))
+                                    .with_code("E0305")
+                                    .with_label(Label::new(m.span, "mismatched arm types")),
+                                );
+                            }
+                            prev
+                        }
                     },
                 });
             }
