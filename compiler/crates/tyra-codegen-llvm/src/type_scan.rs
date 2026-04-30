@@ -89,7 +89,7 @@ pub(crate) fn scan_function_types(
 ) -> ScanResult {
     let (mut string_temps, mut float_temps, mut bool_temps) =
         scan_primitive_temps(func, struct_map, fn_sigs);
-    let struct_temps = pre_scan_struct_types(func, struct_map, fn_sigs);
+    let mut struct_temps = pre_scan_struct_types(func, struct_map, fn_sigs);
     let mut alloca_llvm_types = pre_scan_alloca_llvm_types(
         func,
         &string_temps,
@@ -105,6 +105,10 @@ pub(crate) fn scan_function_types(
         &mut bool_temps,
         &mut alloca_llvm_types,
     );
+    // Propagate struct types from alloca_llvm_types to Load destinations that
+    // pre_scan_struct_types missed (ordering dependency: the Store that typed
+    // the alloca may appear after the Load in the instruction sequence).
+    propagate_struct_types_from_allocas(func, &mut struct_temps, &alloca_llvm_types, struct_map);
     ScanResult {
         string_temps,
         float_temps,
@@ -689,9 +693,16 @@ fn pre_scan_struct_types(
                 }
             }
             Instruction::Store { dest, value } => {
-                if let Operand::Var(name) = value {
-                    if let Some(stype) = struct_temps.get(name).cloned() {
-                        alloca_types.insert(dest.clone(), stype);
+                // First-store-wins: the first value stored into an alloca determines
+                // its struct type for downstream Load propagation. Later stores (e.g.
+                // `tokens = []` in a None arm after an initial `mut tokens: List<String> = []`)
+                // may store a different concrete monomorphization (List__Int vs List__String)
+                // and must not override the authoritative first-store type.
+                if !alloca_types.contains_key(dest) {
+                    if let Operand::Var(name) = value {
+                        if let Some(stype) = struct_temps.get(name).cloned() {
+                            alloca_types.insert(dest.clone(), stype);
+                        }
                     }
                 }
             }
@@ -747,6 +758,39 @@ fn pre_scan_struct_types(
     struct_temps
 }
 
+/// Propagate struct types from alloca_llvm_types to Load destinations.
+///
+/// pre_scan_struct_types does a single forward pass; if the Store that types an
+/// alloca appears AFTER the Load in the instruction sequence, the Load dest does
+/// not get added to struct_temps. This pass fixes that by consulting the already-
+/// computed alloca_llvm_types (which is always correct because pre_scan_alloca_
+/// llvm_types uses first-store-wins from a complete scan).
+fn propagate_struct_types_from_allocas(
+    func: &Function,
+    struct_temps: &mut HashMap<String, String>,
+    alloca_llvm_types: &HashMap<String, String>,
+    struct_map: &HashMap<String, StructInfo>,
+) {
+    // Build reverse map: llvm_name → struct key (e.g. "%struct.List__String" → "List__String")
+    let llvm_to_struct_key: HashMap<&str, &str> = struct_map
+        .iter()
+        .map(|(k, v)| (v.llvm_name.as_str(), k.as_str()))
+        .collect();
+
+    for inst in &func.body {
+        if let Instruction::Load { dest, source } = inst {
+            if let Some(llvm_ty) = alloca_llvm_types.get(source.as_str()) {
+                if let Some(&struct_key) = llvm_to_struct_key.get(llvm_ty.as_str()) {
+                    // alloca_llvm_types uses first-store-wins, making it more authoritative
+                    // than pre_scan_struct_types's local alloca_types (which was last-store).
+                    // Always override so the Load dest gets the correct first-store type.
+                    struct_temps.insert(dest.clone(), struct_key.to_string());
+                }
+            }
+        }
+    }
+}
+
 /// Pre-scan function body to determine the LLVM type for each alloca slot.
 /// This handles match result allocas that may store strings, floats, or structs.
 fn pre_scan_alloca_llvm_types(
@@ -764,21 +808,25 @@ fn pre_scan_alloca_llvm_types(
             if alloca_llvm_types.contains_key(dest) {
                 continue; // First store determines type
             }
-            if let Operand::Var(name) = value {
+            // Always insert an explicit type so the first store wins and
+            // later stores (e.g. dead-path i64 into a ptr alloca) are skipped.
+            let ty = if let Operand::Var(name) = value {
                 if string_temps.contains(name) {
-                    alloca_llvm_types.insert(dest.clone(), "ptr".into());
+                    "ptr".into()
                 } else if float_temps.contains(name) {
-                    alloca_llvm_types.insert(dest.clone(), "double".into());
+                    "double".into()
                 } else if bool_temps.contains(name) {
-                    alloca_llvm_types.insert(dest.clone(), "i1".into());
+                    "i1".into()
                 } else if let Some(stype) = struct_temps.get(name.as_str()) {
-                    alloca_llvm_types.insert(
-                        dest.clone(),
-                        struct_map[stype.as_str()].llvm_name.clone(),
-                    );
+                    struct_map[stype.as_str()].llvm_name.clone()
+                } else {
+                    "i64".into()
                 }
-                // Otherwise default to i64 (handled in emit)
-            }
+            } else {
+                // Const operand: Int→i64, others handled by emit fallback
+                "i64".into()
+            };
+            alloca_llvm_types.insert(dest.clone(), ty);
         }
     }
 

@@ -81,9 +81,13 @@ impl super::LowerCtx {
                         vec![ok_ty.clone(), arg_type.clone()],
                     ))
                 } else {
+                    // Function does not return Result — use Int as the Ok placeholder.
+                    // Int (i64) has the same IR layout as Unit and avoids emitting an
+                    // undefined `Result__Value__String` struct that conflicts with
+                    // `Result__Int__String` at use sites.
                     Some(Ty::Generic(
                         "Result".into(),
-                        vec![Ty::Named("Value".into()), arg_type.clone()],
+                        vec![Ty::Int, arg_type.clone()],
                     ))
                 }
             }

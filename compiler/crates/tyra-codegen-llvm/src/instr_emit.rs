@@ -270,11 +270,13 @@ pub(crate) fn emit_instruction(
 
         Instruction::Store { dest, value } => {
             let val = operand_ref(value, func);
-            let llvm_ty = ctx
-                .alloca_llvm_types
-                .get(dest.as_str())
-                .map(String::as_str)
-                .unwrap_or("i64");
+            // Use the VALUE's LLVM type for the store annotation, not the
+            // destination alloca's declared type.  They differ on dead code
+            // paths (e.g. the Ok-path of `Err("msg")?` extracts i64/Unit but
+            // the match result alloca is ptr/String from another arm).  LLVM
+            // requires the store annotation to match the value's type; it does
+            // not require it to match the alloca's declared type.
+            let llvm_ty = infer_operand_type(value, ctx);
             writeln!(out, "  store {llvm_ty} {val}, ptr %{dest}").unwrap();
         }
 
