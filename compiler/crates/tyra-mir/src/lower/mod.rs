@@ -680,6 +680,51 @@ impl LowerCtx {
         t
     }
 
+    /// If the last instruction in `body` is an `AdtPayload { field_index: 1 }`
+    /// whose `dest` is `temp` (i.e. `temp` was produced by extracting the Ok
+    /// payload with `?`) AND `return_type` is `Result<T,E>`, emit
+    /// `AdtInit { Ok(temp) }` and return the new temp.  Otherwise `temp` is
+    /// already a full Result value and is returned unchanged.
+    ///
+    /// This handles `fn f() -> Result<T,E> { ... expr? }`: the `?` operator
+    /// extracts T in its Ok branch, leaving us with T instead of Result<T,E>.
+    fn maybe_wrap_ok_for_return(
+        &mut self,
+        temp: String,
+        return_type: &Ty,
+        body: &mut Vec<Instruction>,
+    ) -> String {
+        if !return_type.is_result() {
+            return temp;
+        }
+        // Only wrap when the last instruction is AdtPayload field 1 (the ?
+        // ok-extract).  Any other instruction means the value is already a
+        // full Result struct (Load from alloca, AdtInit, Call, …).
+        let is_adt_payload_ok = body.last().map_or(false, |instr| {
+            matches!(
+                instr,
+                Instruction::AdtPayload { dest, field_index: 1, .. } if dest == &temp
+            )
+        });
+        if is_adt_payload_ok {
+            let ret_type_name = return_type.monomorphized_name();
+            self.register_adt_type(return_type);
+            let ok_temp = self.fresh_temp();
+            body.push(Instruction::AdtInit {
+                dest: ok_temp.clone(),
+                type_name: ret_type_name,
+                tag: 0,
+                fields: vec![
+                    Operand::Var(temp),
+                    Operand::Const(Constant::Int(0)), // zero-placeholder for err field
+                ],
+            });
+            ok_temp
+        } else {
+            temp
+        }
+    }
+
     fn fresh_label(&mut self, prefix: &str) -> String {
         let l = format!("{prefix}_{}", self.label_counter);
         self.label_counter += 1;
@@ -874,13 +919,19 @@ impl LowerCtx {
             if return_type == Ty::Unit {
                 body.push(Instruction::Return { value: None });
             } else if let Some(last_temp) = pre_defer_last_temp {
+                // If fn returns Result<T,E> but the tail temp is T (extracted by ?),
+                // wrap it in Ok(T) so the return type matches.
+                let ret_val =
+                    self.maybe_wrap_ok_for_return(last_temp, &return_type, &mut body);
                 body.push(Instruction::Return {
-                    value: Some(Operand::Var(last_temp)),
+                    value: Some(Operand::Var(ret_val)),
                 });
             } else if let Some(expr_val) = last_expr_result {
                 // Last expression was a simple variable reference (no instruction generated)
+                let ret_val =
+                    self.maybe_wrap_ok_for_return(expr_val, &return_type, &mut body);
                 body.push(Instruction::Return {
-                    value: Some(Operand::Var(expr_val)),
+                    value: Some(Operand::Var(ret_val)),
                 });
             } else {
                 body.push(Instruction::Return { value: None });
