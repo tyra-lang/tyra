@@ -58,6 +58,13 @@ impl super::LowerCtx {
                         _ => false,
                     })
             }
+            // list[i] on a List<String> yields String
+            ExprKind::Index(obj, _) => {
+                if let Some(Ty::Generic(_, args)) = self.infer_list_type(obj) {
+                    return args.first() == Some(&Ty::String);
+                }
+                false
+            }
             _ => false,
         }
     }
