@@ -925,7 +925,20 @@ impl super::LowerCtx {
         // a typed call with a tracked return type.
         if let ExprKind::FieldAccess(obj, fn_name) = &callee.kind {
             let qualified = format!("string__{fn_name}");
-            if self.is_string_expr(obj) && self.fn_return_types.contains_key(&qualified) {
+            // Fall back to the always-linked intrinsic (__string_len etc.) when
+            // `import string` is absent so the module-qualified wrapper hasn't
+            // been registered. This lets `s.len()` work without requiring the
+            // import, matching model expectations.
+            let intrinsic = format!("__string_{fn_name}");
+            let actual_fn = if self.fn_return_types.contains_key(&qualified) {
+                Some(qualified.clone())
+            } else if self.fn_return_types.contains_key(&intrinsic) {
+                Some(intrinsic)
+            } else {
+                None
+            };
+            if let Some(resolved_fn) = actual_fn {
+            if self.is_string_expr(obj) {
                 let recv_temp = self.lower_expr(obj, body);
                 let mut arg_operands = vec![Operand::Var(recv_temp)];
                 for a in args {
@@ -933,10 +946,10 @@ impl super::LowerCtx {
                     arg_operands.push(Operand::Var(t));
                 }
                 let dest = self.fresh_temp();
-                let ret_ty = self.fn_return_types.get(&qualified).cloned();
+                let ret_ty = self.fn_return_types.get(&resolved_fn).cloned();
                 body.push(Instruction::Call {
                     dest: Some(dest.clone()),
-                    func: qualified,
+                    func: resolved_fn,
                     args: arg_operands,
                 });
                 if let Some(ref ty) = ret_ty {
@@ -954,6 +967,7 @@ impl super::LowerCtx {
                 }
                 return dest;
             }
+            } // if let Some(resolved_fn)
         }
 
         let func_name = match &callee.kind {
