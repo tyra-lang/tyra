@@ -818,11 +818,6 @@ fn pre_scan_alloca_llvm_types(
 
     for inst in &func.body {
         if let Instruction::Store { dest, value } = inst {
-            if alloca_llvm_types.contains_key(dest) {
-                continue; // First store determines type
-            }
-            // Always insert an explicit type so the first store wins and
-            // later stores (e.g. dead-path i64 into a ptr alloca) are skipped.
             let ty = if let Operand::Var(name) = value {
                 if string_temps.contains(name) {
                     "ptr".into()
@@ -836,10 +831,22 @@ fn pre_scan_alloca_llvm_types(
                     "i64".into()
                 }
             } else {
-                // Const operand: Int→i64, others handled by emit fallback
                 "i64".into()
             };
-            alloca_llvm_types.insert(dest.clone(), ty);
+
+            // Struct/ptr/double types win over scalar i64. When match arms
+            // have mismatched types (e.g. Unit vs Result<Unit,E>) the scalar
+            // arm stores i64 first; the struct arm must override so Load uses
+            // the right width. Scalar-to-scalar: first store wins (unchanged).
+            let existing = alloca_llvm_types.get(dest.as_str());
+            let should_insert = match existing {
+                None => true,
+                Some(prev) if *prev == "i64" && ty != "i64" => true,
+                _ => false,
+            };
+            if should_insert {
+                alloca_llvm_types.insert(dest.clone(), ty);
+            }
         }
     }
 
