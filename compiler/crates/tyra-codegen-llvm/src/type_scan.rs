@@ -644,6 +644,19 @@ fn pre_scan_struct_types(
                     struct_temps.insert(dest.clone(), mono);
                 }
             }
+            Instruction::ListPush {
+                dest, elem_type, ..
+            } => {
+                // list.push returns a new List<T> struct value.
+                // Without this, infer_operand_type returns "i64" for the push
+                // result, causing `store i64 %push_result, ptr %alloca` when
+                // the value is actually %struct.List__T → E0500.
+                let list_ty = Ty::Generic("List".into(), vec![elem_type.clone()]);
+                let mono = list_ty.monomorphized_name();
+                if struct_map.contains_key(mono.as_str()) {
+                    struct_temps.insert(dest.clone(), mono);
+                }
+            }
             Instruction::JoinAll {
                 dest, elem_type, ..
             } => {
