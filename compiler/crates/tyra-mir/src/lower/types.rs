@@ -65,8 +65,25 @@ impl super::LowerCtx {
                 }
                 false
             }
+            // if/else expression: String when both arms produce String
+            ExprKind::If(i) => self.if_expr_is_string(i),
             _ => false,
         }
+    }
+
+    /// Check if an if-expression produces String from both branches.
+    fn if_expr_is_string(&self, i: &IfExpr) -> bool {
+        let then_is_str = i.then_body.last().map_or(false, |s| {
+            matches!(s, Stmt::Expr(es) if self.is_string_expr(&es.expr))
+        });
+        let else_is_str = match &i.else_body {
+            Some(ElseBranch::Else(stmts)) => stmts.last().map_or(false, |s| {
+                matches!(s, Stmt::Expr(es) if self.is_string_expr(&es.expr))
+            }),
+            Some(ElseBranch::ElseIf(inner)) => self.if_expr_is_string(inner),
+            None => false,
+        };
+        then_is_str && else_is_str
     }
 
     /// Check if a function/method call returns a specific type.

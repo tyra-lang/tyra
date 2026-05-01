@@ -259,7 +259,11 @@ def main() -> int:
                         f"{prompt['id']}__{language}{spec_suffix}"
                         f"__{generator.name}__s{seed}"
                     )
+                    out_path = results_dir / f"{key}.json"
                     print(f"[{completed}] {key}", file=sys.stderr)
+                    if out_path.exists() and not getattr(args, "overwrite", False):
+                        print(f"    -> skipped (exists)", file=sys.stderr)
+                        continue
                     try:
                         result = run_one(
                             prompt=prompt,
@@ -279,7 +283,6 @@ def main() -> int:
                             "overall": "harness_error",
                             "error": f"{type(e).__name__}: {e}",
                         }
-                    out_path = results_dir / f"{key}.json"
                     with open(out_path, "w") as f:
                         json.dump(result, f, indent=2)
                     print(f"    -> {result.get('overall')}", file=sys.stderr)
