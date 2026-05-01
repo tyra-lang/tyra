@@ -126,7 +126,18 @@ impl super::LowerCtx {
 
             ExprKind::BinaryOp(lhs, op, rhs) => {
                 let l = self.lower_expr(lhs, body);
+                // Propagate ADT type from lhs to rhs so `line != None` where
+                // `line: Option<String>` constructs None as Option<String>
+                // rather than the default Option<Int>.
+                let lhs_adt_hint = self.generic_var_types.get(&l)
+                    .filter(|t| t.is_option() || t.is_result())
+                    .cloned();
+                let prev_hint = self.binding_type_hint.clone();
+                if let Some(ref adt) = lhs_adt_hint {
+                    self.binding_type_hint = Some(adt.clone());
+                }
                 let r = self.lower_expr(rhs, body);
+                self.binding_type_hint = prev_hint;
 
                 // String comparison: use strcmp-based ops
                 let is_string = self.is_string_expr(lhs) || self.is_string_expr(rhs);
