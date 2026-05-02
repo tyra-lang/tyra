@@ -606,6 +606,12 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
                     substitute_in_expr(it, renames);
                 }
             }
+            ExprKind::MapLit(entries) => {
+                for (k, v) in entries {
+                    substitute_in_expr(k, renames);
+                    substitute_in_expr(v, renames);
+                }
+            }
             ExprKind::StringInterp(parts) => {
                 for p in parts {
                     if let tyra_ast::StringPart::Expr(e) = p {
@@ -613,6 +619,14 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
                     }
                 }
             }
+            ExprKind::Index(obj, idx) => {
+                substitute_in_expr(obj, renames);
+                substitute_in_expr(idx, renames);
+            }
+            ExprKind::Propagate(e) | ExprKind::Await(e) | ExprKind::Spawn(e) => {
+                substitute_in_expr(e, renames);
+            }
+            ExprKind::Lambda(lam) => substitute_in_stmts(&mut lam.body, renames),
             _ => {}
         }
     }
@@ -722,6 +736,12 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
                     process_expr(it, counter);
                 }
             }
+            ExprKind::MapLit(entries) => {
+                for (k, v) in entries {
+                    process_expr(k, counter);
+                    process_expr(v, counter);
+                }
+            }
             ExprKind::StringInterp(parts) => {
                 for p in parts {
                     if let tyra_ast::StringPart::Expr(e) = p {
@@ -729,6 +749,14 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
                     }
                 }
             }
+            ExprKind::Index(obj, idx) => {
+                process_expr(obj, counter);
+                process_expr(idx, counter);
+            }
+            ExprKind::Propagate(e) | ExprKind::Await(e) | ExprKind::Spawn(e) => {
+                process_expr(e, counter);
+            }
+            ExprKind::Lambda(lam) => process_stmts(&mut lam.body, counter),
             _ => {}
         }
     }
