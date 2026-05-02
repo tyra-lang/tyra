@@ -234,3 +234,57 @@ class Generator:
         if m:
             return m.group(1)
         return text.strip()
+
+    @staticmethod
+    def strip_leading_prose(code: str, language: str) -> str:
+        """Remove leading commentary lines before the first line of code.
+
+        Claude Code sometimes outputs a thinking sentence ("Let me rewrite
+        this cleanly:") before the actual code even when the system prompt
+        says code-only. This strips lines up to (but not including) the
+        first line that looks like Tyra (or another language) source code.
+        Only applied for languages where we know what a code line looks
+        like; falls back to returning the original for unknown languages.
+        """
+        if "tyra" not in language:
+            return code
+        # Keywords that a Tyra source file can start with.
+        code_start = re.compile(
+            r"^(import|fn |fn$|let |mut |type |data |value |#|@|\s*$)"
+        )
+        lines = code.splitlines()
+        for i, line in enumerate(lines):
+            if code_start.match(line):
+                return Generator.strip_trailing_prose(
+                    "\n".join(lines[i:]).strip(), language
+                )
+        return code
+
+    @staticmethod
+    def strip_trailing_prose(code: str, language: str) -> str:
+        """Truncate code at the first mid-body prose line.
+
+        Claude Code sometimes appends a self-correction sentence after
+        the first attempt ("Hmm, that loop logic is tangled. Let me write
+        this cleanly:") followed by a second (sometimes truncated) attempt.
+        Truncate at the first line that looks like English prose in the
+        middle of code. Prose indicator: the line ends with `:` and does
+        not contain `->` or `(` (ruling out Tyra type signatures and
+        function calls).
+        """
+        if "tyra" not in language:
+            return code
+        lines = code.splitlines()
+        result = []
+        for line in lines:
+            stripped = line.rstrip()
+            if (
+                stripped.endswith(":")
+                and "->" not in stripped
+                and "(" not in stripped
+                and not stripped.lstrip().startswith("when ")
+                and not stripped.lstrip().startswith("if ")
+            ):
+                break
+            result.append(line)
+        return "\n".join(result).rstrip()

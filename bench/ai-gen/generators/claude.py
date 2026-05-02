@@ -81,7 +81,9 @@ class ClaudeGenerator(Generator):
                 cwd="/tmp",  # Neutral cwd so project CLAUDE.md is not loaded.
             )
             raw = proc.stdout or ""
-            code = Generator.strip_fences(raw)
+            code = Generator.strip_leading_prose(
+                Generator.strip_fences(raw), language
+            )
             dur = int((time.time() - t0) * 1000)
             if proc.returncode != 0 and not code.strip():
                 return GenerateResult(

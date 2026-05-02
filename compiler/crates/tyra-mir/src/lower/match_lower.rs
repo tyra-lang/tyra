@@ -317,12 +317,14 @@ impl super::LowerCtx {
                             // Inner pattern is a literal (e.g. `when Some(10)`): after the
                             // tag check, extract the payload and compare with the literal
                             // value. Wildcard / Ident skip the value comparison.
-                            let inner_lit_val: Option<i64> = match &pf.pattern.kind {
-                                PatternKind::IntLit(n) => Some(*n),
-                                PatternKind::BoolLit(b) => Some(if *b { 1 } else { 0 }),
+                            let inner_lit_const: Option<Constant> = match &pf.pattern.kind {
+                                PatternKind::IntLit(n) => Some(Constant::Int(*n)),
+                                // Bool must use Constant::Bool so the temp is tracked in
+                                // bool_temps and emitted as i1, not i64 (avoids icmp i1/i64 mismatch).
+                                PatternKind::BoolLit(b) => Some(Constant::Bool(*b)),
                                 _ => None,
                             };
-                            if let Some(lit_val) = inner_lit_val {
+                            if let Some(lit_const) = inner_lit_const {
                                 // tag matched → extract payload → compare with literal
                                 let inner_check = self.fresh_label("inner_lit_check");
                                 body.push(Instruction::BranchIf {
@@ -342,7 +344,7 @@ impl super::LowerCtx {
                                 let lit_temp = self.fresh_temp();
                                 body.push(Instruction::Const {
                                     dest: lit_temp.clone(),
-                                    value: Constant::Int(lit_val),
+                                    value: lit_const,
                                 });
                                 let val_cond = self.fresh_temp();
                                 body.push(Instruction::BinOp {
