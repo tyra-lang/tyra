@@ -231,6 +231,37 @@ mod tests {
     }
 
     #[test]
+    fn parse_if_inline() {
+        // `if cond expr else expr end` — no newlines, all on one line
+        let source = "let n = if x > 0 x else 0 end\n";
+        let (ast, report) = parse_str(source);
+        assert!(!report.has_errors(), "inline if errors: {:?}", report.diagnostics());
+        if let Item::Stmt(Stmt::Let(s)) = &ast.items[0] {
+            assert!(matches!(s.value.kind, ExprKind::If(_)));
+        } else {
+            panic!("expected Let with If expr");
+        }
+    }
+
+    #[test]
+    fn parse_if_inline_no_else() {
+        // inline if without else (then-body is single expr, no else branch)
+        let source = "if k < n k end\n";
+        let (ast, report) = parse_str(source);
+        assert!(!report.has_errors(), "inline if no-else errors: {:?}", report.diagnostics());
+        if let Item::Stmt(Stmt::Expr(ExprStmt { expr, .. })) = &ast.items[0] {
+            if let ExprKind::If(if_expr) = &expr.kind {
+                assert!(if_expr.else_body.is_none());
+                assert_eq!(if_expr.then_body.len(), 1);
+            } else {
+                panic!("expected If");
+            }
+        } else {
+            panic!("expected Expr");
+        }
+    }
+
+    #[test]
     fn parse_match() {
         let source = "match x\nwhen 0\n  1\nwhen _\n  2\nend\n";
         let (ast, report) = parse_str(source);

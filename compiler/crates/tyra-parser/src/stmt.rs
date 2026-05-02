@@ -103,11 +103,32 @@ fn parse_defer(ts: &mut TokenStream, report: &mut Report) -> Stmt {
 // -- Control flow --
 
 /// Parse `if cond body [else if ... | else ...] end` (§10.2)
+///
+/// Supports both block form (newline after condition) and inline form
+/// (`if cond expr else expr end`) where the body is a single expression
+/// on the same line. The inline form is accepted because `when` arms
+/// already allow it and AI-generated code uses both styles.
 pub fn parse_if(ts: &mut TokenStream, report: &mut Report) -> IfExpr {
     let start = ts.advance().span; // consume 'if'
     let condition = parse_expr(ts, report);
-    ts.expect_newline_or_eof(report);
-    let then_body = parse_body(ts, report);
+
+    // Block form when newline follows; inline form otherwise.
+    // Else/End/Eof after the condition means an empty then-body (unusual but valid).
+    let then_body = if ts.eat_newline()
+        || ts.check(&TokenKind::Eof)
+        || ts.check(&TokenKind::End)
+        || ts.check(&TokenKind::Else)
+    {
+        parse_body(ts, report)
+    } else {
+        // Inline: single expression terminated by else/end (both accepted by
+        // expect_newline_or_eof as implicit block terminators).
+        let expr_start = ts.peek_span();
+        let expr = parse_expr(ts, report);
+        let stmt_span = expr_start.merge(expr.span);
+        ts.skip_newlines();
+        vec![Stmt::Expr(ExprStmt { expr, span: stmt_span })]
+    };
 
     let else_body = if ts.check(&TokenKind::Else) {
         ts.advance(); // consume 'else'
@@ -116,7 +137,8 @@ pub fn parse_if(ts: &mut TokenStream, report: &mut Report) -> IfExpr {
             let inner = parse_if(ts, report);
             Some(ElseBranch::ElseIf(Box::new(inner)))
         } else {
-            // else block
+            // else block (inline else already works: expect_newline_or_eof
+            // accepts End as an implicit terminator so parse_body handles it)
             ts.skip_newlines();
             let body = parse_body(ts, report);
             ts.expect(&TokenKind::End, report);
