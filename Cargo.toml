@@ -11,6 +11,7 @@ members = [
     "compiler/crates/tyra-driver",
     "compiler/crates/tyra-cli",
     "runtime",
+    "tools/lsp/tyra-lsp",
 ]
 resolver = "2"
 

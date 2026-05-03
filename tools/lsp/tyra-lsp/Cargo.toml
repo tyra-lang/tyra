@@ -1,0 +1,21 @@
+[package]
+name = "tyra-lsp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Language Server Protocol implementation for Tyra"
+
+[[bin]]
+name = "tyra-lsp"
+path = "src/main.rs"
+
+[dependencies]
+tower-lsp = "0.20"
+tokio = { version = "1", features = ["full"] }
+serde_json = "1"
+tyra-driver = { workspace = true }
+tyra-diagnostics = { workspace = true }
+
+[dev-dependencies]
+tower = "0.4"
+futures = "0.3"
