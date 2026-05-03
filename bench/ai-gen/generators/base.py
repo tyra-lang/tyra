@@ -209,6 +209,13 @@ def _load_tyra_context() -> str:
         "`fn list_push_str(xs, s) __list_int_push(xs, s)` and calling it "
         "will produce E0308 (type mismatch) because the intrinsic is "
         "typed for `List<Int>` only. Use `list.push` everywhere.\n"
+        "- **After `?`, the value is the INNER type — not `Option`/`Result`**. "
+        "`let line = io.read_line().ok_or(\"err\")?` unwraps the `Result<String,String>` "
+        "and binds a plain `String` to `line`. Do NOT match `line` with "
+        "`when Some(s)` / `when None` — those are `Option` patterns and "
+        "`line` is already a `String`. Matching a `String` with `Option` "
+        "patterns causes a type error (E0500 / invalid LLVM IR). After `?`, "
+        "use `line` directly as a `String`.\n"
     )
     _load_tyra_context._cache = context  # type: ignore[attr-defined]
     return context
