@@ -967,7 +967,24 @@ impl super::LowerCtx {
                 }
                 return dest;
             }
-            } // if let Some(resolved_fn)
+            } else if self.is_string_expr(obj) {
+                // String receiver but no `string__<method>` / `__string_<method>`
+                // exists.  Without this guard, the call falls through to the
+                // generic fallback below and emits a bogus `Call { func:
+                // "<recv>.<method>" }` whose return value is an untyped i64.
+                // When the AI then matches the result with `Some(_) / None`
+                // patterns (a common shape for `s.get(i)`), the lowerer emits
+                // `extractvalue %struct.Option__Int <i64>` and codegen fails
+                // with an opaque LLVM E0500.  Reject early with E0204 so the
+                // user (or the AI on retry) sees a real diagnostic pointing
+                // at the missing string method.
+                panic!(
+                    "[E0204] unknown string method `{fn_name}`: no `string.{fn_name}` \
+                     in stdlib and no `__string_{fn_name}` intrinsic. \
+                     Tyra v0.1 exposes string operations only as module functions; \
+                     check the import and the available `string.*` exports."
+                );
+            }
         }
 
         let func_name = match &callee.kind {
