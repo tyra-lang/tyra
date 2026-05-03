@@ -63,6 +63,9 @@ lcov.info
 # User project artifacts (when running examples)
 examples/**/target/
 examples/**/.tyra-cache/
+# Compiled example binaries (built from bench/static-corpus/*.tyra sources)
+examples/[0-9]*-*
+!examples/[0-9]*-*/
 
 # Generated AST/MIR dumps for debugging
 *.ast.json
@@ -215,6 +218,7 @@ docs/api/
 benchmarks/results/
 bench/ai-gen/results/*.json
 bench/ai-gen/results/*.csv
+bench/ai-gen/results-run*/
 # SUMMARY.md IS committed — it is the headline published output.
 *.bench.json
 criterion/
