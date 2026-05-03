@@ -1,0 +1,5 @@
+# 01-hello.tyra
+# The simplest possible Tyra program.
+# Validates: top-level executable statement (§6.1), print (prelude function)
+
+print("hello, tyra")

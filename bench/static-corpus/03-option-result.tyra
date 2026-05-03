@@ -1,0 +1,56 @@
+# 03-option-result.tyra
+# Option<T> and Result<T, E> usage patterns.
+# Validates: Some/None/Ok/Err (prelude), ? on Option, ? on Result with Into,
+#            .ok_or() conversion, else if, match on ADT, top-level statements (§6.1)
+
+# SPEC_REF: §17.1 — Option<T> = | Some(value: T) | None, Result<T, E> = | Ok(value: T) | Err(error: E)
+# SPEC_REF: §12.2 — ? works on both Option and Result
+# SPEC_REF: §10.2 — else if is supported, single end
+# SPEC_REF: §8.5 — ADT constructors use qualified form; Some/None/Ok/Err are prelude exceptions
+
+type LookupError =
+  | NotFound
+  | InvalidId
+
+fn find_user(_ id: Int) -> Option<String>
+  if id == 1
+    Some("alice")
+  else if id == 2
+    Some("bob")
+  else
+    None
+  end
+end
+
+# ? on Option: function returns Option<String>, so ? propagates None directly.
+fn user_greeting(_ id: Int) -> Option<String>
+  let name = find_user(id)?
+  Some("hello, #{name}")
+end
+
+# ? on Result with .ok_or(): convert Option<T> -> Result<T, E> before using ?.
+fn get_user_result(_ id: Int) -> Result<String, LookupError>
+  if id <= 0
+    Err(LookupError.InvalidId)
+  else
+    let name = find_user(id).ok_or(LookupError.NotFound)?
+    Ok(name)
+  end
+end
+
+# Top-level executable statements (no ? here, so top-level is valid)
+match user_greeting(1)
+when Some(msg)
+  print(msg)
+when None
+  print("not found")
+end
+
+match get_user_result(0)
+when Ok(name)
+  print("found: #{name}")
+when Err(NotFound)
+  print("user not found")
+when Err(InvalidId)
+  print("invalid id")
+end

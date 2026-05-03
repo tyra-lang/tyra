@@ -1,0 +1,97 @@
+# 10-data-modeling.tyra
+# data and value types with trait implementations and ability verification.
+# Validates: value/data distinction, copy(), mut fields, impl Stringable,
+#            Eq/Hash/Ord ability derivation, Float has NO Eq (ADR-0002),
+#            top-level statements (§6.1)
+
+# SPEC_REF: §8.6 — value: immutable fields, copy() auto-provided
+# SPEC_REF: §8.6 — data: mut fields, reference type, GC-managed
+# SPEC_REF: §8.7 — Stringable is a trait requiring explicit impl
+# SPEC_REF: §7.2 — Float has no Eq (ADR-0002); use float module for comparison
+# SPEC_REF: §8.6 — single-field value with Ord field gets Ord
+# SPEC_REF: §8.6 — data field update requires mut field AND mut binding
+# SPEC_REF: §9.3 — function parameters are always immutable; rebind with mut inside
+
+value Point
+  x: Float
+  y: Float
+end
+
+# Point does NOT get Eq because Float has no Eq (ADR-0002).
+# Point does NOT get Hash (requires Eq).
+# Point does NOT get Ord (two fields).
+# Point DOES get Debug (Float has Debug).
+
+value UserId
+  id: Int
+end
+
+# UserId gets Eq (Int has Eq), Hash (Int has Hash), Ord (single field, Int has Ord).
+
+data User
+  id: UserId
+  mut name: String
+  mut email: String
+end
+
+# User gets Eq (all fields have Eq).
+# User does NOT get Hash (has mut fields).
+# User does NOT get Ord (data types never get Ord).
+
+impl Stringable for Point
+  fn to_string(self) -> String
+    "(#{self.x}, #{self.y})"
+  end
+end
+
+impl Stringable for User
+  fn to_string(self) -> String
+    # Chained field access: self.id is UserId, .id accesses Int field
+    "User(#{self.id.id}, #{self.name})"
+  end
+end
+
+fn distance_squared(_ a: Point, _ b: Point) -> Float
+  let dx = a.x - b.x
+  let dy = a.y - b.y
+  dx * dx + dy * dy
+end
+
+# Function parameters are immutable bindings (§9.3).
+# For data field mutation, rebind to mut inside the function body.
+# Since data is a reference type, mut u = user creates a new binding
+# to the same GC-managed object — the mutation is visible to the caller.
+fn rename(_ user: User, _ new_name: String) -> Unit
+  mut u = user
+  u.name = new_name
+end
+
+# Top-level executable statements
+let origin = Point(x: 0.0, y: 0.0)
+let p = Point(x: 3.0, y: 4.0)
+let p2 = p.copy(x: 1.0)
+
+print(origin.to_string())
+print(p.to_string())
+print(p2.to_string())
+
+let dist_sq = distance_squared(origin, p)
+print("distance squared: #{dist_sq}")
+
+# Float has no Eq, so Point == Point is NOT valid.
+# Use float module functions for comparison instead:
+#   import float
+#   float.eq(origin.x, p.x) and float.eq(origin.y, p.y)
+
+mut user = User(id: UserId(id: 1), name: "alice", email: "alice@example.com")
+rename(user, "alice smith")
+print(user.to_string())
+
+# UserId has Ord (single-field value with Int), so < is valid
+let id1 = UserId(id: 1)
+let id2 = UserId(id: 2)
+if id1 < id2
+  print("id1 is smaller")
+else
+  print("id2 is smaller or equal")
+end

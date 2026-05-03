@@ -1,0 +1,49 @@
+# 06-cli-args.tyra
+# Command-line argument parsing.
+# Validates: core.sys.args, List safe access .get(), for loop, match on String,
+#            parse turbofish, .ok_or(), ? on Result, Unit literal ()
+
+# SPEC_REF: §17.1 — core.sys provides args(), env(), exit()
+# SPEC_REF: §11 — items[index] panics on OOB; items.get(index) returns Option<T>
+# SPEC_REF: §8.4 — turbofish: parse::<Int>(text)
+# SPEC_REF: §7.2 — () is the Unit literal
+
+import core.sys
+
+type CliError =
+  | MissingCommand
+  | UnknownCommand(name: String)
+  | MissingArg(name: String)
+  | InvalidArg(name: String, value: String)
+
+fn run_serve(_ args: List<String>) -> Result<Unit, CliError>
+  let port_str = args.get(2).ok_or(CliError.MissingArg(name: "port"))?
+  let port = parse::<Int>(port_str).ok_or(
+    CliError.InvalidArg(name: "port", value: port_str)
+  )?
+  print("serving on port #{port}")
+  Ok(())
+end
+
+fn run_help() -> Result<Unit, CliError>
+  print("usage: myapp <command> [args]")
+  print("commands:")
+  print("  serve <port>  start the server")
+  print("  help          show this message")
+  Ok(())
+end
+
+fn main() -> Result<Unit, CliError>
+  let args = sys.args()
+  let command = args.get(1).ok_or(CliError.MissingCommand)?
+
+  # match is the last expression; all branches return Result<Unit, CliError>
+  match command
+  when "serve"
+    run_serve(args)
+  when "help"
+    run_help()
+  when _
+    Err(CliError.UnknownCommand(name: command))
+  end
+end

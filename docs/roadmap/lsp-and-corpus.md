@@ -1,0 +1,112 @@
+# Roadmap: LSP and Static Corpus
+
+## Status
+
+| Track | Phase | Status |
+|-------|-------|--------|
+| Static Corpus | Initial files (01–10) | ✅ Done |
+| LSP | Scaffold / `initialize` stub | ✅ Done |
+| LSP | Diagnostics (syntax errors on save) | ✅ Done |
+| LSP | Hover (type of identifier) | ⬜ Not started |
+| LSP | Go to definition | ⬜ Not started |
+| LSP | Completion | ⬜ Not started |
+| Static Corpus | Break / control-flow programs | ⬜ Not started |
+| Static Corpus | CI integration (`check.sh` in workflow) | ⬜ Not started |
+
+---
+
+## Static Corpus
+
+### Goal
+
+Maintain a growing set of **human-written, compiler-verified** Tyra programs
+separate from AI-generated benchmark output.  Changes to the compiler should
+never silently break these programs.
+
+### Location
+
+`bench/static-corpus/`
+
+### Short-term tasks (next 1–2 cycles)
+
+1. **CI hook** — add `bench/static-corpus/check.sh` as a step in the GitHub
+   Actions workflow so the corpus is checked on every PR.
+2. **Extend with break/continue** — add `11-break-loop.tyra` that exercises the
+   newly added `break` statement inside `while` and `for` loops.
+3. **Negative corpus** — add `bad/` subdirectory with programs that are expected
+   to produce specific error codes (E0200, E0214, etc.).  The check script can
+   validate error codes rather than compile success.
+
+### Mid-term tasks
+
+4. **Auto-generate from prompt suite** — after each AI benchmark run that
+   achieves `any_pass = 100`, promote passing AI programs to the corpus
+   (after human review).
+5. **Coverage report** — annotate which spec sections (§) are covered by at
+   least one corpus file; flag uncovered sections.
+
+---
+
+## Language Server Protocol (LSP)
+
+### Goal
+
+Provide IDE support for Tyra in VS Code (and any LSP-compatible editor) to
+improve developer ergonomics and accelerate language adoption.
+
+### Location
+
+`tools/lsp/tyra-lsp/`
+
+### Architecture
+
+```
+Editor (VS Code)
+    ↕ LSP JSON-RPC (stdin/stdout)
+tyra-lsp binary
+    ├── tower-lsp  (transport / dispatch)
+    ├── tyra-driver  (compilation pipeline)
+    │     ├── tyra-lexer
+    │     ├── tyra-parser
+    │     ├── tyra-types   (type checker — produces Ty per binding)
+    │     └── tyra-diagnostics
+    └── document store  (open files, incremental parse)
+```
+
+`tyra-lsp` will reuse the existing `tyra-driver` pipeline and type-checker
+results.  The document store maintains the in-memory version of each open file
+and re-runs the pipeline on every `textDocument/didChange` notification.
+
+### Short-term tasks (next 1–2 cycles)
+
+1. **Diagnostics on save** — wire `tyra-driver` into
+   `textDocument/didOpen` + `textDocument/didChange` handlers; publish
+   `textDocument/publishDiagnostics` with compiler errors.
+2. **VS Code extension scaffold** — create `tools/lsp/vscode-tyra/` with a
+   minimal `package.json` that spawns `tyra-lsp` and registers `.tyra` file
+   associations.
+3. **Document store** — a `HashMap<Url, String>` that caches the latest source
+   text so the server can re-parse on change without hitting disk.
+
+### Mid-term tasks
+
+4. **Hover** — on `textDocument/hover`, resolve the hovered identifier's `Ty`
+   from the type environment and render a human-readable string.
+5. **Go to definition** — use `tyra-resolve` span information to jump to the
+   definition site of a name.
+6. **Completion** — in-scope bindings + imported module members.  Initially
+   keyword-only; upgrade to type-aware after hover is stable.
+
+### Dependencies
+
+- `tower-lsp 0.20` (already in `tools/lsp/tyra-lsp/Cargo.toml`)
+- `tokio` full (async runtime)
+- `tyra-driver` (reuse compilation pipeline; to be added when diagnostics land)
+
+### Known constraints
+
+- `tyra-driver` currently returns `Vec<Diagnostic>` mixed with codegen output.
+  LSP only needs the diagnostic phase, so a new `tyra_driver::check_only()`
+  entry point (stops before LLVM codegen) will be added.
+- Incremental compilation is not planned for v0.1 scope; full re-parse on each
+  edit is acceptable for files < 1 000 lines.

@@ -1,0 +1,39 @@
+# 04-http-handler.tyra
+# HTTP server with multiple route handlers.
+# Validates: import, data types, impl methods, function identifiers as
+#            values (first-class fn refs for handler registration)
+
+# SPEC_REF: §21.3 — HTTP server entry point pattern
+# SPEC_REF: §17.3.3 — http.server frozen in M11 phase 2
+#
+# v0.1 notes:
+# - Handlers are synchronous: `fn(Request) -> Response`. Async handler
+#   dispatch is deferred to a later M11 sub-phase.
+# - Listen blocks forever; example is not exercised by the CI `run` loop
+#   (would hang). Build-only verification validates that the example
+#   type-checks and compiles.
+# - `async fn` + `.await?` HTTP semantics are exercised by example 08
+#   (http.client) — no coverage gap from this file's synchronous shape.
+
+import http.server
+
+fn health_handler(_ req: Request) -> Response
+  Response(status: 200, body: "ok")
+end
+
+fn greet_handler(_ req: Request) -> Response
+  # Request.body carries the raw request body for POST; GET requests use
+  # it as the query (no dedicated query accessor in v0.1).
+  if req.body == ""
+    Response(status: 400, body: "missing body")
+  else
+    Response(status: 200, body: "hello, #{req.body}")
+  end
+end
+
+fn main() -> Result<Unit, String>
+  let app = server.new()
+  app.get("/health", health_handler)
+  app.post("/greet", greet_handler)
+  app.listen(8080)
+end

@@ -1,0 +1,54 @@
+# 05-json-parsing.tyra
+# JSON parsing with the Tier 2 `json` stdlib and Into conversion.
+# Validates: ADT qualified construction, impl Into<T>, ? with error conversion,
+#            nested match, string escape sequences, top-level statements (§6.1)
+
+# SPEC_REF: §8.5 — ADT constructors use TypeName.Variant() qualified form
+# SPEC_REF: §12.2 — ? requires E: Into<F> for error conversion
+# SPEC_REF: §8.5 — ADTs have data semantics (reference type, GC-managed) per ADR-0001
+# SPEC_REF: §7.3 — escape sequences: \n, \t, \r, \\, \", \0, \u{XXXX}
+# SPEC_REF: §17.3.2 — json module frozen in M10 phase 2 (parse + Value accessors)
+
+import json
+
+type AppError =
+  | Json(inner: JsonError)
+  | Io(message: String)
+
+impl Into<AppError> for JsonError
+  fn into(self) -> AppError
+    AppError.Json(inner: self)
+  end
+end
+
+fn parse_name(doc: json.Value) -> Result<String, JsonError>
+  let name_val = doc.get(key: "name").ok_or(
+    JsonError.MissingKey(key: "name")
+  )?
+  let name = name_val.as_string().ok_or(
+    JsonError.TypeMismatch(expected: "string", got: name_val.kind())
+  )?
+  Ok(name)
+end
+
+fn load_user_name(_ input: String) -> Result<String, AppError>
+  # json.parse returns Result<json.Value, JsonError>.
+  # ? converts JsonError -> AppError via Into.
+  let doc = json.parse(input)?
+  let name = parse_name(doc)?
+  Ok(name)
+end
+
+# Top-level executable statements (no ? here, so top-level is valid)
+match load_user_name("{\"name\": \"alice\"}")
+when Ok(name)
+  print("user: #{name}")
+when Err(Json(inner: MissingKey(key: k)))
+  print("missing key: #{k}")
+when Err(Json(inner: TypeMismatch(expected: exp, got: got)))
+  print("type error: expected #{exp}, got #{got}")
+when Err(Json(inner: ParseFailed(message: msg, line: _, col: _)))
+  print("parse failed: #{msg}")
+when Err(Io(message: msg))
+  print("io error: #{msg}")
+end

@@ -1,0 +1,56 @@
+# 07-state-machine.tyra
+# Traffic-light state machine using ADT and value types.
+# Validates: ADT with unit variants (qualified construction), value type,
+#            copy(), match exhaustiveness, Eq on unit-variant ADT, top-level (§6.1)
+
+# SPEC_REF: §8.5 — ADT constructors use qualified form: Color.Red, Color.Green
+# SPEC_REF: §8.5 — ADT with all-Eq variants auto-derives Eq (vacuously for unit variants)
+# SPEC_REF: §8.6 — value type, copy() builtin
+# SPEC_REF: §10.3 — exhaustive match on ADT; patterns are unqualified
+
+type Color =
+  | Red
+  | Yellow
+  | Green
+
+value TrafficLight
+  color: Color
+end
+
+fn next(_ light: TrafficLight) -> TrafficLight
+  match light.color
+  when Red
+    light.copy(color: Color.Green)
+  when Green
+    light.copy(color: Color.Yellow)
+  when Yellow
+    light.copy(color: Color.Red)
+  end
+end
+
+fn label(_ color: Color) -> String
+  match color
+  when Red
+    "stop"
+  when Yellow
+    "caution"
+  when Green
+    "go"
+  end
+end
+
+# Color has Eq (unit variants vacuously satisfy the requirement)
+fn color_eq(_ a: Color, _ b: Color) -> Bool
+  a == b
+end
+
+# Top-level executable statements
+let light = TrafficLight(color: Color.Red)
+let light2 = next(light)
+let light3 = next(light2)
+let light4 = next(light3)
+
+print(label(light.color))
+print(label(light2.color))
+print(label(light3.color))
+print(label(light4.color))
