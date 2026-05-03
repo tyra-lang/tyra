@@ -845,19 +845,33 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
     match stmt {
         Stmt::Let(s) => {
             let value_ty = infer_expr(&s.value, env, report);
-            if let Some(annotation) = &s.type_annotation {
+            // When a type annotation is present, use the declared type as the
+            // binding type rather than the inferred value type.  This lets the
+            // type checker resolve generic collections correctly: e.g.
+            // `let xs: List<String> = []` — the empty-list literal infers as
+            // `List<Var(0)>` (unknown element), but the annotation pins the
+            // binding to `List<String>`, allowing later `list.push` element-
+            // type checks to see the concrete element type.
+            let binding_ty = if let Some(annotation) = &s.type_annotation {
                 let expected = Ty::from_type_expr(annotation);
                 check_type_match(&expected, &value_ty, s.span, report);
-            }
-            env.define_let(s.name.clone(), value_ty);
+                expected
+            } else {
+                value_ty
+            };
+            env.define_let(s.name.clone(), binding_ty);
         }
         Stmt::Mut(s) => {
             let value_ty = infer_expr(&s.value, env, report);
-            if let Some(annotation) = &s.type_annotation {
+            // Same annotation-takes-precedence logic as Stmt::Let above.
+            let binding_ty = if let Some(annotation) = &s.type_annotation {
                 let expected = Ty::from_type_expr(annotation);
                 check_type_match(&expected, &value_ty, s.span, report);
-            }
-            env.define(s.name.clone(), value_ty);
+                expected
+            } else {
+                value_ty
+            };
+            env.define(s.name.clone(), binding_ty);
         }
         Stmt::Return(s) => {
             // For bare `return`, actual is definitively Unit — no deferral needed.
