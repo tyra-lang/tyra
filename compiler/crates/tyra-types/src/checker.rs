@@ -1048,6 +1048,39 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             if let ExprKind::FieldAccess(obj, method) = &callee.kind {
                 let obj_ty = infer_expr(obj, env, report);
                 check_trait_method_call(&obj_ty, method, expr.span, env, report);
+
+                // Special-case: module-qualified List mutations.
+                // `list.push(xs: List<T>, x)` and `list.push_str` require the
+                // element argument to match the list's element type.  The
+                // generic method-call interceptor below intentionally skips
+                // argument type-checking (to avoid cascading errors for
+                // unresolved method returns), but that also silences `List<T>`
+                // × wrong-type-element mismatches that would otherwise reach
+                // LLVM and produce an opaque E0500.  We handle this case here
+                // before falling through to the Ty::Error return.
+                if let ExprKind::Ident(module_name) = &obj.kind {
+                    if module_name == "list"
+                        && matches!(method.as_str(), "push" | "push_str")
+                        && args.len() == 2
+                    {
+                        let list_ty = infer_expr(&args[0].value, env, report);
+                        let elem_ty = infer_expr(&args[1].value, env, report);
+                        if let Ty::Generic(name, params) = &list_ty {
+                            if name == "List" {
+                                if let Some(expected) = params.first() {
+                                    check_type_match(
+                                        expected,
+                                        &elem_ty,
+                                        args[1].span,
+                                        report,
+                                    );
+                                }
+                            }
+                        }
+                        return list_ty;
+                    }
+                }
+
                 // Still infer arg types so argument errors surface.
                 for arg in args {
                     infer_expr(&arg.value, env, report);
