@@ -51,6 +51,8 @@ pub struct TypeEnv {
     /// Stack of enclosing function return types (for `return` stmt and `?` operator checks).
     /// Top of stack = innermost enclosing function. Empty when not inside any fn body.
     return_type_stack: Vec<Ty>,
+    /// Nesting depth of while/for loops; non-zero means `break` is valid.
+    loop_depth: u32,
     /// Trait name → required method names (§8.7).
     /// Populated by register_trait from TraitDef definitions.
     trait_methods: HashMap<String, Vec<String>>,
@@ -78,6 +80,7 @@ impl TypeEnv {
             let_bindings: vec![HashSet::new()],
             adt_variants: HashMap::new(),
             return_type_stack: Vec::new(),
+            loop_depth: 0,
             trait_methods: HashMap::new(),
             trait_impls: HashMap::new(),
             into_impls: HashSet::new(),
@@ -96,6 +99,18 @@ impl TypeEnv {
 
     pub fn current_return_type(&self) -> Option<&Ty> {
         self.return_type_stack.last()
+    }
+
+    pub fn enter_loop(&mut self) {
+        self.loop_depth += 1;
+    }
+
+    pub fn exit_loop(&mut self) {
+        self.loop_depth = self.loop_depth.saturating_sub(1);
+    }
+
+    pub fn in_loop(&self) -> bool {
+        self.loop_depth > 0
     }
 
     pub fn push(&mut self) {
@@ -879,6 +894,15 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
         Stmt::Defer(s) => {
             infer_expr(&s.expr, env, report);
         }
+        Stmt::Break(s) => {
+            if !env.in_loop() {
+                report.add(
+                    Diagnostic::error("`break` used outside of a loop")
+                        .with_code("E0214")
+                        .with_label(Label::new(s.span, "`break` is only valid inside while/for")),
+                );
+            }
+        }
         Stmt::Expr(s) => {
             infer_expr(&s.expr, env, report);
         }
@@ -1248,10 +1272,12 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
         ExprKind::For(f) => {
             infer_expr(&f.iter, env, report);
             env.push();
+            env.enter_loop();
             env.define(f.binding.clone(), Ty::Error); // element type unknown without generics
             for stmt in &f.body {
                 check_stmt(stmt, env, report);
             }
+            env.exit_loop();
             env.pop();
             Ty::Unit
         }
@@ -1268,9 +1294,11 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 );
             }
             env.push();
+            env.enter_loop();
             for stmt in &w.body {
                 check_stmt(stmt, env, report);
             }
+            env.exit_loop();
             env.pop();
             Ty::Unit
         }

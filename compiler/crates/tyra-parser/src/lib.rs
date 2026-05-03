@@ -262,6 +262,36 @@ mod tests {
     }
 
     #[test]
+    fn parse_break_token_recognized() {
+        // `break` inside a while body should parse without errors
+        let source = "while true\n  break\nend\n";
+        let (ast, report) = parse_str(source);
+        assert!(!report.has_errors(), "break parse errors: {:?}", report.diagnostics());
+        if let Item::Stmt(Stmt::Expr(ExprStmt { expr, .. })) = &ast.items[0] {
+            if let ExprKind::While(w) = &expr.kind {
+                assert!(matches!(w.body[0], Stmt::Break(_)));
+            } else {
+                panic!("expected While");
+            }
+        } else {
+            panic!("expected Expr");
+        }
+    }
+
+    #[test]
+    fn parse_break_in_while_with_condition() {
+        // break inside an if inside a while
+        let source = "while true\n  if x > 0\n    break\n  end\nend\n";
+        let (ast, report) = parse_str(source);
+        assert!(!report.has_errors(), "break-in-if errors: {:?}", report.diagnostics());
+        if let Item::Stmt(Stmt::Expr(ExprStmt { expr, .. })) = &ast.items[0] {
+            assert!(matches!(expr.kind, ExprKind::While(_)));
+        } else {
+            panic!("expected While");
+        }
+    }
+
+    #[test]
     fn parse_match() {
         let source = "match x\nwhen 0\n  1\nwhen _\n  2\nend\n";
         let (ast, report) = parse_str(source);

@@ -381,9 +381,11 @@ impl super::LowerCtx {
                     }
 
                     // User's loop body
+                    self.loop_exit_stack.push(end_label.clone());
                     for stmt in &f.body {
                         self.lower_stmt(stmt, body);
                     }
+                    self.loop_exit_stack.pop();
 
                     // Increment: i = i + 1
                     let one = self.fresh_temp();
@@ -413,6 +415,7 @@ impl super::LowerCtx {
                     // Same invariant as the list branch: a pre-existing
                     // slot for `f.binding` must be type-compatible with
                     // `iter_val`. Upheld by the type checker today.
+                    let stub_end = self.fresh_label("for_end");
                     self.local_binding_names.insert(f.binding.clone());
                     if self.pattern_vars.contains(&f.binding)
                         || self.mut_vars.contains(&f.binding)
@@ -427,9 +430,12 @@ impl super::LowerCtx {
                             source: iter_val,
                         });
                     }
+                    self.loop_exit_stack.push(stub_end.clone());
                     for stmt in &f.body {
                         self.lower_stmt(stmt, body);
                     }
+                    self.loop_exit_stack.pop();
+                    body.push(Instruction::Label(stub_end));
                 }
 
                 let dest = self.fresh_temp();
@@ -459,9 +465,11 @@ impl super::LowerCtx {
                     false_label: end_label.clone(),
                 });
                 body.push(Instruction::Label(format!("{loop_label}_body")));
+                self.loop_exit_stack.push(end_label.clone());
                 for stmt in &w.body {
                     self.lower_stmt(stmt, body);
                 }
+                self.loop_exit_stack.pop();
                 body.push(Instruction::Jump { label: loop_label });
                 body.push(Instruction::Label(end_label));
 

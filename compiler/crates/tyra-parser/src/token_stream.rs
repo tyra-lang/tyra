@@ -296,6 +296,7 @@ pub fn kind_name(kind: &TokenKind) -> &'static str {
         TokenKind::For => "`for`",
         TokenKind::In => "`in`",
         TokenKind::While => "`while`",
+        TokenKind::Break => "`break`",
         TokenKind::Return => "`return`",
         TokenKind::Defer => "`defer`",
         TokenKind::Async => "`async`",

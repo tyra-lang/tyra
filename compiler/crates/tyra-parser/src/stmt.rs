@@ -15,6 +15,7 @@ pub fn parse_stmt(ts: &mut TokenStream, report: &mut Report) -> Stmt {
         TokenKind::Mut => parse_mut(ts, report),
         TokenKind::Return => parse_return(ts, report),
         TokenKind::Defer => parse_defer(ts, report),
+        TokenKind::Break => parse_break(ts, report),
         _ => {
             let start = ts.peek_span();
             let expr = parse_expr(ts, report);
@@ -98,6 +99,12 @@ fn parse_defer(ts: &mut TokenStream, report: &mut Report) -> Stmt {
     let span = start.merge(expr.span);
     ts.expect_newline_or_eof(report);
     Stmt::Defer(DeferStmt { expr, span })
+}
+
+fn parse_break(ts: &mut TokenStream, report: &mut Report) -> Stmt {
+    let span = ts.advance().span; // consume 'break'
+    ts.expect_newline_or_eof(report);
+    Stmt::Break(BreakStmt { span })
 }
 
 // -- Control flow --
@@ -251,6 +258,7 @@ fn stmt_span(stmt: &Stmt) -> Span {
         Stmt::Mut(s) => s.span,
         Stmt::Return(s) => s.span,
         Stmt::Defer(s) => s.span,
+        Stmt::Break(s) => s.span,
         Stmt::Expr(s) => s.span,
     }
 }

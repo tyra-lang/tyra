@@ -191,6 +191,8 @@ pub enum Stmt {
     Return(ReturnStmt),
     /// `defer expr`
     Defer(DeferStmt),
+    /// `break` inside a while/for loop
+    Break(BreakStmt),
     /// Expression used as a statement (value discarded)
     Expr(ExprStmt),
 }
@@ -220,6 +222,11 @@ pub struct ReturnStmt {
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeferStmt {
     pub expr: Expr,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BreakStmt {
     pub span: Span,
 }
 

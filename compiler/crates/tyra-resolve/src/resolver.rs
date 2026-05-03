@@ -52,6 +52,7 @@ fn check_stmt_restrictions(stmt: &Stmt, report: &mut Report) {
         Stmt::Let(s) => check_expr_restrictions(&s.value, report),
         Stmt::Mut(s) => check_expr_restrictions(&s.value, report),
         Stmt::Defer(s) => check_expr_restrictions(&s.expr, report),
+        Stmt::Break(_) => {}
         Stmt::Expr(s) => check_expr_restrictions(&s.expr, report),
     }
 }
@@ -252,6 +253,7 @@ fn resolve_stmt(stmt: &Stmt, scopes: &mut ScopeStack, report: &mut Report) {
         Stmt::Defer(s) => {
             resolve_expr(&s.expr, scopes, report);
         }
+        Stmt::Break(_) => {}
         Stmt::Expr(s) => {
             resolve_expr(&s.expr, scopes, report);
         }

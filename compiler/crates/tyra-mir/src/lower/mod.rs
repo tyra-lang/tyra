@@ -600,6 +600,9 @@ pub(crate) struct LowerCtx {
     pub(crate) variant_field_offsets: std::collections::HashMap<(String, String), usize>,
     /// Return type of the function currently being lowered (for ? operator)
     pub(crate) current_fn_return_type: Ty,
+    /// Stack of loop-exit labels for `break` lowering. Each while/for body
+    /// push its end_label here; `break` emits a jump to the top of the stack.
+    pub(crate) loop_exit_stack: Vec<String>,
     /// Active type hint from a `let x: T = ...` / `mut x: T = ...`
     /// annotation, used to type context-sensitive RHS expressions like
     /// a bare `None` (would otherwise default to `Option<Int>`).
@@ -664,6 +667,7 @@ impl LowerCtx {
             adt_variant_fields: std::collections::HashMap::new(),
             variant_field_offsets: std::collections::HashMap::new(),
             current_fn_return_type: Ty::Unit,
+            loop_exit_stack: Vec::new(),
             binding_type_hint: None,
             adt_struct_defs: std::collections::HashMap::new(),
             deferred_exprs: Vec::new(),
@@ -1136,6 +1140,22 @@ impl LowerCtx {
                 });
                 self.deferred_exprs.push((flag_name, d.expr.clone()));
             }
+            Stmt::Break(_) => {
+                // Jump to the innermost loop's exit label. The type checker
+                // (E0214) already rejected `break` outside loops, so the stack
+                // is guaranteed non-empty here.
+                //
+                // No dead label is emitted after the Jump: `range_terminates`
+                // skips Label instructions when walking backwards, so if-branch
+                // lowering (lower_if) correctly sees the Jump as a terminator
+                // and does not append a redundant merge-branch.
+                let exit = self
+                    .loop_exit_stack
+                    .last()
+                    .expect("break without enclosing loop (should be caught by type checker)")
+                    .clone();
+                body.push(Instruction::Jump { label: exit });
+            }
             Stmt::Expr(s) => {
                 self.lower_expr(&s.expr, body);
             }
@@ -1497,6 +1517,7 @@ fn count_defer_sites_in_stmt(s: &Stmt) -> usize {
             .as_ref()
             .map(count_defer_sites_in_expr)
             .unwrap_or(0),
+        Stmt::Break(_) => 0,
         Stmt::Expr(e) => count_defer_sites_in_expr(&e.expr),
     }
 }
@@ -1613,6 +1634,7 @@ fn collect_let_binding_counts_in_stmt(
         }
         Stmt::Expr(e) => collect_let_binding_counts_in_expr(&e.expr, out),
         Stmt::Defer(d) => collect_let_binding_counts_in_expr(&d.expr, out),
+        Stmt::Break(_) => {}
     }
 }
 
@@ -1687,6 +1709,7 @@ fn collect_pattern_bindings_in_stmt(s: &Stmt, out: &mut std::collections::HashSe
         }
         Stmt::Expr(e) => collect_pattern_bindings_in_expr(&e.expr, out),
         Stmt::Defer(d) => collect_pattern_bindings_in_expr(&d.expr, out),
+        Stmt::Break(_) => {}
     }
 }
 
