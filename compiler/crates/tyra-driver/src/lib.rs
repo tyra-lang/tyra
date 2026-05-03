@@ -17,6 +17,50 @@ pub struct CompileResult {
     pub llvm_ir: Option<String>,
 }
 
+/// Check a Tyra source supplied as an in-memory string.
+///
+/// Runs lex → parse → auto-import → rename → (optional) import-resolve
+/// → name-resolve → type-check.  Stops before MIR / LLVM codegen.
+/// Returns the diagnostic report and source map so callers can map
+/// `Span` byte offsets to line/column numbers.
+///
+/// If `workspace_dir` is `None`, filesystem import resolution is
+/// skipped (suitable for LSP single-file diagnostics).
+pub fn check_in_memory(
+    file_name: String,
+    source: String,
+    workspace_dir: Option<&Path>,
+) -> (Report, SourceMap) {
+    let mut sources = SourceMap::new();
+    let mut report = Report::new();
+
+    let source_id = sources.add(file_name, source);
+
+    let mut ast = tyra_parser::parse(source_id, &sources, &mut report);
+    if report.has_errors() {
+        return (report, sources);
+    }
+
+    auto_import_stdlib(&mut ast);
+    rename_pattern_bindings(&mut ast);
+    rename_let_shadows(&mut ast);
+
+    if let Some(dir) = workspace_dir {
+        resolve_imports(&mut ast, dir, &mut sources, &mut report);
+        if report.has_errors() {
+            return (report, sources);
+        }
+    }
+
+    tyra_resolve::resolve(&ast, &mut report);
+    if report.has_errors() {
+        return (report, sources);
+    }
+
+    tyra_types::check(&ast, &mut report);
+    (report, sources)
+}
+
 /// Compile a Tyra source file to LLVM IR text.
 pub fn compile_to_ir(source_path: &Path) -> CompileResult {
     let mut sources = SourceMap::new();
@@ -421,6 +465,7 @@ fn auto_import_stdlib(ast: &mut tyra_ast::SourceFile) {
             }
             Stmt::Expr(e) => walk_expr(&e.expr, needed),
             Stmt::Defer(d) => walk_expr(&d.expr, needed),
+            Stmt::Break(_) => {}
         }
     }
 
@@ -654,6 +699,7 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
             }
             Stmt::Expr(e) => substitute_in_expr(&mut e.expr, renames),
             Stmt::Defer(d) => substitute_in_expr(&mut d.expr, renames),
+            Stmt::Break(_) => {}
         }
     }
 
@@ -778,6 +824,7 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
             }
             Stmt::Expr(e) => process_expr(&mut e.expr, counter),
             Stmt::Defer(d) => process_expr(&mut d.expr, counter),
+            Stmt::Break(_) => {}
         }
     }
 
@@ -885,6 +932,7 @@ fn rename_let_shadows(ast: &mut tyra_ast::SourceFile) {
                         }
                     }
                     Stmt::Defer(d) => self.walk_expr(&mut d.expr, active),
+                    Stmt::Break(_) => {}
                 }
             }
         }
@@ -1086,6 +1134,7 @@ fn stmt_span(s: &tyra_ast::Stmt) -> tyra_ast::Span {
         Stmt::Return(r) => r.span.clone(),
         Stmt::Expr(e) => e.span.clone(),
         Stmt::Defer(d) => d.span.clone(),
+        Stmt::Break(b) => b.span.clone(),
     }
 }
 
@@ -1287,5 +1336,46 @@ pub fn run(source_path: &Path) -> CompileResult {
                 llvm_ir: result.llvm_ir,
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_in_memory_clean_program() {
+        let (report, _) = check_in_memory(
+            "ok.tyra".into(),
+            "fn main() -> Unit\n  print(\"hello\")\nend\n".into(),
+            None,
+        );
+        assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn check_in_memory_reports_e0110_for_import_in_fn() {
+        let (report, _) = check_in_memory(
+            "bad.tyra".into(),
+            "fn f() -> Int\n  import foo\n  0\nend\n".into(),
+            None,
+        );
+        assert!(report.has_errors());
+        let codes: Vec<&str> = report
+            .diagnostics()
+            .iter()
+            .filter_map(|d| d.code.as_deref())
+            .collect();
+        assert!(codes.contains(&"E0110"), "expected E0110, got: {codes:?}");
+    }
+
+    #[test]
+    fn check_in_memory_reports_parse_error() {
+        let (report, _) = check_in_memory(
+            "bad.tyra".into(),
+            "let x = \n".into(),
+            None,
+        );
+        assert!(report.has_errors(), "expected parse error");
     }
 }
