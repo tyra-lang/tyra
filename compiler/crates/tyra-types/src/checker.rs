@@ -1269,6 +1269,7 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
         ExprKind::If(if_expr) => check_if(if_expr, env, report),
         ExprKind::Match(m) => {
             let subject_ty = infer_expr(&m.subject, env, report);
+            check_match_pattern_compatibility(&subject_ty, m, report);
             check_match_exhaustiveness(&subject_ty, m, env, report);
             check_nested_exhaustiveness(&subject_ty, m, env, report);
             check_redundant_arms(m, report);
@@ -1689,6 +1690,64 @@ fn bind_pattern_types(pat: &Pattern, env: &mut TypeEnv) {
 /// - Nested Constructor exhaustiveness (e.g. Err(NotFound) only) not checked
 /// - Unknown Named types and generics other than Option/Result are skipped
 /// - Literal exhaustiveness (Int/String) not checked
+/// Check that match arm Constructor patterns are compatible with the subject type.
+/// Catches the common case where `?` strips a Result to `T` but the arms still
+/// use `Some(s)` / `None` or `Ok` / `Err` patterns against the plain value.
+fn check_match_pattern_compatibility(
+    subject_ty: &Ty,
+    match_expr: &MatchExpr,
+    report: &mut Report,
+) {
+    // Primitive types cannot be matched with Constructor patterns.
+    let subject_is_primitive = matches!(
+        subject_ty,
+        Ty::Int | Ty::Float | Ty::String | Ty::Unit | Ty::Bool
+    );
+    // Generic ADT names expected by the subject (e.g. "Option", "Result").
+    let subject_generic_name = match subject_ty {
+        Ty::Generic(name, _) => Some(name.as_str()),
+        _ => None,
+    };
+
+    for arm in &match_expr.arms {
+        if let PatternKind::Constructor(ctor_name, _) = &arm.pattern.kind {
+            if subject_is_primitive {
+                report.add(
+                    Diagnostic::error(format!(
+                        "pattern type mismatch: subject has type `{}` but pattern `{}` is a constructor",
+                        subject_ty.display_name(),
+                        ctor_name,
+                    ))
+                    .with_code("E0312")
+                    .with_label(Label::new(arm.pattern.span, "this constructor pattern does not match the subject type"))
+                    .with_note("the subject is a primitive type and cannot be matched with constructor patterns"),
+                );
+                return; // one error is enough
+            }
+            // Option subject matched with Result constructors (or vice versa).
+            if let Some(subj_name) = subject_generic_name {
+                let ctor_is_option = matches!(ctor_name.as_str(), "Some" | "None");
+                let ctor_is_result = matches!(ctor_name.as_str(), "Ok" | "Err");
+                let mismatch = (subj_name == "Option" && ctor_is_result)
+                    || (subj_name == "Result" && ctor_is_option);
+                if mismatch {
+                    report.add(
+                        Diagnostic::error(format!(
+                            "pattern type mismatch: subject has type `{}` but pattern `{}` belongs to `{}`",
+                            subject_ty.display_name(),
+                            ctor_name,
+                            if ctor_is_option { "Option" } else { "Result" },
+                        ))
+                        .with_code("E0312")
+                        .with_label(Label::new(arm.pattern.span, "pattern does not match subject type")),
+                    );
+                    return;
+                }
+            }
+        }
+    }
+}
+
 fn check_match_exhaustiveness(
     subject_ty: &Ty,
     match_expr: &MatchExpr,
@@ -2007,10 +2066,8 @@ fn check_redundant_arms(match_expr: &MatchExpr, report: &mut Report) {
 fn stmt_type(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) -> Ty {
     match stmt {
         Stmt::Expr(s) => infer_expr(&s.expr, env, report),
-        // `return` is divergent — control never falls through. Treat it as
-        // the bottom type so a match arm whose tail is a `return` doesn't
-        // pollute the match's overall type with Unit.
-        Stmt::Return(_) => Ty::Never,
+        // `return` and `break` are divergent — control never falls through.
+        Stmt::Return(_) | Stmt::Break(_) => Ty::Never,
         _ => Ty::Unit,
     }
 }

@@ -142,7 +142,42 @@ impl super::LowerCtx {
                             None if self.current_fn_return_type.is_option()
                                 || self.current_fn_return_type.is_result() =>
                             {
-                                self.current_fn_return_type.monomorphized_name()
+                                // Guard against family mismatch: Option pattern on Result fn
+                                // or vice versa should not inherit the fn return type.
+                                // Also skip when the subject is a known scalar (String/Float)
+                                // — using the fn return type for a scalar subject causes an
+                                // LLVM extractvalue type mismatch (ptr vs struct).
+                                if self.string_vars.contains(&subject)
+                                    || self.float_vars.contains(&subject)
+                                {
+                                    // Fall through to scalar fallback below.
+                                    let fallback = match variant_name.as_str() {
+                                        "Ok" | "Err" => Ty::Generic(
+                                            "Result".into(),
+                                            vec![Ty::Int, Ty::String],
+                                        ),
+                                        _ => Ty::Generic("Option".into(), vec![Ty::Int]),
+                                    };
+                                    self.register_adt_type(&fallback);
+                                    fallback.monomorphized_name()
+                                } else {
+                                    let fn_is_option = self.current_fn_return_type.is_option();
+                                    let pat_is_option =
+                                        matches!(variant_name.as_str(), "Some" | "None");
+                                    if fn_is_option == pat_is_option {
+                                        self.current_fn_return_type.monomorphized_name()
+                                    } else {
+                                        let fallback = match variant_name.as_str() {
+                                            "Ok" | "Err" => Ty::Generic(
+                                                "Result".into(),
+                                                vec![Ty::Int, Ty::String],
+                                            ),
+                                            _ => Ty::Generic("Option".into(), vec![Ty::Int]),
+                                        };
+                                        self.register_adt_type(&fallback);
+                                        fallback.monomorphized_name()
+                                    }
+                                }
                             }
                             None => {
                                 // Graceful fallback when upstream type
