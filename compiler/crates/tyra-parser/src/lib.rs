@@ -144,7 +144,6 @@ fn parse_item(ts: &mut TokenStream, report: &mut Report) -> Item {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tyra_ast::*;
 
     fn parse_str(source: &str) -> (SourceFile, Report) {
         let mut sources = SourceMap::new();
@@ -608,5 +607,35 @@ print("hello")
         // past Eof and index-out-of-bounds panic.
         let (_ast, report) = parse_str("let xs = [1, 2, 3\n");
         assert!(report.has_errors());
+    }
+
+    #[test]
+    fn import_inside_fn_body_emits_e0110() {
+        // `import` inside a function body must produce E0110 (not the
+        // generic E0104 "expected expression") and must not cascade into
+        // E0101 ("expected newline") on the module path token.
+        let source = "fn bad() -> Int\n  import foo.bar\n  42\nend\n";
+        let (_ast, report) = parse_str(source);
+        assert!(report.has_errors());
+        let codes: Vec<&str> = report
+            .diagnostics()
+            .iter()
+            .filter_map(|d| d.code.as_deref())
+            .collect();
+        assert!(codes.contains(&"E0110"), "expected E0110, got: {codes:?}");
+        assert!(!codes.contains(&"E0101"), "E0101 cascade should be suppressed, got: {codes:?}");
+        assert!(!codes.contains(&"E0104"), "E0104 should not fire, got: {codes:?}");
+    }
+
+    #[test]
+    fn export_inside_fn_body_emits_e0110() {
+        let source = "fn bad() -> Int\n  export fn inner() -> Int\n    0\n  end\n  0\nend\n";
+        let (_ast, report) = parse_str(source);
+        let codes: Vec<&str> = report
+            .diagnostics()
+            .iter()
+            .filter_map(|d| d.code.as_deref())
+            .collect();
+        assert!(codes.contains(&"E0110"), "expected E0110, got: {codes:?}");
     }
 }

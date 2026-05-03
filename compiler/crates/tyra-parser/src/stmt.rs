@@ -16,6 +16,39 @@ pub fn parse_stmt(ts: &mut TokenStream, report: &mut Report) -> Stmt {
         TokenKind::Return => parse_return(ts, report),
         TokenKind::Defer => parse_defer(ts, report),
         TokenKind::Break => parse_break(ts, report),
+        // `import`/`export` inside a function body is invalid (§13.2).
+        // Emit E0110 with a clear message and skip to end-of-line so we
+        // don't cascade into E0101 ("expected newline") on the module path.
+        TokenKind::Import | TokenKind::Export => {
+            let span = ts.peek_span();
+            let kw = match ts.peek() {
+                TokenKind::Import => "import",
+                _ => "export",
+            };
+            report.add(
+                tyra_diagnostics::Diagnostic::error(format!(
+                    "`{kw}` statements must appear at the top of the file, \
+                     not inside a function body"
+                ))
+                .with_code("E0110")
+                .with_label(tyra_diagnostics::Label::new(
+                    span,
+                    format!("move this `{kw}` to the top of the file, before any `fn` definitions"),
+                )),
+            );
+            // Skip remaining tokens on this line to suppress cascade errors.
+            while !matches!(
+                ts.peek(),
+                TokenKind::Newline
+                    | TokenKind::Eof
+                    | TokenKind::End
+                    | TokenKind::Else
+                    | TokenKind::When
+            ) {
+                ts.advance();
+            }
+            Stmt::Expr(ExprStmt { expr: Expr { kind: ExprKind::UnitLit, span }, span })
+        }
         _ => {
             let start = ts.peek_span();
             let expr = parse_expr(ts, report);
