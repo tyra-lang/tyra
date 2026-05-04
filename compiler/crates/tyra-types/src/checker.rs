@@ -24,6 +24,9 @@ use tyra_diagnostics::{Diagnostic, Label, Report, Span};
 
 use crate::ty::{Ability, Ty, types_compatible};
 
+/// Map from source span → inferred type, used by the LSP hover handler.
+pub type TypeIndex = HashMap<Span, Ty>;
+
 /// Type environment: holds all state used during type checking.
 ///
 /// Three distinct concerns live here for convenience — all are read from the
@@ -71,6 +74,8 @@ pub struct TypeEnv {
     /// User-defined type names (value/data/ADT). Used to distinguish user types
     /// from primitives for checks like Stringable impl requirement (E0501).
     user_defined_types: HashSet<String>,
+    /// Span → Ty map populated during type checking for LSP hover support.
+    pub(crate) type_index: TypeIndex,
 }
 
 impl TypeEnv {
@@ -86,7 +91,14 @@ impl TypeEnv {
             into_impls: HashSet::new(),
             type_abilities: HashMap::new(),
             user_defined_types: HashSet::new(),
+            type_index: HashMap::new(),
         }
+    }
+
+    /// Record the inferred type for a span (for LSP hover).
+    /// Uses entry API to prefer the first (outermost) type recorded for a span.
+    pub fn record_type(&mut self, span: Span, ty: Ty) {
+        self.type_index.entry(span).or_insert(ty);
     }
 
     pub fn push_return_type(&mut self, ty: Ty) {
@@ -253,8 +265,9 @@ impl Default for TypeEnv {
     }
 }
 
-/// Type-check a source file.
-pub fn check(file: &SourceFile, report: &mut Report) {
+/// Type-check a source file. Returns a map from source spans to inferred types
+/// for use by the LSP hover handler.
+pub fn check(file: &SourceFile, report: &mut Report) -> TypeIndex {
     let mut env = TypeEnv::new();
     register_prelude(&mut env);
     collect_top_level_types(&file.items, &mut env);
@@ -262,6 +275,7 @@ pub fn check(file: &SourceFile, report: &mut Report) {
     for item in &file.items {
         check_item(item, &mut env, report);
     }
+    env.type_index
 }
 
 /// Register prelude function types.
@@ -784,6 +798,7 @@ fn check_fn(f: &FnDef, env: &mut TypeEnv, self_ty: Option<&Ty>, report: &mut Rep
     env.push();
     for param in &f.params {
         let ty = Ty::from_type_expr(&param.type_annotation);
+        env.record_type(param.span, ty.clone());
         env.define(param.name.clone(), ty);
     }
     if f.self_param.is_some() {
@@ -859,6 +874,7 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
             } else {
                 value_ty
             };
+            env.record_type(s.span, binding_ty.clone());
             env.define_let(s.name.clone(), binding_ty);
         }
         Stmt::Mut(s) => {
@@ -871,6 +887,7 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
             } else {
                 value_ty
             };
+            env.record_type(s.span, binding_ty.clone());
             env.define(s.name.clone(), binding_ty);
         }
         Stmt::Return(s) => {
@@ -974,7 +991,11 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
         }
 
         // Identifier lookup
-        ExprKind::Ident(name) => env.lookup(name).cloned().unwrap_or(Ty::Error),
+        ExprKind::Ident(name) => {
+            let ty = env.lookup(name).cloned().unwrap_or(Ty::Error);
+            env.record_type(expr.span, ty.clone());
+            ty
+        }
 
         // Field access — deferred (needs type info about the target)
         ExprKind::FieldAccess(obj, _) => {

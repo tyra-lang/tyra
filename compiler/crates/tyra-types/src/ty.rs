@@ -191,6 +191,12 @@ impl Ty {
     }
 }
 
+impl std::fmt::Display for Ty {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.display_name())
+    }
+}
+
 /// Check if two types are compatible (assignable).
 /// Never is compatible with everything (bottom type).
 /// Error is compatible with everything (to suppress cascading errors).

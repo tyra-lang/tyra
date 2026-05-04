@@ -1,0 +1,59 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Tyra",
+  "scopeName": "source.tyra",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#numbers" },
+    { "include": "#booleans" }
+  ],
+  "repository": {
+    "comments": {
+      "name": "comment.line.double-slash.tyra",
+      "match": "//.*$"
+    },
+    "strings": {
+      "name": "string.quoted.double.tyra",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        { "name": "constant.character.escape.tyra", "match": "\\\\." },
+        {
+          "name": "variable.other.interpolation.tyra",
+          "match": "\\{[^}]*\\}"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.tyra",
+          "match": "\\b(if|else|end|while|for|in|match|when|return|break|defer|async|await)\\b"
+        },
+        {
+          "name": "keyword.declaration.tyra",
+          "match": "\\b(fn|let|mut|import|export|type|value|data|trait|impl)\\b"
+        },
+        {
+          "name": "keyword.operator.tyra",
+          "match": "\\b(and|or|not)\\b"
+        }
+      ]
+    },
+    "types": {
+      "name": "entity.name.type.tyra",
+      "match": "\\b(Int|Float|Bool|String|Rune|Bytes|Unit|Never|List|Option|Result|Some|None|Ok|Err)\\b"
+    },
+    "numbers": {
+      "name": "constant.numeric.tyra",
+      "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+    },
+    "booleans": {
+      "name": "constant.language.tyra",
+      "match": "\\b(true|false)\\b"
+    }
+  }
+}

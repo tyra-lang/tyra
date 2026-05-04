@@ -4,19 +4,27 @@ use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
-use tyra_diagnostics::Level;
+use tyra_diagnostics::{Level, SourceMap};
+use tyra_driver::{SourceId, TypeIndex};
 
 const DIAG_SOURCE: &str = "tyra";
 
+/// Cached analysis result for one open document.
+struct DocState {
+    #[allow(dead_code)] // reserved for future completion support
+    text: String,
+    sources: SourceMap,
+    type_index: TypeIndex,
+    source_id: SourceId,
+}
+
 struct TyraLsp {
     client: Client,
-    // Kept for future hover / completion support, where handlers need to
-    // re-read the latest source text without going back to disk.
+    // Per-document state: text + type index for hover, updated on every edit.
     // NOTE: writes and `analyze` calls are not atomic — if two `did_change`
-    // events race, `documents` may hold the newer text while an older
-    // diagnostic result is still in flight. A version guard should be added
-    // once hover/completion land (compare `version` before publishing).
-    documents: Mutex<HashMap<Url, String>>,
+    // events race, the store may briefly hold a stale state. A version guard
+    // should be added when incremental sync lands.
+    documents: Mutex<HashMap<Url, DocState>>,
 }
 
 impl TyraLsp {
@@ -27,22 +35,33 @@ impl TyraLsp {
             .and_then(|p| p.file_name().map(|f| f.to_string_lossy().into_owned()))
             .unwrap_or_else(|| "untitled.tyra".to_string());
 
+        let text_clone = text.clone();
+
         // Run the compiler pipeline on a blocking thread so we don't stall
         // the async executor, and catch any unexpected panics so a compiler
         // bug never brings down the LSP process.
         let result = tokio::task::spawn_blocking(move || {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                tyra_driver::check_in_memory(file_name, text, None)
+                tyra_driver::check_in_memory(file_name, text_clone, None)
             }))
         })
         .await;
 
         let lsp_diags = match result {
-            Ok(Ok((report, sources))) => report
-                .diagnostics()
-                .iter()
-                .map(|d| to_lsp_diagnostic(d, &sources))
-                .collect(),
+            Ok(Ok((report, sources, type_index, source_id))) => {
+                let diags = report
+                    .diagnostics()
+                    .iter()
+                    .map(|d| to_lsp_diagnostic(d, &sources))
+                    .collect();
+
+                self.documents.lock().await.insert(
+                    uri.clone(),
+                    DocState { text, sources, type_index, source_id },
+                );
+
+                diags
+            }
             Ok(Err(_panic_payload)) => {
                 // The compiler panicked — report it as an internal error so
                 // the user knows something went wrong and can file a bug.
@@ -57,7 +76,6 @@ impl TyraLsp {
             }
             Err(_join_err) => {
                 // The spawn_blocking task was cancelled (e.g. LSP shutdown).
-                // Don't publish anything; the client is going away anyway.
                 vec![]
             }
         };
@@ -79,20 +97,7 @@ pub(crate) fn to_lsp_diagnostic(
     let first_label = d.labels.first();
 
     let range = first_label
-        .map(|label| {
-            let (sl, sc) = sources.line_col(label.span.source, label.span.start);
-            let (el, ec) = sources.line_col(label.span.source, label.span.end);
-            Range {
-                start: Position {
-                    line: sl.saturating_sub(1),
-                    character: sc.saturating_sub(1),
-                },
-                end: Position {
-                    line: el.saturating_sub(1),
-                    character: ec.saturating_sub(1),
-                },
-            }
-        })
+        .map(|label| span_to_lsp_range(label.span, sources))
         .unwrap_or_default();
 
     let message = first_label
@@ -113,6 +118,22 @@ pub(crate) fn to_lsp_diagnostic(
     }
 }
 
+/// Convert a `Span` to an LSP `Range` using the source map.
+fn span_to_lsp_range(span: tyra_diagnostics::Span, sources: &SourceMap) -> Range {
+    let (sl, sc) = sources.line_col(span.source, span.start);
+    let (el, ec) = sources.line_col(span.source, span.end);
+    Range {
+        start: Position {
+            line: sl.saturating_sub(1),
+            character: sc.saturating_sub(1),
+        },
+        end: Position {
+            line: el.saturating_sub(1),
+            character: ec.saturating_sub(1),
+        },
+    }
+}
+
 #[tower_lsp::async_trait]
 impl LanguageServer for TyraLsp {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
@@ -121,6 +142,7 @@ impl LanguageServer for TyraLsp {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
+                hover_provider: Some(HoverProviderCapability::Simple(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -144,7 +166,6 @@ impl LanguageServer for TyraLsp {
         let uri = params.text_document.uri;
         let text = params.text_document.text;
         let version = params.text_document.version;
-        self.documents.lock().await.insert(uri.clone(), text.clone());
         self.analyze(uri, text, version).await;
     }
 
@@ -154,7 +175,6 @@ impl LanguageServer for TyraLsp {
         // TextDocumentSyncKind::FULL → changes[0].text is the entire new content.
         match params.content_changes.into_iter().next() {
             Some(change) => {
-                self.documents.lock().await.insert(uri.clone(), change.text.clone());
                 self.analyze(uri, change.text, version).await;
             }
             None => {
@@ -172,6 +192,45 @@ impl LanguageServer for TyraLsp {
         let uri = params.text_document.uri;
         self.documents.lock().await.remove(&uri);
         self.client.publish_diagnostics(uri, vec![], None).await;
+    }
+
+    async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+
+        let docs = self.documents.lock().await;
+        let state = match docs.get(uri) {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+
+        // Convert LSP 0-based Position to byte offset.
+        let offset = match state.sources.offset_at(state.source_id, pos.line, pos.character) {
+            Some(o) => o,
+            None => return Ok(None),
+        };
+
+        // Find the span in the type index that contains the cursor offset.
+        // Among all matching spans, pick the one with the smallest range
+        // (most specific) so hovering inside a complex expression shows the
+        // innermost type rather than the enclosing statement's type.
+        let best = state
+            .type_index
+            .iter()
+            .filter(|(span, _)| span.source == state.source_id && span.start <= offset && offset < span.end)
+            .min_by_key(|(span, _)| span.end - span.start);
+
+        let (span, ty) = match best {
+            Some(entry) => entry,
+            None => return Ok(None),
+        };
+
+        let range = span_to_lsp_range(*span, &state.sources);
+
+        Ok(Some(Hover {
+            contents: HoverContents::Scalar(MarkedString::String(ty.display_name())),
+            range: Some(range),
+        }))
     }
 }
 
@@ -261,6 +320,28 @@ mod tests {
         assert_eq!(lsp.source.as_deref(), Some(DIAG_SOURCE));
     }
 
+    /// Hover over a known binding returns the correct type string.
+    #[test]
+    fn hover_type_index_lookup() {
+        let src = "let x: Int = 1\n";
+        let (report, sources, type_index, source_id) =
+            tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+        assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+
+        // Hover at line 0, col 4 → inside the let statement span.
+        let offset = sources.offset_at(source_id, 0, 4).expect("offset_at failed");
+
+        let best = type_index
+            .iter()
+            .filter(|(span, _)| {
+                span.source == source_id && span.start <= offset && offset < span.end
+            })
+            .min_by_key(|(span, _)| span.end - span.start);
+
+        let (_span, ty) = best.expect("no type found at offset");
+        assert_eq!(ty.display_name(), "Int");
+    }
+
     /// Smoke test: JSON-RPC `textDocument/didOpen` with an E0110-triggering
     /// source must produce a `textDocument/publishDiagnostics` notification
     /// on the client socket that contains the E0110 code.
@@ -278,9 +359,6 @@ mod tests {
 
         // initialize — tower-lsp transitions to Initialized on the response, so no
         // separate `initialized` notification is needed for the test to work.
-        // Sending `initialized` would fire log_message, filling the capacity-1
-        // channel before analyze() can send publishDiagnostics, causing a deadlock
-        // while service.call(did_open) is still driving analyze() inline.
         let init = Request::build("initialize")
             .params(json!({"capabilities": {}}))
             .id(1)

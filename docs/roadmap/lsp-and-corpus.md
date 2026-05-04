@@ -7,7 +7,8 @@
 | Static Corpus | Initial files (01–10) | ✅ Done |
 | LSP | Scaffold / `initialize` stub | ✅ Done |
 | LSP | Diagnostics (syntax errors on save) | ✅ Done |
-| LSP | Hover (type of identifier) | ⬜ Not started |
+| LSP | Hover (type of identifier) | ✅ Done (2026-05-04) |
+| LSP | VS Code extension scaffold | ✅ Done (2026-05-04) |
 | LSP | Go to definition | ⬜ Not started |
 | LSP | Completion | ⬜ Not started |
 | Static Corpus | Break / control-flow programs | ⬜ Not started |
@@ -105,8 +106,15 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
 
 ### Known constraints
 
-- `tyra-driver` currently returns `Vec<Diagnostic>` mixed with codegen output.
-  LSP only needs the diagnostic phase, so a new `tyra_driver::check_only()`
-  entry point (stops before LLVM codegen) will be added.
+- **UTF-16 column accuracy**: `SourceMap::offset_at` treats LSP `Position.character`
+  as a UTF-8 byte column. This is correct for ASCII identifiers. Non-ASCII content
+  inside string literals is not a hover target, so the practical impact is minimal.
+  A proper UTF-16 → byte conversion should be added before shipping the extension
+  to users who write non-ASCII comments or identifiers.
 - Incremental compilation is not planned for v0.1 scope; full re-parse on each
   edit is acceptable for files < 1 000 lines.
+- Type spans for `let`/`mut` statement names are recorded at the statement-level
+  span because the AST does not carry a dedicated span for the binding name token.
+  Hovering anywhere within the `let x: T = …` line shows the binding type.
+- `check_in_memory` returns an empty `TypeIndex` when an early pipeline stage
+  (parse, resolve) fails; hover shows nothing in error files until the error is fixed.

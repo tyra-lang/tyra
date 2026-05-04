@@ -7,7 +7,7 @@
 mod checker;
 mod ty;
 
-pub use checker::{TypeEnv, check, infer_expr};
+pub use checker::{TypeEnv, TypeIndex, check, infer_expr};
 pub use ty::{Ty, types_compatible};
 
 #[cfg(test)]
@@ -28,7 +28,7 @@ mod tests {
         if report.has_errors() {
             return report;
         }
-        super::check(&ast, &mut report);
+        let _ = super::check(&ast, &mut report);
         report
     }
 

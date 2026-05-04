@@ -1,0 +1,41 @@
+{
+  "name": "vscode-tyra",
+  "displayName": "Tyra",
+  "description": "Tyra language support (syntax highlighting, diagnostics, hover types)",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Programming Languages"],
+  "activationEvents": ["onLanguage:tyra"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "tyra",
+        "aliases": ["Tyra", "tyra"],
+        "extensions": [".tyra"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "tyra",
+        "scopeName": "source.tyra",
+        "path": "./syntaxes/tyra.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

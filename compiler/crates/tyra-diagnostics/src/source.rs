@@ -93,6 +93,30 @@ impl SourceMap {
         self.files[id.index()].line_col(offset)
     }
 
+    /// Convert an LSP `Position` (0-based line/col) to a byte offset.
+    ///
+    /// `col` is treated as a UTF-8 byte column (identical to UTF-16 for
+    /// ASCII-only source). Returns `None` when `line` or `col` is out of range.
+    ///
+    /// # Known limitation
+    /// Non-ASCII characters before the cursor position will produce an incorrect
+    /// byte offset because LSP uses UTF-16 code units while this function uses
+    /// byte indices. Tyra source files are expected to be ASCII for identifiers;
+    /// the only non-ASCII content is inside string literals, which are not
+    /// hover targets.
+    pub fn offset_at(&self, id: SourceId, line: u32, col: u32) -> Option<u32> {
+        let file = &self.files[id.index()];
+        let line_idx = line as usize;
+        let line_start = *file.line_starts.get(line_idx)? as usize;
+        let col_bytes = col as usize;
+        let offset = line_start + col_bytes;
+        if offset <= file.content.len() {
+            Some(offset as u32)
+        } else {
+            None
+        }
+    }
+
     /// Get the content of a specific line (1-based), without trailing line endings.
     pub fn line_content(&self, id: SourceId, line: u32) -> &str {
         let file = &self.files[id.index()];
@@ -151,6 +175,23 @@ mod tests {
         let id = map.add("test.tyra".into(), "hello, tyra".into());
         assert_eq!(map.slice(id, 0, 5), "hello");
         assert_eq!(map.slice(id, 7, 11), "tyra");
+    }
+
+    #[test]
+    fn offset_at_basics() {
+        let mut map = SourceMap::new();
+        // "let x = 1\nlet y = 2\n" → line_starts = [0, 10, 20], content.len() = 20
+        let id = map.add("t.tyra".into(), "let x = 1\nlet y = 2\n".into());
+        // line 0 col 0 → byte 0
+        assert_eq!(map.offset_at(id, 0, 0), Some(0));
+        // line 0 col 4 → byte 4 ("x" is at col 4)
+        assert_eq!(map.offset_at(id, 0, 4), Some(4));
+        // line 1 col 0 → byte 10 (after the '\n')
+        assert_eq!(map.offset_at(id, 1, 0), Some(10));
+        // line 2 col 0 → byte 20 (EOF position — valid)
+        assert_eq!(map.offset_at(id, 2, 0), Some(20));
+        // line 3 is beyond the last line_start → None
+        assert_eq!(map.offset_at(id, 3, 0), None);
     }
 
     #[test]
