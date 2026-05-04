@@ -132,7 +132,7 @@ impl Default for ScopeStack {
 // -- Prelude definitions (§17.1) --
 
 /// Prelude functions: auto-imported, no `import` needed.
-const PRELUDE_FUNCTIONS: &[&str] = &[
+pub const PRELUDE_FUNCTIONS: &[&str] = &[
     "print",
     "println",
     "eprint",
@@ -207,10 +207,10 @@ const PRELUDE_FUNCTIONS: &[&str] = &[
 ];
 
 /// Prelude ADT constructors: unqualified access to Option/Result variants.
-const PRELUDE_CONSTRUCTORS: &[&str] = &["Some", "None", "Ok", "Err"];
+pub const PRELUDE_CONSTRUCTORS: &[&str] = &["Some", "None", "Ok", "Err"];
 
 /// Prelude types and abilities.
-const PRELUDE_TYPES: &[&str] = &[
+pub const PRELUDE_TYPES: &[&str] = &[
     // Primitive types (§7.2)
     "Int",
     "Float",

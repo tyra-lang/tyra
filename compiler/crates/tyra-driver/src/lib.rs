@@ -9,7 +9,8 @@ use std::process::Command;
 
 use tyra_diagnostics::{Report, SourceMap};
 pub use tyra_diagnostics::SourceId;
-pub use tyra_resolve::DefIndex;
+pub use tyra_resolve::{CompletionKind, DefIndex, SymbolList};
+pub use tyra_resolve::{PRELUDE_CONSTRUCTORS, PRELUDE_FUNCTIONS, PRELUDE_TYPES};
 pub use tyra_types::TypeIndex;
 
 /// Result of compilation.
@@ -24,27 +25,32 @@ pub struct CompileResult {
 ///
 /// Runs lex → parse → auto-import → rename → (optional) import-resolve
 /// → name-resolve → type-check.  Stops before MIR / LLVM codegen.
-/// Returns the diagnostic report, source map, type index, def index, and
-/// the `SourceId` of the in-memory file so callers can map `Span` byte
-/// offsets to line/column numbers, look up hover types, and jump to definitions.
+/// Returns `(Report, SourceMap, TypeIndex, DefIndex, SymbolList, SourceId)`.
+///
+/// `SymbolList` is a flat list of all user-defined names collected by the
+/// resolver, used by the LSP completion handler. Prelude names are not
+/// included there — the LSP adds them from `PRELUDE_FUNCTIONS` etc.
 ///
 /// If `workspace_dir` is `None`, filesystem import resolution is
 /// skipped (suitable for LSP single-file diagnostics).
+///
+/// TODO: convert this to a named `CheckResult` struct when the tuple grows unwieldy.
 pub fn check_in_memory(
     file_name: String,
     source: String,
     workspace_dir: Option<&Path>,
-) -> (Report, SourceMap, TypeIndex, DefIndex, SourceId) {
+) -> (Report, SourceMap, TypeIndex, DefIndex, SymbolList, SourceId) {
     let mut sources = SourceMap::new();
     let mut report = Report::new();
     let empty_type_index = TypeIndex::new();
     let empty_def_index = DefIndex::new();
+    let empty_symbols = SymbolList::new();
 
     let source_id = sources.add(file_name, source);
 
     let mut ast = tyra_parser::parse(source_id, &sources, &mut report);
     if report.has_errors() {
-        return (report, sources, empty_type_index, empty_def_index, source_id);
+        return (report, sources, empty_type_index, empty_def_index, empty_symbols, source_id);
     }
 
     auto_import_stdlib(&mut ast);
@@ -54,17 +60,17 @@ pub fn check_in_memory(
     if let Some(dir) = workspace_dir {
         resolve_imports(&mut ast, dir, &mut sources, &mut report);
         if report.has_errors() {
-            return (report, sources, empty_type_index, empty_def_index, source_id);
+            return (report, sources, empty_type_index, empty_def_index, empty_symbols, source_id);
         }
     }
 
-    let def_index = tyra_resolve::resolve(&ast, &mut report);
+    let (def_index, symbol_list) = tyra_resolve::resolve(&ast, &mut report);
     if report.has_errors() {
-        return (report, sources, empty_type_index, def_index, source_id);
+        return (report, sources, empty_type_index, def_index, symbol_list, source_id);
     }
 
     let type_index = tyra_types::check(&ast, &mut report);
-    (report, sources, type_index, def_index, source_id)
+    (report, sources, type_index, def_index, symbol_list, source_id)
 }
 
 /// Compile a Tyra source file to LLVM IR text.
@@ -1351,7 +1357,7 @@ mod tests {
 
     #[test]
     fn check_in_memory_clean_program() {
-        let (report, _, _, _, _) = check_in_memory(
+        let (report, _, _, _, _, _) = check_in_memory(
             "ok.tyra".into(),
             "fn main() -> Unit\n  print(\"hello\")\nend\n".into(),
             None,
@@ -1361,7 +1367,7 @@ mod tests {
 
     #[test]
     fn check_in_memory_reports_e0110_for_import_in_fn() {
-        let (report, _, _, _, _) = check_in_memory(
+        let (report, _, _, _, _, _) = check_in_memory(
             "bad.tyra".into(),
             "fn f() -> Int\n  import foo\n  0\nend\n".into(),
             None,
@@ -1377,7 +1383,7 @@ mod tests {
 
     #[test]
     fn check_in_memory_reports_parse_error() {
-        let (report, _, _, _, _) = check_in_memory(
+        let (report, _, _, _, _, _) = check_in_memory(
             "bad.tyra".into(),
             "let x = \n".into(),
             None,

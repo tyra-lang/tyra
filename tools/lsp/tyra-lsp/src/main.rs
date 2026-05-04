@@ -5,17 +5,21 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 use tyra_diagnostics::{Level, SourceMap};
-use tyra_driver::{DefIndex, SourceId, TypeIndex};
+use tyra_driver::{
+    CompletionKind, DefIndex, SourceId, SymbolList, TypeIndex,
+    PRELUDE_CONSTRUCTORS, PRELUDE_FUNCTIONS, PRELUDE_TYPES,
+};
 
 const DIAG_SOURCE: &str = "tyra";
 
 /// Cached analysis result for one open document.
 struct DocState {
-    #[allow(dead_code)] // reserved for future completion support
+    #[allow(dead_code)] // available for future use (e.g. incremental parse)
     text: String,
     sources: SourceMap,
     type_index: TypeIndex,
     def_index: DefIndex,
+    symbols: SymbolList,
     source_id: SourceId,
 }
 
@@ -49,7 +53,7 @@ impl TyraLsp {
         .await;
 
         let lsp_diags = match result {
-            Ok(Ok((report, sources, type_index, def_index, source_id))) => {
+            Ok(Ok((report, sources, type_index, def_index, symbols, source_id))) => {
                 let diags = report
                     .diagnostics()
                     .iter()
@@ -58,7 +62,7 @@ impl TyraLsp {
 
                 self.documents.lock().await.insert(
                     uri.clone(),
-                    DocState { text, sources, type_index, def_index, source_id },
+                    DocState { text, sources, type_index, def_index, symbols, source_id },
                 );
 
                 diags
@@ -145,6 +149,7 @@ impl LanguageServer for TyraLsp {
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
+                completion_provider: Some(CompletionOptions::default()),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -249,6 +254,19 @@ impl LanguageServer for TyraLsp {
         })))
     }
 
+    async fn completion(
+        &self,
+        params: CompletionParams,
+    ) -> Result<Option<CompletionResponse>> {
+        let uri = &params.text_document_position.text_document.uri;
+        let docs = self.documents.lock().await;
+        let state = match docs.get(uri) {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+        Ok(Some(CompletionResponse::Array(build_completion_items(state))))
+    }
+
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
         let uri = &params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
@@ -287,6 +305,88 @@ impl LanguageServer for TyraLsp {
             range: Some(range),
         }))
     }
+}
+
+/// Tyra language keywords for completion.
+static TYRA_KEYWORDS: &[&str] = &[
+    "fn", "let", "mut", "if", "else", "end", "when", "match", "for", "in",
+    "while", "break", "return", "import", "export", "value", "data", "type",
+    "trait", "impl", "true", "false", "and", "or", "not", "defer", "spawn",
+    "await", "async",
+];
+
+/// Build the full completion item list from cached document state.
+///
+/// Combines four sources:
+/// 1. User-defined names from the resolver (`state.symbols`)
+/// 2. Public prelude functions (excludes `__`-prefixed intrinsics)
+/// 3. Prelude constructors + types
+/// 4. Language keywords
+///
+/// v0.1 limitation: completion is position-independent — every name defined
+/// anywhere in the file is offered regardless of the cursor's scope.
+fn build_completion_items(state: &DocState) -> Vec<CompletionItem> {
+    let mut items: Vec<CompletionItem> = Vec::new();
+    // Track emitted labels so user-defined names that shadow prelude names
+    // (e.g. `fn println()`) don't produce duplicate completion entries.
+    let mut emitted: std::collections::HashSet<&str> = std::collections::HashSet::new();
+
+    // 1. User-defined symbols
+    for (name, kind) in &state.symbols {
+        emitted.insert(name.as_str());
+        items.push(CompletionItem {
+            label: name.clone(),
+            kind: Some(match kind {
+                CompletionKind::Function => CompletionItemKind::FUNCTION,
+                CompletionKind::Variable => CompletionItemKind::VARIABLE,
+                CompletionKind::TypeDef => CompletionItemKind::CLASS,
+                CompletionKind::Module => CompletionItemKind::MODULE,
+            }),
+            ..Default::default()
+        });
+    }
+
+    // 2. Prelude functions (skip internal `__`-prefixed intrinsics and user-shadowed names)
+    for &name in PRELUDE_FUNCTIONS {
+        if !name.starts_with("__") && emitted.insert(name) {
+            items.push(CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::FUNCTION),
+                ..Default::default()
+            });
+        }
+    }
+
+    // 3. Prelude constructors + types
+    for &name in PRELUDE_CONSTRUCTORS {
+        if emitted.insert(name) {
+            items.push(CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::CONSTRUCTOR),
+                ..Default::default()
+            });
+        }
+    }
+    for &name in PRELUDE_TYPES {
+        if emitted.insert(name) {
+            items.push(CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::CLASS),
+                ..Default::default()
+            });
+        }
+    }
+
+    // 4. Keywords (no overlap with prelude constants; no dedup needed)
+    for &kw in TYRA_KEYWORDS {
+        items.push(CompletionItem {
+            label: kw.to_string(),
+            kind: Some(CompletionItemKind::KEYWORD),
+            ..Default::default()
+        });
+    }
+
+    items
 }
 
 #[tokio::main]
@@ -379,7 +479,7 @@ mod tests {
     #[test]
     fn hover_type_index_lookup() {
         let src = "let x: Int = 1\n";
-        let (report, sources, type_index, _, source_id) =
+        let (report, sources, type_index, _, _, source_id) =
             tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
         assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
 
@@ -404,7 +504,7 @@ mod tests {
         // "let x: Int = 1\n" is 15 bytes; "let y = x + 1\n" follows.
         // 'x' in "let y = x + 1" sits at byte offset 15+8 = 23.
         let src = "let x: Int = 1\nlet y = x + 1\n";
-        let (report, sources, _, def_index, source_id) =
+        let (report, sources, _, def_index, _, source_id) =
             tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
         assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
 
@@ -476,6 +576,110 @@ mod tests {
                 .map(|s| s.contains("def_test.tyra"))
                 .unwrap_or(false),
             "expected def_test.tyra in uri, got: {body}"
+        );
+    }
+
+    /// Completion includes user-defined locals and prelude names.
+    #[test]
+    fn completion_returns_prelude_and_locals() {
+        let src = "let xs = [1]\n";
+        let (report, sources, _, _, symbols, source_id) =
+            tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+        assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+
+        let state = DocState {
+            text: src.to_string(),
+            sources,
+            type_index: Default::default(),
+            def_index: Default::default(),
+            symbols,
+            source_id,
+        };
+        let items = build_completion_items(&state);
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+
+        assert!(labels.contains(&"xs"), "missing user-defined `xs`");
+        assert!(labels.contains(&"println"), "missing prelude `println`");
+        assert!(labels.contains(&"Some"), "missing prelude constructor `Some`");
+        assert!(labels.contains(&"Int"), "missing prelude type `Int`");
+        assert!(labels.contains(&"let"), "missing keyword `let`");
+    }
+
+    /// `__`-prefixed intrinsics are excluded from completion.
+    #[test]
+    fn completion_excludes_intrinsics() {
+        let src = "let x = 1\n";
+        let (_, sources, _, _, symbols, source_id) =
+            tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+        let state = DocState {
+            text: src.to_string(),
+            sources,
+            type_index: Default::default(),
+            def_index: Default::default(),
+            symbols,
+            source_id,
+        };
+        let items = build_completion_items(&state);
+        assert!(
+            !items.iter().any(|i| i.label.starts_with("__")),
+            "intrinsic names should be excluded"
+        );
+    }
+
+    /// JSON-RPC smoke: `textDocument/completion` returns an array containing `println`.
+    #[tokio::test(flavor = "current_thread")]
+    async fn completion_returns_array_with_println() {
+        use serde_json::json;
+        use tower::{Service, ServiceExt};
+        use tower_lsp::jsonrpc::Request;
+
+        let (mut service, _socket) = LspService::new(|client| TyraLsp {
+            client,
+            documents: Mutex::new(HashMap::new()),
+        });
+
+        let init = Request::build("initialize")
+            .params(json!({"capabilities": {}}))
+            .id(1)
+            .finish();
+        let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+        let src = "let x: Int = 1\n";
+        let did_open = Request::build("textDocument/didOpen")
+            .params(json!({
+                "textDocument": {
+                    "uri": "file:///tmp/completion_test.tyra",
+                    "languageId": "tyra",
+                    "version": 1,
+                    "text": src
+                }
+            }))
+            .finish();
+        let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+        let comp_req = Request::build("textDocument/completion")
+            .params(json!({
+                "textDocument": { "uri": "file:///tmp/completion_test.tyra" },
+                "position": { "line": 0, "character": 0 }
+            }))
+            .id(2)
+            .finish();
+        let resp = service.ready().await.unwrap().call(comp_req).await.unwrap();
+        let body = serde_json::to_value(&resp).unwrap();
+
+        assert!(
+            body["result"].is_array(),
+            "expected array response, got: {body}"
+        );
+        let labels: Vec<&str> = body["result"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|item| item["label"].as_str())
+            .collect();
+        assert!(
+            labels.contains(&"println"),
+            "expected `println` in completion items, got: {labels:?}"
         );
     }
 

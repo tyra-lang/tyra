@@ -10,7 +10,7 @@
 | LSP | Hover (type of identifier) | ✅ Done (2026-05-04) |
 | LSP | VS Code extension scaffold | ✅ Done (2026-05-04) |
 | LSP | Go to definition | ✅ Done (2026-05-04) |
-| LSP | Completion | ⬜ Not started |
+| LSP | Completion | ✅ Done (2026-05-04) |
 | Static Corpus | Break / control-flow programs | ⬜ Not started |
 | Static Corpus | CI integration (`check.sh` in workflow) | ⬜ Not started |
 
@@ -96,8 +96,10 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
    human-readable string.
 5. **Go to definition** — ✅ Done (2026-05-04). Uses `DefIndex` (reference
    span → definition span) built by `tyra-resolve` to jump to the binding site.
-6. **Completion** — in-scope bindings + imported module members.  Initially
-   keyword-only; upgrade to type-aware after hover is stable.
+6. **Completion** — ✅ Done (2026-05-04). File-wide user-defined names
+   (fn / let / mut / param / for-binding / type / import alias) + prelude
+   functions / constructors / types + language keywords. Position-independent
+   (all names in the file are offered regardless of cursor scope).
 
 ### Dependencies
 
@@ -120,6 +122,15 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
 - `check_in_memory` returns an empty `TypeIndex` and `DefIndex` when an early
   pipeline stage (parse, resolve) fails; hover and go-to-definition show nothing
   in error files until the error is fixed.
+- **Completion scope**: position-independent — every name defined anywhere in
+  the file is offered as a candidate, regardless of cursor scope. A local
+  binding from a sibling function may appear while editing another function.
+  VS Code prefix-matching filters most noise; position-aware scoping is
+  deferred to a future iteration.
+- **Completion type-awareness**: method completions for `xs.<Tab>` or
+  `math.<Tab>` (module member access) are not yet supported in v0.1.
+- **Completion intrinsics**: `__`-prefixed intrinsic names (e.g. `__fs_read_raw`)
+  are intentionally excluded from completion; they are implementation details.
 - **Go-to-definition scope**: only `ExprKind::Ident` references are tracked.
   Field-access paths (`module.member`) and prelude/builtin names (no definition
   span) are not supported in v0.1.

@@ -13,11 +13,14 @@ use tyra_ast::*;
 use tyra_diagnostics::{Diagnostic, Label, Report, Span};
 
 use crate::scope::{ScopeStack, Symbol};
-use crate::DefIndex;
+use crate::{CompletionKind, DefIndex, SymbolList};
 
 /// Resolve names in a source file. Reports errors for undefined names.
-/// Returns a `DefIndex` mapping each resolved reference span to its definition span.
-pub fn resolve(file: &SourceFile, report: &mut Report) -> DefIndex {
+/// Returns a `DefIndex` (reference span → definition span) and a `SymbolList`
+/// (all user-defined names + kind) for LSP completion.
+pub fn resolve(file: &SourceFile, report: &mut Report) -> (DefIndex, SymbolList) {
+    let symbol_list = collect_symbols(file);
+
     let mut scopes = ScopeStack::with_prelude();
     let mut def_index = DefIndex::new();
 
@@ -32,7 +35,245 @@ pub fn resolve(file: &SourceFile, report: &mut Report) -> DefIndex {
         resolve_item(item, &mut scopes, &mut def_index, report);
     }
 
-    def_index
+    (def_index, symbol_list)
+}
+
+// ---------------------------------------------------------------------------
+// Symbol collection (pre-pass for LSP completion)
+// ---------------------------------------------------------------------------
+// Walks the AST once to collect every user-defined name and its kind.
+// This is a separate, simpler pass so the main resolve functions don't need
+// to carry extra mutable state. Duplicate names (e.g. a shadowing `let x`)
+// are deduplicated by `seen`.
+
+fn record(
+    name: &str,
+    kind: CompletionKind,
+    out: &mut SymbolList,
+    seen: &mut std::collections::HashSet<String>,
+) {
+    if seen.insert(name.to_string()) {
+        out.push((name.to_string(), kind));
+    }
+}
+
+fn collect_symbols(file: &SourceFile) -> SymbolList {
+    let mut out = SymbolList::new();
+    let mut seen = std::collections::HashSet::new();
+    for item in &file.items {
+        collect_sym_item(item, &mut out, &mut seen);
+    }
+    out
+}
+
+fn collect_sym_item(
+    item: &Item,
+    out: &mut SymbolList,
+    seen: &mut std::collections::HashSet<String>,
+) {
+    match item {
+        Item::FnDef(f) => {
+            record(&f.name, CompletionKind::Function, out, seen);
+            for p in &f.params {
+                record(&p.name, CompletionKind::Variable, out, seen);
+            }
+            collect_sym_stmts(&f.body, out, seen);
+        }
+        Item::ImplDef(imp) => {
+            for m in &imp.methods {
+                record(&m.name, CompletionKind::Function, out, seen);
+                for p in &m.params {
+                    record(&p.name, CompletionKind::Variable, out, seen);
+                }
+                collect_sym_stmts(&m.body, out, seen);
+            }
+        }
+        Item::TraitDef(t) => {
+            record(&t.name, CompletionKind::TypeDef, out, seen);
+            for m in &t.methods {
+                record(&m.name, CompletionKind::Function, out, seen);
+            }
+        }
+        Item::ValueDef(v) => {
+            record(&v.name, CompletionKind::TypeDef, out, seen);
+        }
+        Item::DataDef(d) => {
+            record(&d.name, CompletionKind::TypeDef, out, seen);
+        }
+        Item::TypeDef(t) => {
+            record(&t.name, CompletionKind::TypeDef, out, seen);
+        }
+        Item::Import(i) => {
+            let local = i.alias.as_ref().unwrap_or_else(|| i.path.last().unwrap());
+            record(local, CompletionKind::Module, out, seen);
+        }
+        Item::Stmt(s) => collect_sym_stmt(s, out, seen),
+    }
+}
+
+fn collect_sym_stmts(
+    stmts: &[Stmt],
+    out: &mut SymbolList,
+    seen: &mut std::collections::HashSet<String>,
+) {
+    for s in stmts {
+        collect_sym_stmt(s, out, seen);
+    }
+}
+
+fn collect_sym_stmt(
+    stmt: &Stmt,
+    out: &mut SymbolList,
+    seen: &mut std::collections::HashSet<String>,
+) {
+    match stmt {
+        Stmt::Let(l) => {
+            collect_sym_expr(&l.value, out, seen);
+            record(&l.name, CompletionKind::Variable, out, seen);
+        }
+        Stmt::Mut(m) => {
+            collect_sym_expr(&m.value, out, seen);
+            record(&m.name, CompletionKind::Variable, out, seen);
+        }
+        Stmt::Return(r) => {
+            if let Some(v) = &r.value {
+                collect_sym_expr(v, out, seen);
+            }
+        }
+        Stmt::Defer(d) => collect_sym_expr(&d.expr, out, seen),
+        Stmt::Expr(e) => collect_sym_expr(&e.expr, out, seen),
+        Stmt::Break(_) => {}
+    }
+}
+
+fn collect_sym_expr(
+    expr: &Expr,
+    out: &mut SymbolList,
+    seen: &mut std::collections::HashSet<String>,
+) {
+    match &expr.kind {
+        ExprKind::For(f) => {
+            collect_sym_expr(&f.iter, out, seen);
+            record(&f.binding, CompletionKind::Variable, out, seen);
+            collect_sym_stmts(&f.body, out, seen);
+        }
+        ExprKind::Lambda(lam) => {
+            for p in &lam.params {
+                record(&p.name, CompletionKind::Variable, out, seen);
+            }
+            collect_sym_stmts(&lam.body, out, seen);
+        }
+        ExprKind::Match(m) => {
+            collect_sym_expr(&m.subject, out, seen);
+            for arm in &m.arms {
+                collect_sym_pattern(&arm.pattern, out, seen);
+                collect_sym_stmts(&arm.body, out, seen);
+            }
+        }
+        ExprKind::If(i) => {
+            collect_sym_expr(&i.condition, out, seen);
+            collect_sym_stmts(&i.then_body, out, seen);
+            if let Some(eb) = &i.else_body {
+                collect_sym_else(eb, out, seen);
+            }
+        }
+        ExprKind::While(w) => {
+            collect_sym_expr(&w.condition, out, seen);
+            collect_sym_stmts(&w.body, out, seen);
+        }
+        ExprKind::BinaryOp(l, _, r) => {
+            collect_sym_expr(l, out, seen);
+            collect_sym_expr(r, out, seen);
+        }
+        ExprKind::UnaryOp(_, e) => collect_sym_expr(e, out, seen),
+        ExprKind::Assign(l, r) => {
+            collect_sym_expr(l, out, seen);
+            collect_sym_expr(r, out, seen);
+        }
+        ExprKind::Call(callee, args) => {
+            collect_sym_expr(callee, out, seen);
+            for arg in args {
+                collect_sym_expr(&arg.value, out, seen);
+            }
+        }
+        ExprKind::TurbofishCall(callee, _, args) => {
+            collect_sym_expr(callee, out, seen);
+            for arg in args {
+                collect_sym_expr(&arg.value, out, seen);
+            }
+        }
+        ExprKind::FieldAccess(e, _) => collect_sym_expr(e, out, seen),
+        ExprKind::Index(e, i) => {
+            collect_sym_expr(e, out, seen);
+            collect_sym_expr(i, out, seen);
+        }
+        ExprKind::Propagate(e)
+        | ExprKind::Await(e)
+        | ExprKind::Spawn(e) => collect_sym_expr(e, out, seen),
+        ExprKind::ListLit(items) => {
+            for item in items {
+                collect_sym_expr(item, out, seen);
+            }
+        }
+        ExprKind::MapLit(entries) => {
+            for (k, v) in entries {
+                collect_sym_expr(k, out, seen);
+                collect_sym_expr(v, out, seen);
+            }
+        }
+        ExprKind::StringInterp(parts) => {
+            for part in parts {
+                if let StringPart::Expr(e) = part {
+                    collect_sym_expr(e, out, seen);
+                }
+            }
+        }
+        ExprKind::Ident(_)
+        | ExprKind::IntLit(_)
+        | ExprKind::FloatLit(_)
+        | ExprKind::StringLit(_)
+        | ExprKind::BoolLit(_)
+        | ExprKind::UnitLit => {}
+    }
+}
+
+fn collect_sym_pattern(
+    pat: &Pattern,
+    out: &mut SymbolList,
+    seen: &mut std::collections::HashSet<String>,
+) {
+    match &pat.kind {
+        PatternKind::Ident(name) => {
+            record(name, CompletionKind::Variable, out, seen);
+        }
+        PatternKind::Constructor(_, fields) => {
+            for f in fields {
+                collect_sym_pattern(&f.pattern, out, seen);
+            }
+        }
+        PatternKind::Wildcard
+        | PatternKind::IntLit(_)
+        | PatternKind::FloatLit(_)
+        | PatternKind::StringLit(_)
+        | PatternKind::BoolLit(_) => {}
+    }
+}
+
+fn collect_sym_else(
+    eb: &ElseBranch,
+    out: &mut SymbolList,
+    seen: &mut std::collections::HashSet<String>,
+) {
+    match eb {
+        ElseBranch::Else(stmts) => collect_sym_stmts(stmts, out, seen),
+        ElseBranch::ElseIf(i) => {
+            collect_sym_expr(&i.condition, out, seen);
+            collect_sym_stmts(&i.then_body, out, seen);
+            if let Some(inner) = &i.else_body {
+                collect_sym_else(inner, out, seen);
+            }
+        }
+    }
 }
 
 /// Extract the definition span from a symbol, if it has one.
@@ -478,8 +719,42 @@ mod tests {
         if report.has_errors() {
             return report; // parse errors
         }
-        let _ = resolve(&ast, &mut report);
+        let (_def_index, _symbols) = resolve(&ast, &mut report);
         report
+    }
+
+    fn resolve_with_symbols(source: &str) -> (Report, crate::SymbolList) {
+        let mut sources = tyra_diagnostics::SourceMap::new();
+        let id = sources.add("test.tyra".into(), source.into());
+        let mut report = Report::new();
+        let ast = tyra_parser::parse(id, &sources, &mut report);
+        if report.has_errors() {
+            return (report, vec![]);
+        }
+        let (_def_index, symbols) = resolve(&ast, &mut report);
+        (report, symbols)
+    }
+
+    #[test]
+    fn symbol_list_includes_fn_let_var() {
+        let src = "let x: Int = 1\nfn foo()\n  let y = x\nend\n";
+        let (report, symbols) = resolve_with_symbols(src);
+        assert!(!report.has_errors(), "errors: {:?}", report.diagnostics());
+        let names: Vec<&str> = symbols.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(names.contains(&"x"), "missing x in {names:?}");
+        assert!(names.contains(&"foo"), "missing foo in {names:?}");
+        assert!(names.contains(&"y"), "missing y in {names:?}");
+    }
+
+    #[test]
+    fn symbol_list_kinds() {
+        use crate::CompletionKind;
+        let src = "import list\nfn greet()\nend\nlet v = 1\n";
+        let (_, symbols) = resolve_with_symbols(src);
+        let find = |name: &str| symbols.iter().find(|(n, _)| n == name).map(|(_, k)| k.clone());
+        assert_eq!(find("greet"), Some(CompletionKind::Function));
+        assert_eq!(find("v"), Some(CompletionKind::Variable));
+        assert_eq!(find("list"), Some(CompletionKind::Module));
     }
 
     #[test]
