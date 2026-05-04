@@ -5,7 +5,7 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 use tyra_diagnostics::{Level, SourceMap};
-use tyra_driver::{SourceId, TypeIndex};
+use tyra_driver::{DefIndex, SourceId, TypeIndex};
 
 const DIAG_SOURCE: &str = "tyra";
 
@@ -15,6 +15,7 @@ struct DocState {
     text: String,
     sources: SourceMap,
     type_index: TypeIndex,
+    def_index: DefIndex,
     source_id: SourceId,
 }
 
@@ -48,7 +49,7 @@ impl TyraLsp {
         .await;
 
         let lsp_diags = match result {
-            Ok(Ok((report, sources, type_index, source_id))) => {
+            Ok(Ok((report, sources, type_index, def_index, source_id))) => {
                 let diags = report
                     .diagnostics()
                     .iter()
@@ -57,7 +58,7 @@ impl TyraLsp {
 
                 self.documents.lock().await.insert(
                     uri.clone(),
-                    DocState { text, sources, type_index, source_id },
+                    DocState { text, sources, type_index, def_index, source_id },
                 );
 
                 diags
@@ -143,6 +144,7 @@ impl LanguageServer for TyraLsp {
                     TextDocumentSyncKind::FULL,
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
+                definition_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -192,6 +194,59 @@ impl LanguageServer for TyraLsp {
         let uri = params.text_document.uri;
         self.documents.lock().await.remove(&uri);
         self.client.publish_diagnostics(uri, vec![], None).await;
+    }
+
+    async fn goto_definition(
+        &self,
+        params: GotoDefinitionParams,
+    ) -> Result<Option<GotoDefinitionResponse>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+
+        let docs = self.documents.lock().await;
+        let state = match docs.get(uri) {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+
+        let offset = match state.sources.offset_at(state.source_id, pos.line, pos.character) {
+            Some(o) => o,
+            None => return Ok(None),
+        };
+
+        // Find the smallest ref span in def_index containing the cursor offset.
+        let best = state
+            .def_index
+            .iter()
+            .filter(|(span, _)| {
+                span.source == state.source_id && span.start <= offset && offset < span.end
+            })
+            .min_by_key(|(span, _)| span.end - span.start);
+
+        let (_, def_span) = match best {
+            Some(entry) => entry,
+            None => return Ok(None),
+        };
+
+        let def_range = span_to_lsp_range(*def_span, &state.sources);
+
+        // Reconstruct the URI for the file that contains the definition.
+        // SourceMap::name returns the name the file was registered with.
+        // If it is an absolute path (e.g. from import resolution), build
+        // a file:// URL from it; otherwise fall back to the currently-open URI.
+        let def_uri = {
+            let name = state.sources.name(def_span.source);
+            if name.starts_with('/') {
+                Url::from_file_path(name).unwrap_or_else(|_| uri.clone())
+            } else {
+                uri.clone()
+            }
+        };
+
+        Ok(Some(GotoDefinitionResponse::Scalar(Location {
+            uri: def_uri,
+            range: def_range,
+        })))
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
@@ -324,7 +379,7 @@ mod tests {
     #[test]
     fn hover_type_index_lookup() {
         let src = "let x: Int = 1\n";
-        let (report, sources, type_index, source_id) =
+        let (report, sources, type_index, _, source_id) =
             tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
         assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
 
@@ -340,6 +395,88 @@ mod tests {
 
         let (_span, ty) = best.expect("no type found at offset");
         assert_eq!(ty.display_name(), "Int");
+    }
+
+    /// Go-to-definition: reference to `x` in `let y = x + 1` resolves to the
+    /// `let x` definition span starting at byte 0.
+    #[test]
+    fn goto_definition_def_index_lookup() {
+        // "let x: Int = 1\n" is 15 bytes; "let y = x + 1\n" follows.
+        // 'x' in "let y = x + 1" sits at byte offset 15+8 = 23.
+        let src = "let x: Int = 1\nlet y = x + 1\n";
+        let (report, sources, _, def_index, source_id) =
+            tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+        assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+
+        let ref_offset = sources.offset_at(source_id, 1, 8).expect("offset_at failed");
+
+        let best = def_index
+            .iter()
+            .filter(|(span, _)| {
+                span.source == source_id && span.start <= ref_offset && ref_offset < span.end
+            })
+            .min_by_key(|(span, _)| span.end - span.start);
+
+        let (_, def_span) = best.expect("no definition found for x reference");
+        // def_span is the let stmt starting at the beginning of the source
+        assert_eq!(def_span.start, 0, "expected definition at start of `let x` stmt");
+    }
+
+    /// Smoke test: JSON-RPC `textDocument/definition` returns a `Location`
+    /// pointing back into the same document.
+    #[tokio::test(flavor = "current_thread")]
+    async fn goto_definition_returns_location() {
+        use serde_json::json;
+        use tower::{Service, ServiceExt};
+        use tower_lsp::jsonrpc::Request;
+
+        let (mut service, _socket) = LspService::new(|client| TyraLsp {
+            client,
+            documents: Mutex::new(HashMap::new()),
+        });
+
+        let init = Request::build("initialize")
+            .params(json!({"capabilities": {}}))
+            .id(1)
+            .finish();
+        let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+        let src = "let x: Int = 1\nlet y = x + 1\n";
+        let did_open = Request::build("textDocument/didOpen")
+            .params(json!({
+                "textDocument": {
+                    "uri": "file:///tmp/def_test.tyra",
+                    "languageId": "tyra",
+                    "version": 1,
+                    "text": src
+                }
+            }))
+            .finish();
+        let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+        // Position line 1 col 8 = 'x' in "let y = x + 1"
+        let def_req = Request::build("textDocument/definition")
+            .params(json!({
+                "textDocument": { "uri": "file:///tmp/def_test.tyra" },
+                "position": { "line": 1, "character": 8 }
+            }))
+            .id(2)
+            .finish();
+        let resp = service.ready().await.unwrap().call(def_req).await.unwrap();
+        let body = serde_json::to_value(&resp).unwrap();
+
+        // GotoDefinitionResponse::Scalar serialises as a single Location object.
+        assert!(
+            body["result"].is_object(),
+            "expected a Location object, got: {body}"
+        );
+        assert!(
+            body["result"]["uri"]
+                .as_str()
+                .map(|s| s.contains("def_test.tyra"))
+                .unwrap_or(false),
+            "expected def_test.tyra in uri, got: {body}"
+        );
     }
 
     /// Smoke test: JSON-RPC `textDocument/didOpen` with an E0110-triggering

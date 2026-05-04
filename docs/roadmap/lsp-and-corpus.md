@@ -9,7 +9,7 @@
 | LSP | Diagnostics (syntax errors on save) | ✅ Done |
 | LSP | Hover (type of identifier) | ✅ Done (2026-05-04) |
 | LSP | VS Code extension scaffold | ✅ Done (2026-05-04) |
-| LSP | Go to definition | ⬜ Not started |
+| LSP | Go to definition | ✅ Done (2026-05-04) |
 | LSP | Completion | ⬜ Not started |
 | Static Corpus | Break / control-flow programs | ⬜ Not started |
 | Static Corpus | CI integration (`check.sh` in workflow) | ⬜ Not started |
@@ -91,10 +91,11 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
 
 ### Mid-term tasks
 
-4. **Hover** — on `textDocument/hover`, resolve the hovered identifier's `Ty`
-   from the type environment and render a human-readable string.
-5. **Go to definition** — use `tyra-resolve` span information to jump to the
-   definition site of a name.
+4. **Hover** — ✅ Done (2026-05-04). On `textDocument/hover`, resolve the
+   hovered identifier's `Ty` from the type environment and render a
+   human-readable string.
+5. **Go to definition** — ✅ Done (2026-05-04). Uses `DefIndex` (reference
+   span → definition span) built by `tyra-resolve` to jump to the binding site.
 6. **Completion** — in-scope bindings + imported module members.  Initially
    keyword-only; upgrade to type-aware after hover is stable.
 
@@ -116,5 +117,13 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
 - Type spans for `let`/`mut` statement names are recorded at the statement-level
   span because the AST does not carry a dedicated span for the binding name token.
   Hovering anywhere within the `let x: T = …` line shows the binding type.
-- `check_in_memory` returns an empty `TypeIndex` when an early pipeline stage
-  (parse, resolve) fails; hover shows nothing in error files until the error is fixed.
+- `check_in_memory` returns an empty `TypeIndex` and `DefIndex` when an early
+  pipeline stage (parse, resolve) fails; hover and go-to-definition show nothing
+  in error files until the error is fixed.
+- **Go-to-definition scope**: only `ExprKind::Ident` references are tracked.
+  Field-access paths (`module.member`) and prelude/builtin names (no definition
+  span) are not supported in v0.1.
+- **Definition span granularity**: definition spans cover the entire statement
+  (`let x: T = …` line) rather than just the name token, because the AST does
+  not carry a dedicated span for the binding identifier. A future AST extension
+  can improve jump precision.

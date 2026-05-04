@@ -13,10 +13,13 @@ use tyra_ast::*;
 use tyra_diagnostics::{Diagnostic, Label, Report, Span};
 
 use crate::scope::{ScopeStack, Symbol};
+use crate::DefIndex;
 
 /// Resolve names in a source file. Reports errors for undefined names.
-pub fn resolve(file: &SourceFile, report: &mut Report) {
+/// Returns a `DefIndex` mapping each resolved reference span to its definition span.
+pub fn resolve(file: &SourceFile, report: &mut Report) -> DefIndex {
     let mut scopes = ScopeStack::with_prelude();
+    let mut def_index = DefIndex::new();
 
     // Pass 1: collect top-level declarations (§6.1 forward reference)
     collect_top_level(&file.items, &mut scopes, report);
@@ -26,7 +29,23 @@ pub fn resolve(file: &SourceFile, report: &mut Report) {
 
     // Pass 2: resolve references in all items
     for item in &file.items {
-        resolve_item(item, &mut scopes, report);
+        resolve_item(item, &mut scopes, &mut def_index, report);
+    }
+
+    def_index
+}
+
+/// Extract the definition span from a symbol, if it has one.
+/// `Prelude` symbols have no source span and are excluded.
+fn symbol_span(sym: &Symbol) -> Option<Span> {
+    match sym {
+        Symbol::Local { span, .. } => Some(*span),
+        Symbol::Param { span } => Some(*span),
+        Symbol::Function { span } => Some(*span),
+        Symbol::TypeDef { span } => Some(*span),
+        Symbol::TraitDef { span } => Some(*span),
+        Symbol::Import { span, .. } => Some(*span),
+        Symbol::Prelude { .. } => None,
     }
 }
 
@@ -180,26 +199,26 @@ fn collect_top_level(items: &[Item], scopes: &mut ScopeStack, report: &mut Repor
 }
 
 /// Pass 2: resolve references in each item.
-fn resolve_item(item: &Item, scopes: &mut ScopeStack, report: &mut Report) {
+fn resolve_item(item: &Item, scopes: &mut ScopeStack, def_index: &mut DefIndex, report: &mut Report) {
     match item {
-        Item::FnDef(f) => resolve_fn(f, scopes, report),
+        Item::FnDef(f) => resolve_fn(f, scopes, def_index, report),
         Item::ImplDef(imp) => {
             for method in &imp.methods {
-                resolve_fn(method, scopes, report);
+                resolve_fn(method, scopes, def_index, report);
             }
         }
         Item::TraitDef(t) => {
             for method in &t.methods {
-                resolve_fn(method, scopes, report);
+                resolve_fn(method, scopes, def_index, report);
             }
         }
-        Item::Stmt(s) => resolve_stmt(s, scopes, report),
+        Item::Stmt(s) => resolve_stmt(s, scopes, def_index, report),
         // Type definitions are fully handled in pass 1
         Item::ValueDef(_) | Item::DataDef(_) | Item::TypeDef(_) | Item::Import(_) => {}
     }
 }
 
-fn resolve_fn(f: &FnDef, scopes: &mut ScopeStack, report: &mut Report) {
+fn resolve_fn(f: &FnDef, scopes: &mut ScopeStack, def_index: &mut DefIndex, report: &mut Report) {
     scopes.push();
     // Bind `self` if present (§8.7 trait methods)
     if let Some(self_param) = &f.self_param {
@@ -213,20 +232,20 @@ fn resolve_fn(f: &FnDef, scopes: &mut ScopeStack, report: &mut Report) {
     for param in &f.params {
         scopes.define(param.name.clone(), Symbol::Param { span: param.span });
     }
-    resolve_body(&f.body, scopes, report);
+    resolve_body(&f.body, scopes, def_index, report);
     scopes.pop();
 }
 
-fn resolve_body(stmts: &[Stmt], scopes: &mut ScopeStack, report: &mut Report) {
+fn resolve_body(stmts: &[Stmt], scopes: &mut ScopeStack, def_index: &mut DefIndex, report: &mut Report) {
     for stmt in stmts {
-        resolve_stmt(stmt, scopes, report);
+        resolve_stmt(stmt, scopes, def_index, report);
     }
 }
 
-fn resolve_stmt(stmt: &Stmt, scopes: &mut ScopeStack, report: &mut Report) {
+fn resolve_stmt(stmt: &Stmt, scopes: &mut ScopeStack, def_index: &mut DefIndex, report: &mut Report) {
     match stmt {
         Stmt::Let(s) => {
-            resolve_expr(&s.value, scopes, report);
+            resolve_expr(&s.value, scopes, def_index, report);
             scopes.define(
                 s.name.clone(),
                 Symbol::Local {
@@ -236,7 +255,7 @@ fn resolve_stmt(stmt: &Stmt, scopes: &mut ScopeStack, report: &mut Report) {
             );
         }
         Stmt::Mut(s) => {
-            resolve_expr(&s.value, scopes, report);
+            resolve_expr(&s.value, scopes, def_index, report);
             scopes.define(
                 s.name.clone(),
                 Symbol::Local {
@@ -247,76 +266,83 @@ fn resolve_stmt(stmt: &Stmt, scopes: &mut ScopeStack, report: &mut Report) {
         }
         Stmt::Return(s) => {
             if let Some(v) = &s.value {
-                resolve_expr(v, scopes, report);
+                resolve_expr(v, scopes, def_index, report);
             }
         }
         Stmt::Defer(s) => {
-            resolve_expr(&s.expr, scopes, report);
+            resolve_expr(&s.expr, scopes, def_index, report);
         }
         Stmt::Break(_) => {}
         Stmt::Expr(s) => {
-            resolve_expr(&s.expr, scopes, report);
+            resolve_expr(&s.expr, scopes, def_index, report);
         }
     }
 }
 
-fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, report: &mut Report) {
+fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, def_index: &mut DefIndex, report: &mut Report) {
     match &expr.kind {
         // Names that need resolution
         ExprKind::Ident(name) => {
-            if scopes.lookup(name).is_none() {
-                report.add(
-                    Diagnostic::error(format!("undefined name `{name}`"))
-                        .with_code("E0200")
-                        .with_label(Label::new(expr.span, "not found in this scope")),
-                );
+            match scopes.lookup(name) {
+                None => {
+                    report.add(
+                        Diagnostic::error(format!("undefined name `{name}`"))
+                            .with_code("E0200")
+                            .with_label(Label::new(expr.span, "not found in this scope")),
+                    );
+                }
+                Some(sym) => {
+                    if let Some(def_span) = symbol_span(sym) {
+                        def_index.insert(expr.span, def_span);
+                    }
+                }
             }
         }
 
         // Recursive cases
         ExprKind::BinaryOp(l, _, r) => {
-            resolve_expr(l, scopes, report);
-            resolve_expr(r, scopes, report);
+            resolve_expr(l, scopes, def_index, report);
+            resolve_expr(r, scopes, def_index, report);
         }
-        ExprKind::UnaryOp(_, e) => resolve_expr(e, scopes, report),
+        ExprKind::UnaryOp(_, e) => resolve_expr(e, scopes, def_index, report),
         ExprKind::Assign(l, r) => {
-            resolve_expr(l, scopes, report);
-            resolve_expr(r, scopes, report);
+            resolve_expr(l, scopes, def_index, report);
+            resolve_expr(r, scopes, def_index, report);
         }
         ExprKind::Call(callee, args) => {
-            resolve_expr(callee, scopes, report);
+            resolve_expr(callee, scopes, def_index, report);
             for arg in args {
-                resolve_expr(&arg.value, scopes, report);
+                resolve_expr(&arg.value, scopes, def_index, report);
             }
         }
         ExprKind::TurbofishCall(callee, _, args) => {
-            resolve_expr(callee, scopes, report);
+            resolve_expr(callee, scopes, def_index, report);
             for arg in args {
-                resolve_expr(&arg.value, scopes, report);
+                resolve_expr(&arg.value, scopes, def_index, report);
             }
         }
-        ExprKind::FieldAccess(obj, _) => resolve_expr(obj, scopes, report),
+        ExprKind::FieldAccess(obj, _) => resolve_expr(obj, scopes, def_index, report),
         ExprKind::Index(obj, idx) => {
-            resolve_expr(obj, scopes, report);
-            resolve_expr(idx, scopes, report);
+            resolve_expr(obj, scopes, def_index, report);
+            resolve_expr(idx, scopes, def_index, report);
         }
-        ExprKind::Propagate(e) => resolve_expr(e, scopes, report),
-        ExprKind::Await(e) => resolve_expr(e, scopes, report),
-        ExprKind::Spawn(e) => resolve_expr(e, scopes, report),
+        ExprKind::Propagate(e) => resolve_expr(e, scopes, def_index, report),
+        ExprKind::Await(e) => resolve_expr(e, scopes, def_index, report),
+        ExprKind::Spawn(e) => resolve_expr(e, scopes, def_index, report),
 
         // Control flow with new scopes
-        ExprKind::If(if_expr) => resolve_if(if_expr, scopes, report),
+        ExprKind::If(if_expr) => resolve_if(if_expr, scopes, def_index, report),
         ExprKind::Match(m) => {
-            resolve_expr(&m.subject, scopes, report);
+            resolve_expr(&m.subject, scopes, def_index, report);
             for arm in &m.arms {
                 scopes.push();
                 bind_pattern(&arm.pattern, scopes);
-                resolve_body(&arm.body, scopes, report);
+                resolve_body(&arm.body, scopes, def_index, report);
                 scopes.pop();
             }
         }
         ExprKind::For(f) => {
-            resolve_expr(&f.iter, scopes, report);
+            resolve_expr(&f.iter, scopes, def_index, report);
             scopes.push();
             scopes.define(
                 f.binding.clone(),
@@ -325,13 +351,13 @@ fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, report: &mut Report) {
                     span: f.span,
                 },
             );
-            resolve_body(&f.body, scopes, report);
+            resolve_body(&f.body, scopes, def_index, report);
             scopes.pop();
         }
         ExprKind::While(w) => {
-            resolve_expr(&w.condition, scopes, report);
+            resolve_expr(&w.condition, scopes, def_index, report);
             scopes.push();
-            resolve_body(&w.body, scopes, report);
+            resolve_body(&w.body, scopes, def_index, report);
             scopes.pop();
         }
         ExprKind::Lambda(lam) => {
@@ -339,26 +365,26 @@ fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, report: &mut Report) {
             for param in &lam.params {
                 scopes.define(param.name.clone(), Symbol::Param { span: param.span });
             }
-            resolve_body(&lam.body, scopes, report);
+            resolve_body(&lam.body, scopes, def_index, report);
             scopes.pop();
         }
 
         // Literals and collections
         ExprKind::ListLit(items) => {
             for item in items {
-                resolve_expr(item, scopes, report);
+                resolve_expr(item, scopes, def_index, report);
             }
         }
         ExprKind::MapLit(entries) => {
             for (k, v) in entries {
-                resolve_expr(k, scopes, report);
-                resolve_expr(v, scopes, report);
+                resolve_expr(k, scopes, def_index, report);
+                resolve_expr(v, scopes, def_index, report);
             }
         }
         ExprKind::StringInterp(parts) => {
             for part in parts {
                 if let StringPart::Expr(e) = part {
-                    resolve_expr(e, scopes, report);
+                    resolve_expr(e, scopes, def_index, report);
                 }
             }
         }
@@ -372,19 +398,19 @@ fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, report: &mut Report) {
     }
 }
 
-fn resolve_if(if_expr: &IfExpr, scopes: &mut ScopeStack, report: &mut Report) {
-    resolve_expr(&if_expr.condition, scopes, report);
+fn resolve_if(if_expr: &IfExpr, scopes: &mut ScopeStack, def_index: &mut DefIndex, report: &mut Report) {
+    resolve_expr(&if_expr.condition, scopes, def_index, report);
     scopes.push();
-    resolve_body(&if_expr.then_body, scopes, report);
+    resolve_body(&if_expr.then_body, scopes, def_index, report);
     scopes.pop();
     match &if_expr.else_body {
         Some(ElseBranch::Else(body)) => {
             scopes.push();
-            resolve_body(body, scopes, report);
+            resolve_body(body, scopes, def_index, report);
             scopes.pop();
         }
         Some(ElseBranch::ElseIf(inner)) => {
-            resolve_if(inner, scopes, report);
+            resolve_if(inner, scopes, def_index, report);
         }
         None => {}
     }
@@ -452,7 +478,7 @@ mod tests {
         if report.has_errors() {
             return report; // parse errors
         }
-        resolve(&ast, &mut report);
+        let _ = resolve(&ast, &mut report);
         report
     }
 
