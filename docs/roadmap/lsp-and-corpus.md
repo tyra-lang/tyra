@@ -13,7 +13,7 @@
 | LSP | Completion | ✅ Done (2026-05-04) |
 | Static Corpus | Break / control-flow programs | ✅ Done (2026-05-05) |
 | Static Corpus | Negative corpus (`bad/` directory) | ✅ Done (2026-05-05) |
-| Static Corpus | CI integration (`check.sh` in workflow) | ⬜ Not started |
+| Static Corpus | CI integration (`check.sh` in workflow) | ✅ Done (2026-05-05) |
 
 ---
 
@@ -31,8 +31,8 @@ never silently break these programs.
 
 ### Short-term tasks (next 1–2 cycles)
 
-1. **CI hook** — add `bench/static-corpus/check.sh` as a step in the GitHub
-   Actions workflow so the corpus is checked on every PR.
+1. ✅ **CI hook** — `.github/workflows/static-corpus.yml` added (2026-05-05).
+   Triggers on push and PR to main; builds `tyra-cli`, then runs `check.sh`.
 2. ✅ **Extend with break/continue** — `11-break-loop.tyra` added (2026-05-05).
    Exercises `break` inside `while` and `for`; `tyra check` subcommand also added.
 3. ✅ **Negative corpus** — `bad/` subdirectory added (2026-05-05), expanded to

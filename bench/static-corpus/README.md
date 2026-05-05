@@ -65,6 +65,10 @@ positive and negative corpus and exits non-zero on any failure.
 bash bench/static-corpus/check.sh ./target/debug/tyra
 ```
 
+The GitHub Actions workflow at `.github/workflows/static-corpus.yml` runs this
+check automatically on every push to `main` and every pull request targeting
+`main`.  A failing corpus file turns the CI job red before it can land.
+
 ## Adding programs
 
 ### Positive corpus

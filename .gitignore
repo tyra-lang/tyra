@@ -67,6 +67,9 @@ examples/**/.tyra-cache/
 examples/[0-9]*-*
 !examples/[0-9]*-*/
 
+# Tyra compiler output binaries (produced when running `tyra run` or `tyra build`)
+rust_out
+
 # Generated AST/MIR dumps for debugging
 *.ast.json
 *.mir.txt
