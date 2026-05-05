@@ -19,6 +19,7 @@
 | LSP | Member-access completion (`module.<Tab>`, builtin methods) | ✅ Done (2026-05-05) |
 | LSP | Find references (`textDocument/references`) | ✅ Done (2026-05-05) |
 | LSP | Rename (`textDocument/rename`) | ✅ Done (2026-05-05) |
+| LSP | Document symbols (`textDocument/documentSymbol`) | ✅ Done (2026-05-05) |
 
 ---
 
@@ -150,6 +151,10 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   No scope-collision check: renaming to a name already bound in the same scope produces
   invalid code (post-rename compiler errors surface this).  `prepareRename` is not
   implemented.  Cross-file rename is not supported.
+- **Outline scope**: imports and locals inside function bodies are omitted from
+  `textDocument/documentSymbol`.  Both `range` and `selectionRange` use the
+  item-level span (the parser does not emit per-identifier name spans).
+  `workspace/symbol` is not supported (single-file driver).
 - **References scope**: only `ExprKind::Ident` references are tracked (same scope as
   go-to-definition).  Field-access / pattern bindings / type names are not surfaced.
   Cross-file references are not supported in v0.1.

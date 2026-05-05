@@ -85,7 +85,7 @@ fn to_lsp_diagnostic_source_is_tyra() {
 #[test]
 fn hover_type_index_lookup() {
     let src = "let x: Int = 1\n";
-    let (report, sources, type_index, _, _, source_id) =
+    let tyra_driver::CheckResult { report, sources, type_index, source_id, .. } =
         tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
     assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
 
@@ -107,7 +107,7 @@ fn hover_type_index_lookup() {
 #[test]
 fn goto_definition_def_index_lookup() {
     let src = "let x: Int = 1\nlet y = x + 1\n";
-    let (report, sources, _, def_index, _, source_id) =
+    let tyra_driver::CheckResult { report, sources, def_index, source_id, .. } =
         tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
     assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
 
@@ -179,7 +179,7 @@ async fn goto_definition_returns_location() {
 #[test]
 fn completion_returns_prelude_and_locals() {
     let src = "let xs = [1]\n";
-    let (report, sources, _, _, symbols, source_id) =
+    let tyra_driver::CheckResult { report, sources, symbols, source_id, ast, .. } =
         tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
     assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
 
@@ -190,6 +190,7 @@ fn completion_returns_prelude_and_locals() {
         def_index: Default::default(),
         symbols,
         source_id,
+        ast,
     };
     let items = build_completion_items(&state);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
@@ -204,7 +205,7 @@ fn completion_returns_prelude_and_locals() {
 #[test]
 fn completion_excludes_intrinsics() {
     let src = "let x = 1\n";
-    let (_, sources, _, _, symbols, source_id) =
+    let tyra_driver::CheckResult { sources, symbols, source_id, ast, .. } =
         tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
     let state = DocState {
         text: src.to_string(),
@@ -213,6 +214,7 @@ fn completion_excludes_intrinsics() {
         def_index: Default::default(),
         symbols,
         source_id,
+        ast,
     };
     let items = build_completion_items(&state);
     assert!(
@@ -298,7 +300,7 @@ fn detect_member_receiver_unit() {
 #[test]
 fn completion_after_module_dot_returns_module_members() {
     let src = "let x = 1\n";
-    let (_, sources, type_index, def_index, _, source_id) =
+    let tyra_driver::CheckResult { sources, type_index, def_index, source_id, ast, .. } =
         tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
     let symbols: SymbolList = vec![
         ("mymod__foo".into(), CompletionKind::Function),
@@ -312,6 +314,7 @@ fn completion_after_module_dot_returns_module_members() {
         def_index,
         symbols,
         source_id,
+        ast,
     };
 
     let pos = Position { line: 0, character: 6 };
@@ -328,7 +331,7 @@ fn completion_after_module_dot_returns_module_members() {
 #[test]
 fn completion_after_dot_no_match_returns_empty() {
     let src = "let x = 1\nlet r = unknown_module.\n";
-    let (_, sources, type_index, def_index, symbols, source_id) =
+    let tyra_driver::CheckResult { sources, type_index, def_index, symbols, source_id, ast, .. } =
         tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
     let state = DocState {
         text: src.to_string(),
@@ -337,6 +340,7 @@ fn completion_after_dot_no_match_returns_empty() {
         def_index,
         symbols,
         source_id,
+        ast,
     };
     let pos = Position { line: 1, character: 23 };
     let receiver = detect_member_receiver(src, pos).expect("should detect receiver");
@@ -359,7 +363,7 @@ fn references_finds_uses_from_def_site() {
     use crate::references::{find_def_span_at_cursor, find_uses_for_def};
 
     let src = "let x: Int = 1\nlet y = x + 1\nlet z = x * 2\n";
-    let (report, sources, _, def_index, _, source_id) =
+    let tyra_driver::CheckResult { report, sources, def_index, source_id, ast, .. } =
         tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
     assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
 
@@ -370,6 +374,7 @@ fn references_finds_uses_from_def_site() {
         def_index,
         symbols: Default::default(),
         source_id,
+        ast,
     };
 
     let offset = state.sources.offset_at(source_id, 0, 4).expect("offset_at");
@@ -384,7 +389,7 @@ fn references_finds_uses_from_use_site() {
     use crate::references::{find_def_span_at_cursor, find_uses_for_def};
 
     let src = "let x: Int = 1\nlet y = x + 1\nlet z = x * 2\n";
-    let (report, sources, _, def_index, _, source_id) =
+    let tyra_driver::CheckResult { report, sources, def_index, source_id, ast, .. } =
         tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
     assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
 
@@ -395,6 +400,7 @@ fn references_finds_uses_from_use_site() {
         def_index,
         symbols: Default::default(),
         source_id,
+        ast,
     };
 
     let offset = state.sources.offset_at(source_id, 1, 8).expect("offset_at");
@@ -409,7 +415,7 @@ fn references_includes_declaration_when_requested() {
     use crate::references::{find_def_span_at_cursor, find_uses_for_def};
 
     let src = "let x: Int = 1\nlet y = x + 1\n";
-    let (report, sources, _, def_index, _, source_id) =
+    let tyra_driver::CheckResult { report, sources, def_index, source_id, ast, .. } =
         tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
     assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
 
@@ -420,6 +426,7 @@ fn references_includes_declaration_when_requested() {
         def_index,
         symbols: Default::default(),
         source_id,
+        ast,
     };
 
     let offset = state.sources.offset_at(source_id, 1, 8).expect("offset_at");
@@ -548,7 +555,7 @@ fn rename_renames_all_uses_and_declaration() {
     use crate::rename::{extract_identifier_at, find_binding_name_span};
 
     let src = "let x: Int = 1\nlet y = x + 1\nlet z = x * 2\n";
-    let (report, sources, _, def_index, _, source_id) =
+    let tyra_driver::CheckResult { report, sources, def_index, source_id, ast, .. } =
         tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
     assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
 
@@ -559,6 +566,7 @@ fn rename_renames_all_uses_and_declaration() {
         def_index,
         symbols: Default::default(),
         source_id,
+        ast,
     };
 
     // Cursor on `x` in "let y = x + 1" (line 1, col 8).
@@ -737,6 +745,86 @@ async fn rename_invalid_identifier_returns_error() {
     let body = serde_json::to_value(&resp).unwrap();
 
     assert!(body["error"].is_object(), "expected error object, got: {body}");
+}
+
+// ── Document symbols ─────────────────────────────────────────────────────────
+
+#[tokio::test(flavor = "current_thread")]
+async fn document_symbol_returns_top_level_items() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let src = "fn foo() -> Int\n  0\nend\ndata Bar\n  x: Int\nend\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/syms_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    let sym_req = Request::build("textDocument/documentSymbol")
+        .params(json!({ "textDocument": { "uri": "file:///tmp/syms_test.tyra" } }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(sym_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let symbols = body["result"].as_array().expect("expected symbol array");
+    assert_eq!(symbols.len(), 2, "expected foo + Bar, got: {body}");
+
+    let names: Vec<&str> = symbols.iter().filter_map(|s| s["name"].as_str()).collect();
+    assert!(names.contains(&"foo"), "missing `foo`: {body}");
+    assert!(names.contains(&"Bar"), "missing `Bar`: {body}");
+
+    // Bar should have one child `x`.
+    let bar = symbols.iter().find(|s| s["name"] == "Bar").unwrap();
+    let children = bar["children"].as_array().expect("Bar should have children");
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0]["name"], "x");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn document_symbol_returns_none_for_unopened_uri() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let sym_req = Request::build("textDocument/documentSymbol")
+        .params(json!({ "textDocument": { "uri": "file:///tmp/not_opened.tyra" } }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(sym_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    assert!(body["result"].is_null(), "expected null result for unopened uri, got: {body}");
 }
 
 // ── Diagnostics smoke ─────────────────────────────────────────────────────────

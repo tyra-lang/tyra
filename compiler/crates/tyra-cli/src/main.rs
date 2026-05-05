@@ -115,7 +115,7 @@ fn main() {
             } else {
                 Some(parent)
             };
-            let (report, sources, ..) =
+            let tyra_driver::CheckResult { report, sources, .. } =
                 tyra_driver::check_in_memory(file_name, source, workspace_dir);
             if report.has_errors() {
                 eprint!("{}", report.render(&sources));

@@ -28,6 +28,4 @@ pub enum CompletionKind {
 /// Flat list of (name, kind) pairs for every user-defined binding in a file.
 /// Collected by the resolver and consumed by the LSP completion handler.
 /// Prelude names are NOT included here; the LSP adds them from PRELUDE_*.
-///
-/// TODO: convert `check_in_memory` return type to a named struct in a future cleanup.
 pub type SymbolList = Vec<(String, CompletionKind)>;

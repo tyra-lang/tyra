@@ -884,8 +884,10 @@ dependencies = [
  "tokio",
  "tower",
  "tower-lsp",
+ "tyra-ast",
  "tyra-diagnostics",
  "tyra-driver",
+ "tyra-parser",
 ]
 
 [[package]]

@@ -8,10 +8,22 @@ use std::path::Path;
 use std::process::Command;
 
 use tyra_diagnostics::{Report, SourceMap};
+pub use tyra_ast::SourceFile;
 pub use tyra_diagnostics::SourceId;
 pub use tyra_resolve::{CompletionKind, DefIndex, SymbolList};
 pub use tyra_resolve::{PRELUDE_CONSTRUCTORS, PRELUDE_FUNCTIONS, PRELUDE_TYPES};
 pub use tyra_types::{Ty, TypeIndex};
+
+/// Result of `check_in_memory` — all data produced by the lex→parse→resolve→typecheck pipeline.
+pub struct CheckResult {
+    pub report: Report,
+    pub sources: SourceMap,
+    pub type_index: TypeIndex,
+    pub def_index: DefIndex,
+    pub symbols: SymbolList,
+    pub source_id: SourceId,
+    pub ast: SourceFile,
+}
 
 /// Result of compilation.
 pub struct CompileResult {
@@ -25,7 +37,6 @@ pub struct CompileResult {
 ///
 /// Runs lex → parse → auto-import → rename → (optional) import-resolve
 /// → name-resolve → type-check.  Stops before MIR / LLVM codegen.
-/// Returns `(Report, SourceMap, TypeIndex, DefIndex, SymbolList, SourceId)`.
 ///
 /// `SymbolList` is a flat list of all user-defined names collected by the
 /// resolver, used by the LSP completion handler. Prelude names are not
@@ -33,24 +44,28 @@ pub struct CompileResult {
 ///
 /// If `workspace_dir` is `None`, filesystem import resolution is
 /// skipped (suitable for LSP single-file diagnostics).
-///
-/// TODO: convert this to a named `CheckResult` struct when the tuple grows unwieldy.
 pub fn check_in_memory(
     file_name: String,
     source: String,
     workspace_dir: Option<&Path>,
-) -> (Report, SourceMap, TypeIndex, DefIndex, SymbolList, SourceId) {
+) -> CheckResult {
     let mut sources = SourceMap::new();
     let mut report = Report::new();
-    let empty_type_index = TypeIndex::new();
-    let empty_def_index = DefIndex::new();
-    let empty_symbols = SymbolList::new();
 
     let source_id = sources.add(file_name, source);
 
     let mut ast = tyra_parser::parse(source_id, &sources, &mut report);
     if report.has_errors() {
-        return (report, sources, empty_type_index, empty_def_index, empty_symbols, source_id);
+        let empty_ast = ast;
+        return CheckResult {
+            report,
+            sources,
+            type_index: TypeIndex::new(),
+            def_index: DefIndex::new(),
+            symbols: SymbolList::new(),
+            source_id,
+            ast: empty_ast,
+        };
     }
 
     auto_import_stdlib(&mut ast);
@@ -60,17 +75,35 @@ pub fn check_in_memory(
     if let Some(dir) = workspace_dir {
         resolve_imports(&mut ast, dir, &mut sources, &mut report);
         if report.has_errors() {
-            return (report, sources, empty_type_index, empty_def_index, empty_symbols, source_id);
+            let snapshot = ast;
+            return CheckResult {
+                report,
+                sources,
+                type_index: TypeIndex::new(),
+                def_index: DefIndex::new(),
+                symbols: SymbolList::new(),
+                source_id,
+                ast: snapshot,
+            };
         }
     }
 
     let (def_index, symbol_list) = tyra_resolve::resolve(&ast, &mut report);
     if report.has_errors() {
-        return (report, sources, empty_type_index, def_index, symbol_list, source_id);
+        let snapshot = ast;
+        return CheckResult {
+            report,
+            sources,
+            type_index: TypeIndex::new(),
+            def_index,
+            symbols: symbol_list,
+            source_id,
+            ast: snapshot,
+        };
     }
 
     let type_index = tyra_types::check(&ast, &mut report);
-    (report, sources, type_index, def_index, symbol_list, source_id)
+    CheckResult { report, sources, type_index, def_index, symbols: symbol_list, source_id, ast }
 }
 
 /// Compile a Tyra source file to LLVM IR text.
@@ -1357,7 +1390,7 @@ mod tests {
 
     #[test]
     fn check_in_memory_clean_program() {
-        let (report, _, _, _, _, _) = check_in_memory(
+        let CheckResult { report, .. } = check_in_memory(
             "ok.tyra".into(),
             "fn main() -> Unit\n  print(\"hello\")\nend\n".into(),
             None,
@@ -1367,7 +1400,7 @@ mod tests {
 
     #[test]
     fn check_in_memory_reports_e0110_for_import_in_fn() {
-        let (report, _, _, _, _, _) = check_in_memory(
+        let CheckResult { report, .. } = check_in_memory(
             "bad.tyra".into(),
             "fn f() -> Int\n  import foo\n  0\nend\n".into(),
             None,
@@ -1383,7 +1416,7 @@ mod tests {
 
     #[test]
     fn check_in_memory_reports_parse_error() {
-        let (report, _, _, _, _, _) = check_in_memory(
+        let CheckResult { report, .. } = check_in_memory(
             "bad.tyra".into(),
             "let x = \n".into(),
             None,

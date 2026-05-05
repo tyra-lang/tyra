@@ -14,6 +14,7 @@ use completion::{
 };
 
 mod keywords;
+mod outline;
 mod references;
 mod rename;
 
@@ -27,6 +28,7 @@ pub(crate) struct DocState {
     pub(crate) def_index: DefIndex,
     pub(crate) symbols: SymbolList,
     pub(crate) source_id: SourceId,
+    pub(crate) ast: tyra_driver::SourceFile,
 }
 
 struct TyraLsp {
@@ -59,7 +61,7 @@ impl TyraLsp {
         .await;
 
         let lsp_diags = match result {
-            Ok(Ok((report, sources, type_index, def_index, symbols, source_id))) => {
+            Ok(Ok(tyra_driver::CheckResult { report, sources, type_index, def_index, symbols, source_id, ast })) => {
                 let diags = report
                     .diagnostics()
                     .iter()
@@ -68,7 +70,7 @@ impl TyraLsp {
 
                 self.documents.lock().await.insert(
                     uri.clone(),
-                    DocState { text, sources, type_index, def_index, symbols, source_id },
+                    DocState { text, sources, type_index, def_index, symbols, source_id, ast },
                 );
 
                 diags
@@ -168,6 +170,7 @@ impl LanguageServer for TyraLsp {
                     trigger_characters: Some(vec![".".to_string()]),
                     ..Default::default()
                 }),
+                document_symbol_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -406,6 +409,21 @@ impl LanguageServer for TyraLsp {
         let mut changes = HashMap::new();
         changes.insert(uri.clone(), edits);
         Ok(Some(WorkspaceEdit { changes: Some(changes), ..Default::default() }))
+    }
+
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<Option<DocumentSymbolResponse>> {
+        let uri = &params.text_document.uri;
+        let docs = self.documents.lock().await;
+        let state = match docs.get(uri) {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+        let symbols =
+            outline::build_document_symbols(state.source_id, &state.ast, &state.sources);
+        Ok(Some(DocumentSymbolResponse::Nested(symbols)))
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
