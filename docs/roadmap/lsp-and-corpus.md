@@ -17,6 +17,7 @@
 | Static Corpus | Spec coverage report (`coverage.sh`) | ✅ Done (2026-05-05) |
 | LSP | UTF-16 `Position.character` encoding | ✅ Done (2026-05-05) |
 | LSP | Member-access completion (`module.<Tab>`, builtin methods) | ✅ Done (2026-05-05) |
+| LSP | Find references (`textDocument/references`) | ✅ Done (2026-05-05) |
 
 ---
 
@@ -143,6 +144,9 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   to module-symbol lookup only.
 - **Completion intrinsics**: `__`-prefixed intrinsic names (e.g. `__fs_read_raw`)
   are intentionally excluded from completion; they are implementation details.
+- **References scope**: only `ExprKind::Ident` references are tracked (same scope as
+  go-to-definition).  Field-access / pattern bindings / type names are not surfaced.
+  Cross-file references are not supported in v0.1.
 - **Go-to-definition scope**: only `ExprKind::Ident` references are tracked.
   Field-access paths (`module.member`) and prelude/builtin names (no definition
   span) are not supported in v0.1.

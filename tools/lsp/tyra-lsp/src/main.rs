@@ -5,13 +5,15 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 use tyra_diagnostics::{Level, SourceMap};
-use tyra_driver::{CompletionKind, DefIndex, SourceId, SymbolList, TypeIndex};
+use tyra_driver::{DefIndex, SourceId, SymbolList, TypeIndex};
 
 mod completion;
 use completion::{
     build_completion_items, detect_member_receiver, lookup_receiver_ty,
     module_member_completions, type_method_completions,
 };
+
+mod references;
 
 const DIAG_SOURCE: &str = "tyra";
 
@@ -158,6 +160,7 @@ impl LanguageServer for TyraLsp {
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
+                references_provider: Some(OneOf::Left(true)),
                 completion_provider: Some(CompletionOptions {
                     trigger_characters: Some(vec![".".to_string()]),
                     ..Default::default()
@@ -294,6 +297,49 @@ impl LanguageServer for TyraLsp {
         Ok(Some(CompletionResponse::Array(build_completion_items(state))))
     }
 
+    async fn references(
+        &self,
+        params: ReferenceParams,
+    ) -> Result<Option<Vec<Location>>> {
+        let uri = &params.text_document_position.text_document.uri;
+        let pos = params.text_document_position.position;
+        let include_decl = params.context.include_declaration;
+
+        let docs = self.documents.lock().await;
+        let state = match docs.get(uri) {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+
+        let offset = match state
+            .sources
+            .offset_at_utf16(state.source_id, pos.line, pos.character)
+        {
+            Some(o) => o,
+            None => return Ok(None),
+        };
+
+        let def_span = match references::find_def_span_at_cursor(state, offset) {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+
+        let mut use_spans =
+            references::find_uses_for_def(&state.def_index, def_span, state.source_id);
+        if include_decl {
+            use_spans.push(def_span);
+        }
+
+        let locations = use_spans
+            .into_iter()
+            .map(|s| Location {
+                uri: uri.clone(),
+                range: span_to_lsp_range(s, &state.sources),
+            })
+            .collect();
+        Ok(Some(locations))
+    }
+
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
         let uri = &params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
@@ -350,438 +396,5 @@ async fn main() {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use super::completion::{
-        build_completion_items, detect_member_receiver, lookup_receiver_ty,
-        module_member_completions, type_method_completions,
-    };
-    use tyra_diagnostics::{Diagnostic as TyraDiag, Label, SourceMap, Span};
+mod tests;
 
-    fn make_source() -> (SourceMap, tyra_diagnostics::SourceId) {
-        let mut sources = SourceMap::new();
-        // "hello\nworld\n" → line 1 = "hello", line 2 = "world"
-        let id = sources.add("test.tyra".into(), "hello\nworld\n".into());
-        (sources, id)
-    }
-
-    #[test]
-    fn to_lsp_diagnostic_range_conversion() {
-        let (sources, id) = make_source();
-        // "hello" is at bytes 0..5 on line 1, col 1..6 (1-based)
-        // LSP expects line 0, char 0..5 (0-based)
-        let diag = TyraDiag::error("test error")
-            .with_code("E0001")
-            .with_label(Label::new(Span::new(id, 0, 5), "here"));
-        let lsp = to_lsp_diagnostic(&diag, &sources);
-        assert_eq!(lsp.range.start.line, 0);
-        assert_eq!(lsp.range.start.character, 0);
-        assert_eq!(lsp.range.end.line, 0);
-        assert_eq!(lsp.range.end.character, 5);
-    }
-
-    #[test]
-    fn to_lsp_diagnostic_second_line() {
-        let (sources, id) = make_source();
-        // "world" starts at byte 6 on line 2 col 1 → LSP line 1, char 0
-        let diag = TyraDiag::error("msg")
-            .with_label(Label::new(Span::new(id, 6, 11), "second line"));
-        let lsp = to_lsp_diagnostic(&diag, &sources);
-        assert_eq!(lsp.range.start.line, 1);
-        assert_eq!(lsp.range.start.character, 0);
-    }
-
-    #[test]
-    fn to_lsp_diagnostic_no_label_falls_back_to_origin() {
-        let (sources, _) = make_source();
-        let diag = TyraDiag::error("no span here");
-        let lsp = to_lsp_diagnostic(&diag, &sources);
-        assert_eq!(lsp.range, Range::default());
-        assert_eq!(lsp.message, "no span here");
-    }
-
-    #[test]
-    fn to_lsp_diagnostic_message_combines_label() {
-        let (sources, id) = make_source();
-        let diag = TyraDiag::error("primary")
-            .with_label(Label::new(Span::new(id, 0, 1), "label text"));
-        let lsp = to_lsp_diagnostic(&diag, &sources);
-        assert_eq!(lsp.message, "primary — label text");
-    }
-
-    #[test]
-    fn to_lsp_diagnostic_severity_mapping() {
-        let (sources, _) = make_source();
-        let err = to_lsp_diagnostic(&TyraDiag::error("e"), &sources);
-        let warn = to_lsp_diagnostic(&TyraDiag::warning("w"), &sources);
-        let note = to_lsp_diagnostic(&TyraDiag::note("n"), &sources);
-        assert_eq!(err.severity, Some(DiagnosticSeverity::ERROR));
-        assert_eq!(warn.severity, Some(DiagnosticSeverity::WARNING));
-        assert_eq!(note.severity, Some(DiagnosticSeverity::INFORMATION));
-    }
-
-    #[test]
-    fn to_lsp_diagnostic_source_is_tyra() {
-        let (sources, _) = make_source();
-        let lsp = to_lsp_diagnostic(&TyraDiag::error("e"), &sources);
-        assert_eq!(lsp.source.as_deref(), Some(DIAG_SOURCE));
-    }
-
-    /// Hover over a known binding returns the correct type string.
-    #[test]
-    fn hover_type_index_lookup() {
-        let src = "let x: Int = 1\n";
-        let (report, sources, type_index, _, _, source_id) =
-            tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
-        assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
-
-        // Hover at line 0, col 4 → inside the let statement span.
-        let offset = sources.offset_at(source_id, 0, 4).expect("offset_at failed");
-
-        let best = type_index
-            .iter()
-            .filter(|(span, _)| {
-                span.source == source_id && span.start <= offset && offset < span.end
-            })
-            .min_by_key(|(span, _)| span.end - span.start);
-
-        let (_span, ty) = best.expect("no type found at offset");
-        assert_eq!(ty.display_name(), "Int");
-    }
-
-    /// Go-to-definition: reference to `x` in `let y = x + 1` resolves to the
-    /// `let x` definition span starting at byte 0.
-    #[test]
-    fn goto_definition_def_index_lookup() {
-        // "let x: Int = 1\n" is 15 bytes; "let y = x + 1\n" follows.
-        // 'x' in "let y = x + 1" sits at byte offset 15+8 = 23.
-        let src = "let x: Int = 1\nlet y = x + 1\n";
-        let (report, sources, _, def_index, _, source_id) =
-            tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
-        assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
-
-        let ref_offset = sources.offset_at(source_id, 1, 8).expect("offset_at failed");
-
-        let best = def_index
-            .iter()
-            .filter(|(span, _)| {
-                span.source == source_id && span.start <= ref_offset && ref_offset < span.end
-            })
-            .min_by_key(|(span, _)| span.end - span.start);
-
-        let (_, def_span) = best.expect("no definition found for x reference");
-        // def_span is the let stmt starting at the beginning of the source
-        assert_eq!(def_span.start, 0, "expected definition at start of `let x` stmt");
-    }
-
-    /// Smoke test: JSON-RPC `textDocument/definition` returns a `Location`
-    /// pointing back into the same document.
-    #[tokio::test(flavor = "current_thread")]
-    async fn goto_definition_returns_location() {
-        use serde_json::json;
-        use tower::{Service, ServiceExt};
-        use tower_lsp::jsonrpc::Request;
-
-        let (mut service, _socket) = LspService::new(|client| TyraLsp {
-            client,
-            documents: Mutex::new(HashMap::new()),
-        });
-
-        let init = Request::build("initialize")
-            .params(json!({"capabilities": {}}))
-            .id(1)
-            .finish();
-        let _ = service.ready().await.unwrap().call(init).await.unwrap();
-
-        let src = "let x: Int = 1\nlet y = x + 1\n";
-        let did_open = Request::build("textDocument/didOpen")
-            .params(json!({
-                "textDocument": {
-                    "uri": "file:///tmp/def_test.tyra",
-                    "languageId": "tyra",
-                    "version": 1,
-                    "text": src
-                }
-            }))
-            .finish();
-        let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
-
-        // Position line 1 col 8 = 'x' in "let y = x + 1"
-        let def_req = Request::build("textDocument/definition")
-            .params(json!({
-                "textDocument": { "uri": "file:///tmp/def_test.tyra" },
-                "position": { "line": 1, "character": 8 }
-            }))
-            .id(2)
-            .finish();
-        let resp = service.ready().await.unwrap().call(def_req).await.unwrap();
-        let body = serde_json::to_value(&resp).unwrap();
-
-        // GotoDefinitionResponse::Scalar serialises as a single Location object.
-        assert!(
-            body["result"].is_object(),
-            "expected a Location object, got: {body}"
-        );
-        assert!(
-            body["result"]["uri"]
-                .as_str()
-                .map(|s| s.contains("def_test.tyra"))
-                .unwrap_or(false),
-            "expected def_test.tyra in uri, got: {body}"
-        );
-    }
-
-    /// Completion includes user-defined locals and prelude names.
-    #[test]
-    fn completion_returns_prelude_and_locals() {
-        let src = "let xs = [1]\n";
-        let (report, sources, _, _, symbols, source_id) =
-            tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
-        assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
-
-        let state = DocState {
-            text: src.to_string(),
-            sources,
-            type_index: Default::default(),
-            def_index: Default::default(),
-            symbols,
-            source_id,
-        };
-        let items = build_completion_items(&state);
-        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
-
-        assert!(labels.contains(&"xs"), "missing user-defined `xs`");
-        assert!(labels.contains(&"println"), "missing prelude `println`");
-        assert!(labels.contains(&"Some"), "missing prelude constructor `Some`");
-        assert!(labels.contains(&"Int"), "missing prelude type `Int`");
-        assert!(labels.contains(&"let"), "missing keyword `let`");
-    }
-
-    /// `__`-prefixed intrinsics are excluded from completion.
-    #[test]
-    fn completion_excludes_intrinsics() {
-        let src = "let x = 1\n";
-        let (_, sources, _, _, symbols, source_id) =
-            tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
-        let state = DocState {
-            text: src.to_string(),
-            sources,
-            type_index: Default::default(),
-            def_index: Default::default(),
-            symbols,
-            source_id,
-        };
-        let items = build_completion_items(&state);
-        assert!(
-            !items.iter().any(|i| i.label.starts_with("__")),
-            "intrinsic names should be excluded"
-        );
-    }
-
-    /// JSON-RPC smoke: `textDocument/completion` returns an array containing `println`.
-    #[tokio::test(flavor = "current_thread")]
-    async fn completion_returns_array_with_println() {
-        use serde_json::json;
-        use tower::{Service, ServiceExt};
-        use tower_lsp::jsonrpc::Request;
-
-        let (mut service, _socket) = LspService::new(|client| TyraLsp {
-            client,
-            documents: Mutex::new(HashMap::new()),
-        });
-
-        let init = Request::build("initialize")
-            .params(json!({"capabilities": {}}))
-            .id(1)
-            .finish();
-        let _ = service.ready().await.unwrap().call(init).await.unwrap();
-
-        let src = "let x: Int = 1\n";
-        let did_open = Request::build("textDocument/didOpen")
-            .params(json!({
-                "textDocument": {
-                    "uri": "file:///tmp/completion_test.tyra",
-                    "languageId": "tyra",
-                    "version": 1,
-                    "text": src
-                }
-            }))
-            .finish();
-        let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
-
-        let comp_req = Request::build("textDocument/completion")
-            .params(json!({
-                "textDocument": { "uri": "file:///tmp/completion_test.tyra" },
-                "position": { "line": 0, "character": 0 }
-            }))
-            .id(2)
-            .finish();
-        let resp = service.ready().await.unwrap().call(comp_req).await.unwrap();
-        let body = serde_json::to_value(&resp).unwrap();
-
-        assert!(
-            body["result"].is_array(),
-            "expected array response, got: {body}"
-        );
-        let labels: Vec<&str> = body["result"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter_map(|item| item["label"].as_str())
-            .collect();
-        assert!(
-            labels.contains(&"println"),
-            "expected `println` in completion items, got: {labels:?}"
-        );
-    }
-
-    // ── Member-access completion ───────────────────────────────────────────────
-
-    /// `detect_member_receiver` unit tests: various cursor contexts.
-    #[test]
-    fn detect_member_receiver_unit() {
-        let mk = |line: &str, ch: u32| -> Option<String> {
-            detect_member_receiver(line, Position { line: 0, character: ch })
-        };
-
-        // cursor right after dot
-        assert_eq!(mk("string.", 7), Some("string".into()));
-        // cursor after partial member name
-        assert_eq!(mk("string.tri", 10), Some("string".into()));
-        // no dot → None
-        assert_eq!(mk("string", 6), None);
-        // digit before dot → None (digits are alphanumeric so "1" is extracted)
-        // but "1" won't match any symbol, so returning it is harmless
-        // what matters: no panic
-        let _ = mk("1.", 2);
-        // space before dot → None (no ident chars immediately before dot)
-        assert_eq!(mk("  .", 3), None);
-        // chained: `foo.bar.|` → rightmost dot receiver = "bar"
-        assert_eq!(mk("foo.bar.", 8), Some("bar".into()));
-        // multi-line: only the target line is considered
-        assert_eq!(
-            detect_member_receiver("let x = 1\nstring.", Position { line: 1, character: 7 }),
-            Some("string".into())
-        );
-        // digit-only receiver is rejected (e.g. float literal `1.5`)
-        assert_eq!(mk("1.", 2), None);
-    }
-
-    /// Module-member completion: symbols with `<receiver>__<member>` prefix are
-    /// stripped and returned as plain member names.
-    #[test]
-    fn completion_after_module_dot_returns_module_members() {
-        // Build a DocState whose symbols include `mymod__foo` and `mymod__bar`
-        // (as if `import mymod` had been resolved and merged by the driver).
-        let src = "let x = 1\n";
-        let (_, sources, type_index, def_index, _, source_id) =
-            tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
-        let symbols: SymbolList = vec![
-            ("mymod__foo".into(), CompletionKind::Function),
-            ("mymod__bar".into(), CompletionKind::Function),
-            ("other".into(), CompletionKind::Variable),
-        ];
-        let state = DocState {
-            text: "mymod.".to_string(),
-            sources,
-            type_index,
-            def_index,
-            symbols,
-            source_id,
-        };
-
-        // cursor at character 6 = right after "mymod."
-        let pos = Position { line: 0, character: 6 };
-        let receiver =
-            detect_member_receiver(&state.text, pos).expect("should detect receiver");
-        assert_eq!(receiver, "mymod");
-
-        let items = module_member_completions(&receiver, &state);
-        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
-        assert!(labels.contains(&"foo"), "expected `foo` in members: {labels:?}");
-        assert!(labels.contains(&"bar"), "expected `bar` in members: {labels:?}");
-        assert!(!labels.contains(&"other"), "`other` should not appear");
-    }
-
-    /// When the receiver is not a known module name and has no resolvable Ty,
-    /// member-access completion returns an empty list.
-    #[test]
-    fn completion_after_dot_no_match_returns_empty() {
-        // "let r = unknown_module." — count chars:
-        // l(0)e(1)t(2) (3)r(4) (5)=(6) (7)u(8)n(9)k(10)n(11)o(12)w(13)n(14)_(15)
-        // m(16)o(17)d(18)u(19)l(20)e(21).(22) → cursor after '.' = character 23
-        let src = "let x = 1\nlet r = unknown_module.\n";
-        let (_, sources, type_index, def_index, symbols, source_id) =
-            tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
-        let state = DocState {
-            text: src.to_string(),
-            sources,
-            type_index,
-            def_index,
-            symbols,
-            source_id,
-        };
-        let pos = Position { line: 1, character: 23 };
-        let receiver =
-            detect_member_receiver(src, pos).expect("should detect receiver");
-        assert_eq!(receiver, "unknown_module");
-
-        let module_items = module_member_completions(&receiver, &state);
-        assert!(module_items.is_empty(), "expected no module members for unknown receiver");
-
-        let ty_items = match lookup_receiver_ty(&receiver, &state) {
-            Some(ty) => type_method_completions(&ty),
-            None => vec![],
-        };
-        assert!(ty_items.is_empty(), "expected no type methods for unknown receiver");
-    }
-
-    /// Smoke test: JSON-RPC `textDocument/didOpen` with an E0110-triggering
-    /// source must produce a `textDocument/publishDiagnostics` notification
-    /// on the client socket that contains the E0110 code.
-    #[tokio::test(flavor = "current_thread")]
-    async fn did_open_publishes_e0110_diagnostic() {
-        use futures::StreamExt;
-        use serde_json::json;
-        use tower::{Service, ServiceExt};
-        use tower_lsp::jsonrpc::Request;
-
-        let (mut service, mut socket) = LspService::new(|client| TyraLsp {
-            client,
-            documents: Mutex::new(HashMap::new()),
-        });
-
-        // initialize — tower-lsp transitions to Initialized on the response, so no
-        // separate `initialized` notification is needed for the test to work.
-        let init = Request::build("initialize")
-            .params(json!({"capabilities": {}}))
-            .id(1)
-            .finish();
-        let _ = service.ready().await.unwrap().call(init).await.unwrap();
-
-        // did_open with import inside fn body (→ E0110)
-        let src = "fn f() -> Int\n  import foo\n  0\nend\n";
-        let did_open = Request::build("textDocument/didOpen")
-            .params(json!({
-                "textDocument": {
-                    "uri": "file:///tmp/smoke.tyra",
-                    "languageId": "tyra",
-                    "version": 1,
-                    "text": src
-                }
-            }))
-            .finish();
-        let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
-
-        // publishDiagnostics is sent inline within the did_open call above, so
-        // the socket already has exactly one message waiting.
-        let msg = socket.next().await.expect("expected publishDiagnostics notification");
-        let body = serde_json::to_value(&msg).unwrap();
-        assert_eq!(body["method"], "textDocument/publishDiagnostics");
-        let diags = body["params"]["diagnostics"].as_array().unwrap();
-        assert!(
-            diags.iter().any(|d| d["code"] == "E0110"),
-            "expected E0110 diagnostic, got: {body}"
-        );
-    }
-}
