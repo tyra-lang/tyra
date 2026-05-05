@@ -18,6 +18,7 @@
 | LSP | UTF-16 `Position.character` encoding | ✅ Done (2026-05-05) |
 | LSP | Member-access completion (`module.<Tab>`, builtin methods) | ✅ Done (2026-05-05) |
 | LSP | Find references (`textDocument/references`) | ✅ Done (2026-05-05) |
+| LSP | Rename (`textDocument/rename`) | ✅ Done (2026-05-05) |
 
 ---
 
@@ -144,6 +145,11 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   to module-symbol lookup only.
 - **Completion intrinsics**: `__`-prefixed intrinsic names (e.g. `__fs_read_raw`)
   are intentionally excluded from completion; they are implementation details.
+- **Rename scope**: same as references — only `ExprKind::Ident` use-spans are renamed.
+  Field-access paths, pattern bindings, and type-name references are not renamed.
+  No scope-collision check: renaming to a name already bound in the same scope produces
+  invalid code (post-rename compiler errors surface this).  `prepareRename` is not
+  implemented.  Cross-file rename is not supported.
 - **References scope**: only `ExprKind::Ident` references are tracked (same scope as
   go-to-definition).  Field-access / pattern bindings / type names are not surfaced.
   Cross-file references are not supported in v0.1.

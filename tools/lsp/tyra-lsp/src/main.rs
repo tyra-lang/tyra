@@ -13,7 +13,9 @@ use completion::{
     module_member_completions, type_method_completions,
 };
 
+mod keywords;
 mod references;
+mod rename;
 
 const DIAG_SOURCE: &str = "tyra";
 
@@ -161,6 +163,7 @@ impl LanguageServer for TyraLsp {
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
+                rename_provider: Some(OneOf::Left(true)),
                 completion_provider: Some(CompletionOptions {
                     trigger_characters: Some(vec![".".to_string()]),
                     ..Default::default()
@@ -338,6 +341,71 @@ impl LanguageServer for TyraLsp {
             })
             .collect();
         Ok(Some(locations))
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = &params.text_document_position.text_document.uri;
+        let pos = params.text_document_position.position;
+        let new_name = &params.new_name;
+
+        if !rename::is_valid_identifier(new_name) {
+            return Err(tower_lsp::jsonrpc::Error::invalid_params(format!(
+                "`{new_name}` is not a valid Tyra identifier"
+            )));
+        }
+
+        let docs = self.documents.lock().await;
+        let state = match docs.get(uri) {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+
+        let offset = match state
+            .sources
+            .offset_at_utf16(state.source_id, pos.line, pos.character)
+        {
+            Some(o) => o,
+            None => return Ok(None),
+        };
+
+        let old_name = match rename::extract_identifier_at(&state.text, offset) {
+            Some(n) => n,
+            None => return Ok(None),
+        };
+
+        let def_span = match references::find_def_span_at_cursor(state, offset) {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+
+        let use_spans =
+            references::find_uses_for_def(&state.def_index, def_span, state.source_id);
+        let mut edits: Vec<TextEdit> = use_spans
+            .into_iter()
+            .map(|s| TextEdit {
+                range: span_to_lsp_range(s, &state.sources),
+                new_text: new_name.clone(),
+            })
+            .collect();
+
+        if let Some(name_span) =
+            rename::find_binding_name_span(&state.text, def_span, &old_name)
+        {
+            edits.push(TextEdit {
+                range: span_to_lsp_range(name_span, &state.sources),
+                new_text: new_name.clone(),
+            });
+        }
+
+        // Sort edits by position so clients that apply them in order behave correctly.
+        edits.sort_by(|a, b| {
+            a.range.start.line.cmp(&b.range.start.line)
+                .then(a.range.start.character.cmp(&b.range.start.character))
+        });
+
+        let mut changes = HashMap::new();
+        changes.insert(uri.clone(), edits);
+        Ok(Some(WorkspaceEdit { changes: Some(changes), ..Default::default() }))
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {

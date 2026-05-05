@@ -1,6 +1,7 @@
 use tower_lsp::lsp_types::*;
 use tyra_driver::{CompletionKind, Ty, PRELUDE_CONSTRUCTORS, PRELUDE_FUNCTIONS, PRELUDE_TYPES};
 
+use crate::keywords::TYRA_KEYWORDS;
 use crate::DocState;
 
 /// Builtin method names for the `String` type, sourced from the stdlib.
@@ -11,14 +12,6 @@ static STRING_METHODS: &[&str] = &[
 
 /// Builtin method names for the `List<T>` type.
 static LIST_METHODS: &[&str] = &["push", "pop", "len", "get", "is_empty"];
-
-/// Tyra language keywords for completion.
-static TYRA_KEYWORDS: &[&str] = &[
-    "fn", "let", "mut", "if", "else", "end", "when", "match", "for", "in",
-    "while", "break", "return", "import", "export", "value", "data", "type",
-    "trait", "impl", "true", "false", "and", "or", "not", "defer", "spawn",
-    "await", "async",
-];
 
 /// Detect whether the cursor is positioned immediately after `<ident>.`
 /// (with an optional partial identifier already typed).  Returns the receiver

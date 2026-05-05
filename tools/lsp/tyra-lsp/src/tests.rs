@@ -539,6 +539,206 @@ async fn references_include_declaration_returns_def_and_use() {
     );
 }
 
+// ── Rename ────────────────────────────────────────────────────────────────────
+
+/// Pure helper test: rename `x` → `xx` produces 3 edits (1 decl + 2 uses).
+#[test]
+fn rename_renames_all_uses_and_declaration() {
+    use crate::references::{find_def_span_at_cursor, find_uses_for_def};
+    use crate::rename::{extract_identifier_at, find_binding_name_span};
+
+    let src = "let x: Int = 1\nlet y = x + 1\nlet z = x * 2\n";
+    let (report, sources, _, def_index, _, source_id) =
+        tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+
+    let state = DocState {
+        text: src.to_string(),
+        sources,
+        type_index: Default::default(),
+        def_index,
+        symbols: Default::default(),
+        source_id,
+    };
+
+    // Cursor on `x` in "let y = x + 1" (line 1, col 8).
+    let offset = state.sources.offset_at(source_id, 1, 8).expect("offset_at");
+    let old_name = extract_identifier_at(src, offset).expect("extract_identifier_at");
+    assert_eq!(old_name, "x");
+
+    let def_span = find_def_span_at_cursor(&state, offset).expect("find_def_span_at_cursor");
+    let use_spans = find_uses_for_def(&state.def_index, def_span, source_id);
+    assert_eq!(use_spans.len(), 2, "expected 2 use-spans");
+
+    let name_span = find_binding_name_span(src, def_span, &old_name)
+        .expect("find_binding_name_span");
+    // name_span should cover the 'x' in "let x: Int = 1" (byte 4..5)
+    assert_eq!(&src[name_span.start as usize..name_span.end as usize], "x");
+
+    // Total edits: 2 uses + 1 declaration = 3.
+    let total = use_spans.len() + 1;
+    assert_eq!(total, 3, "expected 3 edits (1 decl + 2 uses)");
+}
+
+/// JSON-RPC smoke: `textDocument/rename` returns a WorkspaceEdit with non-empty changes.
+#[tokio::test(flavor = "current_thread")]
+async fn rename_returns_workspace_edit() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let src = "let x: Int = 1\nlet y = x + 1\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/rename_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    // Rename `x` at line 1 col 8 (use-site) to `renamed`.
+    let rename_req = Request::build("textDocument/rename")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/rename_test.tyra" },
+            "position": { "line": 1, "character": 8 },
+            "newName": "renamed"
+        }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(rename_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let changes = &body["result"]["changes"];
+    assert!(changes.is_object(), "expected changes object, got: {body}");
+    let file_edits = changes["file:///tmp/rename_test.tyra"]
+        .as_array()
+        .expect("expected edits array for the file");
+    assert!(!file_edits.is_empty(), "expected at least one edit, got: {body}");
+    assert!(
+        file_edits.iter().all(|e| e["newText"] == "renamed"),
+        "all edits should use new name 'renamed', got: {body}"
+    );
+}
+
+/// Rename from the declaration site (cursor on `x` in `let x: ...`) also
+/// produces a valid WorkspaceEdit covering declaration + all uses.
+#[tokio::test(flavor = "current_thread")]
+async fn rename_from_def_site_returns_workspace_edit() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    // One declaration, one use.
+    let src = "let x: Int = 1\nlet y = x + 1\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/rename_def_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    // Cursor at line 0 col 4 = 'x' in "let x: Int = 1" (def-site).
+    let rename_req = Request::build("textDocument/rename")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/rename_def_test.tyra" },
+            "position": { "line": 0, "character": 4 },
+            "newName": "renamed"
+        }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(rename_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let edits = body["result"]["changes"]["file:///tmp/rename_def_test.tyra"]
+        .as_array()
+        .expect("expected edits array");
+    // 1 declaration edit + 1 use edit = 2 total.
+    assert_eq!(edits.len(), 2, "expected 2 edits (decl + use), got: {body}");
+    assert!(
+        edits.iter().all(|e| e["newText"] == "renamed"),
+        "all edits should use 'renamed', got: {body}"
+    );
+    // Edits should be sorted: declaration (line 0) before use (line 1).
+    assert_eq!(edits[0]["range"]["start"]["line"], 0, "first edit should be declaration");
+    assert_eq!(edits[1]["range"]["start"]["line"], 1, "second edit should be use");
+}
+
+/// `new_name = \"let\"` (keyword) must produce an invalid_params error.
+#[tokio::test(flavor = "current_thread")]
+async fn rename_invalid_identifier_returns_error() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let src = "let x: Int = 1\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/rename_err_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    let rename_req = Request::build("textDocument/rename")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/rename_err_test.tyra" },
+            "position": { "line": 0, "character": 4 },
+            "newName": "let"
+        }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(rename_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    assert!(body["error"].is_object(), "expected error object, got: {body}");
+}
+
 // ── Diagnostics smoke ─────────────────────────────────────────────────────────
 
 #[tokio::test(flavor = "current_thread")]
