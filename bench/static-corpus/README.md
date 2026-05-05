@@ -26,6 +26,7 @@ on the current `main` branch.
 | `08-async-tasks.tyra` | `async fn`, `spawn`, `Task<T>`, `.await?`, `join_all` |
 | `09-error-handling.tyra` | `defer`, `panic`, compound `and`/`or`, `Into` chain |
 | `10-data-modeling.tyra` | `value`/`data` distinction, `Stringable`, `Eq`/`Ord` |
+| `11-break-loop.tyra` | `break` inside `while` and `for` (§10.4, §10.5) |
 
 ## Running the corpus
 

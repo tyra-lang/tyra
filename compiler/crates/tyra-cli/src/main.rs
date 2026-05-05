@@ -1,6 +1,7 @@
 // tyra CLI: the Tyra language compiler.
 //
 // Usage:
+//   tyra check <file.tyra>     Type-check without codegen
 //   tyra run <file.tyra>       Compile and run a Tyra program
 //   tyra build <file.tyra>     Compile to a native binary
 //   tyra emit-ir <file.tyra>   Emit LLVM IR to stdout
@@ -87,6 +88,40 @@ fn main() {
             }
             println!("compiled to {}", output_path.display());
         }
+        "check" => {
+            if args.len() < 3 {
+                eprintln!("error: `tyra check` requires a source file");
+                eprintln!("usage: tyra check <file.tyra>");
+                process::exit(1);
+            }
+            let path = Path::new(&args[2]);
+            let source = match std::fs::read_to_string(path) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("error: cannot read {}: {e}", path.display());
+                    process::exit(1);
+                }
+            };
+            // Full display path (not bare basename) is intentional: diagnostics
+            // printed by `tyra check` appear in CI/script output where the path
+            // context is useful. Other subcommands (run/build) use the basename
+            // internally but those paths are not surfaced to stdout.
+            let file_name = path.display().to_string();
+            // path.parent() returns Some("") for bare filenames; treat that as
+            // the current working directory so import resolution works correctly.
+            let parent = path.parent().unwrap_or(Path::new("."));
+            let workspace_dir = if parent.as_os_str().is_empty() {
+                Some(Path::new("."))
+            } else {
+                Some(parent)
+            };
+            let (report, sources, ..) =
+                tyra_driver::check_in_memory(file_name, source, workspace_dir);
+            if report.has_errors() {
+                eprint!("{}", report.render(&sources));
+                process::exit(1);
+            }
+        }
         "emit-ir" => {
             if args.len() < 3 {
                 eprintln!("error: `tyra emit-ir` requires a source file");
@@ -116,6 +151,7 @@ fn print_usage() {
     eprintln!("usage: tyra <command> [options]");
     eprintln!();
     eprintln!("commands:");
+    eprintln!("  check <file.tyra>        type-check without codegen (exit 0 = clean)");
     eprintln!("  run <file.tyra>          compile and run a Tyra program");
     eprintln!("  build <file.tyra>        compile to a native binary");
     eprintln!("  emit-ir <file.tyra>      emit LLVM IR to stdout");

@@ -11,7 +11,7 @@
 | LSP | VS Code extension scaffold | ✅ Done (2026-05-04) |
 | LSP | Go to definition | ✅ Done (2026-05-04) |
 | LSP | Completion | ✅ Done (2026-05-04) |
-| Static Corpus | Break / control-flow programs | ⬜ Not started |
+| Static Corpus | Break / control-flow programs | ✅ Done (2026-05-05) |
 | Static Corpus | CI integration (`check.sh` in workflow) | ⬜ Not started |
 
 ---
@@ -32,8 +32,8 @@ never silently break these programs.
 
 1. **CI hook** — add `bench/static-corpus/check.sh` as a step in the GitHub
    Actions workflow so the corpus is checked on every PR.
-2. **Extend with break/continue** — add `11-break-loop.tyra` that exercises the
-   newly added `break` statement inside `while` and `for` loops.
+2. ✅ **Extend with break/continue** — `11-break-loop.tyra` added (2026-05-05).
+   Exercises `break` inside `while` and `for`; `tyra check` subcommand also added.
 3. **Negative corpus** — add `bad/` subdirectory with programs that are expected
    to produce specific error codes (E0200, E0214, etc.).  The check script can
    validate error codes rather than compile success.

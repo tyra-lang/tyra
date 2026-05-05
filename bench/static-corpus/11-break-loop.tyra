@@ -1,0 +1,33 @@
+# 11-break-loop.tyra
+# break statement inside while and for loops.
+# Validates: early exit with break in for and while, divergent typing of break.
+
+# SPEC_REF: §10.4 — while loop
+# SPEC_REF: §10.5 — for loop
+
+fn find_first_even(_ xs: List<Int>) -> Option<Int>
+  mut found: Option<Int> = None
+  for x in xs
+    if x % 2 == 0
+      found = Some(x)
+      break
+    end
+  end
+  found
+end
+
+fn count_until(_ limit: Int) -> Int
+  mut i: Int = 0
+  while true
+    if i >= limit
+      break
+    end
+    i = i + 1
+  end
+  i
+end
+
+let evens = find_first_even([1, 3, 4, 5])
+let n = count_until(5)
+println("first even = #{evens}")
+println("count = #{n}")
