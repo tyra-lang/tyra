@@ -1,0 +1,6 @@
+# E0214-break-outside-loop.tyra
+# expected: error[E0214]: `break` used outside of a loop
+# Exercises: type checker — `break` at top level (no enclosing loop).
+# SPEC_REF: §10.4 — while loop / §10.5 — for loop
+
+break

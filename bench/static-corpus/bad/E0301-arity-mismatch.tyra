@@ -1,0 +1,10 @@
+# E0301-arity-mismatch.tyra
+# expected: error[E0301]: expected 2 arguments, found 1
+# Exercises: type checker — calling a function with too few arguments.
+# SPEC_REF: §9.1 / §9.2 — function definitions and calls
+
+fn add(_ a: Int, _ b: Int) -> Int
+  a + b
+end
+
+let r = add(1)

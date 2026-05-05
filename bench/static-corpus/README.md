@@ -41,6 +41,10 @@ and that stderr contains `error[Exxxx]`.
 |------|----------------|
 | `bad/E0104-unexpected-token.tyra` | E0104 — parser: dangling operator |
 | `bad/E0200-undefined-name.tyra` | E0200 — resolve: undefined identifier |
+| `bad/E0206-assign-to-immutable.tyra` | E0206 — type: assign to immutable `let` binding |
+| `bad/E0214-break-outside-loop.tyra` | E0214 — type: `break` outside of a loop |
+| `bad/E0301-arity-mismatch.tyra` | E0301 — type: function call with wrong argument count |
+| `bad/E0302-question-mark-on-non-result.tyra` | E0302 — type: `?` applied to non-Option/Result |
 | `bad/E0305-arithmetic-type-mismatch.tyra` | E0305 — type: arithmetic type mismatch |
 | `bad/E0309-return-type-mismatch.tyra` | E0309 — type: fn return type mismatch |
 | `bad/E0400-non-exhaustive-match.tyra` | E0400 — type: non-exhaustive match |

@@ -35,10 +35,10 @@ never silently break these programs.
    Actions workflow so the corpus is checked on every PR.
 2. ✅ **Extend with break/continue** — `11-break-loop.tyra` added (2026-05-05).
    Exercises `break` inside `while` and `for`; `tyra check` subcommand also added.
-3. ✅ **Negative corpus** — `bad/` subdirectory added (2026-05-05) with 5 initial
-   programs (E0104 / E0200 / E0305 / E0309 / E0400). `check.sh` extracts the
-   expected code from the filename and verifies that stderr contains
-   `error[Exxxx]` and exit is non-zero.
+3. ✅ **Negative corpus** — `bad/` subdirectory added (2026-05-05), expanded to
+   9 programs (E0104 / E0200 / E0206 / E0214 / E0301 / E0302 / E0305 / E0309 /
+   E0400). `check.sh` extracts the expected code from the filename and verifies
+   that stderr contains `error[Exxxx]` and exit is non-zero.
 
 ### Mid-term tasks
 
