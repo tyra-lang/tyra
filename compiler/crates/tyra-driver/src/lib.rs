@@ -11,7 +11,7 @@ use tyra_diagnostics::{Report, SourceMap};
 pub use tyra_diagnostics::SourceId;
 pub use tyra_resolve::{CompletionKind, DefIndex, SymbolList};
 pub use tyra_resolve::{PRELUDE_CONSTRUCTORS, PRELUDE_FUNCTIONS, PRELUDE_TYPES};
-pub use tyra_types::TypeIndex;
+pub use tyra_types::{Ty, TypeIndex};
 
 /// Result of compilation.
 pub struct CompileResult {

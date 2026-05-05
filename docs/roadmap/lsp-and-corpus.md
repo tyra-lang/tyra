@@ -16,6 +16,7 @@
 | Static Corpus | CI integration (`check.sh` in workflow) | ✅ Done (2026-05-05) |
 | Static Corpus | Spec coverage report (`coverage.sh`) | ✅ Done (2026-05-05) |
 | LSP | UTF-16 `Position.character` encoding | ✅ Done (2026-05-05) |
+| LSP | Member-access completion (`module.<Tab>`, builtin methods) | ✅ Done (2026-05-05) |
 
 ---
 
@@ -131,8 +132,15 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   binding from a sibling function may appear while editing another function.
   VS Code prefix-matching filters most noise; position-aware scoping is
   deferred to a future iteration.
-- **Completion type-awareness**: method completions for `xs.<Tab>` or
-  `math.<Tab>` (module member access) are not yet supported in v0.1.
+- **Completion type-awareness**: when the cursor is positioned after
+  `<ident>.`, completion switches to member-access mode.  Module members
+  (`math.<Tab>`, `string.<Tab>`) are enumerated from mangled `module__member`
+  symbols produced by `resolve_imports`.  Method completions for primitive types
+  (`String`, `List<T>`) use a hardcoded table.  User-defined `impl` blocks and
+  full `Ty`→method resolution are deferred.
+- **Completion member-access best-effort**: when the file contains a dangling
+  `.` (E0103), `TypeIndex` is empty so type-directed method completion degrades
+  to module-symbol lookup only.
 - **Completion intrinsics**: `__`-prefixed intrinsic names (e.g. `__fs_read_raw`)
   are intentionally excluded from completion; they are implementation details.
 - **Go-to-definition scope**: only `ExprKind::Ident` references are tracked.

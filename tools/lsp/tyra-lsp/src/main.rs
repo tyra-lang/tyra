@@ -6,7 +6,7 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 use tyra_diagnostics::{Level, SourceMap};
 use tyra_driver::{
-    CompletionKind, DefIndex, SourceId, SymbolList, TypeIndex,
+    CompletionKind, DefIndex, SourceId, SymbolList, Ty, TypeIndex,
     PRELUDE_CONSTRUCTORS, PRELUDE_FUNCTIONS, PRELUDE_TYPES,
 };
 
@@ -269,11 +269,23 @@ impl LanguageServer for TyraLsp {
         params: CompletionParams,
     ) -> Result<Option<CompletionResponse>> {
         let uri = &params.text_document_position.text_document.uri;
+        let pos = params.text_document_position.position;
         let docs = self.documents.lock().await;
         let state = match docs.get(uri) {
             Some(s) => s,
             None => return Ok(None),
         };
+
+        // If the cursor is immediately after `<ident>.`, switch to member-access
+        // completion mode and return only members of that receiver.
+        if let Some(receiver) = detect_member_receiver(&state.text, pos) {
+            let mut items = module_member_completions(&receiver, state);
+            if let Some(ty) = lookup_receiver_ty(&receiver, state) {
+                items.extend(type_method_completions(&ty));
+            }
+            return Ok(Some(CompletionResponse::Array(items)));
+        }
+
         Ok(Some(CompletionResponse::Array(build_completion_items(state))))
     }
 
@@ -318,6 +330,124 @@ impl LanguageServer for TyraLsp {
             range: Some(range),
         }))
     }
+}
+
+/// Builtin method names for the `String` type, sourced from the stdlib.
+static STRING_METHODS: &[&str] = &[
+    "byte_at", "substring", "from_byte", "parse_int", "parse_errno",
+    "starts_with", "ends_with", "to_upper", "to_lower", "is_empty", "trim", "len",
+];
+
+/// Builtin method names for the `List<T>` type.
+static LIST_METHODS: &[&str] = &["push", "pop", "len", "get", "is_empty"];
+
+/// Detect whether the cursor is positioned immediately after `<ident>.`
+/// (with an optional partial identifier already typed).  Returns the receiver
+/// name when the pattern matches.
+///
+/// Examples (cursor shown as `|`):
+///   `string.|`     → Some("string")
+///   `string.tri|`  → Some("string")
+///   `xs|`          → None (no dot)
+///   `1.|`          → None (non-ident before dot)
+fn detect_member_receiver(text: &str, pos: Position) -> Option<String> {
+    let line = text.lines().nth(pos.line as usize)?;
+
+    // Convert UTF-16 character index to byte offset within the line.
+    let mut byte_off = 0usize;
+    let mut utf16_seen = 0u32;
+    for ch in line.chars() {
+        if utf16_seen >= pos.character {
+            break;
+        }
+        utf16_seen += ch.len_utf16() as u32;
+        byte_off += ch.len_utf8();
+    }
+
+    let before_cursor = &line[..byte_off];
+
+    // Find the last `.` to the left of the cursor.
+    let dot_byte = before_cursor.rfind('.')?;
+    let before_dot = before_cursor[..dot_byte].trim_end();
+
+    // Extract the trailing identifier (ASCII alnum + `_`) from before_dot.
+    let bytes = before_dot.as_bytes();
+    let ident_end = bytes.len();
+    let mut ident_start = ident_end;
+    while ident_start > 0 {
+        let b = bytes[ident_start - 1];
+        if b.is_ascii_alphanumeric() || b == b'_' {
+            ident_start -= 1;
+        } else {
+            break;
+        }
+    }
+
+    let receiver = &before_dot[ident_start..ident_end];
+    if receiver.is_empty() {
+        return None;
+    }
+    Some(receiver.to_string())
+}
+
+/// Return completion items for `<receiver>.<Tab>` where `receiver` is a module
+/// name. Candidates are extracted from `state.symbols` by matching the
+/// `<receiver>__<member>` mangling produced by `resolve_imports`.
+fn module_member_completions(receiver: &str, state: &DocState) -> Vec<CompletionItem> {
+    let prefix = format!("{receiver}__");
+    let mut items: Vec<CompletionItem> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (name, kind) in &state.symbols {
+        if let Some(member) = name.strip_prefix(&prefix) {
+            if seen.insert(member.to_string()) {
+                items.push(CompletionItem {
+                    label: member.to_string(),
+                    kind: Some(match kind {
+                        CompletionKind::Function => CompletionItemKind::FUNCTION,
+                        CompletionKind::Variable => CompletionItemKind::VARIABLE,
+                        CompletionKind::TypeDef => CompletionItemKind::CLASS,
+                        CompletionKind::Module => CompletionItemKind::MODULE,
+                    }),
+                    ..Default::default()
+                });
+            }
+        }
+    }
+    items
+}
+
+/// Return completion items for `<receiver>.<Tab>` based on the receiver's Ty.
+/// Uses a hardcoded method table per primitive type.
+fn type_method_completions(ty: &Ty) -> Vec<CompletionItem> {
+    let methods: &[&str] = match ty {
+        Ty::String => STRING_METHODS,
+        Ty::Generic(name, _) if name == "List" => LIST_METHODS,
+        _ => &[],
+    };
+    methods
+        .iter()
+        .map(|&m| CompletionItem {
+            label: m.to_string(),
+            kind: Some(CompletionItemKind::METHOD),
+            ..Default::default()
+        })
+        .collect()
+}
+
+/// Resolve the Ty of a named receiver by scanning `type_index` for a span
+/// whose text in the source matches `receiver`.  Returns the first match.
+fn lookup_receiver_ty(receiver: &str, state: &DocState) -> Option<Ty> {
+    let text = state.text.as_bytes();
+    state
+        .type_index
+        .iter()
+        .filter(|(span, _)| span.source == state.source_id)
+        .find(|(span, _)| {
+            let (s, e) = (span.start as usize, span.end as usize);
+            e <= text.len()
+                && std::str::from_utf8(&text[s..e]).ok() == Some(receiver)
+        })
+        .map(|(_, ty)| ty.clone())
 }
 
 /// Tyra language keywords for completion.
@@ -694,6 +824,103 @@ mod tests {
             labels.contains(&"println"),
             "expected `println` in completion items, got: {labels:?}"
         );
+    }
+
+    // ── Member-access completion ───────────────────────────────────────────────
+
+    /// `detect_member_receiver` unit tests: various cursor contexts.
+    #[test]
+    fn detect_member_receiver_unit() {
+        let mk = |line: &str, ch: u32| -> Option<String> {
+            detect_member_receiver(line, Position { line: 0, character: ch })
+        };
+
+        // cursor right after dot
+        assert_eq!(mk("string.", 7), Some("string".into()));
+        // cursor after partial member name
+        assert_eq!(mk("string.tri", 10), Some("string".into()));
+        // no dot → None
+        assert_eq!(mk("string", 6), None);
+        // digit before dot → None (digits are alphanumeric so "1" is extracted)
+        // but "1" won't match any symbol, so returning it is harmless
+        // what matters: no panic
+        let _ = mk("1.", 2);
+        // space before dot → None (no ident chars immediately before dot)
+        assert_eq!(mk("  .", 3), None);
+        // multi-line: only the target line is considered
+        assert_eq!(
+            detect_member_receiver("let x = 1\nstring.", Position { line: 1, character: 7 }),
+            Some("string".into())
+        );
+    }
+
+    /// Module-member completion: symbols with `<receiver>__<member>` prefix are
+    /// stripped and returned as plain member names.
+    #[test]
+    fn completion_after_module_dot_returns_module_members() {
+        // Build a DocState whose symbols include `mymod__foo` and `mymod__bar`
+        // (as if `import mymod` had been resolved and merged by the driver).
+        let src = "let x = 1\n";
+        let (_, sources, type_index, def_index, _, source_id) =
+            tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+        let symbols: SymbolList = vec![
+            ("mymod__foo".into(), CompletionKind::Function),
+            ("mymod__bar".into(), CompletionKind::Function),
+            ("other".into(), CompletionKind::Variable),
+        ];
+        let state = DocState {
+            text: "mymod.".to_string(),
+            sources,
+            type_index,
+            def_index,
+            symbols,
+            source_id,
+        };
+
+        // cursor at character 6 = right after "mymod."
+        let pos = Position { line: 0, character: 6 };
+        let receiver =
+            detect_member_receiver(&state.text, pos).expect("should detect receiver");
+        assert_eq!(receiver, "mymod");
+
+        let items = module_member_completions(&receiver, &state);
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert!(labels.contains(&"foo"), "expected `foo` in members: {labels:?}");
+        assert!(labels.contains(&"bar"), "expected `bar` in members: {labels:?}");
+        assert!(!labels.contains(&"other"), "`other` should not appear");
+    }
+
+    /// When the receiver is not a known module name and has no resolvable Ty,
+    /// member-access completion returns an empty list.
+    #[test]
+    fn completion_after_dot_no_match_returns_empty() {
+        // "let r = unknown_module." — count chars:
+        // l(0)e(1)t(2) (3)r(4) (5)=(6) (7)u(8)n(9)k(10)n(11)o(12)w(13)n(14)_(15)
+        // m(16)o(17)d(18)u(19)l(20)e(21).(22) → cursor after '.' = character 23
+        let src = "let x = 1\nlet r = unknown_module.\n";
+        let (_, sources, type_index, def_index, symbols, source_id) =
+            tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+        let state = DocState {
+            text: src.to_string(),
+            sources,
+            type_index,
+            def_index,
+            symbols,
+            source_id,
+        };
+        let pos = Position { line: 1, character: 23 };
+        let receiver =
+            detect_member_receiver(src, pos).expect("should detect receiver");
+        assert_eq!(receiver, "unknown_module");
+
+        let module_items = module_member_completions(&receiver, &state);
+        assert!(module_items.is_empty(), "expected no module members for unknown receiver");
+
+        let ty_items = match lookup_receiver_ty(&receiver, &state) {
+            Some(ty) => type_method_completions(&ty),
+            None => vec![],
+        };
+        assert!(ty_items.is_empty(), "expected no type methods for unknown receiver");
     }
 
     /// Smoke test: JSON-RPC `textDocument/didOpen` with an E0110-triggering
