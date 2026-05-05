@@ -15,6 +15,7 @@
 | Static Corpus | Negative corpus (`bad/` directory) | ✅ Done (2026-05-05) |
 | Static Corpus | CI integration (`check.sh` in workflow) | ✅ Done (2026-05-05) |
 | Static Corpus | Spec coverage report (`coverage.sh`) | ✅ Done (2026-05-05) |
+| LSP | UTF-16 `Position.character` encoding | ✅ Done (2026-05-05) |
 
 ---
 
@@ -113,11 +114,10 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
 
 ### Known constraints
 
-- **UTF-16 column accuracy**: `SourceMap::offset_at` treats LSP `Position.character`
-  as a UTF-8 byte column. This is correct for ASCII identifiers. Non-ASCII content
-  inside string literals is not a hover target, so the practical impact is minimal.
-  A proper UTF-16 → byte conversion should be added before shipping the extension
-  to users who write non-ASCII comments or identifiers.
+- **UTF-16 column accuracy**: ✅ Fixed (2026-05-05). `SourceMap::offset_at_utf16`
+  and `SourceMap::line_col_utf16` now count UTF-16 code units as required by
+  LSP 3.17. All hover, go-to-definition, and diagnostic range positions are
+  accurate for files containing non-ASCII identifiers, comments, or emoji.
 - Incremental compilation is not planned for v0.1 scope; full re-parse on each
   edit is acceptable for files < 1 000 lines.
 - Type spans for `let`/`mut` statement names are recorded at the statement-level

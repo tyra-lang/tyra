@@ -124,17 +124,24 @@ pub(crate) fn to_lsp_diagnostic(
 }
 
 /// Convert a `Span` to an LSP `Range` using the source map.
+///
+/// Positions use UTF-16 code units for `character`, matching the LSP 3.17
+/// default encoding (`positionEncoding: "utf-16"`).
 fn span_to_lsp_range(span: tyra_diagnostics::Span, sources: &SourceMap) -> Range {
-    let (sl, sc) = sources.line_col(span.source, span.start);
-    let (el, ec) = sources.line_col(span.source, span.end);
+    let (sl, sc) = sources
+        .line_col_utf16(span.source, span.start)
+        .unwrap_or((0, 0));
+    let (el, ec) = sources
+        .line_col_utf16(span.source, span.end)
+        .unwrap_or((0, 0));
     Range {
         start: Position {
-            line: sl.saturating_sub(1),
-            character: sc.saturating_sub(1),
+            line: sl,
+            character: sc,
         },
         end: Position {
-            line: el.saturating_sub(1),
-            character: ec.saturating_sub(1),
+            line: el,
+            character: ec,
         },
     }
 }
@@ -214,7 +221,10 @@ impl LanguageServer for TyraLsp {
             None => return Ok(None),
         };
 
-        let offset = match state.sources.offset_at(state.source_id, pos.line, pos.character) {
+        let offset = match state
+            .sources
+            .offset_at_utf16(state.source_id, pos.line, pos.character)
+        {
             Some(o) => o,
             None => return Ok(None),
         };
@@ -277,8 +287,11 @@ impl LanguageServer for TyraLsp {
             None => return Ok(None),
         };
 
-        // Convert LSP 0-based Position to byte offset.
-        let offset = match state.sources.offset_at(state.source_id, pos.line, pos.character) {
+        // Convert LSP 0-based Position (UTF-16 character) to byte offset.
+        let offset = match state
+            .sources
+            .offset_at_utf16(state.source_id, pos.line, pos.character)
+        {
             Some(o) => o,
             None => return Ok(None),
         };
