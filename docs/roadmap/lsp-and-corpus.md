@@ -12,6 +12,7 @@
 | LSP | Go to definition | ✅ Done (2026-05-04) |
 | LSP | Completion | ✅ Done (2026-05-04) |
 | Static Corpus | Break / control-flow programs | ✅ Done (2026-05-05) |
+| Static Corpus | Negative corpus (`bad/` directory) | ✅ Done (2026-05-05) |
 | Static Corpus | CI integration (`check.sh` in workflow) | ⬜ Not started |
 
 ---
@@ -34,9 +35,10 @@ never silently break these programs.
    Actions workflow so the corpus is checked on every PR.
 2. ✅ **Extend with break/continue** — `11-break-loop.tyra` added (2026-05-05).
    Exercises `break` inside `while` and `for`; `tyra check` subcommand also added.
-3. **Negative corpus** — add `bad/` subdirectory with programs that are expected
-   to produce specific error codes (E0200, E0214, etc.).  The check script can
-   validate error codes rather than compile success.
+3. ✅ **Negative corpus** — `bad/` subdirectory added (2026-05-05) with 5 initial
+   programs (E0104 / E0200 / E0305 / E0309 / E0400). `check.sh` extracts the
+   expected code from the filename and verifies that stderr contains
+   `error[Exxxx]` and exit is non-zero.
 
 ### Mid-term tasks
 

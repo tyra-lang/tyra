@@ -6,6 +6,9 @@
 #
 # Files that require live network access (04, 08) are skipped by default;
 # pass --include-network to include them.
+#
+# bad/ subdirectory: files named Exxxx-<slug>.tyra are expected to fail
+# with error[Exxxx] in stderr. These exercise the negative corpus.
 
 set -euo pipefail
 
@@ -26,9 +29,14 @@ FAIL=0
 PASS=0
 SKIP=0
 
+# nullglob: empty globs expand to nothing rather than being passed as literals.
+# Set before all loops so the script is order-independent.
+shopt -s nullglob
+
 for f in "$SCRIPT_DIR"/*.tyra; do
   base="$(basename "$f" .tyra)"
   skip=0
+  # SKIP_PATTERNS may be empty; ${arr[@]:-} suppresses set -u errors on empty arrays.
   for pat in "${SKIP_PATTERNS[@]:-}"; do
     [[ "$base" == *"$pat"* ]] && skip=1 && break
   done
@@ -43,6 +51,36 @@ for f in "$SCRIPT_DIR"/*.tyra; do
   else
     echo "FAIL $f"
     "$TYRA" check "$f" 2>&1 | sed 's/^/     /'
+    FAIL=$((FAIL + 1))
+  fi
+done
+
+# Negative corpus: files in bad/ must fail with the expected error code.
+for f in "$SCRIPT_DIR"/bad/*.tyra; do
+  base="$(basename "$f" .tyra)"
+  if [[ "$base" =~ ^(E[0-9]{4})- ]]; then
+    code="${BASH_REMATCH[1]}"
+  else
+    echo "SKIP $f (no Exxxx prefix in filename)"
+    SKIP=$((SKIP + 1))
+    continue
+  fi
+
+  # Single compiler invocation: capture output and exit code together.
+  set +e
+  out="$("$TYRA" check "$f" 2>&1)"
+  tyra_exit=$?
+  set -e
+
+  if [[ $tyra_exit -eq 0 ]]; then
+    echo "FAIL $f (expected $code error, but compiled successfully)"
+    FAIL=$((FAIL + 1))
+  elif printf '%s\n' "$out" | grep -q "error\[$code\]"; then
+    echo "OK   $f ($code)"
+    PASS=$((PASS + 1))
+  else
+    echo "FAIL $f (expected $code, got different errors)"
+    printf '%s\n' "$out" | sed 's/^/     /'
     FAIL=$((FAIL + 1))
   fi
 done

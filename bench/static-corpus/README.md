@@ -12,7 +12,9 @@ on the current `main` branch.
   for AI prompt engineering and onboarding.
 * **Spec coverage** — each file cites the spec sections (§) it exercises.
 
-## Files
+## Positive corpus
+
+Files in the top-level directory are expected to compile without errors.
 
 | File | What it tests |
 |------|---------------|
@@ -28,6 +30,21 @@ on the current `main` branch.
 | `10-data-modeling.tyra` | `value`/`data` distinction, `Stringable`, `Eq`/`Ord` |
 | `11-break-loop.tyra` | `break` inside `while` and `for` (§10.4, §10.5) |
 
+## Negative corpus (`bad/`)
+
+Files in `bad/` are expected to **fail** with a specific error code.
+File names follow the pattern `Exxxx-<slug>.tyra`; `check.sh` extracts the
+expected code from the filename and verifies that `tyra check` exits non-zero
+and that stderr contains `error[Exxxx]`.
+
+| File | Expected error |
+|------|----------------|
+| `bad/E0104-unexpected-token.tyra` | E0104 — parser: dangling operator |
+| `bad/E0200-undefined-name.tyra` | E0200 — resolve: undefined identifier |
+| `bad/E0305-arithmetic-type-mismatch.tyra` | E0305 — type: arithmetic type mismatch |
+| `bad/E0309-return-type-mismatch.tyra` | E0309 — type: fn return type mismatch |
+| `bad/E0400-non-exhaustive-match.tyra` | E0400 — type: non-exhaustive match |
+
 ## Running the corpus
 
 ```bash
@@ -37,13 +54,29 @@ for f in bench/static-corpus/*.tyra; do
 done
 ```
 
-Alternatively, the CI script at `bench/static-corpus/check.sh` does the same
-check and exits non-zero on any failure.
+Alternatively, the CI script at `bench/static-corpus/check.sh` runs both the
+positive and negative corpus and exits non-zero on any failure.
+
+```bash
+bash bench/static-corpus/check.sh ./target/debug/tyra
+```
 
 ## Adding programs
 
+### Positive corpus
+
 1. Write the program; verify it compiles on the current compiler.
 2. Add the spec section references as `# SPEC_REF: §...` comments.
-3. Add a row to the table above.
+3. Add a row to the positive corpus table above.
 4. Do NOT add programs that are expected to fail at runtime (runtime-only
    failures belong in `bench/ai-gen/`).
+
+### Negative corpus
+
+1. Write the program so that exactly one `error[Exxxx]` is emitted.
+2. Name the file `Exxxx-<short-slug>.tyra` inside `bad/`.
+3. Add the following header comments:
+   - `# expected: error[Exxxx]: <short description>` (exact compiler message)
+   - `# SPEC_REF: §... — <description>` (spec section being exercised)
+4. Verify with `tyra check bad/Exxxx-<slug>.tyra` that stderr contains `error[Exxxx]` and exit is non-zero.
+5. Add a row to the negative corpus table above.

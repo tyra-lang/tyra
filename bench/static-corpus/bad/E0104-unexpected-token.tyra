@@ -1,0 +1,6 @@
+# E0104-unexpected-token.tyra
+# expected: error[E0104]: expected expression, found newline
+# Exercises: parser error — dangling operator with no right-hand operand.
+# SPEC_REF: §10.1 — expressions
+
+let x = 1 +
