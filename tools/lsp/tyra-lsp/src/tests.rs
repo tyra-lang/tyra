@@ -827,6 +827,113 @@ async fn document_symbol_returns_none_for_unopened_uri() {
     assert!(body["result"].is_null(), "expected null result for unopened uri, got: {body}");
 }
 
+// ── Signature help ────────────────────────────────────────────────────────────
+
+#[tokio::test(flavor = "current_thread")]
+async fn signature_help_returns_user_fn_signature() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    // fn add(x: Int, y: Int) -> Int
+    // Cursor inside `add(1, )` after the comma → active_parameter = 1
+    let src = "fn add(x: Int, y: Int) -> Int\n  x + y\nend\nfn main() -> Int\n  add(1, )\nend\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/sig_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    // Line 4: "  add(1, )" — character 9 is right before `)`, after ", "
+    let sig_req = Request::build("textDocument/signatureHelp")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/sig_test.tyra" },
+            "position": { "line": 4, "character": 9 }
+        }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(sig_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let result = &body["result"];
+    assert!(result.is_object(), "expected SignatureHelp object, got: {body}");
+
+    let sigs = result["signatures"].as_array().expect("signatures array");
+    assert_eq!(sigs.len(), 1, "expected 1 signature, got: {body}");
+    assert!(
+        sigs[0]["label"].as_str().unwrap_or("").contains("add"),
+        "expected label to contain 'add', got: {body}"
+    );
+    assert_eq!(
+        result["activeParameter"], 1,
+        "expected activeParameter=1, got: {body}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn signature_help_returns_none_outside_call() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let src = "let x: Int = 1\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/sig_none_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    // Cursor at line 0, character 0 — not inside any call
+    let sig_req = Request::build("textDocument/signatureHelp")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/sig_none_test.tyra" },
+            "position": { "line": 0, "character": 0 }
+        }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(sig_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    assert!(
+        body["result"].is_null(),
+        "expected null result outside a call, got: {body}"
+    );
+}
+
 // ── Diagnostics smoke ─────────────────────────────────────────────────────────
 
 #[tokio::test(flavor = "current_thread")]

@@ -20,6 +20,7 @@
 | LSP | Find references (`textDocument/references`) | ✅ Done (2026-05-05) |
 | LSP | Rename (`textDocument/rename`) | ✅ Done (2026-05-05) |
 | LSP | Document symbols (`textDocument/documentSymbol`) | ✅ Done (2026-05-05) |
+| LSP | Signature help (`textDocument/signatureHelp`) | ✅ Done (2026-05-05) |
 
 ---
 
@@ -155,6 +156,14 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   `textDocument/documentSymbol`.  Both `range` and `selectionRange` use the
   item-level span (the parser does not emit per-identifier name spans).
   `workspace/symbol` is not supported (single-file driver).
+- **Signature help scope**: ユーザ定義トップレベル `fn` と prelude のごく一部
+  (`print` / `println` / `eprint` / `eprintln` / `panic`) のみ対応。
+  メソッド呼び出し (`receiver.method(...)`)、トレイトメソッド、`impl` 内 self メソッド、
+  ジェネリックパラメタの具体化はサポートしない。active call 検出はテキストベース走査
+  (タイピング中に AST が壊れていても動作する) で、`#` 行コメント・`(* *)` ブロック
+  コメント・`"..."` 文字列リテラル (`\` エスケープ込み) をスキップする。型表示は
+  `TypeExpr` の構文形 (`type_expr_name`) で、`Ty` ベースのエイリアス展開や型推論
+  結果は反映しない。
 - **References scope**: only `ExprKind::Ident` references are tracked (same scope as
   go-to-definition).  Field-access / pattern bindings / type names are not surfaced.
   Cross-file references are not supported in v0.1.

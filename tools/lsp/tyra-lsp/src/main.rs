@@ -17,6 +17,7 @@ mod keywords;
 mod outline;
 mod references;
 mod rename;
+mod signature;
 
 const DIAG_SOURCE: &str = "tyra";
 
@@ -171,6 +172,11 @@ impl LanguageServer for TyraLsp {
                     ..Default::default()
                 }),
                 document_symbol_provider: Some(OneOf::Left(true)),
+                signature_help_provider: Some(SignatureHelpOptions {
+                    trigger_characters: Some(vec!["(".to_string(), ",".to_string()]),
+                    retrigger_characters: Some(vec![",".to_string()]),
+                    work_done_progress_options: Default::default(),
+                }),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -424,6 +430,51 @@ impl LanguageServer for TyraLsp {
         let symbols =
             outline::build_document_symbols(state.source_id, &state.ast, &state.sources);
         Ok(Some(DocumentSymbolResponse::Nested(symbols)))
+    }
+
+    async fn signature_help(
+        &self,
+        params: SignatureHelpParams,
+    ) -> Result<Option<SignatureHelp>> {
+        let pos = params.text_document_position_params.position;
+        let uri = &params.text_document_position_params.text_document.uri;
+        let docs = self.documents.lock().await;
+        let state = match docs.get(uri) {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+        let offset = match state
+            .sources
+            .offset_at_utf16(state.source_id, pos.line, pos.character)
+        {
+            Some(o) => o,
+            None => return Ok(None),
+        };
+        let (callee, active_parameter) =
+            match signature::find_active_call(&state.text, offset as usize) {
+                Some(c) => (c.callee.to_string(), c.active_parameter),
+                None => return Ok(None),
+            };
+        let sig = state
+            .ast
+            .items
+            .iter()
+            .find_map(|it| match it {
+                tyra_ast::Item::FnDef(f) if f.name == callee => {
+                    Some(signature::build_signature_for_fn(f))
+                }
+                _ => None,
+            })
+            .or_else(|| signature::prelude_signature(&callee));
+        let sig = match sig {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+        Ok(Some(SignatureHelp {
+            signatures: vec![sig],
+            active_signature: Some(0),
+            active_parameter: Some(active_parameter),
+        }))
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
