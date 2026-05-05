@@ -18,6 +18,7 @@ mod outline;
 mod references;
 mod rename;
 mod signature;
+mod tokens;
 
 const DIAG_SOURCE: &str = "tyra";
 
@@ -172,6 +173,16 @@ impl LanguageServer for TyraLsp {
                     ..Default::default()
                 }),
                 document_symbol_provider: Some(OneOf::Left(true)),
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            work_done_progress_options: Default::default(),
+                            legend: tokens::legend(),
+                            range: Some(false),
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                        },
+                    ),
+                ),
                 signature_help_provider: Some(SignatureHelpOptions {
                     trigger_characters: Some(vec!["(".to_string(), ",".to_string()]),
                     retrigger_characters: Some(vec![",".to_string()]),
@@ -430,6 +441,26 @@ impl LanguageServer for TyraLsp {
         let symbols =
             outline::build_document_symbols(state.source_id, &state.ast, &state.sources);
         Ok(Some(DocumentSymbolResponse::Nested(symbols)))
+    }
+
+    async fn semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> Result<Option<SemanticTokensResult>> {
+        let uri = &params.text_document.uri;
+        let docs = self.documents.lock().await;
+        let state = match docs.get(uri) {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+        let toks = tokens::build_full(
+            &state.text,
+            &state.ast,
+            &state.def_index,
+            state.source_id,
+            &state.sources,
+        );
+        Ok(Some(SemanticTokensResult::Tokens(toks)))
     }
 
     async fn signature_help(

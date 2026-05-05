@@ -827,6 +827,85 @@ async fn document_symbol_returns_none_for_unopened_uri() {
     assert!(body["result"].is_null(), "expected null result for unopened uri, got: {body}");
 }
 
+// ── Semantic tokens ───────────────────────────────────────────────────────────
+
+#[tokio::test(flavor = "current_thread")]
+async fn semantic_tokens_full_returns_tokens() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let src = "fn foo() -> Int\n  let x = 1\n  x\nend\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/tokens_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    let tok_req = Request::build("textDocument/semanticTokens/full")
+        .params(json!({ "textDocument": { "uri": "file:///tmp/tokens_test.tyra" } }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(tok_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let data = body["result"]["data"].as_array().expect("expected data array");
+    assert!(!data.is_empty(), "expected non-empty token data, got: {body}");
+    // data is flat [delta_line, delta_start, length, token_type, token_modifiers, ...]
+    // First token should be `fn` (KEYWORD = type 0) at line 0 col 0
+    assert_eq!(data[0], 0, "first token delta_line should be 0");
+    assert_eq!(data[1], 0, "first token delta_start should be 0");
+    assert_eq!(data[2], 2, "first token length should be 2 (\"fn\")");
+    assert_eq!(data[3], 0, "first token type should be KEYWORD (0)");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn semantic_tokens_full_returns_none_for_unopened_uri() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let tok_req = Request::build("textDocument/semanticTokens/full")
+        .params(json!({ "textDocument": { "uri": "file:///tmp/not_opened_tokens.tyra" } }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(tok_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    assert!(
+        body["result"].is_null(),
+        "expected null for unopened uri, got: {body}"
+    );
+}
+
 // ── Signature help ────────────────────────────────────────────────────────────
 
 #[tokio::test(flavor = "current_thread")]

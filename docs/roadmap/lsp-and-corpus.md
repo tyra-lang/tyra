@@ -21,6 +21,7 @@
 | LSP | Rename (`textDocument/rename`) | ✅ Done (2026-05-05) |
 | LSP | Document symbols (`textDocument/documentSymbol`) | ✅ Done (2026-05-05) |
 | LSP | Signature help (`textDocument/signatureHelp`) | ✅ Done (2026-05-05) |
+| LSP | Semantic tokens (`textDocument/semanticTokens/full`) | ✅ Done (2026-05-05) |
 
 ---
 
@@ -156,6 +157,14 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   `textDocument/documentSymbol`.  Both `range` and `selectionRange` use the
   item-level span (the parser does not emit per-identifier name spans).
   `workspace/symbol` is not supported (single-file driver).
+- **Semantic tokens scope**: lexer + AST のハイブリッド方式。発行するトークン種別は
+  KEYWORD / FUNCTION / TYPE / ENUM_MEMBER / PARAMETER / VARIABLE / STRING / NUMBER /
+  COMMENT。識別子参照はトップレベル `fn` 定義・`let`/`mut` 束縛・`Param` を
+  def_index 経由で分類し、prelude シンボルは名前マッチで DEFAULT_LIBRARY 修飾子を付与。
+  フィールドアクセス (`x.field`) の field 名・引数ラベル・import path セグメント・
+  パターン中の識別子は AST に専用 span がないため未分類。複数行にまたがるトークン
+  (改行を含む raw string 等) は LSP 仕様で禁止のためスキップ。
+  `semanticTokens/range` と incremental delta (`/full/delta`) は未対応。
 - **Signature help scope**: ユーザ定義トップレベル `fn` と prelude のごく一部
   (`print` / `println` / `eprint` / `eprintln` / `panic`) のみ対応。
   メソッド呼び出し (`receiver.method(...)`)、トレイトメソッド、`impl` 内 self メソッド、

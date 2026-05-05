@@ -16,6 +16,7 @@ serde_json = "1"
 tyra-ast = { workspace = true }
 tyra-driver = { workspace = true }
 tyra-diagnostics = { workspace = true }
+tyra-lexer = { workspace = true }
 
 [dev-dependencies]
 tower = "0.4"
