@@ -14,6 +14,7 @@
 | Static Corpus | Break / control-flow programs | ✅ Done (2026-05-05) |
 | Static Corpus | Negative corpus (`bad/` directory) | ✅ Done (2026-05-05) |
 | Static Corpus | CI integration (`check.sh` in workflow) | ✅ Done (2026-05-05) |
+| Static Corpus | Spec coverage report (`coverage.sh`) | ✅ Done (2026-05-05) |
 
 ---
 
@@ -45,8 +46,9 @@ never silently break these programs.
 4. **Auto-generate from prompt suite** — after each AI benchmark run that
    achieves `any_pass = 100`, promote passing AI programs to the corpus
    (after human review).
-5. **Coverage report** — annotate which spec sections (§) are covered by at
-   least one corpus file; flag uncovered sections.
+5. ✅ **Coverage report** — `coverage.sh` added (2026-05-05). Cross-references
+   `SPEC_REF: §...` annotations against `docs/spec/ja/language-spec.md`
+   headings; lists covered / uncovered / unknown sections. Current: 30/81 (37%).
 
 ---
 

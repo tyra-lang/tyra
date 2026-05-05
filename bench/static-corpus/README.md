@@ -69,6 +69,22 @@ The GitHub Actions workflow at `.github/workflows/static-corpus.yml` runs this
 check automatically on every push to `main` and every pull request targeting
 `main`.  A failing corpus file turns the CI job red before it can land.
 
+## Spec coverage
+
+`bench/static-corpus/coverage.sh` cross-references every `# SPEC_REF: §X.Y`
+annotation against the section headings in `docs/spec/ja/language-spec.md`
+and prints:
+
+* which spec sections are covered by at least one corpus file,
+* which are uncovered, and
+* which references point to non-existent section headings.
+
+```bash
+bash bench/static-corpus/coverage.sh
+```
+
+The script is informational (exits 0); it is not run in CI.
+
 ## Adding programs
 
 ### Positive corpus
