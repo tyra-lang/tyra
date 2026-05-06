@@ -1547,3 +1547,110 @@ async fn selection_range_handler_returns_none_for_unopened_uri() {
     let body = serde_json::to_value(&resp).unwrap();
     assert!(body["result"].is_null(), "expected null for unopened URI, got: {body}");
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn prepare_call_hierarchy_handler_returns_item() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    // fn foo() at line 0; fn bar() calls foo() at line 4.
+    let src = "fn foo()\n  1\nend\nfn bar()\n  foo()\nend\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/callhier_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    // Cursor on 'foo' definition (line 0, col 3).
+    let req = Request::build("textDocument/prepareCallHierarchy")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/callhier_test.tyra" },
+            "position": { "line": 0, "character": 3 }
+        }))
+        .id(2)
+        .finish();
+
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let items = body["result"].as_array().expect("expected array result");
+    assert!(!items.is_empty(), "expected at least one CallHierarchyItem, got: {body}");
+    assert_eq!(items[0]["name"].as_str(), Some("foo"), "item name should be 'foo'");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn incoming_calls_handler_returns_caller() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let src = "fn foo()\n  1\nend\nfn bar()\n  foo()\nend\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/callhier_incoming.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    // First prepare to get the CallHierarchyItem for 'foo'.
+    let prepare_req = Request::build("textDocument/prepareCallHierarchy")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/callhier_incoming.tyra" },
+            "position": { "line": 0, "character": 3 }
+        }))
+        .id(2)
+        .finish();
+    let prepare_resp = service.ready().await.unwrap().call(prepare_req).await.unwrap();
+    let prepare_body = serde_json::to_value(&prepare_resp).unwrap();
+    let item = prepare_body["result"].as_array().unwrap()[0].clone();
+
+    // Then request incoming calls.
+    let req = Request::build("callHierarchy/incomingCalls")
+        .params(json!({ "item": item }))
+        .id(3)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let calls = body["result"].as_array().expect("expected array result");
+    assert!(!calls.is_empty(), "expected at least one incoming call, got: {body}");
+    assert_eq!(
+        calls[0]["from"]["name"].as_str(),
+        Some("bar"),
+        "caller should be 'bar', got: {body}"
+    );
+}

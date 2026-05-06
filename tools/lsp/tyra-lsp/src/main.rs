@@ -13,6 +13,7 @@ use completion::{
     module_member_completions, type_method_completions,
 };
 
+mod call_hierarchy;
 mod code_action;
 mod folding;
 mod inlay;
@@ -197,6 +198,7 @@ impl LanguageServer for TyraLsp {
                 inlay_hint_provider: Some(OneOf::Left(true)),
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
+                call_hierarchy_provider: Some(CallHierarchyServerCapability::Simple(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -362,6 +364,43 @@ impl LanguageServer for TyraLsp {
             })
             .collect();
         Ok(Some(highlights))
+    }
+
+    async fn prepare_call_hierarchy(
+        &self,
+        params: CallHierarchyPrepareParams,
+    ) -> Result<Option<Vec<CallHierarchyItem>>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+        let docs = self.documents.lock().await;
+        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(offset) = state
+            .sources
+            .offset_at_utf16(state.source_id, pos.line, pos.character)
+        else {
+            return Ok(None);
+        };
+        Ok(call_hierarchy::prepare(state, uri, offset).map(|item| vec![item]))
+    }
+
+    async fn incoming_calls(
+        &self,
+        params: CallHierarchyIncomingCallsParams,
+    ) -> Result<Option<Vec<CallHierarchyIncomingCall>>> {
+        let uri = &params.item.uri;
+        let docs = self.documents.lock().await;
+        let Some(state) = docs.get(uri) else { return Ok(None); };
+        Ok(Some(call_hierarchy::incoming(state, uri, &params.item)))
+    }
+
+    async fn outgoing_calls(
+        &self,
+        params: CallHierarchyOutgoingCallsParams,
+    ) -> Result<Option<Vec<CallHierarchyOutgoingCall>>> {
+        let uri = &params.item.uri;
+        let docs = self.documents.lock().await;
+        let Some(state) = docs.get(uri) else { return Ok(None); };
+        Ok(Some(call_hierarchy::outgoing(state, uri, &params.item)))
     }
 
     async fn selection_range(

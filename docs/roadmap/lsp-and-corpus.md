@@ -27,6 +27,7 @@
 | LSP | Folding range (`textDocument/foldingRange`) | ✅ Done (2026-05-06) |
 | LSP | Document highlight (`textDocument/documentHighlight`) | ✅ Done (2026-05-06) |
 | LSP | Selection range (`textDocument/selectionRange`) | ✅ Done (2026-05-06) |
+| LSP | Call hierarchy (`textDocument/prepareCallHierarchy` + `callHierarchy/{incoming,outgoing}Calls`) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -169,6 +170,11 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   挿入位置は AST に identifier 専用 span が無いため
   `span.start + "let ".len() + name.len()` で計算 (ASCII 識別子前提)。
   `inlayHint/resolve` と workspace 設定 (`editor.inlayHints.*`) は未対応。
+- **Call hierarchy scope**: 対象は `Item::FnDef` (top-level) と `trait` / `impl` 内 method のみ。
+  top-level 文 (init script) からの呼び出しは caller 不明として `incomingCalls` から除外。
+  メソッド呼び出し (`receiver.method()`) は callee が `FieldAccess` であり `def_index` に
+  無いため未対応。prelude 関数 (`println` 等) への outgoing は def span を持たないため未対応。
+  クロスファイル (workspace driver 不在) は未対応。
 - **Selection range scope**: AST 階層 (`Item` → `Stmt` / `Expr` → 子) のみ。
   トークンレベル (識別子の文字単位、`(` `)` `,` 区切り) は未対応。
   `ElseBranch` は span を持たないため chain には現れない (内側 IfExpr/Stmts は出る)。
