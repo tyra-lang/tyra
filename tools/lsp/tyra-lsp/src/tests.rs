@@ -1761,3 +1761,51 @@ async fn linked_editing_range_returns_none_outside_identifier() {
         "expected null result for whitespace position, got: {body}"
     );
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn goto_type_definition_handler_returns_location() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    // 'u' at line 2, col 5 has type User → should jump to 'value User' at line 0.
+    let src = "value User\nend\nfn f(u: User)\nend\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/typedef.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    let req = Request::build("textDocument/typeDefinition")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/typedef.tyra" },
+            "position": { "line": 2, "character": 5 }
+        }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let start_line = body["result"]["start"]["line"]
+        .as_u64()
+        .or_else(|| body["result"]["range"]["start"]["line"].as_u64())
+        .expect("expected start line in result");
+    assert_eq!(start_line, 0, "expected jump to line 0 ('value User'), got: {body}");
+}

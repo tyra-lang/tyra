@@ -29,6 +29,7 @@
 | LSP | Selection range (`textDocument/selectionRange`) | ✅ Done (2026-05-06) |
 | LSP | Call hierarchy (`textDocument/prepareCallHierarchy` + `callHierarchy/{incoming,outgoing}Calls`) | ✅ Done (2026-05-06) |
 | LSP | Linked editing range (`textDocument/linkedEditingRanges`) | ✅ Done (2026-05-06) |
+| LSP | Type definition (`textDocument/typeDefinition`) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -171,6 +172,12 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   挿入位置は AST に identifier 専用 span が無いため
   `span.start + "let ".len() + name.len()` で計算 (ASCII 識別子前提)。
   `inlayHint/resolve` と workspace 設定 (`editor.inlayHints.*`) は未対応。
+- **Type definition scope**: ユーザ定義 `value` / `data` / `type` のみ対応。
+  プリミティブ (`Int`, `String` 等) と prelude generics
+  (`Option<T>`, `Result<T,E>`, `List<T>`, `Map<K,V>`, `Set<T>`) は
+  def span を持たないため `None` を返す。`Ty::Generic(name, args)` の
+  場合 `args` には再帰せず、外側 `name` で解決する。trait 名解決および
+  クロスファイル type definition は未対応。
 - **Linked editing range scope**: references と同じ範囲 (`ExprKind::Ident` のみ)。
   def 側は `find_binding_name_span` で識別子トークンに narrow できる定義のみ対応
   (narrow に失敗した場合は `None` を返し linked editing を提供しない —
