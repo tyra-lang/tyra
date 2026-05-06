@@ -13,6 +13,7 @@ use completion::{
     module_member_completions, type_method_completions,
 };
 
+mod code_action;
 mod keywords;
 mod outline;
 mod references;
@@ -188,6 +189,7 @@ impl LanguageServer for TyraLsp {
                     retrigger_characters: Some(vec![",".to_string()]),
                     work_done_progress_options: Default::default(),
                 }),
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -506,6 +508,24 @@ impl LanguageServer for TyraLsp {
             active_signature: Some(0),
             active_parameter: Some(active_parameter),
         }))
+    }
+
+    async fn code_action(
+        &self,
+        params: CodeActionParams,
+    ) -> Result<Option<CodeActionResponse>> {
+        let uri = params.text_document.uri;
+        let docs = self.documents.lock().await;
+        let Some(state) = docs.get(&uri) else {
+            return Ok(None);
+        };
+        let actions = code_action::build_actions(
+            &uri,
+            &params.context.diagnostics,
+            &state.symbols,
+            params.context.only.as_deref(),
+        );
+        Ok(if actions.is_empty() { None } else { Some(actions) })
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {

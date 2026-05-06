@@ -1055,3 +1055,111 @@ async fn did_open_publishes_e0110_diagnostic() {
         "expected E0110 diagnostic, got: {body}"
     );
 }
+
+// ── Code action ───────────────────────────────────────────────────────────────
+
+#[tokio::test(flavor = "current_thread")]
+async fn code_action_returns_typo_quickfix() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    // `pirnt()` triggers E0200 (undefined name); `print` is a prelude name.
+    let src = "fn main()\n  pirnt(1)\nend\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/code_action_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    // Build a synthetic E0200 diagnostic covering "pirnt" (line 1, col 2-7).
+    let diag = json!({
+        "range": {
+            "start": { "line": 1, "character": 2 },
+            "end":   { "line": 1, "character": 7 }
+        },
+        "severity": 1,
+        "code": "E0200",
+        "source": "tyra",
+        "message": "undefined name `pirnt`"
+    });
+
+    let ca_req = Request::build("textDocument/codeAction")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/code_action_test.tyra" },
+            "range": {
+                "start": { "line": 1, "character": 2 },
+                "end":   { "line": 1, "character": 7 }
+            },
+            "context": {
+                "diagnostics": [diag],
+                "only": null,
+                "triggerKind": 1
+            }
+        }))
+        .id(2)
+        .finish();
+
+    let resp = service.ready().await.unwrap().call(ca_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let actions = body["result"].as_array().expect("expected array result");
+    assert!(!actions.is_empty(), "expected at least one code action, got: {body}");
+
+    let titles: Vec<&str> = actions
+        .iter()
+        .filter_map(|a| a["title"].as_str())
+        .collect();
+    assert!(
+        titles.iter().any(|t| t.contains("print")),
+        "expected a `print` suggestion in {titles:?}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn code_action_returns_none_for_unopened_uri() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let ca_req = Request::build("textDocument/codeAction")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/not_opened.tyra" },
+            "range": { "start": { "line": 0, "character": 0 }, "end": { "line": 0, "character": 0 } },
+            "context": { "diagnostics": [], "only": null, "triggerKind": 1 }
+        }))
+        .id(2)
+        .finish();
+
+    let resp = service.ready().await.unwrap().call(ca_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+    assert!(body["result"].is_null(), "expected null for unopened URI, got: {body}");
+}

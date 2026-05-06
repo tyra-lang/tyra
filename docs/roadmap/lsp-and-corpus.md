@@ -22,6 +22,7 @@
 | LSP | Document symbols (`textDocument/documentSymbol`) | ✅ Done (2026-05-05) |
 | LSP | Signature help (`textDocument/signatureHelp`) | ✅ Done (2026-05-05) |
 | LSP | Semantic tokens (`textDocument/semanticTokens/full`) | ✅ Done (2026-05-05) |
+| LSP | Code action / quick fix (`textDocument/codeAction`) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -157,6 +158,12 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   `textDocument/documentSymbol`.  Both `range` and `selectionRange` use the
   item-level span (the parser does not emit per-identifier name spans).
   `workspace/symbol` is not supported (single-file driver).
+- **Code action scope**: v1 は E0200 (undefined name) の typo 訂正のみ。
+  候補は `state.symbols` + prelude 名から Levenshtein 距離 ≤ 2 で抽出し、
+  上位 3 件を提案。E0309 戻り型ラッパ・未使用 import 削除・E0214 不要セミコロン等は未対応。
+  `tyra-diagnostics::Diagnostic` に構造化サジェストフィールドが無いため、
+  エラーメッセージを文字列パースして識別子名を抽出している。
+  `CodeActionResolveProvider`・source actions・refactor.* 系は未対応。
 - **Semantic tokens scope**: lexer + AST のハイブリッド方式。発行するトークン種別は
   KEYWORD / FUNCTION / TYPE / ENUM_MEMBER / PARAMETER / VARIABLE / STRING / NUMBER /
   COMMENT。識別子参照はトップレベル `fn` 定義・`let`/`mut` 束縛・`Param` を
