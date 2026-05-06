@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
@@ -19,6 +20,7 @@ mod code_lens;
 mod declaration;
 mod implementation;
 mod type_definition;
+mod type_hierarchy;
 mod workspace_symbol;
 mod folding;
 mod inlay;
@@ -51,6 +53,9 @@ struct TyraLsp {
     // events race, the store may briefly hold a stale state. A version guard
     // should be added when incremental sync lands.
     documents: Mutex<HashMap<Url, DocState>>,
+    // Whether the client supports dynamic registration for type hierarchy.
+    // Set during initialize; read in initialized to decide whether to register.
+    type_hierarchy_dynamic: AtomicBool,
 }
 
 impl TyraLsp {
@@ -175,7 +180,14 @@ pub(crate) fn span_to_lsp_range(span: tyra_diagnostics::Span, sources: &SourceMa
 
 #[tower_lsp::async_trait]
 impl LanguageServer for TyraLsp {
-    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
+        let supports_dynamic = params.capabilities
+            .text_document.as_ref()
+            .and_then(|td| td.type_hierarchy.as_ref())
+            .and_then(|th| th.dynamic_registration)
+            == Some(true);
+        self.type_hierarchy_dynamic.store(supports_dynamic, Ordering::Relaxed);
+
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
@@ -236,6 +248,24 @@ impl LanguageServer for TyraLsp {
         self.client
             .log_message(MessageType::INFO, "tyra-lsp ready")
             .await;
+
+        // lsp-types 0.94.1 lacks type_hierarchy_provider on ServerCapabilities.
+        // Register dynamically only when the client declared support for it;
+        // static-only clients do not process client/registerCapability.
+        if self.type_hierarchy_dynamic.load(Ordering::Relaxed) {
+            let reg = Registration {
+                id: "tyra-type-hierarchy".to_string(),
+                method: "textDocument/prepareTypeHierarchy".to_string(),
+                register_options: Some(serde_json::json!({
+                    "documentSelector": [{ "language": "tyra" }]
+                })),
+            };
+            if let Err(e) = self.client.register_capability(vec![reg]).await {
+                self.client
+                    .log_message(MessageType::WARNING, format!("type hierarchy registration failed: {e}"))
+                    .await;
+            }
+        }
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -792,6 +822,43 @@ impl LanguageServer for TyraLsp {
         if lenses.is_empty() { Ok(None) } else { Ok(Some(lenses)) }
     }
 
+    async fn prepare_type_hierarchy(
+        &self,
+        params: TypeHierarchyPrepareParams,
+    ) -> Result<Option<Vec<TypeHierarchyItem>>> {
+        let pos = params.text_document_position_params.position;
+        let uri = &params.text_document_position_params.text_document.uri;
+        let docs = self.documents.lock().await;
+        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let offset = state.sources
+            .offset_at_utf16(state.source_id, pos.line, pos.character)
+            .unwrap_or(0);
+        let items = type_hierarchy::prepare(&state.ast, &state.text, &state.sources, uri, offset);
+        Ok(if items.is_empty() { None } else { Some(items) })
+    }
+
+    async fn supertypes(
+        &self,
+        params: TypeHierarchySupertypesParams,
+    ) -> Result<Option<Vec<TypeHierarchyItem>>> {
+        let uri = params.item.uri.clone();
+        let docs = self.documents.lock().await;
+        let Some(state) = docs.get(&uri) else { return Ok(Some(vec![])); };
+        let items = type_hierarchy::supertypes(&state.ast, &state.text, &state.sources, &uri, &params.item);
+        Ok(Some(items))
+    }
+
+    async fn subtypes(
+        &self,
+        params: TypeHierarchySubtypesParams,
+    ) -> Result<Option<Vec<TypeHierarchyItem>>> {
+        let uri = params.item.uri.clone();
+        let docs = self.documents.lock().await;
+        let Some(state) = docs.get(&uri) else { return Ok(Some(vec![])); };
+        let items = type_hierarchy::subtypes(&state.ast, &state.text, &state.sources, &uri, &params.item);
+        Ok(Some(items))
+    }
+
     async fn diagnostic(
         &self,
         params: DocumentDiagnosticParams,
@@ -911,6 +978,7 @@ async fn main() {
     let (service, socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
     Server::new(stdin, stdout, socket).serve(service).await;
 }

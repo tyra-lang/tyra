@@ -35,6 +35,7 @@
 | LSP | Workspace symbol (`workspace/symbol`) | ✅ Done (2026-05-06) |
 | LSP | Code lens (`textDocument/codeLens`) | ✅ Done (2026-05-06) |
 | LSP | Pull diagnostics (`textDocument/diagnostic`) | ✅ Done (2026-05-06) |
+| LSP | Type hierarchy (`textDocument/prepareTypeHierarchy` + super/subtypes) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -195,6 +196,13 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   を表示し label-only (クリック不可)。`value` / `data` / `type` / `trait` /
   impl method は未対応。Run/Test アクション lens および `codeLens/resolve` も
   未対応。
+- **Type hierarchy scope**: 単一ファイルのみ。trait → impl 検索は `state.ast`
+  のトップレベル `Item::ImplDef` を走査するため、別ファイルの impl はヒット
+  しない。Tyra trait モデルに super-trait 継承がないため、trait の supertypes
+  と具象型の subtypes は常に空。`target_type` は `TypeExprKind::Named` のみ
+  対応 (`Generic<T>` / `Fn(...)` は v1 では未対応)。capability は
+  `client.register_capability` による動的登録で表明 (lsp-types 0.94.1 が
+  `type_hierarchy_provider` フィールドを持たないため)。
 - **Pull diagnostics scope**: `textDocument/diagnostic` のみ実装、
   `workspace/diagnostic` は未対応 (`workspace_diagnostics: false`)。
   `previous_result_id` を使った `Unchanged` キャッシュ最適化は未対応で、

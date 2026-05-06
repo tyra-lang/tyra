@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
 
 use tokio::sync::Mutex;
 use tower_lsp::lsp_types::*;
@@ -133,6 +134,7 @@ async fn goto_definition_returns_location() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -234,6 +236,7 @@ async fn completion_returns_array_with_println() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -455,6 +458,7 @@ async fn references_returns_location_array() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -504,6 +508,7 @@ async fn references_include_declaration_returns_def_and_use() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -606,6 +611,7 @@ async fn rename_returns_workspace_edit() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -662,6 +668,7 @@ async fn rename_from_def_site_returns_workspace_edit() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -720,6 +727,7 @@ async fn rename_invalid_identifier_returns_error() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -766,6 +774,7 @@ async fn document_symbol_returns_top_level_items() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -817,6 +826,7 @@ async fn document_symbol_returns_none_for_unopened_uri() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -846,6 +856,7 @@ async fn semantic_tokens_full_returns_tokens() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -893,6 +904,7 @@ async fn semantic_tokens_full_returns_none_for_unopened_uri() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -925,6 +937,7 @@ async fn signature_help_returns_user_fn_signature() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -983,6 +996,7 @@ async fn signature_help_returns_none_outside_call() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1033,6 +1047,7 @@ async fn did_open_publishes_e0110_diagnostic() {
     let (mut service, mut socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1075,6 +1090,7 @@ async fn code_action_returns_typo_quickfix() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1150,6 +1166,7 @@ async fn code_action_returns_none_for_unopened_uri() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1183,6 +1200,7 @@ async fn inlay_hint_returns_type_for_let() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1240,6 +1258,7 @@ async fn inlay_hint_returns_none_for_unopened_uri() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1273,6 +1292,7 @@ async fn folding_range_returns_ranges_for_fn() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1322,6 +1342,7 @@ async fn folding_range_returns_none_for_unopened_uri() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1351,6 +1372,7 @@ async fn document_highlight_returns_uses_at_def_site() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1405,6 +1427,7 @@ async fn document_highlight_returns_uses_at_use_site() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1454,6 +1477,7 @@ async fn document_highlight_returns_none_for_unopened_uri() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1484,6 +1508,7 @@ async fn selection_range_handler_returns_chain_for_known_position() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1535,6 +1560,7 @@ async fn selection_range_handler_returns_none_for_unopened_uri() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1565,6 +1591,7 @@ async fn prepare_call_hierarchy_handler_returns_item() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1613,6 +1640,7 @@ async fn incoming_calls_handler_returns_caller() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1672,6 +1700,7 @@ async fn linked_editing_range_returns_def_and_uses() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1733,6 +1762,7 @@ async fn linked_editing_range_returns_none_outside_identifier() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1779,6 +1809,7 @@ async fn goto_type_definition_handler_returns_location() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1827,6 +1858,7 @@ async fn goto_implementation_handler_returns_locations() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1877,6 +1909,7 @@ async fn goto_declaration_handler_returns_location() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1925,6 +1958,7 @@ async fn workspace_symbol_handler_returns_matches() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1970,6 +2004,7 @@ async fn code_lens_handler_returns_lenses() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -2013,6 +2048,7 @@ async fn diagnostic_handler_returns_full_report_with_items() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -2060,6 +2096,7 @@ async fn diagnostic_handler_returns_empty_report_for_unopened_uri() {
     let (mut service, _socket) = LspService::new(|client| TyraLsp {
         client,
         documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -2082,4 +2119,55 @@ async fn diagnostic_handler_returns_empty_report_for_unopened_uri() {
     assert_eq!(body["result"]["kind"].as_str(), Some("full"), "expected full report: {body}");
     let items = body["result"]["items"].as_array().expect("expected items array");
     assert!(items.is_empty(), "expected empty items for unopened URI, got: {body}");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn prepare_type_hierarchy_handler_returns_item() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let src = "trait Foo\nend\nvalue Bar\nend\nimpl Foo for Bar\nend\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/type_hier_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    // Cursor on 'Foo' in 'trait Foo' (line 0, col 6)
+    let req = Request::build("textDocument/prepareTypeHierarchy")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/type_hier_test.tyra" },
+            "position": { "line": 0, "character": 6 }
+        }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let arr = body["result"].as_array().expect("expected array result");
+    assert_eq!(arr.len(), 1, "expected 1 item for trait Foo, got: {body}");
+    let kind_val = arr[0]["data"]["kind"].as_str().unwrap_or("");
+    assert!(
+        kind_val == "trait" || kind_val == "concrete",
+        "expected data.kind to be 'trait' or 'concrete', got: {kind_val}"
+    );
 }
