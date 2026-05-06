@@ -41,6 +41,7 @@ pub(crate) struct DocState {
     pub(crate) symbols: SymbolList,
     pub(crate) source_id: SourceId,
     pub(crate) ast: tyra_driver::SourceFile,
+    pub(crate) diagnostics: Vec<Diagnostic>,
 }
 
 struct TyraLsp {
@@ -74,7 +75,7 @@ impl TyraLsp {
 
         let lsp_diags = match result {
             Ok(Ok(tyra_driver::CheckResult { report, sources, type_index, def_index, symbols, source_id, ast })) => {
-                let diags = report
+                let diags: Vec<Diagnostic> = report
                     .diagnostics()
                     .iter()
                     .map(|d| to_lsp_diagnostic(d, &sources))
@@ -82,7 +83,7 @@ impl TyraLsp {
 
                 self.documents.lock().await.insert(
                     uri.clone(),
-                    DocState { text, sources, type_index, def_index, symbols, source_id, ast },
+                    DocState { text, sources, type_index, def_index, symbols, source_id, ast, diagnostics: diags.clone() },
                 );
 
                 diags
@@ -90,14 +91,20 @@ impl TyraLsp {
             Ok(Err(_panic_payload)) => {
                 // The compiler panicked — report it as an internal error so
                 // the user knows something went wrong and can file a bug.
-                vec![Diagnostic {
+                let diags = vec![Diagnostic {
                     range: Range::default(),
                     severity: Some(DiagnosticSeverity::ERROR),
                     code: Some(NumberOrString::String("E9999".into())),
                     source: Some(DIAG_SOURCE.into()),
                     message: "internal compiler error — please report this bug".into(),
                     ..Default::default()
-                }]
+                }];
+                // Keep pull diagnostics in sync: update the cached state so
+                // textDocument/diagnostic returns the same E9999 as the push path.
+                if let Some(state) = self.documents.lock().await.get_mut(&uri) {
+                    state.diagnostics = diags.clone();
+                }
+                diags
             }
             Err(_join_err) => {
                 // The spawn_blocking task was cancelled (e.g. LSP shutdown).
@@ -205,6 +212,12 @@ impl LanguageServer for TyraLsp {
                 }),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 code_lens_provider: Some(CodeLensOptions { resolve_provider: Some(false) }),
+                diagnostic_provider: Some(DiagnosticServerCapabilities::Options(DiagnosticOptions {
+                    identifier: Some("tyra".to_string()),
+                    inter_file_dependencies: false,
+                    workspace_diagnostics: false,
+                    work_done_progress_options: WorkDoneProgressOptions::default(),
+                })),
                 inlay_hint_provider: Some(OneOf::Left(true)),
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
@@ -777,6 +790,24 @@ impl LanguageServer for TyraLsp {
         let Some(state) = docs.get(uri) else { return Ok(None); };
         let lenses = code_lens::build_code_lenses(state);
         if lenses.is_empty() { Ok(None) } else { Ok(Some(lenses)) }
+    }
+
+    async fn diagnostic(
+        &self,
+        params: DocumentDiagnosticParams,
+    ) -> Result<DocumentDiagnosticReportResult> {
+        let uri = &params.text_document.uri;
+        let docs = self.documents.lock().await;
+        let items = docs.get(uri).map(|s| s.diagnostics.clone()).unwrap_or_default();
+        Ok(DocumentDiagnosticReportResult::Report(
+            DocumentDiagnosticReport::Full(RelatedFullDocumentDiagnosticReport {
+                related_documents: None,
+                full_document_diagnostic_report: FullDocumentDiagnosticReport {
+                    result_id: None,
+                    items,
+                },
+            }),
+        ))
     }
 
     async fn code_action(

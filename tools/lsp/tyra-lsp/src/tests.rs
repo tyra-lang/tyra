@@ -191,6 +191,7 @@ fn completion_returns_prelude_and_locals() {
         symbols,
         source_id,
         ast,
+        diagnostics: vec![],
     };
     let items = build_completion_items(&state);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
@@ -215,6 +216,7 @@ fn completion_excludes_intrinsics() {
         symbols,
         source_id,
         ast,
+        diagnostics: vec![],
     };
     let items = build_completion_items(&state);
     assert!(
@@ -315,6 +317,7 @@ fn completion_after_module_dot_returns_module_members() {
         symbols,
         source_id,
         ast,
+        diagnostics: vec![],
     };
 
     let pos = Position { line: 0, character: 6 };
@@ -341,6 +344,7 @@ fn completion_after_dot_no_match_returns_empty() {
         symbols,
         source_id,
         ast,
+        diagnostics: vec![],
     };
     let pos = Position { line: 1, character: 23 };
     let receiver = detect_member_receiver(src, pos).expect("should detect receiver");
@@ -375,6 +379,7 @@ fn references_finds_uses_from_def_site() {
         symbols: Default::default(),
         source_id,
         ast,
+        diagnostics: vec![],
     };
 
     let offset = state.sources.offset_at(source_id, 0, 4).expect("offset_at");
@@ -401,6 +406,7 @@ fn references_finds_uses_from_use_site() {
         symbols: Default::default(),
         source_id,
         ast,
+        diagnostics: vec![],
     };
 
     let offset = state.sources.offset_at(source_id, 1, 8).expect("offset_at");
@@ -427,6 +433,7 @@ fn references_includes_declaration_when_requested() {
         symbols: Default::default(),
         source_id,
         ast,
+        diagnostics: vec![],
     };
 
     let offset = state.sources.offset_at(source_id, 1, 8).expect("offset_at");
@@ -567,6 +574,7 @@ fn rename_renames_all_uses_and_declaration() {
         symbols: Default::default(),
         source_id,
         ast,
+        diagnostics: vec![],
     };
 
     // Cursor on `x` in "let y = x + 1" (line 1, col 8).
@@ -1994,4 +2002,84 @@ async fn code_lens_handler_returns_lenses() {
     assert!(!arr.is_empty(), "expected at least one lens, got: {body}");
     let title = arr[0]["command"]["title"].as_str().unwrap_or("");
     assert!(title.contains("references"), "expected 'references' in title, got: {title}");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn diagnostic_handler_returns_full_report_with_items() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    // Type error: assigning a String to an Int binding.
+    let src = "let x: Int = \"s\"\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/pull_diag_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    let req = Request::build("textDocument/diagnostic")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/pull_diag_test.tyra" },
+            "identifier": null,
+            "previousResultId": null
+        }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    assert_eq!(body["result"]["kind"].as_str(), Some("full"), "expected full report: {body}");
+    let items = body["result"]["items"].as_array().expect("expected items array");
+    assert!(!items.is_empty(), "expected at least one diagnostic for type error, got: {body}");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn diagnostic_handler_returns_empty_report_for_unopened_uri() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let req = Request::build("textDocument/diagnostic")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/never_opened.tyra" },
+            "identifier": null,
+            "previousResultId": null
+        }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    assert_eq!(body["result"]["kind"].as_str(), Some("full"), "expected full report: {body}");
+    let items = body["result"]["items"].as_array().expect("expected items array");
+    assert!(items.is_empty(), "expected empty items for unopened URI, got: {body}");
 }

@@ -34,6 +34,7 @@
 | LSP | Declaration (`textDocument/declaration`) | ✅ Done (2026-05-06) |
 | LSP | Workspace symbol (`workspace/symbol`) | ✅ Done (2026-05-06) |
 | LSP | Code lens (`textDocument/codeLens`) | ✅ Done (2026-05-06) |
+| LSP | Pull diagnostics (`textDocument/diagnostic`) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -194,6 +195,12 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   を表示し label-only (クリック不可)。`value` / `data` / `type` / `trait` /
   impl method は未対応。Run/Test アクション lens および `codeLens/resolve` も
   未対応。
+- **Pull diagnostics scope**: `textDocument/diagnostic` のみ実装、
+  `workspace/diagnostic` は未対応 (`workspace_diagnostics: false`)。
+  `previous_result_id` を使った `Unchanged` キャッシュ最適化は未対応で、
+  毎回 `Full` を返す。`related_documents` (cross-file diagnostics) も未対応
+  (`inter_file_dependencies: false`)。既存の push-based `publishDiagnostics`
+  と併存し、`analyze` 時にキャッシュした結果を返す。
 - **Type definition scope**: ユーザ定義 `value` / `data` / `type` のみ対応。
   プリミティブ (`Int`, `String` 等) と prelude generics
   (`Option<T>`, `Result<T,E>`, `List<T>`, `Map<K,V>`, `Set<T>`) は

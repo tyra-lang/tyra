@@ -52,6 +52,7 @@ mod tests {
             symbols: result.symbols,
             source_id: result.source_id,
             ast: result.ast,
+            diagnostics: vec![],
         };
         build_code_lenses(&state)
     }
