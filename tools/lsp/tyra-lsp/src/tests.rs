@@ -1952,3 +1952,46 @@ async fn workspace_symbol_handler_returns_matches() {
     assert!(names.contains(&"greet"), "expected 'greet' in: {names:?}");
     assert!(!names.contains(&"foo"), "expected 'foo' excluded, got: {names:?}");
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn code_lens_handler_returns_lenses() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let src = "fn greet()\nend\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/lens_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    let req = Request::build("textDocument/codeLens")
+        .params(json!({ "textDocument": { "uri": "file:///tmp/lens_test.tyra" } }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let arr = body["result"].as_array().expect("expected array result");
+    assert!(!arr.is_empty(), "expected at least one lens, got: {body}");
+    let title = arr[0]["command"]["title"].as_str().unwrap_or("");
+    assert!(title.contains("references"), "expected 'references' in title, got: {title}");
+}

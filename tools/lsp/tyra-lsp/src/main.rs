@@ -15,6 +15,7 @@ use completion::{
 
 mod call_hierarchy;
 mod code_action;
+mod code_lens;
 mod declaration;
 mod implementation;
 mod type_definition;
@@ -146,7 +147,7 @@ pub(crate) fn to_lsp_diagnostic(
 ///
 /// Positions use UTF-16 code units for `character`, matching the LSP 3.17
 /// default encoding (`positionEncoding: "utf-16"`).
-fn span_to_lsp_range(span: tyra_diagnostics::Span, sources: &SourceMap) -> Range {
+pub(crate) fn span_to_lsp_range(span: tyra_diagnostics::Span, sources: &SourceMap) -> Range {
     let (sl, sc) = sources
         .line_col_utf16(span.source, span.start)
         .unwrap_or((0, 0));
@@ -203,6 +204,7 @@ impl LanguageServer for TyraLsp {
                     work_done_progress_options: Default::default(),
                 }),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+                code_lens_provider: Some(CodeLensOptions { resolve_provider: Some(false) }),
                 inlay_hint_provider: Some(OneOf::Left(true)),
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
@@ -764,6 +766,17 @@ impl LanguageServer for TyraLsp {
             active_signature: Some(0),
             active_parameter: Some(active_parameter),
         }))
+    }
+
+    async fn code_lens(
+        &self,
+        params: CodeLensParams,
+    ) -> Result<Option<Vec<CodeLens>>> {
+        let uri = &params.text_document.uri;
+        let docs = self.documents.lock().await;
+        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let lenses = code_lens::build_code_lenses(state);
+        if lenses.is_empty() { Ok(None) } else { Ok(Some(lenses)) }
     }
 
     async fn code_action(

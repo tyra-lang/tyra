@@ -33,6 +33,7 @@
 | LSP | Implementation (`textDocument/implementation`) | ✅ Done (2026-05-06) |
 | LSP | Declaration (`textDocument/declaration`) | ✅ Done (2026-05-06) |
 | LSP | Workspace symbol (`workspace/symbol`) | ✅ Done (2026-05-06) |
+| LSP | Code lens (`textDocument/codeLens`) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -189,6 +190,10 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   システムを走査しないため未 open のファイルはヒットしない。マッチは
   case-insensitive substring。`SymbolInformation` (legacy) を返し、
   `WorkspaceSymbol` (3.17) / `workspaceSymbol/resolve` は未対応。
+- **Code lens scope**: 対象はトップレベル `fn` 定義のみ。参照数 (`N references`)
+  を表示し label-only (クリック不可)。`value` / `data` / `type` / `trait` /
+  impl method は未対応。Run/Test アクション lens および `codeLens/resolve` も
+  未対応。
 - **Type definition scope**: ユーザ定義 `value` / `data` / `type` のみ対応。
   プリミティブ (`Int`, `String` 等) と prelude generics
   (`Option<T>`, `Result<T,E>`, `List<T>`, `Map<K,V>`, `Set<T>`) は
