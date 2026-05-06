@@ -1163,3 +1163,95 @@ async fn code_action_returns_none_for_unopened_uri() {
     let body = serde_json::to_value(&resp).unwrap();
     assert!(body["result"].is_null(), "expected null for unopened URI, got: {body}");
 }
+
+// ── Inlay hints ───────────────────────────────────────────────────────────────
+
+#[tokio::test(flavor = "current_thread")]
+async fn inlay_hint_returns_type_for_let() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let src = "fn main()\n  let x = 1\nend\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/inlay_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    let hint_req = Request::build("textDocument/inlayHint")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/inlay_test.tyra" },
+            "range": {
+                "start": { "line": 0, "character": 0 },
+                "end":   { "line": 99, "character": 0 }
+            }
+        }))
+        .id(2)
+        .finish();
+
+    let resp = service.ready().await.unwrap().call(hint_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let hints = body["result"].as_array().expect("expected array result");
+    assert!(!hints.is_empty(), "expected at least one inlay hint, got: {body}");
+
+    let labels: Vec<&str> = hints
+        .iter()
+        .filter_map(|h| h["label"].as_str())
+        .collect();
+    assert!(
+        labels.iter().any(|l| *l == ": Int"),
+        "expected `: Int` label, got: {labels:?}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn inlay_hint_returns_none_for_unopened_uri() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let hint_req = Request::build("textDocument/inlayHint")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/not_opened_inlay.tyra" },
+            "range": {
+                "start": { "line": 0, "character": 0 },
+                "end":   { "line": 99, "character": 0 }
+            }
+        }))
+        .id(2)
+        .finish();
+
+    let resp = service.ready().await.unwrap().call(hint_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+    assert!(body["result"].is_null(), "expected null for unopened URI, got: {body}");
+}

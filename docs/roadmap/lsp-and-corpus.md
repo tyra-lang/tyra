@@ -23,6 +23,7 @@
 | LSP | Signature help (`textDocument/signatureHelp`) | ✅ Done (2026-05-05) |
 | LSP | Semantic tokens (`textDocument/semanticTokens/full`) | ✅ Done (2026-05-05) |
 | LSP | Code action / quick fix (`textDocument/codeAction`) | ✅ Done (2026-05-06) |
+| LSP | Inlay hints (`textDocument/inlayHint`) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -158,6 +159,13 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   `textDocument/documentSymbol`.  Both `range` and `selectionRange` use the
   item-level span (the parser does not emit per-identifier name spans).
   `workspace/symbol` is not supported (single-file driver).
+- **Inlay hints scope**: v1 は `let` / `mut` 文の型ヒント (`: T`) のみ。
+  関数引数ラベル、戻り値ヒント、closure パラメタ型、for-loop binding、
+  pattern destructuring の各 binding は未対応。型注釈付きの束縛
+  (`let x: Int = 1`) はスキップ。`Ty::Var(_)` / `Ty::Error` は出さない。
+  挿入位置は AST に identifier 専用 span が無いため
+  `span.start + "let ".len() + name.len()` で計算 (ASCII 識別子前提)。
+  `inlayHint/resolve` と workspace 設定 (`editor.inlayHints.*`) は未対応。
 - **Code action scope**: v1 は E0200 (undefined name) の typo 訂正のみ。
   候補は `state.symbols` + prelude 名から Levenshtein 距離 ≤ 2 で抽出し、
   上位 3 件を提案。E0309 戻り型ラッパ・未使用 import 削除・E0214 不要セミコロン等は未対応。
