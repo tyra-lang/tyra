@@ -1333,3 +1333,136 @@ async fn folding_range_returns_none_for_unopened_uri() {
     let body = serde_json::to_value(&resp).unwrap();
     assert!(body["result"].is_null(), "expected null for unopened URI, got: {body}");
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn document_highlight_returns_uses_at_def_site() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    // fn foo on line 0 (col 3), called on lines 2 and 3.
+    let src = "fn foo()\n  1\nend\nfoo()\nfoo()\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/highlight_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    // Cursor on 'foo' definition (line 0, col 3).
+    let hl_req = Request::build("textDocument/documentHighlight")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/highlight_test.tyra" },
+            "position": { "line": 0, "character": 3 }
+        }))
+        .id(2)
+        .finish();
+
+    let resp = service.ready().await.unwrap().call(hl_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let highlights = body["result"].as_array().expect("expected array result");
+    assert!(
+        highlights.len() >= 3,
+        "expected def + 2 use highlights, got: {body}"
+    );
+    assert!(
+        highlights.iter().all(|h| h["kind"].as_u64() == Some(1)),
+        "all highlights should be kind TEXT (1), got: {body}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn document_highlight_returns_uses_at_use_site() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let src = "fn foo()\n  1\nend\nfoo()\nfoo()\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/highlight_use_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    // Cursor on first call site 'foo' (line 3, col 0).
+    let hl_req = Request::build("textDocument/documentHighlight")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/highlight_use_test.tyra" },
+            "position": { "line": 3, "character": 0 }
+        }))
+        .id(2)
+        .finish();
+
+    let resp = service.ready().await.unwrap().call(hl_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let highlights = body["result"].as_array().expect("expected array result");
+    assert!(
+        highlights.len() >= 3,
+        "expected def + 2 use highlights from use site, got: {body}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn document_highlight_returns_none_for_unopened_uri() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let hl_req = Request::build("textDocument/documentHighlight")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/not_opened_highlight.tyra" },
+            "position": { "line": 0, "character": 0 }
+        }))
+        .id(2)
+        .finish();
+
+    let resp = service.ready().await.unwrap().call(hl_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+    assert!(body["result"].is_null(), "expected null for unopened URI, got: {body}");
+}

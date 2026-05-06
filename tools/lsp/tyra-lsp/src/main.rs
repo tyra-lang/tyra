@@ -169,6 +169,7 @@ impl LanguageServer for TyraLsp {
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
+                document_highlight_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
                 rename_provider: Some(OneOf::Left(true)),
                 completion_provider: Some(CompletionOptions {
@@ -324,6 +325,41 @@ impl LanguageServer for TyraLsp {
         }
 
         Ok(Some(CompletionResponse::Array(build_completion_items(state))))
+    }
+
+    async fn document_highlight(
+        &self,
+        params: DocumentHighlightParams,
+    ) -> Result<Option<Vec<DocumentHighlight>>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+        let docs = self.documents.lock().await;
+        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(offset) = state
+            .sources
+            .offset_at_utf16(state.source_id, pos.line, pos.character)
+        else {
+            return Ok(None);
+        };
+        let Some(def_span) = references::find_def_span_at_cursor(state, offset) else {
+            return Ok(None);
+        };
+        let mut spans =
+            references::find_uses_for_def(&state.def_index, def_span, state.source_id);
+        // Narrow def_span to just the binding name token (def_span covers the
+        // whole declaration, e.g. an entire `fn ... end` block).
+        let def_name_span = rename::extract_identifier_at(&state.text, offset)
+            .and_then(|name| rename::find_binding_name_span(&state.text, def_span, &name))
+            .unwrap_or(def_span);
+        spans.push(def_name_span);
+        let highlights = spans
+            .into_iter()
+            .map(|s| DocumentHighlight {
+                range: span_to_lsp_range(s, &state.sources),
+                kind: Some(DocumentHighlightKind::TEXT),
+            })
+            .collect();
+        Ok(Some(highlights))
     }
 
     async fn references(
