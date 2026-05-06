@@ -1809,3 +1809,53 @@ async fn goto_type_definition_handler_returns_location() {
         .expect("expected start line in result");
     assert_eq!(start_line, 0, "expected jump to line 0 ('value User'), got: {body}");
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn goto_implementation_handler_returns_locations() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    // Cursor on 'Foo' of 'trait Foo' (line 0, col 6) → impl block.
+    let src = "trait Foo\nend\nvalue Bar\nend\nimpl Foo for Bar\nend\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/impl_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    let req = Request::build("textDocument/implementation")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/impl_test.tyra" },
+            "position": { "line": 0, "character": 6 }
+        }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let arr = body["result"].as_array().expect("expected array result");
+    assert!(!arr.is_empty(), "expected at least one implementation, got: {body}");
+    assert_eq!(
+        arr[0]["range"]["start"]["line"].as_u64(),
+        Some(4),
+        "expected impl on line 4, got: {body}"
+    );
+}

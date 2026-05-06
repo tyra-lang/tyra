@@ -30,6 +30,7 @@
 | LSP | Call hierarchy (`textDocument/prepareCallHierarchy` + `callHierarchy/{incoming,outgoing}Calls`) | ✅ Done (2026-05-06) |
 | LSP | Linked editing range (`textDocument/linkedEditingRanges`) | ✅ Done (2026-05-06) |
 | LSP | Type definition (`textDocument/typeDefinition`) | ✅ Done (2026-05-06) |
+| LSP | Implementation (`textDocument/implementation`) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -172,6 +173,12 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   挿入位置は AST に identifier 専用 span が無いため
   `span.start + "let ".len() + name.len()` で計算 (ASCII 識別子前提)。
   `inlayHint/resolve` と workspace 設定 (`editor.inlayHints.*`) は未対応。
+- **Implementation scope**: 対象は (1) `trait` 定義の trait 名 (2) `trait` body
+  内の method 名 (3) `impl Trait for Type` の trait 名のみ。impl 内 method
+  名から trait 側へ戻る方向 (declaration 相当) は未対応。trait method 呼び出し
+  サイト (`receiver.method()`) からの impl 探索は受信者の型解決が必要なため未対応。
+  name token span は `find_binding_name_span` のテキストベース最初出現スキャン
+  に依存。クロスファイルは未対応。
 - **Type definition scope**: ユーザ定義 `value` / `data` / `type` のみ対応。
   プリミティブ (`Int`, `String` 等) と prelude generics
   (`Option<T>`, `Result<T,E>`, `List<T>`, `Map<K,V>`, `Set<T>`) は

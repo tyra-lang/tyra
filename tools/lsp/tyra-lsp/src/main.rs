@@ -15,6 +15,7 @@ use completion::{
 
 mod call_hierarchy;
 mod code_action;
+mod implementation;
 mod type_definition;
 mod folding;
 mod inlay;
@@ -173,6 +174,7 @@ impl LanguageServer for TyraLsp {
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
                 type_definition_provider: Some(TypeDefinitionProviderCapability::Simple(true)),
+                implementation_provider: Some(ImplementationProviderCapability::Simple(true)),
                 document_highlight_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
                 rename_provider: Some(OneOf::Left(true)),
@@ -335,6 +337,35 @@ impl LanguageServer for TyraLsp {
             uri: uri.clone(),
             range: span_to_lsp_range(span, &state.sources),
         })))
+    }
+
+    async fn goto_implementation(
+        &self,
+        params: GotoDefinitionParams,
+    ) -> Result<Option<GotoDefinitionResponse>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+        let docs = self.documents.lock().await;
+        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(offset) = state
+            .sources
+            .offset_at_utf16(state.source_id, pos.line, pos.character)
+        else {
+            return Ok(None);
+        };
+        let spans =
+            implementation::find_implementations(&state.ast, &state.text, offset);
+        if spans.is_empty() {
+            return Ok(None);
+        }
+        let locs: Vec<Location> = spans
+            .into_iter()
+            .map(|s| Location {
+                uri: uri.clone(),
+                range: span_to_lsp_range(s, &state.sources),
+            })
+            .collect();
+        Ok(Some(GotoDefinitionResponse::Array(locs)))
     }
 
     async fn completion(
