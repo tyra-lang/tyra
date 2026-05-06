@@ -47,6 +47,7 @@ pub(crate) struct DocState {
     pub(crate) source_id: SourceId,
     pub(crate) ast: tyra_driver::SourceFile,
     pub(crate) diagnostics: Vec<Diagnostic>,
+    pub(crate) version: i32,
 }
 
 struct TyraLsp {
@@ -91,7 +92,7 @@ impl TyraLsp {
 
                 self.documents.lock().await.insert(
                     uri.clone(),
-                    DocState { text, sources, type_index, def_index, symbols, source_id, ast, diagnostics: diags.clone() },
+                    DocState { text, sources, type_index, def_index, symbols, source_id, ast, diagnostics: diags.clone(), version },
                 );
 
                 diags
@@ -111,6 +112,7 @@ impl TyraLsp {
                 // textDocument/diagnostic returns the same E9999 as the push path.
                 if let Some(state) = self.documents.lock().await.get_mut(&uri) {
                     state.diagnostics = diags.clone();
+                    state.version = version;
                 }
                 diags
             }
@@ -237,7 +239,7 @@ impl LanguageServer for TyraLsp {
                 diagnostic_provider: Some(DiagnosticServerCapabilities::Options(DiagnosticOptions {
                     identifier: Some("tyra".to_string()),
                     inter_file_dependencies: false,
-                    workspace_diagnostics: false,
+                    workspace_diagnostics: true,
                     work_done_progress_options: WorkDoneProgressOptions::default(),
                 })),
                 inlay_hint_provider: Some(OneOf::Left(true)),
@@ -981,6 +983,27 @@ impl LanguageServer for TyraLsp {
                 },
             }),
         ))
+    }
+
+    async fn workspace_diagnostic(
+        &self,
+        _params: WorkspaceDiagnosticParams,
+    ) -> Result<WorkspaceDiagnosticReportResult> {
+        let docs = self.documents.lock().await;
+        let items: Vec<WorkspaceDocumentDiagnosticReport> = docs
+            .iter()
+            .map(|(uri, state)| {
+                WorkspaceDocumentDiagnosticReport::Full(WorkspaceFullDocumentDiagnosticReport {
+                    uri: uri.clone(),
+                    version: Some(state.version as i64),
+                    full_document_diagnostic_report: FullDocumentDiagnosticReport {
+                        result_id: None,
+                        items: state.diagnostics.clone(),
+                    },
+                })
+            })
+            .collect();
+        Ok(WorkspaceDiagnosticReportResult::Report(WorkspaceDiagnosticReport { items }))
     }
 
     async fn document_link(

@@ -63,6 +63,7 @@ mod tests {
             source_id: result.source_id,
             ast: result.ast,
             diagnostics: vec![],
+            version: 0,
         };
         let url = Url::parse(uri).unwrap();
         let mut map = HashMap::new();

@@ -416,6 +416,7 @@ mod tests {
             source_id: result.source_id,
             ast: result.ast,
             diagnostics: vec![],
+            version: 0,
         }
     }
 

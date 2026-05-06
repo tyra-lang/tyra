@@ -194,6 +194,7 @@ fn completion_returns_prelude_and_locals() {
         source_id,
         ast,
         diagnostics: vec![],
+        version: 0,
     };
     let items = build_completion_items(&state);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
@@ -219,6 +220,7 @@ fn completion_excludes_intrinsics() {
         source_id,
         ast,
         diagnostics: vec![],
+        version: 0,
     };
     let items = build_completion_items(&state);
     assert!(
@@ -321,6 +323,7 @@ fn completion_after_module_dot_returns_module_members() {
         source_id,
         ast,
         diagnostics: vec![],
+        version: 0,
     };
 
     let pos = Position { line: 0, character: 6 };
@@ -348,6 +351,7 @@ fn completion_after_dot_no_match_returns_empty() {
         source_id,
         ast,
         diagnostics: vec![],
+        version: 0,
     };
     let pos = Position { line: 1, character: 23 };
     let receiver = detect_member_receiver(src, pos).expect("should detect receiver");
@@ -383,6 +387,7 @@ fn references_finds_uses_from_def_site() {
         source_id,
         ast,
         diagnostics: vec![],
+        version: 0,
     };
 
     let offset = state.sources.offset_at(source_id, 0, 4).expect("offset_at");
@@ -410,6 +415,7 @@ fn references_finds_uses_from_use_site() {
         source_id,
         ast,
         diagnostics: vec![],
+        version: 0,
     };
 
     let offset = state.sources.offset_at(source_id, 1, 8).expect("offset_at");
@@ -437,6 +443,7 @@ fn references_includes_declaration_when_requested() {
         source_id,
         ast,
         diagnostics: vec![],
+        version: 0,
     };
 
     let offset = state.sources.offset_at(source_id, 1, 8).expect("offset_at");
@@ -580,6 +587,7 @@ fn rename_renames_all_uses_and_declaration() {
         source_id,
         ast,
         diagnostics: vec![],
+        version: 0,
     };
 
     // Cursor on `x` in "let y = x + 1" (line 1, col 8).
@@ -2366,4 +2374,82 @@ async fn prepare_type_hierarchy_handler_returns_item() {
         kind_val == "trait" || kind_val == "concrete",
         "expected data.kind to be 'trait' or 'concrete', got: {kind_val}"
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn workspace_diagnostic_returns_reports_for_all_open_docs() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    // Open one document with a type error (return type mismatch).
+    // We use a single did_open to avoid filling the unbuffered notification
+    // channel that the test socket provides.
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/ws_diag_err.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": "fn bad() -> Int\n  \"not an int\"\nend\n"
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    let req = Request::build("workspace/diagnostic")
+        .params(json!({ "previousResultIds": [] }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let items = body["result"]["items"].as_array().expect("expected items array");
+    assert_eq!(items.len(), 1, "expected 1 document report for the open doc, got: {body}");
+
+    // The single item must be a Full report with diagnostics.
+    assert_eq!(items[0]["kind"].as_str(), Some("full"), "expected kind=full: {}", items[0]);
+    let diags = items[0]["items"].as_array().expect("expected items in doc report");
+    assert!(!diags.is_empty(), "expected ≥1 diagnostic for the erroneous doc");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn workspace_diagnostic_returns_empty_when_no_docs_open() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let req = Request::build("workspace/diagnostic")
+        .params(json!({ "previousResultIds": [] }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let items = body["result"]["items"].as_array().expect("expected items array");
+    assert!(items.is_empty(), "expected empty items when no docs open, got: {body}");
 }
