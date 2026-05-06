@@ -52,7 +52,7 @@ pub(crate) fn collect(
 /// Within `[span.start, span.end)` in `text`, locate the dotted module path
 /// token that follows the `import` keyword and optional whitespace.
 /// Stops at whitespace, `\n`, or the `as` keyword.
-fn path_token_span(text: &str, span: Span) -> Option<Span> {
+pub(crate) fn path_token_span(text: &str, span: Span) -> Option<Span> {
     let start = span.start as usize;
     let end = (span.end as usize).min(text.len());
     let slice = &text[start..end];

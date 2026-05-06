@@ -19,6 +19,7 @@ mod code_action;
 mod code_lens;
 mod declaration;
 mod document_link;
+mod file_rename;
 mod implementation;
 mod type_definition;
 mod type_hierarchy;
@@ -243,6 +244,22 @@ impl LanguageServer for TyraLsp {
                 selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
                 call_hierarchy_provider: Some(CallHierarchyServerCapability::Simple(true)),
                 linked_editing_range_provider: Some(LinkedEditingRangeServerCapabilities::Simple(true)),
+                workspace: Some(WorkspaceServerCapabilities {
+                    file_operations: Some(WorkspaceFileOperationsServerCapabilities {
+                        will_rename: Some(FileOperationRegistrationOptions {
+                            filters: vec![FileOperationFilter {
+                                scheme: Some("file".to_string()),
+                                pattern: FileOperationPattern {
+                                    glob: "**/*.tyra".to_string(),
+                                    matches: Some(FileOperationPatternKind::File),
+                                    options: None,
+                                },
+                            }],
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -782,6 +799,14 @@ impl LanguageServer for TyraLsp {
         let mut changes = HashMap::new();
         changes.insert(uri.clone(), edits);
         Ok(Some(WorkspaceEdit { changes: Some(changes), ..Default::default() }))
+    }
+
+    async fn will_rename_files(
+        &self,
+        params: RenameFilesParams,
+    ) -> Result<Option<WorkspaceEdit>> {
+        let docs = self.documents.lock().await;
+        Ok(file_rename::compute_edits(&docs, &params.files))
     }
 
     async fn document_symbol(

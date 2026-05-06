@@ -38,6 +38,7 @@
 | LSP | Type hierarchy (`textDocument/prepareTypeHierarchy` + super/subtypes) | ✅ Done (2026-05-06) |
 | LSP | Document link (`textDocument/documentLink`) | ✅ Done (2026-05-06) |
 | LSP | Prepare rename (`textDocument/prepareRename`) | ✅ Done (2026-05-06) |
+| LSP | Workspace file rename (`workspace/willRenameFiles`) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -207,6 +208,11 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   埋める。`main_dir` はドキュメント URI の `parent()` から取得し、解決順は
   `<main_dir>/a/b/c.tyra` → `<TYRA_STDLIB or 上位の stdlib/>/a/b/c.tyra`。
   built-in module (`core.sys` / `core.tasks`) と解決失敗 import はリンク化しない。
+- **Workspace file rename scope**: 開いているドキュメントの `import` 文のみ
+  書き換える (ディスク上の未オープンファイルはスキャンしない)。Workspace
+  root は `initialize` 時の `workspace_folders[0]` または `root_uri` から取得し、
+  単一ルートを前提とする。フォルダ単位のリネームは対象外 (`*.tyra` ファイル
+  単体のみ反応)。Auto-import で合成された `import` は span text 不一致で除外。
 - **Type hierarchy scope**: 単一ファイルのみ。trait → impl 検索は `state.ast`
   のトップレベル `Item::ImplDef` を走査するため、別ファイルの impl はヒット
   しない。Tyra trait モデルに super-trait 継承がないため、trait の supertypes
