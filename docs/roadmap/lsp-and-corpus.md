@@ -28,6 +28,7 @@
 | LSP | Document highlight (`textDocument/documentHighlight`) | ✅ Done (2026-05-06) |
 | LSP | Selection range (`textDocument/selectionRange`) | ✅ Done (2026-05-06) |
 | LSP | Call hierarchy (`textDocument/prepareCallHierarchy` + `callHierarchy/{incoming,outgoing}Calls`) | ✅ Done (2026-05-06) |
+| LSP | Linked editing range (`textDocument/linkedEditingRanges`) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -170,6 +171,12 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   挿入位置は AST に identifier 専用 span が無いため
   `span.start + "let ".len() + name.len()` で計算 (ASCII 識別子前提)。
   `inlayHint/resolve` と workspace 設定 (`editor.inlayHints.*`) は未対応。
+- **Linked editing range scope**: references と同じ範囲 (`ExprKind::Ident` のみ)。
+  def 側は `find_binding_name_span` で識別子トークンに narrow できる定義のみ対応
+  (narrow に失敗した場合は `None` を返し linked editing を提供しない —
+  LSP 仕様が要求する「全 range が同一長」を保証するため)。
+  フィールドアクセス・パターン束縛・型名・prelude/builtin は未対応。
+  `word_pattern` は省略しクライアントデフォルトに委ねる。
 - **Call hierarchy scope**: 対象は `Item::FnDef` (top-level) と `trait` / `impl` 内 method のみ。
   top-level 文 (init script) からの呼び出しは caller 不明として `incomingCalls` から除外。
   メソッド呼び出し (`receiver.method()`) は callee が `FieldAccess` であり `def_index` に

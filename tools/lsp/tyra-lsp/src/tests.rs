@@ -1654,3 +1654,110 @@ async fn incoming_calls_handler_returns_caller() {
         "caller should be 'bar', got: {body}"
     );
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn linked_editing_range_returns_def_and_uses() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    // fn main()\n  let x = 1\n  let y = x + x\nend\n
+    // 'x' appears at: def (col 6, line 1), use1 (col 10, line 2), use2 (col 14, line 2)
+    let src = "fn main()\n  let x = 1\n  let y = x + x\nend\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/linked_edit.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    // Cursor on 'x' at line 2, col 10 (first use).
+    let req = Request::build("textDocument/linkedEditingRange")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/linked_edit.tyra" },
+            "position": { "line": 2, "character": 10 }
+        }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let ranges = body["result"]["ranges"]
+        .as_array()
+        .expect("expected ranges array");
+    assert!(
+        ranges.len() >= 3,
+        "expected ≥ 3 ranges (def + 2 uses), got {}: {body}",
+        ranges.len()
+    );
+    // All ranges should span exactly 1 character ('x').
+    for r in ranges {
+        assert_eq!(
+            r["start"]["character"],
+            r["end"]["character"].as_u64().unwrap() - 1,
+            "all ranges should be width 1 (single-char identifier), got: {r}"
+        );
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn linked_editing_range_returns_none_outside_identifier() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let src = "fn main()\n  let x = 1\nend\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/linked_edit_none.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    // Cursor on whitespace (col 0 of line 1, before 'let').
+    let req = Request::build("textDocument/linkedEditingRange")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/linked_edit_none.tyra" },
+            "position": { "line": 1, "character": 0 }
+        }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+    assert!(
+        body["result"].is_null(),
+        "expected null result for whitespace position, got: {body}"
+    );
+}

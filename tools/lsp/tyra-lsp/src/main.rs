@@ -199,6 +199,7 @@ impl LanguageServer for TyraLsp {
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
                 call_hierarchy_provider: Some(CallHierarchyServerCapability::Simple(true)),
+                linked_editing_range_provider: Some(LinkedEditingRangeServerCapabilities::Simple(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -364,6 +365,55 @@ impl LanguageServer for TyraLsp {
             })
             .collect();
         Ok(Some(highlights))
+    }
+
+    async fn linked_editing_range(
+        &self,
+        params: LinkedEditingRangeParams,
+    ) -> Result<Option<LinkedEditingRanges>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+        let docs = self.documents.lock().await;
+        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(offset) = state
+            .sources
+            .offset_at_utf16(state.source_id, pos.line, pos.character)
+        else {
+            return Ok(None);
+        };
+        let Some(def_span) = references::find_def_span_at_cursor(state, offset) else {
+            return Ok(None);
+        };
+        // Is the cursor on a use-site ref-span (rather than inside the declaration)?
+        let at_use_site = state.def_index.iter().any(|(&ref_span, &ds)| {
+            ds == def_span
+                && ref_span.source == state.source_id
+                && ref_span.start <= offset
+                && offset < ref_span.end
+        });
+        // Narrow def_span to the identifier name token; bail if narrowing fails
+        // so all returned ranges have identical length (LSP requirement).
+        let Some(name) = rename::extract_identifier_at(&state.text, offset) else {
+            return Ok(None);
+        };
+        let Some(def_name_span) =
+            rename::find_binding_name_span(&state.text, def_span, &name)
+        else {
+            return Ok(None);
+        };
+        // At a def site the cursor must land specifically on the binding name
+        // token (not on `let`, a type annotation, or the RHS expression).
+        if !at_use_site && !(def_name_span.start <= offset && offset < def_name_span.end) {
+            return Ok(None);
+        }
+        let mut spans =
+            references::find_uses_for_def(&state.def_index, def_span, state.source_id);
+        spans.push(def_name_span);
+        let ranges = spans
+            .into_iter()
+            .map(|s| span_to_lsp_range(s, &state.sources))
+            .collect();
+        Ok(Some(LinkedEditingRanges { ranges, word_pattern: None }))
     }
 
     async fn prepare_call_hierarchy(
