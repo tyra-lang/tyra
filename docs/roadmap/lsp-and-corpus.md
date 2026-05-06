@@ -24,6 +24,7 @@
 | LSP | Semantic tokens (`textDocument/semanticTokens/full`) | ✅ Done (2026-05-05) |
 | LSP | Code action / quick fix (`textDocument/codeAction`) | ✅ Done (2026-05-06) |
 | LSP | Inlay hints (`textDocument/inlayHint`) | ✅ Done (2026-05-06) |
+| LSP | Folding range (`textDocument/foldingRange`) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -166,6 +167,15 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   挿入位置は AST に identifier 専用 span が無いため
   `span.start + "let ".len() + name.len()` で計算 (ASCII 識別子前提)。
   `inlayHint/resolve` と workspace 設定 (`editor.inlayHints.*`) は未対応。
+- **Folding range scope**: v1 は AST 由来のブロック構造のみ
+  (`fn` / `data` / `type` / `trait` (+methods) / `impl` (+methods) /
+  `value` / `if`-`else if`-`else` / `while` / `for` / `match` (含 arms) /
+  `lambda`)。連続する `import` は 1 つの `Imports` 範囲にまとめる。
+  単一行のアイテムはスキップ。`end_line` は `end` キーワード行の 1 行前に
+  設定し、折りたたみ時に閉じトークンが見えるようにする。
+  **コメント折り畳み (`FoldingRangeKind::Comment`)** は未対応 — lexer が
+  コメントを破棄しているため。`foldingRange/resolve` および
+  `collapsed_text` 動的指定は未対応。
 - **Code action scope**: v1 は E0200 (undefined name) の typo 訂正のみ。
   候補は `state.symbols` + prelude 名から Levenshtein 距離 ≤ 2 で抽出し、
   上位 3 件を提案。E0309 戻り型ラッパ・未使用 import 削除・E0214 不要セミコロン等は未対応。

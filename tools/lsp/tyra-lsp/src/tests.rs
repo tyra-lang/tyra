@@ -1255,3 +1255,81 @@ async fn inlay_hint_returns_none_for_unopened_uri() {
     let body = serde_json::to_value(&resp).unwrap();
     assert!(body["result"].is_null(), "expected null for unopened URI, got: {body}");
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn folding_range_returns_ranges_for_fn() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let src = "fn main()\n  let x = 1\nend\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/fold_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    let fold_req = Request::build("textDocument/foldingRange")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/fold_test.tyra" }
+        }))
+        .id(2)
+        .finish();
+
+    let resp = service.ready().await.unwrap().call(fold_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let ranges = body["result"].as_array().expect("expected array result");
+    assert!(!ranges.is_empty(), "expected at least one folding range, got: {body}");
+    assert_eq!(
+        ranges[0]["startLine"].as_u64().unwrap(),
+        0,
+        "fn range should start on line 0"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn folding_range_returns_none_for_unopened_uri() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let fold_req = Request::build("textDocument/foldingRange")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/not_opened_fold.tyra" }
+        }))
+        .id(2)
+        .finish();
+
+    let resp = service.ready().await.unwrap().call(fold_req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+    assert!(body["result"].is_null(), "expected null for unopened URI, got: {body}");
+}

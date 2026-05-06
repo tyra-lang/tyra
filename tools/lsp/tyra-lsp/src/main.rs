@@ -14,6 +14,7 @@ use completion::{
 };
 
 mod code_action;
+mod folding;
 mod inlay;
 mod keywords;
 mod outline;
@@ -192,6 +193,7 @@ impl LanguageServer for TyraLsp {
                 }),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 inlay_hint_provider: Some(OneOf::Left(true)),
+                folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -547,6 +549,19 @@ impl LanguageServer for TyraLsp {
             params.range,
         );
         Ok(Some(hints))
+    }
+
+    async fn folding_range(
+        &self,
+        params: FoldingRangeParams,
+    ) -> Result<Option<Vec<FoldingRange>>> {
+        let uri = &params.text_document.uri;
+        let docs = self.documents.lock().await;
+        let Some(state) = docs.get(uri) else {
+            return Ok(None);
+        };
+        let ranges = folding::build_ranges(&state.ast, &state.sources, state.source_id);
+        Ok(Some(ranges))
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
