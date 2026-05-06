@@ -21,6 +21,7 @@ mod outline;
 mod references;
 mod rename;
 mod signature;
+mod selection_range;
 mod tokens;
 
 const DIAG_SOURCE: &str = "tyra";
@@ -195,6 +196,7 @@ impl LanguageServer for TyraLsp {
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 inlay_hint_provider: Some(OneOf::Left(true)),
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
+                selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -360,6 +362,34 @@ impl LanguageServer for TyraLsp {
             })
             .collect();
         Ok(Some(highlights))
+    }
+
+    async fn selection_range(
+        &self,
+        params: SelectionRangeParams,
+    ) -> Result<Option<Vec<SelectionRange>>> {
+        let uri = &params.text_document.uri;
+        let docs = self.documents.lock().await;
+        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let mut out = Vec::with_capacity(params.positions.len());
+        for pos in &params.positions {
+            let Some(offset) = state
+                .sources
+                .offset_at_utf16(state.source_id, pos.line, pos.character)
+            else {
+                return Ok(None);
+            };
+            let Some(sr) = selection_range::compute(
+                &state.ast,
+                &state.sources,
+                state.source_id,
+                offset,
+            ) else {
+                return Ok(None);
+            };
+            out.push(sr);
+        }
+        Ok(Some(out))
     }
 
     async fn references(

@@ -26,6 +26,7 @@
 | LSP | Inlay hints (`textDocument/inlayHint`) | ✅ Done (2026-05-06) |
 | LSP | Folding range (`textDocument/foldingRange`) | ✅ Done (2026-05-06) |
 | LSP | Document highlight (`textDocument/documentHighlight`) | ✅ Done (2026-05-06) |
+| LSP | Selection range (`textDocument/selectionRange`) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -168,6 +169,10 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   挿入位置は AST に identifier 専用 span が無いため
   `span.start + "let ".len() + name.len()` で計算 (ASCII 識別子前提)。
   `inlayHint/resolve` と workspace 設定 (`editor.inlayHints.*`) は未対応。
+- **Selection range scope**: AST 階層 (`Item` → `Stmt` / `Expr` → 子) のみ。
+  トークンレベル (識別子の文字単位、`(` `)` `,` 区切り) は未対応。
+  `ElseBranch` は span を持たないため chain には現れない (内側 IfExpr/Stmts は出る)。
+  Position 不正または AST に対応ノードが無い場合は全体 None を返す。
 - **Document highlight scope**: references と同じ範囲 (`ExprKind::Ident` のみ)。
   kind は `TEXT` で統一 (read/write の区別は未対応)。クロスファイル・フィールド
   アクセス・型名・パターン束縛は未対応。prelude / builtin 名は定義 span を持たない

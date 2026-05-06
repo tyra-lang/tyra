@@ -1466,3 +1466,84 @@ async fn document_highlight_returns_none_for_unopened_uri() {
     let body = serde_json::to_value(&resp).unwrap();
     assert!(body["result"].is_null(), "expected null for unopened URI, got: {body}");
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn selection_range_handler_returns_chain_for_known_position() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    // fn main()\n  let x = 1 + 2\nend\n — cursor on '2' (line 1, col 13)
+    let src = "fn main()\n  let x = 1 + 2\nend\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/selrange_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    let req = Request::build("textDocument/selectionRange")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/selrange_test.tyra" },
+            "positions": [{ "line": 1, "character": 13 }]
+        }))
+        .id(2)
+        .finish();
+
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let result = body["result"].as_array().expect("expected array result");
+    assert!(!result.is_empty(), "expected at least one SelectionRange, got: {body}");
+    // Each entry should have a 'range' field.
+    assert!(
+        result[0]["range"].is_object(),
+        "expected SelectionRange to have 'range', got: {body}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn selection_range_handler_returns_none_for_unopened_uri() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let req = Request::build("textDocument/selectionRange")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/not_opened_selrange.tyra" },
+            "positions": [{ "line": 0, "character": 0 }]
+        }))
+        .id(2)
+        .finish();
+
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+    assert!(body["result"].is_null(), "expected null for unopened URI, got: {body}");
+}
