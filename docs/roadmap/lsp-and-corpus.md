@@ -39,6 +39,7 @@
 | LSP | Document link (`textDocument/documentLink`) | ✅ Done (2026-05-06) |
 | LSP | Prepare rename (`textDocument/prepareRename`) | ✅ Done (2026-05-06) |
 | LSP | Workspace file rename (`workspace/willRenameFiles`) | ✅ Done (2026-05-06) |
+| LSP | Workspace file delete (`workspace/willDeleteFiles`) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -208,6 +209,11 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   埋める。`main_dir` はドキュメント URI の `parent()` から取得し、解決順は
   `<main_dir>/a/b/c.tyra` → `<TYRA_STDLIB or 上位の stdlib/>/a/b/c.tyra`。
   built-in module (`core.sys` / `core.tasks`) と解決失敗 import はリンク化しない。
+- **Workspace file delete scope**: 削除対象 `.tyra` ファイルを import して
+  いる open ドキュメントの `import` 文を行単位で削除する。`willRenameFiles`
+  同様、モジュールパスはインポータの parent dir 相対で解決し、合成 import は
+  span text 不一致で除外。フォルダ単位の削除および未オープンファイルのスキャンは
+  対象外。`workspace/didDeleteFiles` 通知は購読しない。
 - **Workspace file rename scope**: 開いているドキュメントの `import` 文のみ
   書き換える (ディスク上の未オープンファイルはスキャンしない)。Workspace
   root は `initialize` 時の `workspace_folders[0]` または `root_uri` から取得し、

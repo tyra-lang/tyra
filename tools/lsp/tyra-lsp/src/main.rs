@@ -19,6 +19,7 @@ mod code_action;
 mod code_lens;
 mod declaration;
 mod document_link;
+mod file_delete;
 mod file_rename;
 mod implementation;
 mod type_definition;
@@ -247,6 +248,16 @@ impl LanguageServer for TyraLsp {
                 workspace: Some(WorkspaceServerCapabilities {
                     file_operations: Some(WorkspaceFileOperationsServerCapabilities {
                         will_rename: Some(FileOperationRegistrationOptions {
+                            filters: vec![FileOperationFilter {
+                                scheme: Some("file".to_string()),
+                                pattern: FileOperationPattern {
+                                    glob: "**/*.tyra".to_string(),
+                                    matches: Some(FileOperationPatternKind::File),
+                                    options: None,
+                                },
+                            }],
+                        }),
+                        will_delete: Some(FileOperationRegistrationOptions {
                             filters: vec![FileOperationFilter {
                                 scheme: Some("file".to_string()),
                                 pattern: FileOperationPattern {
@@ -807,6 +818,14 @@ impl LanguageServer for TyraLsp {
     ) -> Result<Option<WorkspaceEdit>> {
         let docs = self.documents.lock().await;
         Ok(file_rename::compute_edits(&docs, &params.files))
+    }
+
+    async fn will_delete_files(
+        &self,
+        params: DeleteFilesParams,
+    ) -> Result<Option<WorkspaceEdit>> {
+        let docs = self.documents.lock().await;
+        Ok(file_delete::compute_edits(&docs, &params.files))
     }
 
     async fn document_symbol(
