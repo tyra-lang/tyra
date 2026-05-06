@@ -31,6 +31,7 @@
 | LSP | Linked editing range (`textDocument/linkedEditingRanges`) | ✅ Done (2026-05-06) |
 | LSP | Type definition (`textDocument/typeDefinition`) | ✅ Done (2026-05-06) |
 | LSP | Implementation (`textDocument/implementation`) | ✅ Done (2026-05-06) |
+| LSP | Declaration (`textDocument/declaration`) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -179,6 +180,10 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   サイト (`receiver.method()`) からの impl 探索は受信者の型解決が必要なため未対応。
   name token span は `find_binding_name_span` のテキストベース最初出現スキャン
   に依存。クロスファイルは未対応。
+- **Declaration scope**: 対象は (1) `impl Foo for X` の trait 名 `Foo` (2) impl
+  block 内の method 名のみ。任意シンボルから定義への汎用ジャンプは
+  `goto_definition` の責務。対応する `trait` が AST に見つからない場合は `None`
+  を返す。クロスファイル未対応。
 - **Type definition scope**: ユーザ定義 `value` / `data` / `type` のみ対応。
   プリミティブ (`Int`, `String` 等) と prelude generics
   (`Option<T>`, `Result<T,E>`, `List<T>`, `Map<K,V>`, `Set<T>`) は

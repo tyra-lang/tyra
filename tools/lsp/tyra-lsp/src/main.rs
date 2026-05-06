@@ -15,6 +15,7 @@ use completion::{
 
 mod call_hierarchy;
 mod code_action;
+mod declaration;
 mod implementation;
 mod type_definition;
 mod folding;
@@ -175,6 +176,7 @@ impl LanguageServer for TyraLsp {
                 definition_provider: Some(OneOf::Left(true)),
                 type_definition_provider: Some(TypeDefinitionProviderCapability::Simple(true)),
                 implementation_provider: Some(ImplementationProviderCapability::Simple(true)),
+                declaration_provider: Some(DeclarationCapability::Simple(true)),
                 document_highlight_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
                 rename_provider: Some(OneOf::Left(true)),
@@ -366,6 +368,29 @@ impl LanguageServer for TyraLsp {
             })
             .collect();
         Ok(Some(GotoDefinitionResponse::Array(locs)))
+    }
+
+    async fn goto_declaration(
+        &self,
+        params: GotoDefinitionParams,
+    ) -> Result<Option<GotoDefinitionResponse>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+        let docs = self.documents.lock().await;
+        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(offset) = state
+            .sources
+            .offset_at_utf16(state.source_id, pos.line, pos.character)
+        else {
+            return Ok(None);
+        };
+        let Some(span) = declaration::find_declaration(&state.ast, &state.text, offset) else {
+            return Ok(None);
+        };
+        Ok(Some(GotoDefinitionResponse::Scalar(Location {
+            uri: uri.clone(),
+            range: span_to_lsp_range(span, &state.sources),
+        })))
     }
 
     async fn completion(
