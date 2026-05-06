@@ -1,4 +1,4 @@
-use tyra_diagnostics::Span;
+use tyra_diagnostics::{SourceId, Span};
 
 use crate::keywords::TYRA_KEYWORDS;
 
@@ -59,12 +59,10 @@ pub(crate) fn find_binding_name_span(text: &str, def_span: Span, old_name: &str)
     None
 }
 
-/// Extract the identifier text that overlaps `offset` in `text`.
-///
-/// Scans backwards from `offset` to find the start of the identifier, then
-/// forwards to find the end. Returns `None` if the byte at `offset` is not
-/// an identifier character.
-pub(crate) fn extract_identifier_at(text: &str, offset: u32) -> Option<String> {
+/// Scan `text` to find the byte range `[start, end)` of the identifier
+/// overlapping `offset`. Returns `None` if `offset` is not on an identifier
+/// character.
+fn ident_byte_range(text: &str, offset: u32) -> Option<(usize, usize)> {
     let bytes = text.as_bytes();
     let off = offset as usize;
     if off >= bytes.len() || !is_ident_char(bytes[off]) {
@@ -78,6 +76,27 @@ pub(crate) fn extract_identifier_at(text: &str, offset: u32) -> Option<String> {
     while end < bytes.len() && is_ident_char(bytes[end]) {
         end += 1;
     }
+    Some((start, end))
+}
+
+/// Extract the byte span of the identifier overlapping `offset` in `text`.
+/// Returns `None` if the byte at `offset` is not an identifier character.
+pub(crate) fn extract_identifier_span_at(
+    text: &str,
+    source: SourceId,
+    offset: u32,
+) -> Option<Span> {
+    let (start, end) = ident_byte_range(text, offset)?;
+    Some(Span::new(source, start as u32, end as u32))
+}
+
+/// Extract the identifier text that overlaps `offset` in `text`.
+///
+/// Scans backwards from `offset` to find the start of the identifier, then
+/// forwards to find the end. Returns `None` if the byte at `offset` is not
+/// an identifier character.
+pub(crate) fn extract_identifier_at(text: &str, offset: u32) -> Option<String> {
+    let (start, end) = ident_byte_range(text, offset)?;
     Some(text[start..end].to_string())
 }
 
@@ -89,6 +108,23 @@ fn is_ident_char(b: u8) -> bool {
 mod tests {
     use super::*;
     use tyra_diagnostics::SourceMap;
+
+    #[test]
+    fn extract_identifier_span_at_basic() {
+        let mut sources = SourceMap::new();
+        let src = "let foo = 1\n";
+        let id = sources.add("t.tyra".into(), src.into());
+        // 'f' is at byte 4
+        let span = extract_identifier_span_at(src, id, 4).expect("expected span");
+        assert_eq!(span.start, 4);
+        assert_eq!(span.end, 7);
+        // whitespace returns None
+        assert!(extract_identifier_span_at(src, id, 3).is_none());
+        // middle of identifier returns full span
+        let span2 = extract_identifier_span_at(src, id, 5).expect("mid-ident");
+        assert_eq!(span2.start, 4);
+        assert_eq!(span2.end, 7);
+    }
 
     #[test]
     fn is_valid_identifier_accepts_normal() {

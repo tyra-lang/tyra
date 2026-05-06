@@ -201,7 +201,10 @@ impl LanguageServer for TyraLsp {
                 declaration_provider: Some(DeclarationCapability::Simple(true)),
                 document_highlight_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
-                rename_provider: Some(OneOf::Left(true)),
+                rename_provider: Some(OneOf::Right(RenameOptions {
+                    prepare_provider: Some(true),
+                    work_done_progress_options: WorkDoneProgressOptions::default(),
+                })),
                 completion_provider: Some(CompletionOptions {
                     trigger_characters: Some(vec![".".to_string()]),
                     ..Default::default()
@@ -660,6 +663,60 @@ impl LanguageServer for TyraLsp {
             })
             .collect();
         Ok(Some(locations))
+    }
+
+    async fn prepare_rename(
+        &self,
+        params: TextDocumentPositionParams,
+    ) -> Result<Option<PrepareRenameResponse>> {
+        let uri = &params.text_document.uri;
+        let pos = params.position;
+        let docs = self.documents.lock().await;
+        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(offset) = state
+            .sources
+            .offset_at_utf16(state.source_id, pos.line, pos.character)
+        else {
+            return Ok(None);
+        };
+
+        let Some(name_span) =
+            rename::extract_identifier_span_at(&state.text, state.source_id, offset)
+        else {
+            return Ok(None);
+        };
+        let name = state.text[name_span.start as usize..name_span.end as usize].to_string();
+
+        if !rename::is_valid_identifier(&name) {
+            return Err(tower_lsp::jsonrpc::Error::invalid_params(format!(
+                "`{name}` is not renameable"
+            )));
+        }
+
+        let Some(def_span) = references::find_def_span_at_cursor(state, offset) else {
+            return Ok(None);
+        };
+
+        // Guard: the identifier under the cursor must actually be the rename
+        // target — either a recorded use-span in def_index or the binding-name
+        // token of the definition.  Without this check, any identifier that
+        // happens to fall inside a definition span (e.g. `Int` in `let x: Int`)
+        // would be falsely advertised as renameable.
+        let is_use_span = state
+            .def_index
+            .iter()
+            .any(|(s, _)| s.source == state.source_id && *s == name_span);
+        let is_binding_name = rename::find_binding_name_span(&state.text, def_span, &name)
+            .map(|s| s == name_span)
+            .unwrap_or(false);
+        if !is_use_span && !is_binding_name {
+            return Ok(None);
+        }
+
+        Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
+            range: span_to_lsp_range(name_span, &state.sources),
+            placeholder: name,
+        }))
     }
 
     async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {

@@ -2122,6 +2122,146 @@ async fn diagnostic_handler_returns_empty_report_for_unopened_uri() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn prepare_rename_returns_range_for_let_binding() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    // `x` is defined and used, so it appears in the def_index.
+    let src = "let x: Int = 1\nlet y = x + 1\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/prepare_rename_test.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    // Cursor on 'x' in 'let x' (line 0, col 4)
+    let req = Request::build("textDocument/prepareRename")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/prepare_rename_test.tyra" },
+            "position": { "line": 0, "character": 4 }
+        }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    assert_eq!(
+        body["result"]["placeholder"].as_str(),
+        Some("x"),
+        "expected placeholder 'x': {body}"
+    );
+    assert_eq!(body["result"]["range"]["start"]["character"].as_u64(), Some(4));
+    assert_eq!(body["result"]["range"]["end"]["character"].as_u64(), Some(5));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn prepare_rename_returns_none_outside_identifier() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let src = "let x: Int = 1\nlet y = x + 1\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/prepare_rename_test2.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    // Cursor on '=' (col 11 in 'let x: Int = 1') — not an identifier character
+    let req = Request::build("textDocument/prepareRename")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/prepare_rename_test2.tyra" },
+            "position": { "line": 0, "character": 11 }
+        }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+    assert!(body["result"].is_null(), "expected null result outside identifier: {body}");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn prepare_rename_rejects_keyword() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let src = "let x: Int = 1\nlet y = x + 1\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/prepare_rename_test3.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    // Cursor on 'l' in 'let' (col 0) — keyword, not renameable
+    let req = Request::build("textDocument/prepareRename")
+        .params(json!({
+            "textDocument": { "uri": "file:///tmp/prepare_rename_test3.tyra" },
+            "position": { "line": 0, "character": 0 }
+        }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+    assert!(body["error"].is_object(), "expected error for keyword rename: {body}");
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn document_link_handler_returns_link_for_local_import() {
     use serde_json::json;
     use tower::{Service, ServiceExt};

@@ -37,6 +37,7 @@
 | LSP | Pull diagnostics (`textDocument/diagnostic`) | ✅ Done (2026-05-06) |
 | LSP | Type hierarchy (`textDocument/prepareTypeHierarchy` + super/subtypes) | ✅ Done (2026-05-06) |
 | LSP | Document link (`textDocument/documentLink`) | ✅ Done (2026-05-06) |
+| LSP | Prepare rename (`textDocument/prepareRename`) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -197,6 +198,10 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   を表示し label-only (クリック不可)。`value` / `data` / `type` / `trait` /
   impl method は未対応。Run/Test アクション lens および `codeLens/resolve` も
   未対応。
+- **Prepare rename scope**: 識別子文字 (`[A-Za-z0-9_]`) の連続トークンを検出し、
+  `is_valid_identifier` で予約語・無効トークンを弾く。定義が解決出来ない位置
+  (未定義シンボル等) では `null` を返す。`RangeWithPlaceholder` を返すため、
+  クライアントの F2 ダイアログには旧名がプレフィルされる。
 - **Document link scope**: `import a.b.c` の path token のみ。文字列リテラルや
   コメント内 URL は対象外。`resolve_provider = false` で eager に `target` を
   埋める。`main_dir` はドキュメント URI の `parent()` から取得し、解決順は
