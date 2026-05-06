@@ -32,6 +32,7 @@
 | LSP | Type definition (`textDocument/typeDefinition`) | ✅ Done (2026-05-06) |
 | LSP | Implementation (`textDocument/implementation`) | ✅ Done (2026-05-06) |
 | LSP | Declaration (`textDocument/declaration`) | ✅ Done (2026-05-06) |
+| LSP | Workspace symbol (`workspace/symbol`) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -184,6 +185,10 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   block 内の method 名のみ。任意シンボルから定義への汎用ジャンプは
   `goto_definition` の責務。対応する `trait` が AST に見つからない場合は `None`
   を返す。クロスファイル未対応。
+- **Workspace symbol scope**: 検索対象は open 済みドキュメントのみ。ファイル
+  システムを走査しないため未 open のファイルはヒットしない。マッチは
+  case-insensitive substring。`SymbolInformation` (legacy) を返し、
+  `WorkspaceSymbol` (3.17) / `workspaceSymbol/resolve` は未対応。
 - **Type definition scope**: ユーザ定義 `value` / `data` / `type` のみ対応。
   プリミティブ (`Int`, `String` 等) と prelude generics
   (`Option<T>`, `Result<T,E>`, `List<T>`, `Map<K,V>`, `Set<T>`) は

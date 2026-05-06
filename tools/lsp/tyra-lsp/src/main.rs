@@ -18,6 +18,7 @@ mod code_action;
 mod declaration;
 mod implementation;
 mod type_definition;
+mod workspace_symbol;
 mod folding;
 mod inlay;
 mod keywords;
@@ -185,6 +186,7 @@ impl LanguageServer for TyraLsp {
                     ..Default::default()
                 }),
                 document_symbol_provider: Some(OneOf::Left(true)),
+                workspace_symbol_provider: Some(OneOf::Left(true)),
                 semantic_tokens_provider: Some(
                     SemanticTokensServerCapabilities::SemanticTokensOptions(
                         SemanticTokensOptions {
@@ -688,6 +690,15 @@ impl LanguageServer for TyraLsp {
         let symbols =
             outline::build_document_symbols(state.source_id, &state.ast, &state.sources);
         Ok(Some(DocumentSymbolResponse::Nested(symbols)))
+    }
+
+    async fn symbol(
+        &self,
+        params: WorkspaceSymbolParams,
+    ) -> Result<Option<Vec<SymbolInformation>>> {
+        let docs = self.documents.lock().await;
+        let syms = workspace_symbol::collect(&params.query, &docs);
+        if syms.is_empty() { Ok(None) } else { Ok(Some(syms)) }
     }
 
     async fn semantic_tokens_full(

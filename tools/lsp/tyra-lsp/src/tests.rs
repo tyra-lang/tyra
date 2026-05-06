@@ -1907,3 +1907,48 @@ async fn goto_declaration_handler_returns_location() {
         .expect("expected start line in result");
     assert_eq!(start_line, 0, "expected jump to line 0 ('trait Foo'), got: {body}");
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn workspace_symbol_handler_returns_matches() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    // Open a doc with two fns; query should filter to just 'greet'.
+    let src = "fn greet()\nend\nfn foo()\nend\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": "file:///tmp/ws_sym.tyra",
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    let req = Request::build("workspace/symbol")
+        .params(json!({ "query": "greet" }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let arr = body["result"].as_array().expect("expected array result");
+    assert!(!arr.is_empty(), "expected at least one symbol, got: {body}");
+    let names: Vec<_> = arr.iter().map(|s| s["name"].as_str().unwrap_or("")).collect();
+    assert!(names.contains(&"greet"), "expected 'greet' in: {names:?}");
+    assert!(!names.contains(&"foo"), "expected 'foo' excluded, got: {names:?}");
+}
