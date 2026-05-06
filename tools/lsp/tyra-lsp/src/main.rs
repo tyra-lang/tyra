@@ -18,6 +18,7 @@ mod call_hierarchy;
 mod code_action;
 mod code_lens;
 mod declaration;
+mod document_link;
 mod implementation;
 mod type_definition;
 mod type_hierarchy;
@@ -224,6 +225,10 @@ impl LanguageServer for TyraLsp {
                 }),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 code_lens_provider: Some(CodeLensOptions { resolve_provider: Some(false) }),
+                document_link_provider: Some(DocumentLinkOptions {
+                    resolve_provider: Some(false),
+                    work_done_progress_options: WorkDoneProgressOptions::default(),
+                }),
                 diagnostic_provider: Some(DiagnosticServerCapabilities::Options(DiagnosticOptions {
                     identifier: Some("tyra".to_string()),
                     inter_file_dependencies: false,
@@ -875,6 +880,28 @@ impl LanguageServer for TyraLsp {
                 },
             }),
         ))
+    }
+
+    async fn document_link(
+        &self,
+        params: DocumentLinkParams,
+    ) -> Result<Option<Vec<DocumentLink>>> {
+        let uri = &params.text_document.uri;
+        let docs = self.documents.lock().await;
+        let Some(state) = docs.get(uri) else {
+            return Ok(None);
+        };
+        let main_dir = uri
+            .to_file_path()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+        let links = document_link::collect(
+            &state.ast,
+            &state.text,
+            &state.sources,
+            main_dir.as_deref(),
+        );
+        Ok(if links.is_empty() { None } else { Some(links) })
     }
 
     async fn code_action(

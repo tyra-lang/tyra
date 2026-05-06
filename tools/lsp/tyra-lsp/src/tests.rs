@@ -2122,6 +2122,62 @@ async fn diagnostic_handler_returns_empty_report_for_unopened_uri() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn document_link_handler_returns_link_for_local_import() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    // Create a temp dir with a resolvable module file
+    let dir = std::env::temp_dir().join("tyra_lsp_dl_smoke");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("math.tyra"), "").unwrap();
+
+    let main_tyra = dir.join("main.tyra");
+    let file_uri = tower_lsp::lsp_types::Url::from_file_path(&main_tyra).unwrap();
+    let uri_str = file_uri.to_string();
+
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    let src = "import math\n";
+    let did_open = Request::build("textDocument/didOpen")
+        .params(json!({
+            "textDocument": {
+                "uri": uri_str,
+                "languageId": "tyra",
+                "version": 1,
+                "text": src
+            }
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
+
+    let req = Request::build("textDocument/documentLink")
+        .params(json!({ "textDocument": { "uri": uri_str } }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
+
+    let arr = body["result"].as_array().expect("expected array result");
+    assert_eq!(arr.len(), 1, "expected 1 link for `import math`, got: {body}");
+    let target = arr[0]["target"].as_str().expect("expected target string");
+    assert!(target.ends_with("math.tyra"), "target should point to math.tyra: {target}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn prepare_type_hierarchy_handler_returns_item() {
     use serde_json::json;
     use tower::{Service, ServiceExt};

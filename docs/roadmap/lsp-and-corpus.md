@@ -36,6 +36,7 @@
 | LSP | Code lens (`textDocument/codeLens`) | ✅ Done (2026-05-06) |
 | LSP | Pull diagnostics (`textDocument/diagnostic`) | ✅ Done (2026-05-06) |
 | LSP | Type hierarchy (`textDocument/prepareTypeHierarchy` + super/subtypes) | ✅ Done (2026-05-06) |
+| LSP | Document link (`textDocument/documentLink`) | ✅ Done (2026-05-06) |
 
 ---
 
@@ -196,6 +197,11 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   を表示し label-only (クリック不可)。`value` / `data` / `type` / `trait` /
   impl method は未対応。Run/Test アクション lens および `codeLens/resolve` も
   未対応。
+- **Document link scope**: `import a.b.c` の path token のみ。文字列リテラルや
+  コメント内 URL は対象外。`resolve_provider = false` で eager に `target` を
+  埋める。`main_dir` はドキュメント URI の `parent()` から取得し、解決順は
+  `<main_dir>/a/b/c.tyra` → `<TYRA_STDLIB or 上位の stdlib/>/a/b/c.tyra`。
+  built-in module (`core.sys` / `core.tasks`) と解決失敗 import はリンク化しない。
 - **Type hierarchy scope**: 単一ファイルのみ。trait → impl 検索は `state.ast`
   のトップレベル `Item::ImplDef` を走査するため、別ファイルの impl はヒット
   しない。Tyra trait モデルに super-trait 継承がないため、trait の supertypes

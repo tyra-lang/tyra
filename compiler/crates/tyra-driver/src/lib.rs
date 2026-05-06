@@ -380,6 +380,34 @@ fn is_builtin_module(module_path: &str) -> bool {
     matches!(module_path, "core.sys" | "core.tasks")
 }
 
+/// Resolve `import a.b.c` to the `.tyra` file path the compiler would read,
+/// using the same lookup order as `resolve_imports`:
+///   1. `<main_dir>/a/b/c.tyra`
+///   2. `<stdlib_dir>/a/b/c.tyra`  (via `TYRA_STDLIB` env or walk-up for `stdlib/`)
+///
+/// Returns `None` for built-in modules (`core.sys`, `core.tasks`) and paths
+/// that do not exist on disk.
+pub fn resolve_import_file(main_dir: &Path, path: &[String]) -> Option<std::path::PathBuf> {
+    if is_builtin_module(&path.join(".")) {
+        return None;
+    }
+    let mut p = main_dir.to_path_buf();
+    for seg in path {
+        p.push(seg);
+    }
+    p.set_extension("tyra");
+    if p.is_file() {
+        return Some(p);
+    }
+    let stdlib = find_stdlib_dir(main_dir)?;
+    let mut sp = stdlib;
+    for seg in path {
+        sp.push(seg);
+    }
+    sp.set_extension("tyra");
+    sp.is_file().then_some(sp)
+}
+
 /// Add `import string` / `import list` / `import io` automatically when the
 /// program calls those module's functions (`string.trim(s)`, `list.push(xs, v)`,
 /// `io.read_line()`) without an explicit import. The AI-gen benchmark shows
@@ -1422,5 +1450,29 @@ mod tests {
             None,
         );
         assert!(report.has_errors(), "expected parse error");
+    }
+
+    #[test]
+    fn resolve_import_file_finds_local_and_skips_builtin() {
+        use std::fs;
+        let dir = std::env::temp_dir().join("tyra_driver_rif_test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let foo_path = dir.join("foo.tyra");
+        fs::write(&foo_path, "").unwrap();
+
+        // local module resolves
+        let got = resolve_import_file(&dir, &["foo".to_string()]);
+        assert_eq!(got.as_deref(), Some(foo_path.as_path()), "should find foo.tyra");
+
+        // non-existent module
+        let got = resolve_import_file(&dir, &["bar".to_string()]);
+        assert!(got.is_none(), "should not find bar.tyra: {got:?}");
+
+        // built-in module skipped
+        let got = resolve_import_file(&dir, &["core".to_string(), "sys".to_string()]);
+        assert!(got.is_none(), "core.sys is builtin, should return None");
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
