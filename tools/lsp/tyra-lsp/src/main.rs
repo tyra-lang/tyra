@@ -60,10 +60,19 @@ struct TyraLsp {
     // Whether the client supports dynamic registration for type hierarchy.
     // Set during initialize; read in initialized to decide whether to register.
     type_hierarchy_dynamic: AtomicBool,
+    // Whether the client supports dynamic registration for watched files.
+    did_change_watched_files_dynamic: AtomicBool,
 }
 
 impl TyraLsp {
-    async fn analyze(&self, uri: Url, text: String, version: i32) {
+    /// Analyze `text` as the content of `uri` and publish diagnostics.
+    ///
+    /// `workspace_dir` is forwarded to `check_in_memory` to enable filesystem
+    /// import resolution (`resolve_imports`).  Pass `None` for single-file
+    /// analysis (didOpen / didChange); pass the document's parent directory
+    /// when re-analyzing after external file changes so that imported modules
+    /// are re-read from disk.
+    async fn analyze(&self, uri: Url, text: String, version: i32, workspace_dir: Option<std::path::PathBuf>) {
         let file_name: String = uri
             .to_file_path()
             .ok()
@@ -77,7 +86,7 @@ impl TyraLsp {
         // bug never brings down the LSP process.
         let result = tokio::task::spawn_blocking(move || {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                tyra_driver::check_in_memory(file_name, text_clone, None)
+                tyra_driver::check_in_memory(file_name, text_clone, workspace_dir.as_deref())
             }))
         })
         .await;
@@ -193,6 +202,14 @@ impl LanguageServer for TyraLsp {
             == Some(true);
         self.type_hierarchy_dynamic.store(supports_dynamic, Ordering::Relaxed);
 
+        let supports_watched_files_dynamic = params.capabilities
+            .workspace.as_ref()
+            .and_then(|w| w.did_change_watched_files.as_ref())
+            .and_then(|d| d.dynamic_registration)
+            == Some(true);
+        self.did_change_watched_files_dynamic
+            .store(supports_watched_files_dynamic, Ordering::Relaxed);
+
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
@@ -304,6 +321,25 @@ impl LanguageServer for TyraLsp {
                     .await;
             }
         }
+
+        if self.did_change_watched_files_dynamic.load(Ordering::Relaxed) {
+            let opts = DidChangeWatchedFilesRegistrationOptions {
+                watchers: vec![FileSystemWatcher {
+                    glob_pattern: GlobPattern::String("**/*.tyra".into()),
+                    kind: None,
+                }],
+            };
+            let reg = Registration {
+                id: "tyra-watched-files".to_string(),
+                method: "workspace/didChangeWatchedFiles".to_string(),
+                register_options: serde_json::to_value(opts).ok(),
+            };
+            if let Err(e) = self.client.register_capability(vec![reg]).await {
+                self.client
+                    .log_message(MessageType::WARNING, format!("watched files registration failed: {e}"))
+                    .await;
+            }
+        }
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -314,7 +350,7 @@ impl LanguageServer for TyraLsp {
         let uri = params.text_document.uri;
         let text = params.text_document.text;
         let version = params.text_document.version;
-        self.analyze(uri, text, version).await;
+        self.analyze(uri, text, version, None).await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
@@ -323,7 +359,7 @@ impl LanguageServer for TyraLsp {
         // TextDocumentSyncKind::FULL → changes[0].text is the entire new content.
         match params.content_changes.into_iter().next() {
             Some(change) => {
-                self.analyze(uri, change.text, version).await;
+                self.analyze(uri, change.text, version, None).await;
             }
             None => {
                 self.client
@@ -1006,6 +1042,26 @@ impl LanguageServer for TyraLsp {
         Ok(WorkspaceDiagnosticReportResult::Report(WorkspaceDiagnosticReport { items }))
     }
 
+    async fn did_change_watched_files(&self, _params: DidChangeWatchedFilesParams) {
+        // Any .tyra file created/changed/deleted outside the editor may affect
+        // import resolution for all open docs. Re-analyze everything with the
+        // document's parent directory so resolve_imports re-reads modules from
+        // disk and picks up the external change.
+        let entries: Vec<(Url, String, i32)> = {
+            let docs = self.documents.lock().await;
+            docs.iter()
+                .map(|(uri, state)| (uri.clone(), state.text.clone(), state.version))
+                .collect()
+        };
+        for (uri, text, version) in entries {
+            let workspace_dir = uri
+                .to_file_path()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+            self.analyze(uri, text, version, workspace_dir).await;
+        }
+    }
+
     async fn document_link(
         &self,
         params: DocumentLinkParams,
@@ -1130,6 +1186,7 @@ async fn main() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
     Server::new(stdin, stdout, socket).serve(service).await;
 }

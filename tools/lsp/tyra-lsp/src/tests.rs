@@ -135,6 +135,7 @@ async fn goto_definition_returns_location() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -239,6 +240,7 @@ async fn completion_returns_array_with_println() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -466,6 +468,7 @@ async fn references_returns_location_array() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -516,6 +519,7 @@ async fn references_include_declaration_returns_def_and_use() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -620,6 +624,7 @@ async fn rename_returns_workspace_edit() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -677,6 +682,7 @@ async fn rename_from_def_site_returns_workspace_edit() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -736,6 +742,7 @@ async fn rename_invalid_identifier_returns_error() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -783,6 +790,7 @@ async fn document_symbol_returns_top_level_items() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -835,6 +843,7 @@ async fn document_symbol_returns_none_for_unopened_uri() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -865,6 +874,7 @@ async fn semantic_tokens_full_returns_tokens() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -913,6 +923,7 @@ async fn semantic_tokens_full_returns_none_for_unopened_uri() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -946,6 +957,7 @@ async fn signature_help_returns_user_fn_signature() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1005,6 +1017,7 @@ async fn signature_help_returns_none_outside_call() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1056,6 +1069,7 @@ async fn did_open_publishes_e0110_diagnostic() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1099,6 +1113,7 @@ async fn code_action_returns_typo_quickfix() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1175,6 +1190,7 @@ async fn code_action_returns_none_for_unopened_uri() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1209,6 +1225,7 @@ async fn inlay_hint_returns_type_for_let() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1267,6 +1284,7 @@ async fn inlay_hint_returns_none_for_unopened_uri() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1301,6 +1319,7 @@ async fn folding_range_returns_ranges_for_fn() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1351,6 +1370,7 @@ async fn folding_range_returns_none_for_unopened_uri() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1381,6 +1401,7 @@ async fn document_highlight_returns_uses_at_def_site() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1436,6 +1457,7 @@ async fn document_highlight_returns_uses_at_use_site() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1486,6 +1508,7 @@ async fn document_highlight_returns_none_for_unopened_uri() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1517,6 +1540,7 @@ async fn selection_range_handler_returns_chain_for_known_position() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1569,6 +1593,7 @@ async fn selection_range_handler_returns_none_for_unopened_uri() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1600,6 +1625,7 @@ async fn prepare_call_hierarchy_handler_returns_item() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1649,6 +1675,7 @@ async fn incoming_calls_handler_returns_caller() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1709,6 +1736,7 @@ async fn linked_editing_range_returns_def_and_uses() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1771,6 +1799,7 @@ async fn linked_editing_range_returns_none_outside_identifier() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1818,6 +1847,7 @@ async fn goto_type_definition_handler_returns_location() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1867,6 +1897,7 @@ async fn goto_implementation_handler_returns_locations() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1918,6 +1949,7 @@ async fn goto_declaration_handler_returns_location() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -1967,6 +1999,7 @@ async fn workspace_symbol_handler_returns_matches() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -2013,6 +2046,7 @@ async fn code_lens_handler_returns_lenses() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -2057,6 +2091,7 @@ async fn diagnostic_handler_returns_full_report_with_items() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -2105,6 +2140,7 @@ async fn diagnostic_handler_returns_empty_report_for_unopened_uri() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -2139,6 +2175,7 @@ async fn prepare_rename_returns_range_for_let_binding() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -2191,6 +2228,7 @@ async fn prepare_rename_returns_none_outside_identifier() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -2235,6 +2273,7 @@ async fn prepare_rename_rejects_keyword() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -2289,6 +2328,7 @@ async fn document_link_handler_returns_link_for_local_import() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -2335,6 +2375,7 @@ async fn prepare_type_hierarchy_handler_returns_item() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -2386,6 +2427,7 @@ async fn workspace_diagnostic_returns_reports_for_all_open_docs() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -2435,6 +2477,7 @@ async fn workspace_diagnostic_returns_empty_when_no_docs_open() {
         client,
         documents: Mutex::new(HashMap::new()),
         type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
     });
 
     let init = Request::build("initialize")
@@ -2450,6 +2493,49 @@ async fn workspace_diagnostic_returns_empty_when_no_docs_open() {
     let resp = service.ready().await.unwrap().call(req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
 
+    let items = body["result"]["items"].as_array().expect("expected items array");
+    assert!(items.is_empty(), "expected empty items when no docs open, got: {body}");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn did_change_watched_files_handler_does_not_crash() {
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::Request;
+
+    // No did_open: the handler loops over open docs, finds none, calls publish_diagnostics
+    // zero times — avoids filling the test socket's notification channel.
+    let (mut service, _socket) = LspService::new(|client| TyraLsp {
+        client,
+        documents: Mutex::new(HashMap::new()),
+        type_hierarchy_dynamic: AtomicBool::new(false),
+        did_change_watched_files_dynamic: AtomicBool::new(false),
+    });
+
+    let init = Request::build("initialize")
+        .params(json!({"capabilities": {}}))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(init).await.unwrap();
+
+    // Send workspace/didChangeWatchedFiles with no open documents.
+    // Verifies the handler completes without panicking.
+    let notif = Request::build("workspace/didChangeWatchedFiles")
+        .params(json!({
+            "changes": [
+                { "uri": "file:///tmp/other.tyra", "type": 1 }
+            ]
+        }))
+        .finish();
+    let _ = service.ready().await.unwrap().call(notif).await.unwrap();
+
+    // Confirm workspace state is intact (empty map → empty items).
+    let req = Request::build("workspace/diagnostic")
+        .params(json!({ "previousResultIds": [] }))
+        .id(2)
+        .finish();
+    let resp = service.ready().await.unwrap().call(req).await.unwrap();
+    let body = serde_json::to_value(&resp).unwrap();
     let items = body["result"]["items"].as_array().expect("expected items array");
     assert!(items.is_empty(), "expected empty items when no docs open, got: {body}");
 }

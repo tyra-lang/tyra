@@ -41,6 +41,7 @@
 | LSP | Workspace file rename (`workspace/willRenameFiles`) | ✅ Done (2026-05-06) |
 | LSP | Workspace file delete (`workspace/willDeleteFiles`) | ✅ Done (2026-05-06) |
 | LSP | Workspace pull diagnostics (`workspace/diagnostic`) | ✅ Done (2026-05-07) |
+| LSP | Workspace file watcher (`workspace/didChangeWatchedFiles`) | ✅ Done (2026-05-07) |
 
 ---
 
@@ -235,6 +236,13 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   差分最適化と `Unchanged` レポートは未対応で、常に `Full` を返す。
   `related_documents` (cross-file diagnostics) も未対応。既存の push-based
   `publishDiagnostics` と併存し、`analyze` 時にキャッシュした結果を返す。
+- **Watched files scope**: クライアントが監視する `.tyra` ファイルの
+  Create / Change / Delete を受信 (`workspace/didChangeWatchedFiles`)。
+  受信時は `params.changes` の内訳を参照せず、open 中の全ドキュメントを
+  再解析する (cross-file な影響を簡潔に網羅するため)。動的登録
+  (`client/registerCapability`) で表明するため、静的 capability のみの
+  クライアントでは無効。glob は `**/*.tyra` 単一。フォルダ単位 watcher、
+  `RelativePattern`、`WatchKind` 個別指定は未対応。
 - **Type definition scope**: ユーザ定義 `value` / `data` / `type` のみ対応。
   プリミティブ (`Int`, `String` 等) と prelude generics
   (`Option<T>`, `Result<T,E>`, `List<T>`, `Map<K,V>`, `Set<T>`) は
