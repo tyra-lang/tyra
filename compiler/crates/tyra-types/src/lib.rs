@@ -1196,6 +1196,78 @@ end
         assert!(!has_e0306(&report), "zero-field ADT variants should keep Eq; got: {:?}", report.diagnostics());
     }
 
+    #[test]
+    fn option_int_can_eq() {
+        // §8.6: Option<Int> derives Eq because Int has Eq.
+        let source = r#"
+fn f(_ a: Option<Int>, _ b: Option<Int>) -> Bool
+  a == b
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0306(&report), "Option<Int> should auto-derive Eq; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn option_float_cannot_eq() {
+        // §8.6 + ADR-0002: Option<Float> has no Eq because Float has no Eq.
+        let source = r#"
+fn f(_ a: Option<Float>, _ b: Option<Float>) -> Bool
+  a == b
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0306(&report), "Option<Float> must not have Eq (Float blocks it); got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn result_int_string_can_eq() {
+        // §8.6: Result<Int, String> derives Eq because both args have Eq.
+        let source = r#"
+fn f(_ a: Result<Int, String>, _ b: Result<Int, String>) -> Bool
+  a == b
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0306(&report), "Result<Int, String> should auto-derive Eq; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn result_float_int_cannot_eq() {
+        // §8.6: Result<Float, Int> has no Eq because the first arg (Float) lacks Eq.
+        let source = r#"
+fn f(_ a: Result<Float, Int>, _ b: Result<Float, Int>) -> Bool
+  a == b
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0306(&report), "Result<Float, Int> must not have Eq (Float arg blocks it); got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn nested_option_can_eq() {
+        // §8.6: ability derivation recurses into nested type arguments.
+        let source = r#"
+fn f(_ a: Option<Option<Int>>, _ b: Option<Option<Int>>) -> Bool
+  a == b
+end
+"#;
+        let report = check_str(source);
+        assert!(!has_e0306(&report), "Option<Option<Int>> should auto-derive Eq; got: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn option_int_no_ord() {
+        // §8.5: ADTs never auto-derive Ord, even when type arguments have Ord.
+        let source = r#"
+fn f(_ a: Option<Int>, _ b: Option<Int>) -> Bool
+  a < b
+end
+"#;
+        let report = check_str(source);
+        assert!(has_e0307(&report), "Option<Int> must not have Ord (ADTs never derive Ord); got: {:?}", report.diagnostics());
+    }
+
     // ========================================================================
     // Bare `return;` from non-Unit fn (§9.5, E0309)
     // ========================================================================

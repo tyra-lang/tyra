@@ -249,6 +249,12 @@ impl TypeEnv {
                 .get(name.as_str())
                 .map(|a| a.contains(&ability))
                 .unwrap_or(false),
+            // Prelude ADTs Option<T> / Result<T, E>: §8.6 structural derivation.
+            // Ability X holds iff every type argument has X. ADTs never auto-derive
+            // Ord (§8.5), so Ord is always false regardless of arguments.
+            Ty::Generic(name, args) if name == "Option" || name == "Result" => {
+                ability != Ability::Ord && args.iter().all(|a| self.ty_has_ability(a, ability))
+            }
             Ty::Generic(name, _) => self
                 .type_abilities
                 .get(name.as_str())
