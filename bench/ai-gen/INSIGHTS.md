@@ -2,6 +2,78 @@
 
 Running log of observations that raw counts in `SUMMARY.md` hide.
 
+## Run 52 (2026-05-14) — replay: this-session compiler fixes vs Run 51
+
+**This is a replay run, not a fresh generation.** No LLM was called.
+`bench/ai-gen/replay.py` took the model code already cached in
+`results-run51/*.json` (generated with `--inject-tyra-spec`) and
+re-compiled + re-executed it against the current compiler. Purpose:
+isolate the effect of compiler fixes from any model variance.
+
+This is the first entry in this log since Run 8. Runs 9–51 are tracked
+in `results-run*/` and (partially) in the now-retired `SUMMARY.md`;
+they are not backfilled here.
+
+### Compiler commits included in this session
+
+| commit | change |
+| --- | --- |
+| `2265fc1` | fix(mir): correctly store match arm result when payload binding present |
+| `fbfd811` | fix(codegen): compare all scalar fields for Option/Result structural equality |
+| `fbd2064` | fix(types): derive Eq/Hash/Debug for Option/Result from type arguments |
+| `9657b86` | fix(codegen): hoist alloca instructions to entry block |
+
+### Result
+
+| metric | Run 51 | Run 52 (replay) | delta |
+| --- | ---: | ---: | ---: |
+| pass | 297 | 298 | **+1** |
+| check_fail | 1 | 0 | -1 |
+| exec_fail | 1 | 1 | 0 |
+| compile_fail | 1 | 1 | 0 |
+| pass% | 99.0% | **99.3%** | +0.3 |
+| all_pass% (3 seeds) | 97.0% | **98.0%** | +1.0 |
+
+### Cell-by-cell breakdown
+
+**`049-count-chars` s1: `check_fail → pass`.**
+This is the primary validation target. The model code output
+`count=11` (counting all `s` occurrences) instead of `count=4`
+(matching only the target character). The root cause was a codegen
+bug in MIR match arm result storage (`2265fc1`) combined with a
+missing structural comparison for Option/Result (`fbfd811`). After
+the fix the program outputs `count=4` and passes.
+
+**`099-sum-column` s1: `exec_fail → exec_fail`, but the failure
+mode changed.**
+Run 51: exit code −11 (SIGSEGV) — alloca in a non-entry basic block
+consumed O(iterations) stack inside a `while` loop, exhausting the 8 MiB
+stack around 130 k iterations. Run 52: timeout (exit code null, note
+`"timeout"`) — the alloca hoisting fix (`9657b86`) eliminated the
+compiler-caused crash. The remaining `exec_fail` is the model's own
+bug: the generated code is a `while true` loop with no `break`, so it
+hangs indefinitely. **The compiler defect is resolved; the model code
+defect is out of scope.**
+
+**`088-histogram` s1: `compile_fail → compile_fail` (unchanged).**
+E0110: the model placed `import string` inside a function body. This
+is a model code-quality issue, not a compiler limitation. Unchanged
+result is expected and correct.
+
+**Remaining 297 cells: `pass → pass`, zero regressions.**
+
+The `fbd2064` Option/Result Eq fix does not correspond directly to any
+Run 51 failure cell, but is validated by 6 new unit tests in
+`tyra-types` and confirmed by the 297-cell regression baseline.
+
+### What this means
+
+The session's compiler fixes worked exactly within their intended
+scope. One prompt moved from `check_fail` to `pass`; one compiler-caused
+crash became a model-caused timeout; zero regressions. The two remaining
+failures (`088`, `099`) are now cleanly attributable to model code
+generation quality, not compiler defects.
+
 ## Run 8 (2026-04-21) — spec injection v3: anti-hallucination method guide
 
 Added a final block to the injected context enumerating common
@@ -402,3 +474,9 @@ failures.
   compile_fail → check_fail (compiler accepted, logic wrong).
   Trajectory from Run 4 baseline: compile_pass 0 → 16 → 15 → 33
   → 40 in a single afternoon purely via context + minimal stdlib.
+- *(Runs 9–51 not logged here — see `results-run*/`.)*
+- **Run 52** (2026-05-14) — **replay** of Run 51 model code through
+  the fixed compiler (no LLM call). 049 `check_fail→pass` (codegen
+  fix), 099 SIGSEGV→timeout (alloca hoisting, compiler crash
+  resolved; remaining fail is model's infinite loop), 088 unchanged
+  (model bug). pass% 99.0→99.3, all_pass% 97.0→98.0.
