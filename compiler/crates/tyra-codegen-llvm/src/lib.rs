@@ -347,6 +347,66 @@ mod tests {
     }
 
     #[test]
+    fn eq_option_int_compares_payload() {
+        // Option<Int> == Option<Int> must compare both tag (field 0) AND
+        // payload (field 1), not just the tag. Before the fix, the codegen
+        // only extracted field 0 and returned early, making Some(5)==Some(99)
+        // emit `true` (both tags are 0).
+        let program = tyra_mir::Program {
+            functions: vec![tyra_mir::Function {
+                name: "main".into(),
+                params: vec![],
+                return_type: tyra_types::Ty::Unit,
+                body: vec![
+                    // _t0 = Some(5)
+                    tyra_mir::Instruction::AdtInit {
+                        dest: "_t0".into(),
+                        type_name: "Option__Int".into(),
+                        tag: 0,
+                        fields: vec![tyra_mir::Operand::Const(tyra_mir::Constant::Int(5))],
+                    },
+                    // _t1 = Some(99)
+                    tyra_mir::Instruction::AdtInit {
+                        dest: "_t1".into(),
+                        type_name: "Option__Int".into(),
+                        tag: 0,
+                        fields: vec![tyra_mir::Operand::Const(tyra_mir::Constant::Int(99))],
+                    },
+                    // _t2 = _t0 == _t1
+                    tyra_mir::Instruction::BinOp {
+                        dest: "_t2".into(),
+                        op: tyra_mir::MirBinOp::EqInt,
+                        lhs: tyra_mir::Operand::Var("_t0".into()),
+                        rhs: tyra_mir::Operand::Var("_t1".into()),
+                    },
+                    tyra_mir::Instruction::Return { value: None },
+                ],
+                is_main: true,
+            }],
+            string_constants: vec![],
+            struct_defs: vec![tyra_mir::StructDef {
+                name: "Option__Int".into(),
+                // fields[0] named "tag" → is_adt=true; fields[1] = payload
+                fields: vec![("tag".into(), tyra_types::Ty::Int), ("0".into(), tyra_types::Ty::Int)],
+                is_data: false,
+                recursive_fields: vec![false, false],
+            }],
+        };
+
+        let ir = emit_llvm_ir(&program);
+        // Must extract field 1 (payload), not only field 0 (tag)
+        assert!(
+            ir.contains("extractvalue %struct.Option__Int") && ir.contains(", 1"),
+            "expected field-1 extractvalue for payload comparison; IR:\n{ir}"
+        );
+        // Must AND the per-field equalities together
+        assert!(
+            ir.contains("and i1"),
+            "expected `and i1` from structural field-by-field compare; IR:\n{ir}"
+        );
+    }
+
+    #[test]
     fn panic_emits_puts_abort_unreachable() {
         // §12.1: panic(msg) → puts(msg) + abort + unreachable
         let program = tyra_mir::Program {

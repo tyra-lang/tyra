@@ -80,15 +80,77 @@ pub(crate) fn emit_instruction(
             let l = operand_ref(lhs, func);
             let r = operand_ref(rhs, func);
 
-            // If either operand is an Option/Result struct, compare discriminants
-            // (field 0, i8 tag) rather than treating the struct as i64.
-            // Handles patterns like `option_expr == None` / `option_expr != None`.
+            // If either operand is an Option/Result struct, emit a structural
+            // comparison (tag + all payload fields).
+            //
+            // When all fields are scalar (i8/i1/i64/double) we emit a full
+            // field-by-field compare AND'd together. AdtInit deterministically
+            // zero-fills inactive variant fields, so comparing every field is
+            // correct for structural equality of scalar-payload prelude ADTs
+            // (Option<Int>, Option<Bool>, Option<Float>, Result<Int,Int>, …).
+            //
+            // When any field is a ptr or nested struct (Option<String>, data
+            // payloads, recursive fields) we fall back to tag-only comparison
+            // — identical to the pre-existing behaviour — since deep equality
+            // requires string/recursive comparison that is out of scope here.
             if matches!(op, MirBinOp::EqInt | MirBinOp::NeqInt) {
                 let lhs_stype = if let Operand::Var(n) = lhs { ctx.struct_temps.get(n.as_str()) } else { None };
                 let rhs_stype = if let Operand::Var(n) = rhs { ctx.struct_temps.get(n.as_str()) } else { None };
                 if let Some(stype) = lhs_stype.or(rhs_stype) {
-                    let llvm_ty = &ctx.struct_map[stype.as_str()].llvm_name;
-                    let cmp = if matches!(op, MirBinOp::EqInt) { "eq" } else { "ne" };
+                    let info = &ctx.struct_map[stype.as_str()];
+                    let llvm_ty = &info.llvm_name;
+                    let num_fields = info.field_types.len();
+                    let is_eq = matches!(op, MirBinOp::EqInt);
+
+                    // Compute effective LLVM type per field.
+                    let field_llvm: Vec<String> = (0..num_fields)
+                        .map(|fi| {
+                            if fi == 0 {
+                                "i8".to_string()
+                            } else if info.recursive_fields.get(fi).copied().unwrap_or(false) {
+                                "ptr".to_string()
+                            } else {
+                                let t = llvm_type_str(&info.field_types[fi], ctx.struct_map);
+                                if t == "void" { "i64".to_string() } else { t }
+                            }
+                        })
+                        .collect();
+
+                    let all_scalar = field_llvm.iter().all(|t| {
+                        matches!(t.as_str(), "i8" | "i1" | "i64" | "double")
+                    });
+
+                    if all_scalar {
+                        // Extract and compare every field; AND the per-field results.
+                        let mut prev_acc: Option<String> = None;
+                        for (fi, fty) in field_llvm.iter().enumerate() {
+                            writeln!(out, "  %{dest}.l{fi} = extractvalue {llvm_ty} {l}, {fi}").unwrap();
+                            writeln!(out, "  %{dest}.r{fi} = extractvalue {llvm_ty} {r}, {fi}").unwrap();
+                            if fty == "double" {
+                                writeln!(out, "  %{dest}.e{fi} = fcmp oeq double %{dest}.l{fi}, %{dest}.r{fi}").unwrap();
+                            } else {
+                                writeln!(out, "  %{dest}.e{fi} = icmp eq {fty} %{dest}.l{fi}, %{dest}.r{fi}").unwrap();
+                            }
+                            prev_acc = Some(match prev_acc {
+                                None => format!("%{dest}.e{fi}"),
+                                Some(prev) => {
+                                    writeln!(out, "  %{dest}.a{fi} = and i1 {prev}, %{dest}.e{fi}").unwrap();
+                                    format!("%{dest}.a{fi}")
+                                }
+                            });
+                        }
+                        let alleq = prev_acc.unwrap_or_else(|| "true".to_string());
+                        if is_eq {
+                            writeln!(out, "  %{dest} = or i1 {alleq}, false").unwrap();
+                        } else {
+                            writeln!(out, "  %{dest} = xor i1 {alleq}, true").unwrap();
+                        }
+                        return;
+                    }
+
+                    // Fallback: tag-only comparison (preserves pre-existing behaviour
+                    // for ptr/struct payload ADTs).
+                    let cmp = if is_eq { "eq" } else { "ne" };
                     writeln!(out, "  %{dest}.l_tag = extractvalue {llvm_ty} {l}, 0").unwrap();
                     writeln!(out, "  %{dest}.r_tag = extractvalue {llvm_ty} {r}, 0").unwrap();
                     writeln!(out, "  %{dest} = icmp {cmp} i8 %{dest}.l_tag, %{dest}.r_tag").unwrap();
