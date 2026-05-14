@@ -517,6 +517,20 @@ fn auto_import_stdlib(ast: &mut tyra_ast::SourceFile) {
                     }
                 }
             }
+            ExprKind::Propagate(inner) => walk_expr(inner, needed),
+            ExprKind::Await(inner) => walk_expr(inner, needed),
+            ExprKind::Spawn(inner) => walk_expr(inner, needed),
+            ExprKind::Index(base, idx) => {
+                walk_expr(base, needed);
+                walk_expr(idx, needed);
+            }
+            ExprKind::MapLit(pairs) => {
+                for (k, v) in pairs {
+                    walk_expr(k, needed);
+                    walk_expr(v, needed);
+                }
+            }
+            ExprKind::Lambda(l) => walk_stmts(&l.body, needed),
             _ => {}
         }
     }
@@ -1476,5 +1490,26 @@ mod tests {
         assert!(got.is_none(), "core.sys is builtin, should return None");
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn auto_import_detects_module_call_inside_propagate() {
+        // `string.parse_int(...)?` — module call wrapped in `?`.
+        // Before the fix, walk_expr did not recurse into Propagate,
+        // so `import string` was never injected → E0200.
+        let CheckResult { report, .. } = check_in_memory(
+            "p.tyra".into(),
+            "import io\n\nfn main() -> Result<Unit, String>\n  \
+             let line = match io.read_line() when Some(s) s when None \"\" end\n  \
+             let n = string.parse_int(string.trim(line)).ok_or(\"bad\")?\n  \
+             print(\"#{n}\")\n  Ok(())\nend\n"
+                .into(),
+            None,
+        );
+        assert!(
+            !report.has_errors(),
+            "expected clean compile, got: {:?}",
+            report.diagnostics()
+        );
     }
 }
