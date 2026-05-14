@@ -192,7 +192,7 @@ def _load_tyra_context() -> str:
         "- **`import` statements belong at the TOP of the file only** — "
         "never inside `fn main` or any other function body. Writing "
         "`fn main()` with `import io` indented inside it produces "
-        "E0104 (`expected expression, found 'import'`). Always place "
+        "E0110 (`import statements must appear at the top of the file`). Always place "
         "all imports before any `fn` definition, at the top level.\n"
         "- **`Map<String, Int>` declared with `let` is immutable forever**. "
         "Even an empty literal `let counts: Map<String, Int> = {}` cannot "
