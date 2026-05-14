@@ -321,14 +321,9 @@ pub(crate) fn emit_instruction(
             writeln!(out, "  %{dest} = phi {phi_ty} {}", entries.join(", ")).unwrap();
         }
 
-        Instruction::Alloca { dest } => {
-            let llvm_ty = ctx
-                .alloca_llvm_types
-                .get(dest.as_str())
-                .map(String::as_str)
-                .unwrap_or("i64");
-            writeln!(out, "  %{dest} = alloca {llvm_ty}").unwrap();
-        }
+        // Alloca slots are hoisted to the entry block in emit_function so they
+        // are allocated once instead of per loop iteration (099 diagnosis).
+        Instruction::Alloca { .. } => {}
 
         Instruction::Store { dest, value } => {
             let val = operand_ref(value, func);

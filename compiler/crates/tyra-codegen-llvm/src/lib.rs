@@ -589,4 +589,50 @@ mod tests {
         assert!(!ir.contains("extractvalue"), "data FieldGet must not use extractvalue");
         assert!(ir.contains("define i64 @get_id(ptr %user)"), "data type param must be ptr");
     }
+
+    #[test]
+    fn alloca_hoisted_to_entry_block() {
+        // Alloca inside a loop body (non-entry block) must be hoisted to entry
+        // so it is allocated once per call rather than once per iteration.
+        // See docs/notes/099-sum-column-diagnosis.md.
+        let program = tyra_mir::Program {
+            functions: vec![tyra_mir::Function {
+                name: "loop_fn".into(),
+                params: vec![("x".into(), tyra_types::Ty::Int)],
+                return_type: tyra_types::Ty::Int,
+                body: vec![
+                    tyra_mir::Instruction::Jump { label: "loop_body".into() },
+                    tyra_mir::Instruction::Label("loop_body".into()),
+                    tyra_mir::Instruction::Alloca { dest: "_t0".into() },
+                    tyra_mir::Instruction::Store {
+                        dest: "_t0".into(),
+                        value: tyra_mir::Operand::Var("x".into()),
+                    },
+                    tyra_mir::Instruction::Jump { label: "loop_body".into() },
+                ],
+                is_main: false,
+            }],
+            string_constants: vec![],
+            struct_defs: vec![],
+        };
+
+        let ir = emit_llvm_ir(&program);
+        let entry_pos = ir.find("entry:").expect("entry block must be present");
+        let alloca_pos = ir.find("  %_t0 = alloca").expect("alloca must be emitted");
+        let loop_pos = ir.find("loop_body:").expect("loop_body label must be present");
+        assert!(
+            alloca_pos > entry_pos,
+            "alloca must come after entry: (was before)"
+        );
+        assert!(
+            alloca_pos < loop_pos,
+            "alloca must be hoisted before loop_body: (was after, causing per-iteration stack growth)"
+        );
+        // Verify no second alloca appears after loop_body: (catches double-emit bugs).
+        let after_loop = &ir[loop_pos..];
+        assert!(
+            !after_loop.contains("alloca"),
+            "no alloca must appear in or after loop_body: — got:\n{after_loop}"
+        );
+    }
 }

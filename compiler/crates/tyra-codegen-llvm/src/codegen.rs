@@ -453,6 +453,28 @@ fn emit_function(
         writeln!(out, "  store {lt} %{name}, ptr %{name}.addr").unwrap();
     }
 
+    // Hoist all alloca slots to the entry block. An alloca in a non-entry
+    // block consumes stack on every execution of that block and is never
+    // freed until the function returns, so allocas inside loop bodies cause
+    // unbounded O(iterations) stack growth (docs/notes/099-sum-column-diagnosis.md).
+    // Unreachable (dead-code) allocas are included conservatively — a dead slot
+    // allocated once in entry is harmless and prevents load-of-undefined-alloca.
+    // MIR guarantees dest names are unique within a function, so name-dedup is
+    // safe; the HashSet is a defensive guard against any future duplication.
+    let mut hoisted = std::collections::HashSet::new();
+    for inst in &func.body {
+        if let Instruction::Alloca { dest } = inst {
+            if hoisted.insert(dest.as_str()) {
+                let llvm_ty = scan
+                    .alloca_llvm_types
+                    .get(dest.as_str())
+                    .map(String::as_str)
+                    .unwrap_or("i64");
+                writeln!(out, "  %{dest} = alloca {llvm_ty}").unwrap();
+            }
+        }
+    }
+
     let ctx = EmitCtx {
         struct_map,
         fn_sigs,
@@ -471,6 +493,8 @@ fn emit_function(
             Instruction::Label(_) => {
                 block_terminated = false;
             }
+            // Alloca slots were already emitted in the entry block above.
+            Instruction::Alloca { .. } => continue,
             _ if block_terminated => continue,
             _ => {}
         }
