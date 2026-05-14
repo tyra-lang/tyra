@@ -641,7 +641,9 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
         counter: &mut u32,
     ) {
         match p {
-            PatternKind::Ident(name) => {
+            // Skip renaming the wildcard discard `_`: it is not a binding,
+            // so it must not generate a named alloca or substitute in the arm body.
+            PatternKind::Ident(name) if name != "_" => {
                 let new = fresh(name, counter);
                 renames.insert(name.clone(), new.clone());
                 *name = new;

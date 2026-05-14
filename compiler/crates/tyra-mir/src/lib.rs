@@ -1668,4 +1668,97 @@ end
             f.body
         );
     }
+
+    /// Regression: `when Err(_) -> fallback` must store `fallback` into the
+    /// match result slot. Previously `rename_pattern_bindings` renamed `_` to
+    /// `___pN`, defeating the `field_name != "_"` guard, causing a spurious
+    /// payload Store that `block_ends_with_assignment` then misidentified as a
+    /// user assignment, skipping the arm-result Store entirely.
+    #[test]
+    fn match_err_wildcard_arm_stores_result() {
+        let source = "\
+fn get(_ n: Int) -> Result<Int, Int>
+  if n > 0
+    Err(1)
+  else
+    Ok(n)
+  end
+end
+fn f() -> Int
+  let fallback = 99
+  let r = get(500)
+  match r
+  when Ok(v)
+    v
+  when Err(_)
+    fallback
+  end
+end
+";
+        let prog = lower_str(source);
+        let f = prog.functions.iter().find(|f| f.name == "f").unwrap();
+        // After Fix A the wildcard `_` is not renamed; no Store { dest: "___pN" }
+        // should appear (dest starts with "___p" followed by digits).
+        let spurious_wildcard_store = f.body.iter().any(|i| {
+            if let Instruction::Store { dest, .. } = i {
+                dest == "_"
+                    || (dest.starts_with("___p")
+                        && dest[4..].chars().all(|c| c.is_ascii_digit()))
+            } else {
+                false
+            }
+        });
+        assert!(
+            !spurious_wildcard_store,
+            "wildcard `_` payload must not be stored; body = {:#?}",
+            f.body
+        );
+        // After Fix B the arm-result Store for `fallback` must be emitted.
+        let fallback_stored = f.body.iter().any(|i| {
+            matches!(i, Instruction::Store { value: Operand::Var(v), .. } if v == "fallback")
+        });
+        assert!(
+            fallback_stored,
+            "`fallback` must be stored into the match result slot; body = {:#?}",
+            f.body
+        );
+    }
+
+    /// Regression (Fix B — general case): `when Err(e) -> fallback` where the
+    /// arm body is a bare ident unrelated to the payload must also store
+    /// `fallback`. Before Fix B, `Store { dest: "e__pN" }` was the last
+    /// instruction in the arm range and was misidentified as a user assignment.
+    #[test]
+    fn match_named_payload_arm_stores_unrelated_result() {
+        let source = "\
+fn get(_ n: Int) -> Result<Int, Int>
+  if n > 0
+    Err(1)
+  else
+    Ok(n)
+  end
+end
+fn f() -> Int
+  let fallback = 99
+  let r = get(500)
+  match r
+  when Ok(v)
+    v
+  when Err(e)
+    fallback
+  end
+end
+";
+        let prog = lower_str(source);
+        let f = prog.functions.iter().find(|f| f.name == "f").unwrap();
+        // `fallback` must be stored into the match result slot.
+        let fallback_stored = f.body.iter().any(|i| {
+            matches!(i, Instruction::Store { value: Operand::Var(v), .. } if v == "fallback")
+        });
+        assert!(
+            fallback_stored,
+            "`fallback` must be stored into match result (named payload arm); body = {:#?}",
+            f.body
+        );
+    }
 }

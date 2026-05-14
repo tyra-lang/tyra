@@ -667,6 +667,13 @@ impl super::LowerCtx {
                 }
             }
 
+            // Record where the user-written arm body starts (after all payload
+            // binding instructions). block_ends_with_assignment must only see
+            // instructions from the user body, not synthesised payload stores,
+            // or it will mistake `Store { dest: "e__pN" }` for a user assignment
+            // and skip storing the arm result into the match result slot.
+            let arm_user_body_start = body.len();
+
             // Lower the arm body via the block-tail helper so the trailing
             // `Stmt::Expr` — including bare-Ident tails like `when Some(x) x`
             // — gets its value captured from `lower_expr`'s return rather
@@ -685,7 +692,9 @@ impl super::LowerCtx {
                 // Store arm result into the alloca'd slot.
                 // Skip when the arm's tail is a user assignment (`x = e`) — Tyra spec
                 // makes that a Unit-typed statement, not the value of `e`.
-                if !super::block_ends_with_assignment(body, arm_body_start) {
+                // Use arm_user_body_start (post-payload-binding) so synthesised
+                // payload stores do not trigger this check.
+                if !super::block_ends_with_assignment(body, arm_user_body_start) {
                     let last = match tail {
                         super::BlockTail::Value(v) => Some(v),
                         super::BlockTail::Unit => None,
