@@ -1,0 +1,2 @@
+language,generator,pass,check_fail,exec_fail,compile_fail,generator_fail,harness_error,skipped_no_compiler,total,pass_rate
+tyra+spec,claude,298,1,0,1,0,0,0,300,0.9933

@@ -2,6 +2,97 @@
 
 Running log of observations that raw counts in `SUMMARY.md` hide.
 
+## Run 53 (2026-05-15) — fresh generation: fixed compiler + claude-sonnet-4-6
+
+**Fresh generation run.** `claude-sonnet-4-6` generated new code for all 100
+prompts (3 seeds = 300 runs). Compiler is HEAD `f0ec420` with all fixes from
+this session applied. `config.yaml` was pinned to `model: "claude-sonnet-4-6"`
+before this run (the default the CLI selected at invocation time).
+
+**Audit artifacts.** The full 300 JSON result files are gitignored
+(`bench/ai-gen/results-run*/`). Compact manifests (`stem,outcome`, 300 rows each)
+are committed for both runs, making the Run 51→53 diff reproducible from a clean
+clone without re-running the harness:
+
+```
+python3 diff_runs.py \
+  --baseline results-run51-manifest.csv \
+  --candidate results-run53-manifest.csv \
+  --filter tyra+spec
+```
+
+**Model traceability note.** Run 51 recorded only `model: '2.1.141 (Claude Code)'`
+(CLI version string); the actual model id is unknown retroactively. Run 53 is
+pinned and reproducible; Run 51 is not. Any Run 51 vs Run 53 headline delta may
+therefore include a silent model-swap component that cannot be separated.
+
+### Three-point comparison (tyra+spec, 300 runs / 100 prompts × 3 seeds)
+
+| metric | Run 51 (fresh) | Run 52 (replay) | Run 53 (fresh) |
+| --- | ---: | ---: | ---: |
+| pass | 297 | 298 | **298** |
+| check_fail | 1 | 0 | 1 |
+| exec_fail | 1 | 1 | 0 |
+| compile_fail | 1 | 1 | 1 |
+| pass% | 99.0% | 99.3% | **99.3%** |
+| all_pass% | 97.0% | 98.0% | **98.0%** |
+| any_pass% | 100.0% | 100.0% | **100.0%** |
+
+Run 52 and Run 53 share the same headline (99.3% / all_pass 98.0%) despite
+different failure compositions — see cell-by-cell breakdown below.
+
+**Interpretation of deltas:**
+- **Run 51 → Run 52** (compiler effect, isolated): +0.3 pp pass%, +1.0 pp all_pass%.
+  This is the clean compiler-fix signal. No model variance since Run 52 reused
+  Run 51's cached model code.
+- **Run 51 → Run 53** (compiler fixes + model sampling + possible model-swap):
+  same headline (+0.3 pp / +1.0 pp), but 5 cells changed (3 improvements,
+  2 regressions). The net is identical to Run 52's delta by coincidence.
+- **Run 52 → Run 53** (model sampling only, same compiler): failure *composition*
+  shifted (exec_fail→pass for 099, check_fail appeared for 031, compile_fail
+  moved from 088 to 090) while the headline stayed flat. This is the expected
+  signature of sampling variance at ~99% pass rate.
+
+### Cell-by-cell breakdown (Run 51 → Run 53 changes)
+
+**`049-count-chars` s1: `check_fail → pass`.** Compiler fix (`2265fc1`/`fbfd811`)
+confirmed — identical to Run 52's change. Model code was correct; codegen bug was
+the blocker. **Compiler fix, validated.**
+
+**`099-sum-column` s1: `exec_fail → pass`.** Run 51 had SIGSEGV (alloca in
+non-entry block, `9657b86` fixed the compiler side); Run 52 still had exec_fail
+because the replayed model code contained an infinite `while true` loop. In Run 53
+the model generated a correct loop and the prompt passes. **Model sampling
+improvement** (new correct code); compiler alloca fix was a prerequisite.
+
+**`088-histogram` s1: `compile_fail → pass`.** Run 51 and Run 52 both had
+compile_fail (model placed `import string` inside a function body — E0110). In
+Run 53 the model generated correct top-level imports. **Model sampling improvement**
+(no compiler involvement).
+
+**`090-balanced-parens` s1: `pass → compile_fail`.** New regression. Run 53 model
+code called `string.get()` — E0204 (`unknown string method 'get': no string.get in
+stdlib`). Previous generation did not use this pattern. **Model sampling regression;**
+`string.get` is a hallucinated method. Out of scope for current compiler work.
+Flagged as follow-up: if recurrent, add stdlib coverage or an error note in the
+spec injection.
+
+**`031-nested-option` s1: `pass → check_fail`.** New regression. Output was
+`nick=anonymous` but expected `nick=<anonymous>` (angle brackets around the
+anonymous sentinel). Compiler compiled and ran successfully; the model omitted the
+surrounding `<>`. **Model sampling regression** in output formatting. Out of scope.
+
+### Follow-ups
+
+- `090-balanced-parens`: `string.get` hallucination. If it recurs across seeds or
+  future runs, add a stdlib clarification to the spec injection preamble.
+- `031-nested-option`: `<anonymous>` sentinel formatting. Model knows the concept
+  but drops angle brackets. Low priority (single seed, correct logic).
+- Harness improvement: record actual model id per result JSON (currently only CLI
+  version string). Prevents future traceability gaps like the Run 51 gap.
+
+---
+
 ## Run 52 (2026-05-14) — replay: this-session compiler fixes vs Run 51
 
 **This is a replay run, not a fresh generation.** No LLM was called.
@@ -480,3 +571,7 @@ failures.
   fix), 099 SIGSEGV→timeout (alloca hoisting, compiler crash
   resolved; remaining fail is model's infinite loop), 088 unchanged
   (model bug). pass% 99.0→99.3, all_pass% 97.0→98.0.
+- **Run 53** (2026-05-15) — **fresh generation** with fixed compiler
+  (`f0ec420`) + `claude-sonnet-4-6` (pinned). 5 cells changed vs
+  Run 51: 049/099/088 improved, 090/031 regressed (model sampling).
+  Headline matches Run 52: pass% **99.3%**, all_pass% **98.0%**.
