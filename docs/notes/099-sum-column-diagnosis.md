@@ -105,7 +105,10 @@ lifetime but stack exhaustion from loop-body allocas. Any unbounded loop
 that generates match-expression allocas will eventually overflow, regardless
 of whether `io.read_line` is involved.
 
-## Recommended fix
+## Recommended fix (implemented in `9657b86`)
+
+> **Implemented.** The hoisting described below landed in commit `9657b86`
+> and was validated by the Run 52 replay. Kept as a record of the approach.
 
 Hoist all `alloca` instructions to the function entry block in the LLVM codegen
 (`compiler/crates/tyra-codegen-llvm/`). Two places to look:
@@ -124,10 +127,12 @@ loop iterations.
 
 ## Status
 
-- `stdlib/io.tyra:18-21` comment ("avoid hot polling loops") should be updated
-  to point to the alloca-in-loop-body root cause rather than implying GC.
-- `runtime/src/stdlib_io.rs:20-23` comment ("scanned conservatively by Boehm
-  GC") is factually incorrect (no `#[global_allocator]` replacement; GC does
-  not manage system-malloc'd CString buffers) and should be corrected in a
-  follow-up cleanup.
-- The codegen fix (alloca hoisting) is deferred — tracked here as a known bug.
+- **Resolved.** The codegen fix (alloca hoisting to the entry block) landed
+  in `9657b86` and was validated by the Run 52 replay: `099-sum-column` s1
+  moved from SIGSEGV (exit 139) to timeout — the compiler-caused crash is
+  gone; the remaining failure is the model's own `while true` loop with no
+  `break`, which is out of scope for the compiler.
+- The `stdlib/io.tyra` and `runtime/src/stdlib_io.rs` allocation comments
+  have been corrected: the per-read heap leak is real (system-allocator
+  buffer, not GC-managed), but the SIGSEGV was a separate codegen defect —
+  now fixed — and not a GC / allocation-lifetime issue.

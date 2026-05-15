@@ -17,10 +17,11 @@
 //! - `tyra_io_eof` returns the EOF state set by the most recent
 //!   `tyra_io_read_line` call on the same thread. 1 = EOF, 0 = not EOF.
 //!
-//! Allocation: `CString::into_raw` (heap, scanned conservatively by Boehm
-//! GC). Not freed in v0.1 — same trade-off as `tyra_fs_read`. Acceptable
-//! for CLI / one-shot tools; avoid tight read_line loops in long-lived
-//! processes until GC_malloc integration lands.
+//! Allocation: `CString::into_raw` allocates via Rust's system allocator,
+//! not `GC_malloc`. The Boehm GC does not manage these buffers, so they
+//! are never reclaimed in v0.1 — same trade-off as `tyra_fs_read`.
+//! Acceptable for CLI / one-shot tools; long-lived processes that loop on
+//! `read_line` leak heap memory unboundedly until GC_malloc integration lands.
 //!
 //! NUL handling: input containing interior NUL bytes is truncated at the
 //! first NUL (Tyra `String` is C-string-backed in v0.1). Binary stdin is

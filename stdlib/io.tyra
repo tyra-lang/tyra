@@ -15,10 +15,11 @@
 #   '\n'); only actual end-of-file produces `None`. Callers that care
 #   about the distinction should match on the variant, not compare the
 #   string to "".
-# - One allocation is leaked per read in v0.1 (opaque ptr handed to
-#   Tyra, not freed). Fine for CLI / one-shot programs; avoid hot
-#   polling loops in long-lived processes until GC_malloc integration
-#   lands.
+# - Each read leaks one heap buffer in v0.1: the C string handed to
+#   Tyra is allocated by the system allocator (not GC_malloc), so the
+#   Boehm GC never reclaims it. Fine for CLI / one-shot programs;
+#   long-lived processes that poll stdin in a loop leak heap memory
+#   unboundedly until GC_malloc integration lands.
 
 export fn read_line() -> Option<String>
   let line = __io_read_line()
