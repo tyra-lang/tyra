@@ -2,7 +2,7 @@
 
 バックエンドサービス、CLI ツール、業務アプリケーションのための、AI フレンドリーな静的型付け言語。
 
-> ⚠️ **プレアルファ**: Tyra は活発に開発中です。言語仕様は v0.1 (Draft) です。v1.0 までは破壊的変更が予想されます。
+> **v0.1.0 — 初回リリース (既知の制限あり)。** 小規模 CLI ツール・学習・言語評価に適しています。本番利用前に [既知の制限](#既知の制限) をご確認ください。
 
 ---
 
@@ -11,12 +11,20 @@
 Tyra は、人間と LLM がコードを共同編集する時代に向けて、ゼロから設計された汎用プログラミング言語です。すべての設計判断は **解釈の一貫性** を最優先します。同じ入力は、人間にとっても AI にとっても、同じ構文木、同じ型、同じ意味を持つべきです。
 
 ```tyra
-import http.server
+import fs
 
-export async fn main() -> Result<Unit, AppError>
-  let app = server.new()
-  app.get("/health", health_handler)
-  app.listen(port: 8080).await?
+fn word_count(path: String) -> Result<Int, fs.Error>
+  let text = fs.read_to_string(path)?
+  Ok(text.split(" ").length())
+end
+
+export fn main() -> Unit
+  match word_count("notes.txt")
+  when Ok(n)
+    print("#{n} words")
+  when Err(e)
+    print("error: #{e}")
+  end
 end
 ```
 
@@ -93,17 +101,41 @@ let p2 = p1.copy(x: 3.0)
 
 ## 開発状況
 
-| コンポーネント | 状況 |
-| --- | --- |
-| 言語仕様 v0.1 | ✅ Draft 完成 |
-| Lexer | 🚧 開発中 |
-| Parser | ⏳ 計画中 |
-| 型検査器 | ⏳ 計画中 |
-| LLVM codegen | ⏳ 計画中 |
-| 標準ライブラリ | ⏳ 計画中 |
-| ツール (fmt, lsp, mod) | ⏳ 計画中 |
+**v0.1.0 で安定** — サポート済み・テスト済み:
 
-**動くコンパイラはまだありません**。設計を読みたい方は仕様書をどうぞ。Tyra を使いたい方は v0.1.0 リリースをお待ちください。
+| コンポーネント | 備考 |
+| --- | --- |
+| 言語仕様 v0.1 | ✅ 完成 |
+| Lexer / Parser / 型検査器 | ✅ 完成 |
+| LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 |
+| 標準ライブラリ: string, list, fs, io, float, json | ✅ 完成 |
+| `tyra check / run / build` CLI | ✅ 完成 |
+| LSP サーバ (`tyra-lsp`) + VS Code 拡張 | ✅ 開発インストール可 |
+| 静的適合コーパス (10 本 + エラー事例) | ✅ CI ゲート済み |
+
+**v0.1.0 で実験的** — 含まれているが本番利用不可:
+
+| コンポーネント | 備考 |
+| --- | --- |
+| `http.server` 標準ライブラリ | ⚠️ 基本 GET/POST ルーティングのみ、本番利用不可 |
+
+**v0.1.0 では未提供**:
+
+| コンポーネント | 備考 |
+| --- | --- |
+| `tyra fmt` フォーマッタ | ⏳ v0.2 予定 |
+| `tyra test` テストランナー | ⏳ v0.2 予定 |
+| パッケージマネージャ | ⏳ 将来予定 |
+| ビルド済みバイナリ (homebrew, apt) | ⏳ v0.2 予定 |
+| VS Code Marketplace 公開 | ⏳ v0.2 予定 |
+
+## 既知の制限
+
+- **文字列 GC**: アロケートされた文字列はガーベジコレクタに回収されません。短命な CLI プログラムには許容範囲ですが、長時間稼働するサーバには適しません。
+- **Windows**: 未テスト。WSL2 経由のビルドを推奨します。
+- **`http.server`**: 実験的。シングルスレッド、TLS なし、ミドルウェアなし。本番で使用しないでください。
+- **float の表示精度**: `Float` の表示は Rust の `Display` に依存しており、エッジ値で期待と異なる場合があります。
+- **破壊的変更**: v1.0 までは破壊的変更が予想されます。
 
 ## ドキュメント
 

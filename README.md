@@ -2,7 +2,7 @@
 
 A statically-typed, AI-friendly programming language for backend services, CLI tools, and business applications.
 
-> ⚠️ **Pre-alpha**: Tyra is under active development. The language specification is at v0.1 (Draft). Breaking changes are expected before v1.0.
+> **v0.1.0 — initial release with known limitations.** Suitable for small CLI tools, learning, and language evaluation. [See known limitations](#known-limitations) before using in production.
 
 ---
 
@@ -11,12 +11,20 @@ A statically-typed, AI-friendly programming language for backend services, CLI t
 Tyra is a general-purpose language designed from the ground up for an era where humans and LLMs collaborate on code. Every design decision prioritizes **interpretive consistency**: the same input should yield the same parse, the same type, the same meaning — for both humans and AI.
 
 ```tyra
-import http.server
+import fs
 
-export async fn main() -> Result<Unit, AppError>
-  let app = server.new()
-  app.get("/health", health_handler)
-  app.listen(port: 8080).await?
+fn word_count(path: String) -> Result<Int, fs.Error>
+  let text = fs.read_to_string(path)?
+  Ok(text.split(" ").length())
+end
+
+export fn main() -> Unit
+  match word_count("notes.txt")
+  when Ok(n)
+    print("#{n} words")
+  when Err(e)
+    print("error: #{e}")
+  end
 end
 ```
 
@@ -93,17 +101,41 @@ let p2 = p1.copy(x: 3.0)
 
 ## Status
 
-| Component | Status |
-| --- | --- |
-| Language specification v0.1 | ✅ Draft complete |
-| Lexer | 🚧 In progress |
-| Parser | ⏳ Planned |
-| Type checker | ⏳ Planned |
-| LLVM codegen | ⏳ Planned |
-| Standard library | ⏳ Planned |
-| Tooling (fmt, lsp, mod) | ⏳ Planned |
+**Stable in v0.1.0** — supported and tested:
 
-There is **no working compiler yet**. If you want to read the design, see the spec. If you want to use Tyra, please wait for v0.1.0 release.
+| Component | Notes |
+| --- | --- |
+| Language specification v0.1 | ✅ Complete |
+| Lexer, Parser, Type checker | ✅ Complete |
+| LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 |
+| Standard library: string, list, fs, io, float, json | ✅ Complete |
+| `tyra check / run / build` CLI | ✅ Complete |
+| LSP server (`tyra-lsp`) + VS Code extension | ✅ Development install |
+| Static conformance corpus (10 programs + error cases) | ✅ CI-gated |
+
+**Experimental in v0.1.0** — included but not production-ready:
+
+| Component | Notes |
+| --- | --- |
+| `http.server` stdlib | ⚠️ Basic GET/POST routing only; not production-ready |
+
+**Not in v0.1.0**:
+
+| Component | Notes |
+| --- | --- |
+| `tyra fmt` formatter | ⏳ Planned for v0.2 |
+| `tyra test` runner | ⏳ Planned for v0.2 |
+| Package manager | ⏳ Planned for later |
+| Pre-built binaries (homebrew, apt) | ⏳ Planned for v0.2 |
+| VS Code Marketplace publication | ⏳ Planned for v0.2 |
+
+## Known limitations
+
+- **String GC**: allocated strings are not reclaimed by the garbage collector. Acceptable for short-lived CLI programs; not suitable for long-running servers.
+- **Windows**: untested. Build via WSL2 is recommended.
+- **`http.server`**: experimental. Single-threaded, no TLS, no middleware. Do not use in production.
+- **Format precision**: `Float` display uses Rust's default `Display`, which may differ from your expectations for edge values.
+- **Breaking changes**: expect breaking changes before v1.0.
 
 ## Documentation
 

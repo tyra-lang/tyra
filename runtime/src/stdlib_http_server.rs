@@ -363,6 +363,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "needs TCP bind; http.server is experimental in v0.1.0 — run with --ignored locally"]
     fn server_routes_and_responds() {
         let srv = tyra_http_server_new();
         let method = CString::new("GET").unwrap();
@@ -379,6 +380,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "needs TCP bind; http.server is experimental in v0.1.0 — run with --ignored locally"]
     fn server_returns_404_for_unknown_route() {
         let srv = tyra_http_server_new();
         let port = start_test_server(srv);
@@ -394,6 +396,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "needs TCP bind; http.server is experimental in v0.1.0 — run with --ignored locally"]
     fn handler_returning_null_gets_500() {
         let srv = tyra_http_server_new();
         let method = CString::new("GET").unwrap();

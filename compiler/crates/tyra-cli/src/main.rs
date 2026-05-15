@@ -49,7 +49,7 @@ fn main() {
 
     match args[1].as_str() {
         "--version" | "-V" => {
-            println!("tyra 0.1.0");
+            println!("tyra {}", env!("CARGO_PKG_VERSION"));
             println!("implementing language spec 0.1");
         }
         "--help" | "-h" => {

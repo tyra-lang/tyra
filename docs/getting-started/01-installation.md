@@ -49,7 +49,8 @@ tyra --version
 You should see output like:
 
 ```
-tyra 0.1.0-dev
+tyra 0.1.0
+implementing language spec 0.1
 ```
 
 ## Test with Hello, World
@@ -74,9 +75,38 @@ Hello, World!
 
 If you see the output, your installation is working correctly.
 
+## Supported Platforms
+
+| Platform | Status |
+| --- | --- |
+| macOS arm64 (Apple Silicon) | ✅ Tested |
+| Linux x86_64 | ✅ Tested |
+| Windows | ⚠️ Untested — build via WSL2 recommended |
+
 ## Editor Support
 
-A **VS Code extension** with syntax highlighting and basic language support is planned for Marketplace publication. In the meantime, you can associate `.tyra` files with Ruby syntax highlighting as a rough approximation (both use `end` blocks and `#` comments).
+A VS Code extension with syntax highlighting, diagnostics, hover, go-to-definition, and completion is available as a development install.
+
+### Step 1: Build and install the language server
+
+```bash
+cargo install --path tools/lsp/tyra-lsp
+```
+
+This installs `tyra-lsp` to `~/.cargo/bin/`. Make sure `~/.cargo/bin` is on your `PATH`.
+
+### Step 2: Install the VS Code extension
+
+1. Open the `tools/lsp/vscode-tyra/` directory in VS Code
+2. Press **F5** to launch the Extension Development Host
+
+Alternatively, set `TYRA_LSP_PATH` to the full path of the `tyra-lsp` binary before starting VS Code:
+
+```bash
+export TYRA_LSP_PATH="$HOME/.cargo/bin/tyra-lsp"
+```
+
+> **Note:** VS Code Marketplace publication is planned for a future release.
 
 ## Next Steps
 

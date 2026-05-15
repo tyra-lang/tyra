@@ -8,13 +8,13 @@ If you are an AI coding assistant (Claude Code, Codex, Cursor, etc.), please rea
 
 ## Project status
 
-Tyra is **pre-alpha**. The language specification is at v0.1 (Draft), and the compiler is under active development. Expect breaking changes.
+Tyra is at **v0.1.0 — initial release**. The language specification is at v0.1, the compiler is functional, and the core feature set is stable. Expect breaking changes before v1.0.
 
 What this means for contributors:
 
-- Architecture is still solidifying — large refactors may discard your work
+- The core architecture is settled, but details will change — large refactors may conflict with in-progress work
 - The maintainer reserves the right to reject contributions that conflict with the design vision
-- Most valuable contributions right now are **specification feedback** and **example programs**, not compiler code
+- Most valuable contributions right now are **specification feedback**, **example programs**, and **bug reports** — the compiler is functional and bugs are actionable
 
 If you are looking for a stable project to contribute to, please come back after v1.0.
 
@@ -95,12 +95,11 @@ Code contributions are accepted but with caveats:
 
 Areas currently accepting contributions:
 
-- ✅ Lexer improvements and edge cases
 - ✅ Diagnostic message clarity (English wording)
-- ✅ Test infrastructure
-- ⚠️ Parser: under active development, coordinate first
-- ❌ Type checker: not yet started, please wait
-- ❌ Codegen: not yet started, please wait
+- ✅ Test infrastructure and conformance corpus
+- ✅ Standard library (`stdlib/`) — new functions, bug fixes
+- ⚠️ Compiler internals (lexer, parser, types, codegen): coordinate via issue first
+- ❌ Language spec changes without an accepted RFC
 
 ---
 

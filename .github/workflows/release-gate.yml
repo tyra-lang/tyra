@@ -1,0 +1,52 @@
+name: Release Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  release-gate:
+    name: build + test + corpus + smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install libgc-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgc-dev
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-gate-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-gate-
+
+      - name: Build release binary
+        run: cargo build --release -p tyra-cli
+
+      - name: Run workspace tests
+        run: cargo test --workspace
+
+      - name: Run static corpus check
+        run: bash bench/static-corpus/check.sh ./target/release/tyra
+
+      - name: Smoke test (hello world)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra run examples/01-hello.tyra)
+          expected="hello, tyra"
+          if [ "$output" != "$expected" ]; then
+            echo "FAIL: expected '$expected', got '$output'"
+            exit 1
+          fi
