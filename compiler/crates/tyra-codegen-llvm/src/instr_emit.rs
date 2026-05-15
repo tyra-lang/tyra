@@ -83,16 +83,21 @@ pub(crate) fn emit_instruction(
             // If either operand is an Option/Result struct, emit a structural
             // comparison (tag + all payload fields).
             //
-            // When all fields are scalar (i8/i1/i64/double) we emit a full
-            // field-by-field compare AND'd together. AdtInit deterministically
-            // zero-fills inactive variant fields, so comparing every field is
-            // correct for structural equality of scalar-payload prelude ADTs
-            // (Option<Int>, Option<Bool>, Option<Float>, Result<Int,Int>, …).
+            // Fields are classified into three kinds:
+            //   Scalar  — i8/i1/i64/double → icmp/fcmp
+            //   StrPtr  — field_types[fi] is exactly Ty::String (non-recursive)
+            //             → null-safe strcmp with basic blocks
+            //   Unsupported — anything else (data payload, nested ADT, recursive
+            //             self-ref) → fall back to tag-only (follow-up tasks)
             //
-            // When any field is a ptr or nested struct (Option<String>, data
-            // payloads, recursive fields) we fall back to tag-only comparison
-            // — identical to the pre-existing behaviour — since deep equality
-            // requires string/recursive comparison that is out of scope here.
+            // If all fields are Scalar or StrPtr we emit a full field-by-field
+            // compare AND'd together. AdtInit zero-fills inactive variant fields
+            // (String → null ptr), so the null guard in StrPtr comparison is
+            // mandatory to avoid strcmp(null, …) SIGSEGV.
+            //
+            // The StrPtr condition is keyed on Ty::String, NOT on the LLVM type
+            // being "ptr" — data payloads and other ptr-like fields must not
+            // accidentally go through strcmp.
             if matches!(op, MirBinOp::EqInt | MirBinOp::NeqInt) {
                 let lhs_stype = if let Operand::Var(n) = lhs { ctx.struct_temps.get(n.as_str()) } else { None };
                 let rhs_stype = if let Operand::Var(n) = rhs { ctx.struct_temps.get(n.as_str()) } else { None };
@@ -116,20 +121,69 @@ pub(crate) fn emit_instruction(
                         })
                         .collect();
 
-                    let all_scalar = field_llvm.iter().all(|t| {
-                        matches!(t.as_str(), "i8" | "i1" | "i64" | "double")
-                    });
+                    // Classify each field: StrPtr (Ty::String, non-recursive) takes
+                    // priority over the LLVM-type-based Scalar check so that data
+                    // payloads and other ptr-like fields are never routed to strcmp.
+                    enum FieldKind { Scalar, StrPtr, Unsupported }
+                    let field_kinds: Vec<FieldKind> = (0..num_fields)
+                        .map(|fi| {
+                            if fi == 0 {
+                                FieldKind::Scalar // tag is always i8
+                            } else if !info.recursive_fields.get(fi).copied().unwrap_or(false)
+                                && info.field_types.get(fi)
+                                    == Some(&tyra_types::Ty::String)
+                            {
+                                FieldKind::StrPtr
+                            } else if matches!(
+                                field_llvm[fi].as_str(),
+                                "i8" | "i1" | "i64" | "double"
+                            ) {
+                                FieldKind::Scalar
+                            } else {
+                                FieldKind::Unsupported
+                            }
+                        })
+                        .collect();
 
-                    if all_scalar {
-                        // Extract and compare every field; AND the per-field results.
+                    let all_supported = field_kinds
+                        .iter()
+                        .all(|k| !matches!(k, FieldKind::Unsupported));
+
+                    if all_supported {
+                        // Field-by-field compare AND'd together.
+                        // Scalar fields: icmp/fcmp.
+                        // StrPtr fields: null-safe strcmp via three basic blocks
+                        //   (snull / scmp / sdone+phi).
                         let mut prev_acc: Option<String> = None;
                         for (fi, fty) in field_llvm.iter().enumerate() {
                             writeln!(out, "  %{dest}.l{fi} = extractvalue {llvm_ty} {l}, {fi}").unwrap();
                             writeln!(out, "  %{dest}.r{fi} = extractvalue {llvm_ty} {r}, {fi}").unwrap();
-                            if fty == "double" {
-                                writeln!(out, "  %{dest}.e{fi} = fcmp oeq double %{dest}.l{fi}, %{dest}.r{fi}").unwrap();
-                            } else {
-                                writeln!(out, "  %{dest}.e{fi} = icmp eq {fty} %{dest}.l{fi}, %{dest}.r{fi}").unwrap();
+                            match &field_kinds[fi] {
+                                FieldKind::StrPtr => {
+                                    // Null guard: inactive variant fields are null-filled by
+                                    // AdtInit; calling strcmp(null,…) would SIGSEGV.
+                                    writeln!(out, "  %{dest}.ln{fi} = icmp eq ptr %{dest}.l{fi}, null").unwrap();
+                                    writeln!(out, "  %{dest}.rn{fi} = icmp eq ptr %{dest}.r{fi}, null").unwrap();
+                                    writeln!(out, "  %{dest}.anyn{fi} = or i1 %{dest}.ln{fi}, %{dest}.rn{fi}").unwrap();
+                                    writeln!(out, "  br i1 %{dest}.anyn{fi}, label %{dest}.snull{fi}, label %{dest}.scmp{fi}").unwrap();
+                                    writeln!(out, "{dest}.snull{fi}:").unwrap();
+                                    writeln!(out, "  %{dest}.pe{fi} = icmp eq ptr %{dest}.l{fi}, %{dest}.r{fi}").unwrap();
+                                    writeln!(out, "  br label %{dest}.sdone{fi}").unwrap();
+                                    writeln!(out, "{dest}.scmp{fi}:").unwrap();
+                                    writeln!(out, "  %{dest}.sc{fi} = call i32 @strcmp(ptr %{dest}.l{fi}, ptr %{dest}.r{fi})").unwrap();
+                                    writeln!(out, "  %{dest}.se{fi} = icmp eq i32 %{dest}.sc{fi}, 0").unwrap();
+                                    writeln!(out, "  br label %{dest}.sdone{fi}").unwrap();
+                                    writeln!(out, "{dest}.sdone{fi}:").unwrap();
+                                    writeln!(out, "  %{dest}.e{fi} = phi i1 [ %{dest}.pe{fi}, %{dest}.snull{fi} ], [ %{dest}.se{fi}, %{dest}.scmp{fi} ]").unwrap();
+                                }
+                                FieldKind::Scalar => {
+                                    if fty == "double" {
+                                        writeln!(out, "  %{dest}.e{fi} = fcmp oeq double %{dest}.l{fi}, %{dest}.r{fi}").unwrap();
+                                    } else {
+                                        writeln!(out, "  %{dest}.e{fi} = icmp eq {fty} %{dest}.l{fi}, %{dest}.r{fi}").unwrap();
+                                    }
+                                }
+                                FieldKind::Unsupported => unreachable!(),
                             }
                             prev_acc = Some(match prev_acc {
                                 None => format!("%{dest}.e{fi}"),
@@ -148,8 +202,8 @@ pub(crate) fn emit_instruction(
                         return;
                     }
 
-                    // Fallback: tag-only comparison (preserves pre-existing behaviour
-                    // for ptr/struct payload ADTs).
+                    // Fallback: tag-only comparison for Unsupported payload types
+                    // (data payloads, nested ADTs, recursive fields — follow-up tasks).
                     let cmp = if is_eq { "eq" } else { "ne" };
                     writeln!(out, "  %{dest}.l_tag = extractvalue {llvm_ty} {l}, 0").unwrap();
                     writeln!(out, "  %{dest}.r_tag = extractvalue {llvm_ty} {r}, 0").unwrap();

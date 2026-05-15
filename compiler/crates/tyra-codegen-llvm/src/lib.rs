@@ -407,6 +407,196 @@ mod tests {
     }
 
     #[test]
+    fn eq_option_string_compares_payload() {
+        // Option<String> == Option<String> must compare the String payload via
+        // null-safe strcmp, not just the tag. Before the fix, the ptr payload
+        // caused a tag-only fallback, making Some("a")==Some("b") emit true.
+        let program = tyra_mir::Program {
+            functions: vec![tyra_mir::Function {
+                name: "main".into(),
+                params: vec![],
+                return_type: tyra_types::Ty::Unit,
+                body: vec![
+                    tyra_mir::Instruction::AdtInit {
+                        dest: "_t0".into(),
+                        type_name: "Option__String".into(),
+                        tag: 0,
+                        fields: vec![tyra_mir::Operand::Const(tyra_mir::Constant::StringRef(0))],
+                    },
+                    tyra_mir::Instruction::AdtInit {
+                        dest: "_t1".into(),
+                        type_name: "Option__String".into(),
+                        tag: 0,
+                        fields: vec![tyra_mir::Operand::Const(tyra_mir::Constant::StringRef(1))],
+                    },
+                    tyra_mir::Instruction::BinOp {
+                        dest: "_t2".into(),
+                        op: tyra_mir::MirBinOp::EqInt,
+                        lhs: tyra_mir::Operand::Var("_t0".into()),
+                        rhs: tyra_mir::Operand::Var("_t1".into()),
+                    },
+                    tyra_mir::Instruction::Return { value: None },
+                ],
+                is_main: true,
+            }],
+            string_constants: vec!["a".into(), "b".into()],
+            struct_defs: vec![tyra_mir::StructDef {
+                name: "Option__String".into(),
+                fields: vec![
+                    ("tag".into(), tyra_types::Ty::Int),
+                    ("0".into(), tyra_types::Ty::String),
+                ],
+                is_data: false,
+                recursive_fields: vec![false, false],
+            }],
+        };
+
+        let ir = emit_llvm_ir(&program);
+        assert!(
+            ir.contains("call i32 @strcmp"),
+            "expected strcmp for String payload; IR:\n{ir}"
+        );
+        assert!(
+            ir.contains("icmp eq ptr") && ir.contains("br i1"),
+            "expected null guard (icmp eq ptr + br i1); IR:\n{ir}"
+        );
+        assert!(ir.contains("phi i1"), "expected phi i1 in sdone merge block; IR:\n{ir}");
+        assert!(ir.contains("and i1"), "expected and i1 combining tag and payload; IR:\n{ir}");
+        assert!(
+            ir.contains("extractvalue %struct.Option__String") && ir.contains(", 1"),
+            "expected field-1 extractvalue for String payload; IR:\n{ir}"
+        );
+    }
+
+    #[test]
+    fn neq_option_string_compares_payload() {
+        // Option<String> != Option<String> must also go through null-safe strcmp and
+        // invert the result via xor i1 .., true, not fall back to tag-only !=.
+        let program = tyra_mir::Program {
+            functions: vec![tyra_mir::Function {
+                name: "main".into(),
+                params: vec![],
+                return_type: tyra_types::Ty::Unit,
+                body: vec![
+                    tyra_mir::Instruction::AdtInit {
+                        dest: "_t0".into(),
+                        type_name: "Option__String".into(),
+                        tag: 0,
+                        fields: vec![tyra_mir::Operand::Const(tyra_mir::Constant::StringRef(0))],
+                    },
+                    tyra_mir::Instruction::AdtInit {
+                        dest: "_t1".into(),
+                        type_name: "Option__String".into(),
+                        tag: 0,
+                        fields: vec![tyra_mir::Operand::Const(tyra_mir::Constant::StringRef(1))],
+                    },
+                    tyra_mir::Instruction::BinOp {
+                        dest: "_t2".into(),
+                        op: tyra_mir::MirBinOp::NeqInt,
+                        lhs: tyra_mir::Operand::Var("_t0".into()),
+                        rhs: tyra_mir::Operand::Var("_t1".into()),
+                    },
+                    tyra_mir::Instruction::Return { value: None },
+                ],
+                is_main: true,
+            }],
+            string_constants: vec!["a".into(), "b".into()],
+            struct_defs: vec![tyra_mir::StructDef {
+                name: "Option__String".into(),
+                fields: vec![
+                    ("tag".into(), tyra_types::Ty::Int),
+                    ("0".into(), tyra_types::Ty::String),
+                ],
+                is_data: false,
+                recursive_fields: vec![false, false],
+            }],
+        };
+
+        let ir = emit_llvm_ir(&program);
+        // strcmp path must still be emitted (not tag-only)
+        assert!(
+            ir.contains("call i32 @strcmp"),
+            "expected strcmp for String payload in != path; IR:\n{ir}"
+        );
+        // Result is inverted via xor, not icmp ne
+        assert!(
+            ir.contains("xor i1"),
+            "expected xor i1 to invert structural equality for !=; IR:\n{ir}"
+        );
+        // Null guard and phi must still be present
+        assert!(ir.contains("phi i1"), "expected phi i1 in sdone block; IR:\n{ir}");
+    }
+
+    #[test]
+    fn eq_result_int_string_compares_string_payload() {
+        // Result<Int, String>: field 0=tag i8, field 1=Int payload, field 2=String payload.
+        // Mixed Scalar+StrPtr layout must NOT fall back to tag-only; field 2 must go
+        // through null-safe strcmp.
+        let program = tyra_mir::Program {
+            functions: vec![tyra_mir::Function {
+                name: "main".into(),
+                params: vec![],
+                return_type: tyra_types::Ty::Unit,
+                body: vec![
+                    tyra_mir::Instruction::AdtInit {
+                        dest: "_t0".into(),
+                        type_name: "Result__Int__String".into(),
+                        tag: 1,
+                        fields: vec![
+                            tyra_mir::Operand::Const(tyra_mir::Constant::Int(0)),
+                            tyra_mir::Operand::Const(tyra_mir::Constant::StringRef(0)),
+                        ],
+                    },
+                    tyra_mir::Instruction::AdtInit {
+                        dest: "_t1".into(),
+                        type_name: "Result__Int__String".into(),
+                        tag: 1,
+                        fields: vec![
+                            tyra_mir::Operand::Const(tyra_mir::Constant::Int(0)),
+                            tyra_mir::Operand::Const(tyra_mir::Constant::StringRef(1)),
+                        ],
+                    },
+                    tyra_mir::Instruction::BinOp {
+                        dest: "_t2".into(),
+                        op: tyra_mir::MirBinOp::EqInt,
+                        lhs: tyra_mir::Operand::Var("_t0".into()),
+                        rhs: tyra_mir::Operand::Var("_t1".into()),
+                    },
+                    tyra_mir::Instruction::Return { value: None },
+                ],
+                is_main: true,
+            }],
+            string_constants: vec!["x".into(), "y".into()],
+            struct_defs: vec![tyra_mir::StructDef {
+                name: "Result__Int__String".into(),
+                fields: vec![
+                    ("tag".into(), tyra_types::Ty::Int),
+                    ("0".into(), tyra_types::Ty::Int),
+                    ("1".into(), tyra_types::Ty::String),
+                ],
+                is_data: false,
+                recursive_fields: vec![false, false, false],
+            }],
+        };
+
+        let ir = emit_llvm_ir(&program);
+        assert!(
+            ir.contains("call i32 @strcmp"),
+            "expected strcmp for String field 2; IR:\n{ir}"
+        );
+        // Each assert checks that the struct name AND field index appear on the same
+        // line, preventing false positives from unrelated IR constants like `i32 2`.
+        assert!(
+            ir.lines().any(|l| l.contains("extractvalue %struct.Result__Int__String") && l.contains(", 2")),
+            "expected extractvalue of field 2 (String payload) on same IR line; IR:\n{ir}"
+        );
+        assert!(
+            ir.lines().any(|l| l.contains("extractvalue %struct.Result__Int__String") && l.contains(", 1")),
+            "expected extractvalue of field 1 (Int payload, not tag-only fallback) on same IR line; IR:\n{ir}"
+        );
+    }
+
+    #[test]
     fn panic_emits_puts_abort_unreachable() {
         // §12.1: panic(msg) → puts(msg) + abort + unreachable
         let program = tyra_mir::Program {
