@@ -308,6 +308,67 @@ pub fn lower(file: &SourceFile) -> Program {
         .insert("__string_split".into(), list_string);
     ctx.fn_param_types
         .insert("__string_split".into(), vec![Ty::String, Ty::String]);
+    // §17.3.x: float stdlib intrinsics.
+    ctx.fn_return_types.insert("__float_eq".into(), Ty::Bool);
+    ctx.fn_param_types
+        .insert("__float_eq".into(), vec![Ty::Float, Ty::Float]);
+    ctx.fn_return_types
+        .insert("__float_approx_eq".into(), Ty::Bool);
+    ctx.fn_param_types.insert(
+        "__float_approx_eq".into(),
+        vec![Ty::Float, Ty::Float, Ty::Float],
+    );
+    ctx.fn_return_types.insert("__float_abs".into(), Ty::Float);
+    ctx.fn_param_types
+        .insert("__float_abs".into(), vec![Ty::Float]);
+    ctx.fn_return_types
+        .insert("__float_floor".into(), Ty::Float);
+    ctx.fn_param_types
+        .insert("__float_floor".into(), vec![Ty::Float]);
+    ctx.fn_return_types
+        .insert("__float_ceil".into(), Ty::Float);
+    ctx.fn_param_types
+        .insert("__float_ceil".into(), vec![Ty::Float]);
+    ctx.fn_return_types
+        .insert("__float_round".into(), Ty::Float);
+    ctx.fn_param_types
+        .insert("__float_round".into(), vec![Ty::Float]);
+    ctx.fn_return_types
+        .insert("__float_min".into(), Ty::Float);
+    ctx.fn_param_types
+        .insert("__float_min".into(), vec![Ty::Float, Ty::Float]);
+    ctx.fn_return_types
+        .insert("__float_max".into(), Ty::Float);
+    ctx.fn_param_types
+        .insert("__float_max".into(), vec![Ty::Float, Ty::Float]);
+    ctx.fn_return_types
+        .insert("__float_to_string".into(), Ty::String);
+    ctx.fn_param_types
+        .insert("__float_to_string".into(), vec![Ty::Float]);
+    ctx.fn_return_types
+        .insert("__float_parse".into(), Ty::Float);
+    ctx.fn_param_types
+        .insert("__float_parse".into(), vec![Ty::String]);
+    ctx.fn_return_types
+        .insert("__float_parse_errno".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__float_parse_errno".into(), vec![]);
+    ctx.fn_return_types
+        .insert("__float_from_int".into(), Ty::Float);
+    ctx.fn_param_types
+        .insert("__float_from_int".into(), vec![Ty::Int]);
+    ctx.fn_return_types
+        .insert("__float_to_int".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__float_to_int".into(), vec![Ty::Float]);
+    ctx.fn_return_types
+        .insert("__float_is_nan".into(), Ty::Bool);
+    ctx.fn_param_types
+        .insert("__float_is_nan".into(), vec![Ty::Float]);
+    ctx.fn_return_types
+        .insert("__float_is_infinite".into(), Ty::Bool);
+    ctx.fn_param_types
+        .insert("__float_is_infinite".into(), vec![Ty::Float]);
     // §17.3.6 Map<String, Int> intrinsics (handle = ptr surfaced as
     // Ty::String).
     ctx.fn_return_types

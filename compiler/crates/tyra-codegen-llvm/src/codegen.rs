@@ -216,6 +216,22 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare ptr @tyra_string_from_byte(i64)").unwrap();
     writeln!(out, "declare void @tyra_string_split_whitespace(ptr, ptr)").unwrap();
     writeln!(out, "declare void @tyra_string_split(ptr, ptr, ptr)").unwrap();
+    // §17.3.x: float stdlib. See runtime/src/stdlib_float.rs.
+    writeln!(out, "declare i32 @tyra_float_eq(double, double)").unwrap();
+    writeln!(out, "declare i32 @tyra_float_approx_eq(double, double, double)").unwrap();
+    writeln!(out, "declare double @tyra_float_abs(double)").unwrap();
+    writeln!(out, "declare double @tyra_float_floor(double)").unwrap();
+    writeln!(out, "declare double @tyra_float_ceil(double)").unwrap();
+    writeln!(out, "declare double @tyra_float_round(double)").unwrap();
+    writeln!(out, "declare double @tyra_float_min(double, double)").unwrap();
+    writeln!(out, "declare double @tyra_float_max(double, double)").unwrap();
+    writeln!(out, "declare ptr @tyra_float_to_string(double)").unwrap();
+    writeln!(out, "declare double @tyra_float_parse(ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_float_parse_errno()").unwrap();
+    writeln!(out, "declare double @tyra_float_from_int(i64)").unwrap();
+    writeln!(out, "declare i64 @tyra_float_to_int(double)").unwrap();
+    writeln!(out, "declare i32 @tyra_float_is_nan(double)").unwrap();
+    writeln!(out, "declare i32 @tyra_float_is_infinite(double)").unwrap();
     writeln!(out, "declare ptr @tyra_map_new_string_int()").unwrap();
     writeln!(out, "declare ptr @tyra_map_insert_string_int(ptr, ptr, i64)").unwrap();
     writeln!(out, "declare i64 @tyra_map_get_string_int(ptr, ptr)").unwrap();

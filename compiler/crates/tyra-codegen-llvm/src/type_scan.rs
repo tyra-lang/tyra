@@ -57,6 +57,20 @@ fn builtin_primitive_return(fname: &str) -> Option<Ty> {
         | "__string_ends_with" => Some(Ty::Bool),
         // __string_len / __string_parse_int / __string_parse_errno return
         // Int (default i64 path — no tracking needed).
+        // §17.3.x: float stdlib intrinsics.
+        "__float_abs"
+        | "__float_floor"
+        | "__float_ceil"
+        | "__float_round"
+        | "__float_min"
+        | "__float_max"
+        | "__float_parse"
+        | "__float_from_int" => Some(Ty::Float),
+        "__float_to_string" => Some(Ty::String),
+        "__float_eq" | "__float_approx_eq" | "__float_is_nan" | "__float_is_infinite" => {
+            Some(Ty::Bool)
+        }
+        // __float_to_int / __float_parse_errno return Int (default i64 path — no tracking needed).
         // §17.3.5: list stdlib intrinsics (List<Int> only). Int / List<Int> /
         // Option<Int> returns are tracked via struct_temps in
         // pre_scan_struct_types; only the Bool return needs registration here.

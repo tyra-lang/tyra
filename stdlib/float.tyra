@@ -1,0 +1,79 @@
+# stdlib/float.tyra — Float utilities (§17.3.x).
+#
+# v0.1 API (frozen):
+#   float.eq(a, b)              -> Bool          (exact equality; == is not available for Float)
+#   float.approx_eq(a, b, eps)  -> Bool          (|a - b| <= eps)
+#   float.abs(x)                -> Float
+#   float.floor(x)              -> Float
+#   float.ceil(x)               -> Float
+#   float.round(x)              -> Float         (ties away from zero)
+#   float.min(a, b)             -> Float
+#   float.max(a, b)             -> Float
+#   float.to_string(x)          -> String        ("3.14" format)
+#   float.parse(s)              -> Option<Float> ("3.14" -> Some(3.14))
+#   float.from_int(n)           -> Float         (Int -> Float cast)
+#   float.to_int(x)             -> Int           (truncate toward zero)
+#
+# Backed by `__float_*` intrinsics (see runtime/src/stdlib_float.rs).
+
+export fn eq(_ a: Float, _ b: Float) -> Bool
+  __float_eq(a, b)
+end
+
+export fn approx_eq(_ a: Float, _ b: Float, _ eps: Float) -> Bool
+  __float_approx_eq(a, b, eps)
+end
+
+export fn abs(_ x: Float) -> Float
+  __float_abs(x)
+end
+
+export fn floor(_ x: Float) -> Float
+  __float_floor(x)
+end
+
+export fn ceil(_ x: Float) -> Float
+  __float_ceil(x)
+end
+
+export fn round(_ x: Float) -> Float
+  __float_round(x)
+end
+
+export fn min(_ a: Float, _ b: Float) -> Float
+  __float_min(a, b)
+end
+
+export fn max(_ a: Float, _ b: Float) -> Float
+  __float_max(a, b)
+end
+
+export fn to_string(_ x: Float) -> String
+  __float_to_string(x)
+end
+
+export fn parse(_ s: String) -> Option<Float>
+  let v = __float_parse(s)
+  let code = __float_parse_errno()
+  if code == 0
+    Some(v)
+  else
+    None
+  end
+end
+
+export fn from_int(_ n: Int) -> Float
+  __float_from_int(n)
+end
+
+export fn to_int(_ x: Float) -> Int
+  __float_to_int(x)
+end
+
+export fn is_nan(_ x: Float) -> Bool
+  __float_is_nan(x)
+end
+
+export fn is_infinite(_ x: Float) -> Bool
+  __float_is_infinite(x)
+end

@@ -500,6 +500,67 @@ fn register_prelude(env: &mut TypeEnv) {
         "__string_split".to_string(),
         Ty::Fn(vec![Ty::String, Ty::String], Box::new(list_string.clone())),
     );
+    // §17.3.x: float stdlib intrinsics. See stdlib/float.tyra.
+    env.define(
+        "__float_eq".to_string(),
+        Ty::Fn(vec![Ty::Float, Ty::Float], Box::new(Ty::Bool)),
+    );
+    env.define(
+        "__float_approx_eq".to_string(),
+        Ty::Fn(vec![Ty::Float, Ty::Float, Ty::Float], Box::new(Ty::Bool)),
+    );
+    env.define(
+        "__float_abs".to_string(),
+        Ty::Fn(vec![Ty::Float], Box::new(Ty::Float)),
+    );
+    env.define(
+        "__float_floor".to_string(),
+        Ty::Fn(vec![Ty::Float], Box::new(Ty::Float)),
+    );
+    env.define(
+        "__float_ceil".to_string(),
+        Ty::Fn(vec![Ty::Float], Box::new(Ty::Float)),
+    );
+    env.define(
+        "__float_round".to_string(),
+        Ty::Fn(vec![Ty::Float], Box::new(Ty::Float)),
+    );
+    env.define(
+        "__float_min".to_string(),
+        Ty::Fn(vec![Ty::Float, Ty::Float], Box::new(Ty::Float)),
+    );
+    env.define(
+        "__float_max".to_string(),
+        Ty::Fn(vec![Ty::Float, Ty::Float], Box::new(Ty::Float)),
+    );
+    env.define(
+        "__float_to_string".to_string(),
+        Ty::Fn(vec![Ty::Float], Box::new(Ty::String)),
+    );
+    env.define(
+        "__float_parse".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(Ty::Float)),
+    );
+    env.define(
+        "__float_parse_errno".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__float_from_int".to_string(),
+        Ty::Fn(vec![Ty::Int], Box::new(Ty::Float)),
+    );
+    env.define(
+        "__float_to_int".to_string(),
+        Ty::Fn(vec![Ty::Float], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__float_is_nan".to_string(),
+        Ty::Fn(vec![Ty::Float], Box::new(Ty::Bool)),
+    );
+    env.define(
+        "__float_is_infinite".to_string(),
+        Ty::Fn(vec![Ty::Float], Box::new(Ty::Bool)),
+    );
     // §17.3.6 Map intrinsics (Map<String, Int> only). The "handle" is a
     // raw pointer; we surface it as Ty::String here since v0.1 has no
     // dedicated Ty::Ptr (mirrors the List<T> data-pointer convention).

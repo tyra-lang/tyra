@@ -76,8 +76,8 @@ However, since `Ord` for `value` types is only auto-derived for single-field typ
 The `float` module in the standard library provides:
 
 ```tyra
-fn eq(_ a: Float, _ b: Float) -> Bool            # bitwise equal (NaN == NaN is false)
-fn approx_eq(_ a: Float, _ b: Float, epsilon: Float) -> Bool
+fn eq(_ a: Float, _ b: Float) -> Bool            # IEEE 754 numeric equality (NaN == NaN → false; 0.0 == -0.0 → true)
+fn approx_eq(_ a: Float, _ b: Float, _ eps: Float) -> Bool
 fn is_nan(_ x: Float) -> Bool
 fn is_infinite(_ x: Float) -> Bool
 ```

@@ -65,6 +65,14 @@ pub use stdlib_string::{
     tyra_string_substring, tyra_string_to_lower, tyra_string_to_upper, tyra_string_trim,
 };
 
+pub mod stdlib_float;
+pub use stdlib_float::{
+    tyra_float_abs, tyra_float_approx_eq, tyra_float_ceil, tyra_float_eq, tyra_float_floor,
+    tyra_float_from_int, tyra_float_is_infinite, tyra_float_is_nan, tyra_float_max,
+    tyra_float_min, tyra_float_parse, tyra_float_parse_errno, tyra_float_round,
+    tyra_float_to_int, tyra_float_to_string,
+};
+
 /// Thunk signature emitted by codegen for each `spawn` site.
 /// Takes opaque arg pointer, returns opaque result pointer.
 pub type ThunkFn = unsafe extern "C" fn(*mut c_void) -> *mut c_void;

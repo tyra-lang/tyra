@@ -230,6 +230,75 @@ pub(crate) fn emit_builtin_call(
             emit_string_split(out, dest.as_deref(), args, func, ctx);
             true
         }
+        // §17.3.x: float stdlib intrinsics.
+        "__float_eq" => {
+            emit_float_double2_to_bool(out, dest.as_deref(), "tyra_float_eq", args, func);
+            true
+        }
+        "__float_approx_eq" => {
+            emit_float_approx_eq(out, dest.as_deref(), args, func);
+            true
+        }
+        "__float_abs" => {
+            emit_float_double_to_double(out, dest.as_deref(), "tyra_float_abs", args, func);
+            true
+        }
+        "__float_floor" => {
+            emit_float_double_to_double(out, dest.as_deref(), "tyra_float_floor", args, func);
+            true
+        }
+        "__float_ceil" => {
+            emit_float_double_to_double(out, dest.as_deref(), "tyra_float_ceil", args, func);
+            true
+        }
+        "__float_round" => {
+            emit_float_double_to_double(out, dest.as_deref(), "tyra_float_round", args, func);
+            true
+        }
+        "__float_min" => {
+            emit_float_double2_to_double(out, dest.as_deref(), "tyra_float_min", args, func);
+            true
+        }
+        "__float_max" => {
+            emit_float_double2_to_double(out, dest.as_deref(), "tyra_float_max", args, func);
+            true
+        }
+        "__float_to_string" => {
+            emit_float_to_string(out, dest.as_deref(), args, func);
+            true
+        }
+        "__float_parse" => {
+            emit_float_parse(out, dest.as_deref(), args, func);
+            true
+        }
+        "__float_parse_errno" => {
+            let d = dest.as_deref().unwrap_or("_float_parse_errno");
+            writeln!(out, "  %{d}.i32 = call i32 @tyra_float_parse_errno()").unwrap();
+            writeln!(out, "  %{d} = sext i32 %{d}.i32 to i64").unwrap();
+            true
+        }
+        "__float_from_int" => {
+            emit_float_from_int(out, dest.as_deref(), args, func);
+            true
+        }
+        "__float_to_int" => {
+            emit_float_to_int(out, dest.as_deref(), args, func);
+            true
+        }
+        "__float_is_nan" => {
+            let d = dest.as_deref().unwrap_or("_float_is_nan");
+            let x = args.first().map(|a| operand_ref(a, func)).unwrap_or_else(|| "0.0".into());
+            writeln!(out, "  %{d}.i32 = call i32 @tyra_float_is_nan(double {x})").unwrap();
+            writeln!(out, "  %{d} = trunc i32 %{d}.i32 to i1").unwrap();
+            true
+        }
+        "__float_is_infinite" => {
+            let d = dest.as_deref().unwrap_or("_float_is_inf");
+            let x = args.first().map(|a| operand_ref(a, func)).unwrap_or_else(|| "0.0".into());
+            writeln!(out, "  %{d}.i32 = call i32 @tyra_float_is_infinite(double {x})").unwrap();
+            writeln!(out, "  %{d} = trunc i32 %{d}.i32 to i1").unwrap();
+            true
+        }
         // §17.3.6 Map<String, Int> intrinsics — handle is a ptr.
         "__map_new_string_int" => {
             let d = dest.as_deref().unwrap_or("_map");
@@ -943,6 +1012,155 @@ fn emit_string_split(
     )
     .unwrap();
     writeln!(out, "  %{d} = load {list_ty}, ptr %{d}.slot").unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// §17.3.x: float stdlib emit helpers.
+// ---------------------------------------------------------------------------
+
+/// `__float_eq(a, b) -> Bool`.
+fn emit_float_double2_to_bool(
+    out: &mut String,
+    dest: Option<&str>,
+    callee: &str,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_float");
+    let a = args
+        .first()
+        .map(|x| operand_ref(x, func))
+        .unwrap_or_else(|| "0.0".into());
+    let b = args
+        .get(1)
+        .map(|x| operand_ref(x, func))
+        .unwrap_or_else(|| "0.0".into());
+    writeln!(out, "  %{d}.i32 = call i32 @{callee}(double {a}, double {b})").unwrap();
+    writeln!(out, "  %{d} = icmp ne i32 %{d}.i32, 0").unwrap();
+}
+
+/// `__float_approx_eq(a, b, eps) -> Bool` — three double args.
+fn emit_float_approx_eq(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_float_approx");
+    let a = args
+        .first()
+        .map(|x| operand_ref(x, func))
+        .unwrap_or_else(|| "0.0".into());
+    let b = args
+        .get(1)
+        .map(|x| operand_ref(x, func))
+        .unwrap_or_else(|| "0.0".into());
+    let eps = args
+        .get(2)
+        .map(|x| operand_ref(x, func))
+        .unwrap_or_else(|| "0.0".into());
+    writeln!(
+        out,
+        "  %{d}.i32 = call i32 @tyra_float_approx_eq(double {a}, double {b}, double {eps})"
+    )
+    .unwrap();
+    writeln!(out, "  %{d} = icmp ne i32 %{d}.i32, 0").unwrap();
+}
+
+/// `__float_abs(x) -> Float`, `__float_floor`, `__float_ceil`, `__float_round`.
+fn emit_float_double_to_double(
+    out: &mut String,
+    dest: Option<&str>,
+    callee: &str,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_float");
+    let x = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0.0".into());
+    writeln!(out, "  %{d} = call double @{callee}(double {x})").unwrap();
+}
+
+/// `__float_min(a, b) -> Float`, `__float_max(a, b) -> Float`.
+fn emit_float_double2_to_double(
+    out: &mut String,
+    dest: Option<&str>,
+    callee: &str,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_float");
+    let a = args
+        .first()
+        .map(|x| operand_ref(x, func))
+        .unwrap_or_else(|| "0.0".into());
+    let b = args
+        .get(1)
+        .map(|x| operand_ref(x, func))
+        .unwrap_or_else(|| "0.0".into());
+    writeln!(out, "  %{d} = call double @{callee}(double {a}, double {b})").unwrap();
+}
+
+/// `__float_to_string(x) -> String`.
+fn emit_float_to_string(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_float_str");
+    let x = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0.0".into());
+    writeln!(out, "  %{d} = call ptr @tyra_float_to_string(double {x})").unwrap();
+}
+
+/// `__float_parse(s) -> Float`.
+fn emit_float_parse(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_float_parse");
+    let s = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    writeln!(out, "  %{d} = call double @tyra_float_parse(ptr {s})").unwrap();
+}
+
+/// `__float_from_int(n) -> Float`.
+fn emit_float_from_int(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_float_from_int");
+    let n = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    writeln!(out, "  %{d} = call double @tyra_float_from_int(i64 {n})").unwrap();
+}
+
+/// `__float_to_int(x) -> Int`.
+fn emit_float_to_int(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_float_to_int");
+    let x = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0.0".into());
+    writeln!(out, "  %{d} = call i64 @tyra_float_to_int(double {x})").unwrap();
 }
 
 /// parse::<Int>(str) -> Option<Int>
