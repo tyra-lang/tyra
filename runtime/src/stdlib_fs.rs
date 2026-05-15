@@ -12,10 +12,10 @@
 //!
 //! v0.1 limitations:
 //! - Returned strings are allocated via `CString::into_raw` (system
-//!   allocator). Boehm GC scans conservatively so the pointer stays
-//!   reachable while referenced, but the buffer is never freed. Acceptable
-//!   for v0.1 CLI workloads; revisit when GC_malloc is wired through the
-//!   runtime (M9 follow-up).
+//!   allocator), not `GC_malloc`. The Boehm GC does not manage these
+//!   buffers, so they are never freed in v0.1. Acceptable for v0.1 CLI
+//!   workloads; revisit when GC_malloc is wired through the runtime
+//!   (M9 follow-up).
 //! - The `__fs_*` intrinsics are registered in the Tyra prelude so that
 //!   `stdlib/fs.tyra` can call them without an `import` (which would
 //!   create a module cycle). Direct user calls are technically possible

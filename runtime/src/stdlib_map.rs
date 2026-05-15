@@ -6,8 +6,10 @@
 //! A real hash table lands when the language gains generic V plumbing.
 //!
 //! Returned handles are `ptr` (`*mut MapNode`); empty map = null. All
-//! nodes and key strings are leaked (`Box::leak` / `CString::into_raw`)
-//! — Boehm GC scans conservatively, identical trade-off to fs / json.
+//! nodes and key strings are allocated via the system allocator
+//! (`Box::leak` / `CString::into_raw`), not `GC_malloc`, so the Boehm GC
+//! never reclaims them — they leak for the process lifetime. Same
+//! trade-off as fs / json.
 //!
 //! Concurrency: not thread-safe. v0.1 has no shared mutable state across
 //! tasks for these maps; map handles are owned by the spawning task.

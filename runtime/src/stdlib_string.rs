@@ -9,10 +9,11 @@
 //! the plumbing lands in a later phase together with a generalized
 //! "intrinsic returns List<String>" codegen helper.
 //!
-//! All returned strings are allocated via `CString::into_raw` (same
-//! trade-off as fs/io: Boehm GC scans conservatively, buffers never
-//! freed in v0.1). Input strings are borrowed from the caller's C
-//! string; we never mutate them.
+//! All returned strings are allocated via `CString::into_raw`, which uses
+//! the system allocator, not `GC_malloc` — the Boehm GC does not manage
+//! these buffers, so they are never freed in v0.1 (same trade-off as
+//! fs / io). Input strings are borrowed from the caller's C string; we
+//! never mutate them.
 
 use std::cell::Cell;
 use std::ffi::{CStr, CString};
@@ -233,8 +234,9 @@ pub extern "C" fn tyra_string_from_byte(b: i64) -> *const c_char {
 /// Layout shared with codegen for List<String>-returning intrinsics.
 /// Mirrors `%struct.List__String = type { ptr, i64 }` in LLVM IR. The
 /// caller alloca's a 16-byte slot, passes its address, and we fill in
-/// (data, len). All string entries are GC-safe (Boehm-conservative)
-/// `CString::into_raw` leaks; the array itself is `Box::leak`'d.
+/// (data, len). Both the string entries (`CString::into_raw`) and the
+/// array (`Box::leak`) are system-allocator allocations, not `GC_malloc` —
+/// they leak for the process lifetime, never reclaimed in v0.1.
 #[repr(C)]
 pub struct ListStringRet {
     data: *mut *const c_char,
