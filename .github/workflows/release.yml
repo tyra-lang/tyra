@@ -58,8 +58,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-release-
 
-      - name: Build release binary
-        run: cargo build --release -p tyra-cli
+      - name: Build release binary and runtime
+        run: cargo build --release -p tyra-cli -p tyra-runtime
 
       - name: Verify binary architecture
         run: |
