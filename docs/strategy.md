@@ -343,6 +343,8 @@ Tyra is for **new projects** in **backend services, CLI tools, and business appl
 
 ### 6.2 Phase 1: LLVM implementation (12-24 months)
 
+**v0.1 platform scope**: macOS arm64 and Linux x86_64. Windows is out of scope for v0.1 (see [ADR-0007](design/0007-boehm-gc-reference-impl.md)); item 10 below targets a future release.
+
 **Goal**: A production-grade compiler that delivers on Tyra's promises.
 
 Deliverables (in order):

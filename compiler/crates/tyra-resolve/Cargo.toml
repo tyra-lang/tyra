@@ -3,6 +3,7 @@ name = "tyra-resolve"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 description = "Name resolution for the Tyra language (spec §13, §17)"
 
 [dependencies]

@@ -640,11 +640,10 @@ pub(crate) struct LowerCtx {
     /// declaration order. Populated for ALL functions (unlike fn_defs which
     /// only stores generics) so `spawn f(args)` can emit typed arg boxes.
     pub(crate) fn_param_types: std::collections::HashMap<String, Vec<Ty>>,
-    /// Temporaries that hold a live Task<T> handle (M9). `.await` uses this
-    /// to decide whether to emit a real `Await` instruction or treat the
-    /// expression as sync (async-as-sync stub — §14 v0.1). Kept separate
-    /// from `generic_var_types` so downstream code (propagate, match, list
-    /// ops) continues to see the underlying T for type lookups.
+    /// Temporaries that hold a live Task<T> handle (M9 real thread-pool — §14).
+    /// `.await` uses this to decide whether to emit an `Await` instruction.
+    /// Kept separate from `generic_var_types` so downstream code (propagate,
+    /// match, list ops) continues to see the underlying T for type lookups.
     pub(crate) task_result_types: std::collections::HashMap<String, Ty>,
     /// Impl method registry: (target_type_name, method_name) → mangled_fn_name
     pub(crate) impl_methods: std::collections::HashMap<(String, String), String>,

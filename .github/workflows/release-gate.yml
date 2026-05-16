@@ -7,6 +7,24 @@ on:
     branches: [main]
 
 jobs:
+  msrv:
+    name: MSRV check (Rust 1.85)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.85
+        uses: dtolnay/rust-toolchain@1.85
+
+      - name: Install libgc-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgc-dev
+
+      - name: Check workspace at MSRV
+        run: cargo check --workspace
+
   release-gate:
     name: build + test + corpus + smoke
     runs-on: ubuntu-latest
@@ -41,6 +59,12 @@ jobs:
 
       - name: Run static corpus check
         run: bash bench/static-corpus/check.sh ./target/release/tyra
+
+      - name: Verify LLVM version
+        run: |
+          version=$(llvm-config --version 2>/dev/null || llvm-config-21 --version 2>/dev/null || echo "not-found")
+          echo "LLVM version: $version"
+          echo "$version" | grep -qE '^21\.' || { echo "ERROR: expected LLVM 21.x, got $version"; exit 1; }
 
       - name: Smoke test (hello world)
         run: |

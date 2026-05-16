@@ -61,6 +61,8 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - **String GC**: allocated strings are never reclaimed by the garbage collector. Acceptable for short-lived CLI programs; avoid long-running servers.
 - **Windows**: untested. Build via WSL2 is recommended.
 - **Float display precision**: uses Rust's `Display`, which may print unexpected representations for edge values (e.g., `0` instead of `0.0`).
+- **`tasks.select` literal-only**: `tasks.select([t1, t2])` accepts list literals only; a dynamic `List<Task<T>>` variable is rejected at compile time.
+- **Task handles in `for` / `match`**: iterating over a task list with `for t in tasks` or binding a task in a match pattern drops the task-result type; use index access or `tasks.join_all` instead.
 - **No formatter**: `tyra fmt` is not yet available.
 - **No test runner**: `tyra test` is not yet available.
 - **No package manager**: dependency management is not yet available.

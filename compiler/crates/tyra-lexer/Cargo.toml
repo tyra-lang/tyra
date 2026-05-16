@@ -3,6 +3,7 @@ name = "tyra-lexer"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 description = "Tokenizer for the Tyra language (spec §5)"
 
 [dependencies]

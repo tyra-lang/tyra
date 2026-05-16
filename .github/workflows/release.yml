@@ -1,0 +1,118 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: build (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            expected_arch: x86_64
+            platform_label: linux-x86_64
+          - runner: macos-14
+            expected_arch: arm64
+            platform_label: macos-arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgc-dev llvm-21 clang-21
+          sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-21 100
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install bdw-gc llvm@21
+          echo "/opt/homebrew/opt/llvm@21/bin" >> "$GITHUB_PATH"
+
+      - name: Verify LLVM 21
+        run: |
+          version=$(llvm-config --version)
+          echo "LLVM version: $version"
+          echo "$version" | grep -qE '^21\.' || { echo "ERROR: expected LLVM 21.x, got $version"; exit 1; }
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-
+
+      - name: Build release binary
+        run: cargo build --release -p tyra-cli
+
+      - name: Verify binary architecture
+        run: |
+          arch=$(uname -m)
+          echo "Runner arch: $arch"
+          file target/release/tyra
+          [ "$arch" = "${{ matrix.expected_arch }}" ] || { echo "ERROR: expected ${{ matrix.expected_arch }}, got $arch"; exit 1; }
+
+      - name: Package artifact
+        run: |
+          version="${GITHUB_REF_NAME:-dev}"
+          name="tyra-${version}-${{ matrix.platform_label }}"
+          mkdir -p "dist/${name}"
+          cp target/release/tyra "dist/${name}/"
+          cp -r stdlib "dist/${name}/"
+          cp README.md LICENSE CHANGELOG.md "dist/${name}/"
+          tar -czf "dist/${name}.tar.gz" -C dist "${name}"
+          echo "ARTIFACT_NAME=${name}" >> "$GITHUB_ENV"
+          echo "ARTIFACT_PATH=dist/${name}.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_PATH }}
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          awk "/^## \[${version}\]/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md > release-notes.md
+          cat release-notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md
+          files: dist/**/*.tar.gz
+          fail_on_unmatched_files: true

@@ -182,24 +182,24 @@ Install prerequisites:
 
 ```bash
 # macOS
-brew install bdw-gc
+brew install llvm@21 bdw-gc
 
 # Debian / Ubuntu
-sudo apt install libgc-dev
+sudo apt install llvm-21 clang-21 libgc-dev
 ```
 
 Then build:
 
 ```bash
 git clone https://github.com/tyra-lang/tyra.git
-cd tyra/compiler
-cargo build --release
+cd tyra
+cargo build --release -p tyra-cli
 ```
+
+The binary is at `target/release/tyra`.
 
 Tyra's reference implementation links against Boehm GC for heap
 reclamation (see [ADR-0007](docs/design/0007-boehm-gc-reference-impl.md)).
-
-The compiler is not yet functional. This builds the skeleton.
 
 ## Versioning
 

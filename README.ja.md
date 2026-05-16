@@ -176,15 +176,27 @@ Tyra は次の用途には **適していません**:
 
 ## ソースからのビルド
 
-> Rust 1.85+ と LLVM 21 が必要です。
+> Rust 1.85+、LLVM 21、および Boehm GC (`bdw-gc`) が必要です。
+
+事前インストール:
+
+```bash
+# macOS
+brew install llvm@21 bdw-gc
+
+# Debian / Ubuntu
+sudo apt install llvm-21 clang-21 libgc-dev
+```
+
+ビルド:
 
 ```bash
 git clone https://github.com/tyra-lang/tyra.git
-cd tyra/compiler
-cargo build --release
+cd tyra
+cargo build --release -p tyra-cli
 ```
 
-コンパイラはまだ機能しません。これはスケルトンのビルドです。
+バイナリは `target/release/tyra` に生成されます。
 
 ## バージョニング
 

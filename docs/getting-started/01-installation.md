@@ -4,12 +4,12 @@ Tyra is currently distributed as source only. You will build the compiler and ru
 
 ## Prerequisites
 
-- **Rust** 1.75 or later — install via [rustup.rs](https://rustup.rs)
+- **Rust** 1.85 or later — install via [rustup.rs](https://rustup.rs)
 - **Cargo** (included with Rust)
-- **LLVM** 17 — required by the compiler backend (see note below)
+- **LLVM** 21 — required by the compiler backend (see note below)
 - **Git**
 
-> **NOTE:** On macOS, LLVM can be installed with `brew install llvm@17`. On Debian/Ubuntu, use `apt install llvm-17 clang-17`. Make sure the LLVM binaries are on your `PATH`.
+> **NOTE:** On macOS, LLVM can be installed with `brew install llvm@21`. On Debian/Ubuntu, use `apt install llvm-21 clang-21`. Make sure the LLVM binaries are on your `PATH`.
 
 ## Build from Source
 

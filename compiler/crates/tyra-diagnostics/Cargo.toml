@@ -3,6 +3,7 @@ name = "tyra-diagnostics"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 description = "Error reporting infrastructure for the Tyra compiler"
 
 [dependencies]

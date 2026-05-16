@@ -1341,14 +1341,14 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             payload_ty
         }
 
-        // Await (§14.3): v0.1 — accept any type (async is synchronous no-op)
+        // Await (§14.3): Task<T>.await unwraps to T; bare value .await is identity
+        // (M9 runtime uses a real thread-pool; see runtime/src/task.rs)
         ExprKind::Await(inner) => {
             let inner_ty = infer_expr(inner, env, report);
             match inner_ty {
                 Ty::Generic(ref name, ref args) if name == "Task" && args.len() == 1 => {
                     args[0].clone()
                 }
-                // v0.1: async fn returns T directly (not Task<T>); .await is identity
                 other => other,
             }
         }

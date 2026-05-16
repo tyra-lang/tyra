@@ -3,6 +3,7 @@ name = "tyra-mir"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 description = "Mid-level IR for the Tyra language"
 
 [dependencies]

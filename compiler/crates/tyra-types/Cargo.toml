@@ -3,6 +3,7 @@ name = "tyra-types"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 description = "Type checker for the Tyra language (spec §8)"
 
 [dependencies]
