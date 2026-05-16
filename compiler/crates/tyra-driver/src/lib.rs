@@ -1277,10 +1277,10 @@ pub fn compile_to_binary(source_path: &Path, output_path: &Path) -> CompileResul
     }
     // libtyra_runtime: locate via the running compiler's target dir. The
     // staticlib is produced by cargo alongside the `tyra` binary (workspace
-    // target/{debug,release}/). If it is missing (e.g. the user installed
-    // only the binary via `cargo install`, or built with
-    // `cargo build -p tyra-cli`), surface an explicit Tyra diagnostic
-    // instead of letting clang emit an unresolved-symbol error.
+    // target/{debug,release}/). If it is missing (e.g. the user copied only
+    // the `tyra` binary without `libtyra_runtime.a`, or installed via
+    // `cargo install` without the staticlib), surface an explicit Tyra
+    // diagnostic instead of letting clang emit an unresolved-symbol error.
     let runtime_lib_path = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(|d| d.join("libtyra_runtime.a")));

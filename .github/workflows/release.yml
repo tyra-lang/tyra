@@ -74,6 +74,7 @@ jobs:
           name="tyra-${version}-${{ matrix.platform_label }}"
           mkdir -p "dist/${name}"
           cp target/release/tyra "dist/${name}/"
+          cp target/release/libtyra_runtime.a "dist/${name}/"
           cp -r stdlib "dist/${name}/"
           cp README.md LICENSE CHANGELOG.md "dist/${name}/"
           tar -czf "dist/${name}.tar.gz" -C dist "${name}"
