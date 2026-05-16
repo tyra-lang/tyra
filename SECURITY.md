@@ -24,7 +24,7 @@ Use the "Report a vulnerability" button on the [Security tab](https://github.com
 
 ### Alternative: Email
 
-Send a report to **<security@tyra-lang.org>** (or the email listed in the repository profile).
+Send a report to **mizumoto@andgenie.jp**.
 
 For sensitive reports, you may encrypt your message with the maintainer's PGP key (fingerprint published in `SECURITY.asc` when available).
 
@@ -74,6 +74,7 @@ The following are **in scope** for security reports:
 
 The following are **out of scope**:
 
+- Vulnerabilities in `stdlib/http.server` — it is explicitly marked **experimental** and not production-safe (no TLS, single-threaded, no authentication middleware). Do not expose it to untrusted networks.
 - Issues that require an attacker to already have write access to the source code being compiled
 - Bugs that require modified versions of the compiler or runtime
 - Memory safety issues in code that uses planned future FFI features (FFI is inherently unsafe)
