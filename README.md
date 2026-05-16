@@ -176,7 +176,7 @@ See [spec §3 and §22](docs/spec/ja/language-spec.md) for the full list.
 
 ## Building from source
 
-> Requires Rust 1.85+, LLVM 21, and Boehm GC (`bdw-gc`).
+> Requires Rust 1.88+, LLVM 21, and Boehm GC (`bdw-gc`).
 
 Install prerequisites:
 

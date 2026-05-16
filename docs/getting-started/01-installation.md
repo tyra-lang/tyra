@@ -4,7 +4,7 @@ Tyra is currently distributed as source only. You will build the compiler and ru
 
 ## Prerequisites
 
-- **Rust** 1.85 or later — install via [rustup.rs](https://rustup.rs)
+- **Rust** 1.88 or later — install via [rustup.rs](https://rustup.rs)
 - **Cargo** (included with Rust)
 - **LLVM** 21 — required by the compiler backend (see note below)
 - **Git**

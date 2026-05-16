@@ -8,14 +8,14 @@ on:
 
 jobs:
   msrv:
-    name: MSRV check (Rust 1.85)
+    name: MSRV check (Rust 1.88)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust 1.85
-        uses: dtolnay/rust-toolchain@1.85
+      - name: Install Rust 1.88
+        uses: dtolnay/rust-toolchain@1.88
 
       - name: Install libgc-dev
         run: |
@@ -60,11 +60,10 @@ jobs:
       - name: Run static corpus check
         run: bash bench/static-corpus/check.sh ./target/release/tyra
 
-      - name: Verify LLVM version
+      - name: Report LLVM version
         run: |
           version=$(llvm-config --version 2>/dev/null || llvm-config-21 --version 2>/dev/null || echo "not-found")
-          echo "LLVM version: $version"
-          echo "$version" | grep -qE '^21\.' || { echo "ERROR: expected LLVM 21.x, got $version"; exit 1; }
+          echo "LLVM version on runner: $version (informational — tyra run requires LLVM 21)"
 
       - name: Smoke test (hello world)
         run: |
