@@ -97,8 +97,14 @@ This installs `tyra-lsp` to `~/.cargo/bin/`. Make sure `~/.cargo/bin` is on your
 
 ### Step 2: Install the VS Code extension
 
-1. Open the `tools/lsp/vscode-tyra/` directory in VS Code
-2. Press **F5** to launch the Extension Development Host
+```bash
+cd tools/lsp/vscode-tyra
+npm install
+```
+
+Then open the `tools/lsp/vscode-tyra/` directory in VS Code and press **F5** to launch the Extension Development Host.
+
+> **Note:** If F5 triggers macOS voice input instead, go to System Settings → Keyboard → Dictation and change or disable the shortcut. Alternatively, use **Run → Start Debugging** from the VS Code menu, or press `Cmd+Shift+P` and run `Debug: Start Debugging`.
 
 Alternatively, set `TYRA_LSP_PATH` to the full path of the `tyra-lsp` binary before starting VS Code:
 

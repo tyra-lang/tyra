@@ -6,15 +6,24 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Programming Languages"],
-  "activationEvents": ["onLanguage:tyra"],
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:tyra"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [
       {
         "id": "tyra",
-        "aliases": ["Tyra", "tyra"],
-        "extensions": [".tyra"],
+        "aliases": [
+          "Tyra",
+          "tyra"
+        ],
+        "extensions": [
+          ".tyra"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -32,6 +41,7 @@
     "watch": "tsc -watch -p ./"
   },
   "devDependencies": {
+    "@types/node": "^25.8.0",
     "@types/vscode": "^1.85.0",
     "typescript": "^5.3.0"
   },
