@@ -66,6 +66,8 @@ examples/**/.tyra-cache/
 # Compiled example binaries (built from bench/static-corpus/*.tyra sources)
 examples/[0-9]*-*
 !examples/[0-9]*-*/
+!examples/[0-9]*-*.tyra
+!examples/[0-9]*-*.md
 
 # Tyra compiler output binaries (produced when running `tyra run` or `tyra build`)
 rust_out
@@ -80,12 +82,8 @@ rust_out
 # Editors / IDEs
 # =============================================================================
 
-# VSCode
-.vscode/
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+# VSCode (project root only — sub-projects manage their own .vscode/)
+/.vscode/
 
 # JetBrains (RustRover, IntelliJ, CLion)
 .idea/
@@ -215,8 +213,7 @@ docs/api/
 benchmarks/results/
 bench/ai-gen/results/*.json
 bench/ai-gen/results/*.csv
-bench/ai-gen/results-run*/
-# SUMMARY.md IS committed — it is the headline published output.
+bench/ai-gen/results-run*
 *.bench.json
 criterion/
 
