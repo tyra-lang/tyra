@@ -32,7 +32,7 @@ The convergence of three trends creates an opening for Tyra:
 
 Tyra's bet is that **a language designed from scratch for AI auditability and strict semantics, with operational standards matching Go and surface readability matching Ruby, can capture users dissatisfied with Crystal, V, and parts of the Go and Ruby ecosystems.**
 
-**Current status**: Pre-alpha. Specification v0.1 (Draft) complete with 6 ADRs. Phase 0 complete (spec, examples, competitive analysis). Phase 1 (LLVM implementation) starting.
+**Current status**: v0.1.0 initial release. Specification v0.1 finalized with 7 ADRs. Phase 0 complete (spec, examples, competitive analysis). Phase 1 (LLVM implementation) in progress — compiler, runtime, and Tier 1 stdlib plus frozen Tier 2 APIs (fs, json, http, string, list, map) shipped in v0.1.0 for macOS arm64 and Linux x86_64. Remaining Phase 1 deliverables (LSP, formatter, debugger, CI matrix, broader Tier 2) are in progress.
 
 ---
 
@@ -264,8 +264,8 @@ Crystal has two officially-documented weaknesses that Tyra can directly address:
 
 Required evidence:
 
-- Tyra compiles to a static single binary on Linux (glibc and musl), macOS (x86 and ARM), and Windows
-- Tyra's parallel execution is stable and benchmarked from v0.1
+- Tyra compiles to a static single binary on Linux (glibc and musl), macOS (x86 and ARM), and Windows (long-term target; v0.1 ships Linux x86_64 + macOS arm64 only — see §6.2)
+- Tyra's parallel execution is stable and benchmarked (Phase 1 milestone; v0.1.0 does not yet expose stable parallel runtime — tracked as a Phase 1 deliverable in §6.2)
 
 How to validate: CI matrix builds across platforms, parallel benchmark suite published.
 
@@ -277,7 +277,7 @@ Tyra must match Go's operational standards as a baseline. Failing to match Go me
 
 Required:
 
-- `tyra new`, `tyra run`, `tyra build`, `tyra test`, `tyra fmt`, `tyra mod` all work
+- `tyra new`, `tyra run`, `tyra build`, `tyra test`, `tyra fmt`, `tyra mod` all work (Phase 1 target; v0.1.0 ships `tyra check` / `run` / `build` only — `test` / `fmt` / `mod` / `new` tracked in §6.2)
 - Single command produces a release binary
 - Cross-compilation supported
 - LSP, debugger, formatter all official
@@ -355,7 +355,7 @@ Deliverables (in order):
 4. LLVM IR generation
 5. Runtime (GC + async scheduler) in Rust/C
 6. Standard library Tier 1 implementation
-7. Standard library Tier 2 (http, fs, json, etc.) — initially as community libraries
+7. Standard library Tier 2 (http, fs, json, etc.) — core APIs (fs, json, http, string, list, map) frozen and shipped in v0.1.0; broader Tier 2 (collections, time, test, log, float) continues as Phase 1 work
 8. LSP, formatter, debugger
 9. Documentation site, comparison pages
 10. CI matrix builds for Linux/macOS/Windows

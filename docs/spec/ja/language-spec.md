@@ -828,26 +828,29 @@ end
 
 - C 風 `for (;;)` は採用しない
 - 戻り値は `Unit` である
-- `break` と `continue` は v0.1 では採用しない
+- `continue` は v0.1 では採用しない（`break` は採用）
 
 ---
 
 ## 11. コレクション
 
-標準コレクション:
+> **設計意図 vs. v0.1 実装スコープ**: このセクションは言語の全体設計を記述する。v0.1 での凍結スコープはセクション末尾の callout を参照のこと。
+
+標準コレクション（設計ターゲット）:
 
 - `List<T>`
-- `Map<K, V>`
-- `Set<T>`
+- `Map<K, V>` — v0.1 では `Map<String, Int>` のみ実装（§17.3.6）
+- `Set<T>` — v0.1 では未実装（§22）
 
 リテラル:
 
 ```tyra
 let nums = [1, 2, 3]
-let user_by_id = {1: "mika", 2: "jun"}
+let scores: Map<String, Int> = {"alice": 92, "bob": 85}  # v0.1 で利用可能
+# let user_by_id = {1: "mika", 2: "jun"}                 # Map<Int, String> — v0.2 以降
 ```
 
-- map literal のキーは任意の式を許可する
+- map literal のキーは任意の式を許可する（full `Map<K, V>` 実装時。v0.1 では `Map<String, Int>` のみ）
 - `Map<K, V>` のキー型 `K` は `Hash` を満たさなければならない
 - index 構文は `items[index]` とする
 - `items[index]` は境界外アクセス時に panic する
@@ -858,6 +861,11 @@ let x = items[0]           # 境界外なら panic
 let y = items.get(0)       # Option<T> を返す
 let z = items.get(0)?      # Option 早期 return (関数戻り値が Option の場合)
 ```
+
+> **v0.1 凍結スコープ**:
+> - `List<T>`: `[]` / `.get(index)` / `for` の generic サポートは v0.1 で利用可能。`list` モジュール関数（`list.push` / `sum` / `max` / `min` / `contains` / `index_of`）は **`List<Int>` 専用** で凍結（§17.3.5）。`List<String>` などは `for` で走査可だが `list.*` 関数は使えない。
+> - `Map<K, V>`: v0.1 では **`Map<String, Int>` リテラルと `.get(k)` / `.contains_key(k)` のみ** 凍結（§17.3.6）。任意の K / V、`put` / `remove` / イテレーションは §22 で保留。
+> - `Set<T>`: v0.1 では未実装（§22 参照）。
 
 ---
 
@@ -1671,12 +1679,13 @@ end
 - guard clause (`when pattern if condition`)
 - tuple 型
 - structured concurrency
-- `break` / `continue`
+- `continue`（`break` は §10.5 で採用済）
 - モジュールレベルの初期化セマンティクス (`let`/`mut` のモジュールスコープ)
 - Tier 2 標準ライブラリ API の詳細 (collections, time, test, log, float) — `fs`, `json`, `http`, `string` は §17.3 で v0.1 凍結済
 - `string` の拡張 API (replace, join, char_at, 正規表現) — `split` / `split_whitespace` は §17.3.4 に追加凍結、それ以外は v0.2 以降
 - `list` の拡張 API (ジェネリック `List<T>` 全般、`map` / `filter` / `fold`、`List<String>` 等) — §17.3.5 で凍結した `List<Int>` 専用 6 関数の外側は v0.2 以降 (要素型モノモーフィゼーションとラムダ C ABI 通し配管が必要)
 - `Map` の拡張 API (任意の K / V、`put` / `remove` / イテレーション、ハッシュテーブル化) — §17.3.6 で `Map<String, Int>` リテラル + `get` / `contains_key` のみ凍結。それ以外は v0.2 以降
+- `Set<T>` 全般（リテラル構文、操作 API、ハッシュ実装）— v0.2 以降
 
 ---
 

@@ -9,7 +9,7 @@ Welcome to Tyra — a statically-typed language designed for backend services, C
 1. [Installation](01-installation.md) — Build from source and set up your environment
 2. [Hello, World](02-hello-world.md) — Variables, types, functions, and string interpolation
 3. [Control Flow](03-control-flow.md) — `if/else`, `for`, `while`, `match`
-4. [Collections](04-collections.md) — `List<Int>`, string utilities, and `Map` (planned)
+4. [Collections](04-collections.md) — `List<Int>`, string utilities, and `Map<String, Int>`
 5. [Error Handling](05-error-handling.md) — `Option<T>`, `Result<T, E>`, and the `?` operator
 6. [Types and ADTs](06-types-and-adt.md) — Algebraic data types, `value`, `data`, and `impl`
 7. [A Real Program](07-real-program.md) — A complete working example from stdin to output

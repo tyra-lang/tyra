@@ -834,26 +834,29 @@ end
 
 - C-style `for (;;)` is not adopted
 - The value is `Unit`
-- `break` and `continue` are not adopted in v0.1
+- `continue` is not adopted in v0.1 (`break` is adopted)
 
 ---
 
 ## 11. Collections
 
-Standard collections:
+> **Design intent vs. v0.1 implementation scope**: This section describes the full language design target. For the v0.1 frozen scope, see the callout at the end of this section.
+
+Standard collections (design target):
 
 - `List<T>`
-- `Map<K, V>`
-- `Set<T>`
+- `Map<K, V>` — only `Map<String, Int>` is implemented in v0.1 (§17.3.6)
+- `Set<T>` — not implemented in v0.1 (§22)
 
 Literals:
 
 ```tyra
 let nums = [1, 2, 3]
-let user_by_id = {1: "mika", 2: "jun"}
+let scores: Map<String, Int> = {"alice": 92, "bob": 85}  # available in v0.1
+# let user_by_id = {1: "mika", 2: "jun"}                 # Map<Int, String> — v0.2+
 ```
 
-- Map literal keys may be arbitrary expressions
+- Map literal keys may be arbitrary expressions (full `Map<K, V>` implementation; v0.1 supports `Map<String, Int>` only)
 - The key type `K` of `Map<K, V>` must satisfy `Hash`
 - Indexing uses `items[index]`
 - `items[index]` panics on out-of-bounds access
@@ -864,6 +867,11 @@ let x = items[0]           # panics if out of bounds
 let y = items.get(0)       # returns Option<T>
 let z = items.get(0)?      # Option early return (when the enclosing function returns Option)
 ```
+
+> **v0.1 frozen scope**:
+> - `List<T>`: generic `[]` / `.get(index)` / `for` are available in v0.1. The `list` module functions (`list.push` / `sum` / `max` / `min` / `contains` / `index_of`) are frozen for **`List<Int>` only** (§17.3.5). `List<String>` and other element types can be iterated with `for` but the `list.*` functions do not apply.
+> - `Map<K, V>`: v0.1 freezes **`Map<String, Int>` literals and `.get(k)` / `.contains_key(k)` only** (§17.3.6). Arbitrary K / V, `put` / `remove` / iteration are deferred to §22.
+> - `Set<T>`: not implemented in v0.1 (see §22).
 
 ---
 
@@ -1662,12 +1670,13 @@ The following are postponed for later specification:
 - guard clauses (`when pattern if condition`)
 - tuple types
 - structured concurrency
-- `break` / `continue`
+- `continue` (`break` is adopted in §10.5)
 - Module-level initialization semantics (`let`/`mut` at module scope)
 - Detailed APIs for Tier 2 standard library modules (collections, time, test, log, float) — `fs`, `json`, `http`, and `string` are frozen in §17.3
 - Extended `string` API (replace, join, char_at, regex) — `split` and `split_whitespace` are frozen in §17.3.4 alongside the other v0.1 functions
 - Extended `list` API (generic `List<T>`, `map` / `filter` / `fold`, `List<String>`, etc.) — the six `List<Int>`-only functions frozen in §17.3.5 are the only v0.1 surface (requires element-type monomorphization and lambda-through-C-ABI plumbing)
 - Extended `Map` API (arbitrary K / V, `put` / `remove` / iteration, hash-table backing) — only `Map<String, Int>` literals plus `get` / `contains_key` are frozen in §17.3.6; everything else is v0.2+
+- `Set<T>` in full (literal syntax, operations, hash-table backing) — v0.2+
 
 ---
 

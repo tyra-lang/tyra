@@ -1,6 +1,6 @@
 # Collections
 
-Tyra's v0.1 standard library provides `List<T>` via the `list` module and string utilities via the `string` module. `Map` support is planned for a future release.
+Tyra's v0.1 standard library provides `List<T>` via the `list` module, string utilities via the `string` module, and `Map<String, Int>` with minimal accessors. Broader `Map<K, V>` support is planned for a future release.
 
 ## `List<T>`
 
@@ -260,9 +260,38 @@ print("count: #{list.len(numbers)}\n")
 print("sum:   #{list.sum(numbers)}\n")
 ```
 
-## `Map<String, Int>` (Coming Soon)
+## `Map<String, Int>`
 
-`Map` support is planned for a future release. For now, model keyed data with ADTs or lists of pairs (see [Types and ADTs](06-types-and-adt.md)).
+A `Map<String, Int>` stores key-value pairs where keys are strings and values are integers. In v0.1, only this combination is supported; broader `Map<K, V>` is planned for a future release.
+
+### Map Literals
+
+```tyra
+let table: Map<String, Int> = {"one": 1, "two": 2}
+```
+
+### `.get` — Safe Lookup
+
+`map.get` returns `Option<Int>` — it never panics on missing keys:
+
+```tyra
+match table.get("one")
+when Some(n)
+  print("got: #{n}\n")
+when None
+  print("absent\n")
+end
+```
+
+### `.contains_key` — Existence Check
+
+```tyra
+if table.contains_key("two")
+  print("two is present\n")
+end
+```
+
+> **NOTE:** `put` / `remove` / iteration are not available in v0.1. To "modify" a map, build a new literal and rebind it. For more complex keyed data, use ADTs or lists of pairs (see [Types and ADTs](06-types-and-adt.md)).
 
 ## Next Steps
 
