@@ -7,7 +7,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ---
 
-## [0.1.0] - 2026-05-15
+## [0.1.0] - 2026-05-17
 
 ### Stable
 
