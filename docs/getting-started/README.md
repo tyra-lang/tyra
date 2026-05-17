@@ -2,14 +2,14 @@
 
 Welcome to Tyra — a statically-typed language designed for backend services, CLI tools, and business applications. Tyra compiles to native binaries via LLVM and emphasizes explicitness, predictability, and practical error handling.
 
-> **Pre-alpha notice**: Tyra is under active development. The API is at v0.1 and breaking changes may occur before v1.0.
+> **v0.1.0 — initial release.** Suitable for small CLI tools, learning, and language evaluation. Breaking changes may occur before v1.0.
 
 ## Table of Contents
 
 1. [Installation](01-installation.md) — Build from source and set up your environment
 2. [Hello, World](02-hello-world.md) — Variables, types, functions, and string interpolation
 3. [Control Flow](03-control-flow.md) — `if/else`, `for`, `while`, `match`
-4. [Collections](04-collections.md) — `List<T>`, `Map<String, Int>`, and string utilities
+4. [Collections](04-collections.md) — `List<Int>`, string utilities, and `Map` (planned)
 5. [Error Handling](05-error-handling.md) — `Option<T>`, `Result<T, E>`, and the `?` operator
 6. [Types and ADTs](06-types-and-adt.md) — Algebraic data types, `value`, `data`, and `impl`
 7. [A Real Program](07-real-program.md) — A complete working example from stdin to output
@@ -46,4 +46,4 @@ end
 - **`end` blocks, not braces** — unambiguous block boundaries
 - **Explicit argument labels** — call sites are self-documenting
 - **Value vs. data distinction** — memory semantics are visible in the type
-- **Single toolchain** — `tyra build`, `tyra run`, `tyra fmt`, `tyra test`
+- **Single toolchain** — `tyra check`, `tyra run`, `tyra build` today; `fmt` and `test` planned

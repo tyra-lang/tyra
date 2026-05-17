@@ -38,10 +38,11 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install libgc-dev
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgc-dev
+          sudo apt-get install -y libgc-dev llvm-21 clang-21
+          sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-21 100
 
       - name: Cache cargo registry and target
         uses: actions/cache@v4
@@ -54,8 +55,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-release-gate-
 
-      - name: Build release binary
-        run: cargo build --release -p tyra-cli
+      - name: Build release binary and runtime
+        run: cargo build --release -p tyra-cli -p tyra-runtime
 
       - name: Run workspace tests
         run: cargo test --workspace
@@ -63,10 +64,11 @@ jobs:
       - name: Run static corpus check
         run: bash bench/static-corpus/check.sh ./target/release/tyra
 
-      - name: Report LLVM version
+      - name: Verify LLVM 21
         run: |
-          version=$(llvm-config --version 2>/dev/null || llvm-config-21 --version 2>/dev/null || echo "not-found")
-          echo "LLVM version on runner: $version (informational — tyra run requires LLVM 21)"
+          version=$(llvm-config --version)
+          echo "LLVM version: $version"
+          echo "$version" | grep -qE '^21\.' || { echo "ERROR: expected LLVM 21.x, got $version"; exit 1; }
 
       - name: Smoke test (hello world)
         run: |

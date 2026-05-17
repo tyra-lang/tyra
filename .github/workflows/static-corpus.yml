@@ -36,8 +36,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-corpus-
 
-      - name: Build tyra-cli
-        run: cargo build -p tyra-cli
+      - name: Build tyra-cli and runtime
+        run: cargo build -p tyra-cli -p tyra-runtime
 
       - name: Run static corpus check
         run: bash bench/static-corpus/check.sh ./target/debug/tyra

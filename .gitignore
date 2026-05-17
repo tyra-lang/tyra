@@ -75,12 +75,6 @@ rust_out
 *.mir.txt
 *.tyra.dump
 
-# Test snapshot temporaries
-tests/**/*.snap.new
-tests/**/*.actual
-
-# Conformance test scratch
-tests/conformance/**/*.tmp
 
 # =============================================================================
 # Editors / IDEs
@@ -241,6 +235,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 package-lock.json
+!tools/lsp/vscode-tyra/package-lock.json
 yarn.lock
 
 # Python (for build scripts or tooling)

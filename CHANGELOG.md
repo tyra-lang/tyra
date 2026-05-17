@@ -41,7 +41,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - VS Code extension: development install via F5
 
 **Testing and quality**
-- 10-program static conformance corpus (`bench/static-corpus/`)
+- 11-program static conformance corpus (`bench/static-corpus/`)
 - Negative corpus: 9 expected-error programs (`bench/static-corpus/bad/`)
 - Spec coverage report (`bench/static-corpus/coverage.sh`)
 - CI: static corpus check on every push/PR to `main`

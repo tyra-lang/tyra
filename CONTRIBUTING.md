@@ -39,7 +39,7 @@ Open an issue with the `spec` label and quote the section number.
 
 ### 2. Write example programs
 
-The `tests/corpus/` directory contains "spec by example" — real programs that exercise the language. Writing more of these reveals spec gaps before they become bugs.
+The `bench/static-corpus/` directory contains "spec by example" — real programs that exercise the language. Writing more of these reveals spec gaps before they become bugs.
 
 Good targets:
 
@@ -90,7 +90,7 @@ Code contributions are accepted but with caveats:
 
 - **Discuss before implementing**: open an issue first to confirm the approach
 - **Small PRs only**: changes touching multiple crates are likely to conflict with the maintainer's in-progress work
-- **Tests required**: every feature needs a conformance test in `tests/conformance/`
+- **Tests required**: every feature needs a conformance test in `bench/static-corpus/`
 - **Spec compliance is non-negotiable**: code that violates the spec will be rejected, even if it works
 
 Areas currently accepting contributions:
@@ -132,63 +132,51 @@ RFCs may target the next minor spec version (e.g., propose for v0.2 while v0.1 i
 
 ### Requirements
 
-- Rust 1.85 or later (the project's MSRV)
-- LLVM 21 (with development headers)
+- Rust 1.88 or later (the project's MSRV)
+- LLVM 21 and Boehm GC (`bdw-gc` / `libgc-dev`)
 - Git
-- Make (optional, for convenience targets)
 
-LLVM 22 is not yet supported because the `inkwell` LLVM bindings (currently at v0.8.0) support up to LLVM 21. We will track inkwell's LLVM 22 support and update this requirement when available.
-
-### Platform-specific LLVM installation
+### Platform-specific installation
 
 **macOS**:
 
 ```bash
-brew install llvm@21
-export LLVM_SYS_210_PREFIX=$(brew --prefix llvm@21)
+brew install llvm@21 bdw-gc
+echo 'export PATH="/opt/homebrew/opt/llvm@21/bin:$PATH"' >> ~/.zshrc
 ```
 
 **Ubuntu/Debian**:
 
 ```bash
-sudo apt install llvm-21-dev libpolly-21-dev
-export LLVM_SYS_210_PREFIX=/usr/lib/llvm-21
+sudo apt install llvm-21 clang-21 libgc-dev
+sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-21 100
 ```
 
-**Arch Linux**:
-
-```bash
-sudo pacman -S llvm
-export LLVM_SYS_210_PREFIX=/usr
-```
-
-**Windows**: Build via WSL2 is recommended. Native Windows support is planned but not currently tested.
+**Windows**: Build via WSL2 is recommended. Native Windows support is not currently tested.
 
 ### Building
 
 ```bash
 git clone https://github.com/tyra-lang/tyra.git
-cd tyra/compiler
-cargo build
+cd tyra
+cargo build -p tyra-cli
 ```
 
 ### Running tests
 
 ```bash
-# All tests
-cargo test
+# Workspace unit tests
+cargo test --workspace
 
-# Conformance tests only
-cargo test --test conformance
-
-# A specific conformance test
-cargo test --test conformance test_0042
+# Static corpus (spec conformance)
+bash bench/static-corpus/check.sh ./target/debug/tyra
 ```
 
-### Running the compiler (when functional)
+### Running the compiler
 
 ```bash
-./target/debug/tyra run examples/hello/main.tyra
+export TYRA_STDLIB=$PWD/stdlib
+./target/debug/tyra run examples/01-hello.tyra
 ```
 
 ---
@@ -201,7 +189,7 @@ cargo test --test conformance test_0042
 - [ ] For spec changes, ensure an RFC exists and is accepted
 - [ ] Run `cargo fmt` and `cargo clippy` (CI will check)
 - [ ] Run `cargo test` and ensure all tests pass
-- [ ] Add conformance tests for new behavior
+- [ ] Add corpus tests in `bench/static-corpus/` for new behavior
 
 ### PR description
 

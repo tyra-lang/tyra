@@ -4,13 +4,9 @@ Thank you for taking the time to help keep Tyra and its users safe.
 
 ## Project status
 
-Tyra is **pre-alpha** software. The compiler is under active development and the language specification is at v0.1 (Draft). At this stage:
+Tyra v0.1.0 is an initial release suitable for small CLI tools, learning, and language evaluation. It is not recommended for production services. Known limitations (string GC, experimental `http.server`, no package manager) are documented in the README.
 
-- No production use is recommended
-- No security guarantees are made for any release
-- Backward compatibility may break in any version
-
-That said, we take security reports seriously and will respond to them.
+We take security reports seriously and will respond to them.
 
 ## Reporting a vulnerability
 
@@ -67,9 +63,6 @@ The following are **in scope** for security reports:
   - Bypassing the type system from safe Tyra code
   - Denial of service from well-formed inputs
 - Bugs in the standard library that violate documented safety guarantees
-- Issues in the package manager (`tyra mod`) that allow:
-  - Installing unintended packages
-  - Bypassing version pinning or integrity checks
 - Issues in build infrastructure that could compromise releases (signed tags, release binaries)
 
 The following are **out of scope**:
@@ -122,11 +115,7 @@ If, however, the Tyra compiler itself produces unsafe machine code from safe-loo
 
 ## Bug bounty
 
-We do not currently offer a bug bounty program. Tyra is a volunteer project. We will publicly acknowledge security researchers in:
-
-- The security advisory
-- The release notes for the fix
-- A `SECURITY-CREDITS.md` file in the repository
+We do not currently offer a bug bounty program. Tyra is a volunteer project. We will publicly acknowledge security researchers in the security advisory and the release notes for the fix.
 
 ## Hall of fame
 

@@ -39,7 +39,7 @@ The answer is a language that:
 - **Distinguishes value types and reference types** at the language level — so memory semantics are visible, not inferred
 - **Separates traits (replaceable behaviors) from abilities (structural properties)** — a novel design that prevents the trait/derive boilerplate of Rust
 - **Uses `end` blocks, not braces** — so block boundaries are unambiguous in any visual context
-- **Has one official toolchain**: build, test, fmt, deploy in a single CLI
+- **Has one official toolchain**: `check`, `run`, and `build` today; `fmt`, `test`, and `deploy` planned — all in a single CLI
 
 ## Design influences
 
@@ -223,7 +223,7 @@ While Tyra is at v0.x, **breaking changes are allowed in MINOR version bumps**. 
 Tyra is at a stage where the most valuable contributions are:
 
 1. **Reading the spec** and reporting ambiguities or contradictions as issues
-2. **Writing example programs** that exercise edge cases (see `tests/corpus/`)
+2. **Writing example programs** that exercise edge cases (see `bench/static-corpus/`)
 3. **Translating documentation** to English
 
 Code contributions are welcome but the architecture is still solidifying. See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md).
@@ -247,7 +247,7 @@ Apache License 2.0. See [LICENSE](LICENSE).
 
 ## Acknowledgments
 
-Tyra's design was developed through extensive collaboration with Claude (Anthropic). The language is, in a sense, the first to have its specification iteratively reviewed by an AI — a meta-validation of its core thesis.
+Tyra's design benefited from iterative review and discussion with AI assistants during specification development. Final design decisions and project direction remain the responsibility of the maintainer.
 
 ---
 

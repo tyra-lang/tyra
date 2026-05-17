@@ -56,13 +56,26 @@ type ParseError =
 
 # Parse a single line in the format "name,score"
 fn parse_line(_ line: String) -> Result<Student, ParseError>
-  let parts = string.split(line, ",")
-  let name = list.get(parts, 0).ok_or(ParseError.MissingScore)?
-  let score_str = list.get(parts, 1).ok_or(ParseError.MissingScore)?
-  let score = string.parse_int(string.trim(score_str)).ok_or(
-    ParseError.InvalidScore(raw: score_str)
-  )?
-  Ok(Student(name: string.trim(name), score: score))
+  # list.get works on List<Int>; for List<String> from string.split, use for
+  mut name = ""
+  mut score_str = ""
+  mut field = 0
+  for part in string.split(line, ",")
+    if field == 0
+      name = string.trim(part)
+    else
+      score_str = string.trim(part)
+    end
+    field = field + 1
+  end
+  if string.is_empty(name)
+    Err(ParseError.MissingScore)
+  else
+    let score = string.parse_int(score_str).ok_or(
+      ParseError.InvalidScore(raw: score_str)
+    )?
+    Ok(Student(name: name, score: score))
+  end
 end
 
 # Read all lines from stdin and collect valid scores
@@ -147,18 +160,31 @@ Representing errors as ADT variants lets callers handle each case explicitly. `I
 
 ```tyra
 fn parse_line(_ line: String) -> Result<Student, ParseError>
-  let parts = string.split(line, ",")
-  let name = list.get(parts, 0).ok_or(ParseError.MissingScore)?
-  let score_str = list.get(parts, 1).ok_or(ParseError.MissingScore)?
-  let score = string.parse_int(string.trim(score_str)).ok_or(
-    ParseError.InvalidScore(raw: score_str)
-  )?
-  Ok(Student(name: string.trim(name), score: score))
+  # list.get works on List<Int>; for List<String> from string.split, use for
+  mut name = ""
+  mut score_str = ""
+  mut field = 0
+  for part in string.split(line, ",")
+    if field == 0
+      name = string.trim(part)
+    else
+      score_str = string.trim(part)
+    end
+    field = field + 1
+  end
+  if string.is_empty(name)
+    Err(ParseError.MissingScore)
+  else
+    let score = string.parse_int(score_str).ok_or(
+      ParseError.InvalidScore(raw: score_str)
+    )?
+    Ok(Student(name: name, score: score))
+  end
 end
 ```
 
 Key patterns used here:
-- `string.split` returns a `List<String>` — we use `list.get` for safe indexed access
+- `string.split` returns a `List<String>` — since `list.get` works on `List<Int>` only in v0.1, we iterate with `for` and track the field index manually
 - `.ok_or(error)?` converts `Option` to `Result` and propagates errors with `?`
 - The last expression `Ok(student)` is the return value — no `return` keyword needed
 

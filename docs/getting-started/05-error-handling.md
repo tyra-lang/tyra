@@ -43,26 +43,26 @@ print_first([])
 Inside a function that returns `Option<T>`, use `?` to propagate `None` automatically:
 
 ```tyra
-import list
 import string
 
-# If list.get returns None, the whole function returns None immediately.
-fn first_word(_ text: String) -> Option<String>
-  let words = string.split_whitespace(text)
-  let first = list.get(words, 0)?
-  Some(first)
+# If parse_int returns None, the whole function returns None immediately.
+fn double_if_int(_ text: String) -> Option<Int>
+  let n = string.parse_int(string.trim(text))?
+  Some(n * 2)
 end
 
-match first_word("hello world")
-when Some(w) -> print("first word: #{w}\n")
-when None -> print("no words\n")
+match double_if_int("21")
+when Some(n) -> print("doubled: #{n}\n")
+when None -> print("not a number\n")
 end
 
-match first_word("")
-when Some(w) -> print("first word: #{w}\n")
-when None -> print("no words\n")
+match double_if_int("abc")
+when Some(n) -> print("doubled: #{n}\n")
+when None -> print("not a number\n")
 end
 ```
+
+> **NOTE:** `list.get` returns `Option<Int>` and works on `List<Int>`. To access the first element of a `List<String>` (such as from `string.split`), iterate with `for` — see [Collections](04-collections.md).
 
 ### `.ok_or()` — Convert `Option` to `Result`
 

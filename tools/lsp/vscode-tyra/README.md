@@ -1,6 +1,6 @@
 # vscode-tyra
 
-VS Code extension for the [Tyra](https://github.com/kiyoshi/tyra-lang) programming language.
+VS Code extension for the [Tyra](https://github.com/tyra-lang/tyra) programming language.
 
 ## Features
 
@@ -16,7 +16,15 @@ VS Code extension for the [Tyra](https://github.com/kiyoshi/tyra-lang) programmi
 cargo install --path tools/lsp/tyra-lsp
 ```
 
-2. Open this directory in VS Code and press **F5** to launch the Extension Development Host.
+2. Install npm dependencies:
+
+```sh
+npm install
+```
+
+3. Open this directory in VS Code and press **F5** to launch the Extension Development Host.
+
+> **Note (macOS):** If F5 triggers voice input, disable the shortcut in System Settings → Keyboard → Dictation. Alternatively, use **Run → Start Debugging** or `Cmd+Shift+P` → `Debug: Start Debugging`.
 
 Alternatively, set `TYRA_LSP_PATH` to the path of the `tyra-lsp` binary before starting VS Code.
 
