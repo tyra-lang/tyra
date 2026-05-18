@@ -222,9 +222,8 @@ pub extern "C" fn tyra_string_from_byte(b: i64) -> *const c_char {
 /// Layout shared with codegen for List<String>-returning intrinsics.
 /// Mirrors `%struct.List__String = type { ptr, i64 }` in LLVM IR. The
 /// caller alloca's a 16-byte slot, passes its address, and we fill in
-/// (data, len). String entries use `alloc_gc_cstring` (GC-managed);
-/// the array wrapper (`Box::leak`) is a system-allocator allocation that
-/// outlives the list's use.
+/// (data, len). Both the string entries and the pointer array are
+/// allocated via GC_malloc_atomic so the Boehm GC manages them.
 #[repr(C)]
 pub struct ListStringRet {
     data: *mut *const c_char,
@@ -235,12 +234,23 @@ unsafe fn fill_list_string_ret(out: *mut ListStringRet, parts: Vec<*const c_char
     if out.is_null() {
         return;
     }
-    let len = parts.len() as i64;
-    let boxed = parts.into_boxed_slice();
-    let raw = Box::leak(boxed).as_mut_ptr();
+    let len = parts.len();
+    // Allocate the pointer array via GC_malloc_atomic. The array contains
+    // raw pointer values (no interior GC references), so atomic allocation
+    // is correct and the GC does not need to scan its elements.
+    let data = if len == 0 {
+        std::ptr::null_mut()
+    } else {
+        let buf = crate::gc::malloc_atomic(len * std::mem::size_of::<*const c_char>())
+            as *mut *const c_char;
+        if !buf.is_null() {
+            unsafe { std::ptr::copy_nonoverlapping(parts.as_ptr(), buf, len) };
+        }
+        buf
+    };
     unsafe {
-        (*out).data = raw;
-        (*out).len = len;
+        (*out).data = data;
+        (*out).len = len as i64;
     }
 }
 
