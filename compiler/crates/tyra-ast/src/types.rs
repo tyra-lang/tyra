@@ -193,6 +193,8 @@ pub enum Stmt {
     Defer(DeferStmt),
     /// `break` inside a while/for loop
     Break(BreakStmt),
+    /// `continue` inside a while/for loop (spec §5.2)
+    Continue(ContinueStmt),
     /// Expression used as a statement (value discarded)
     Expr(ExprStmt),
 }
@@ -227,6 +229,11 @@ pub struct DeferStmt {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BreakStmt {
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContinueStmt {
     pub span: Span,
 }
 

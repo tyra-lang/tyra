@@ -16,6 +16,7 @@ pub fn parse_stmt(ts: &mut TokenStream, report: &mut Report) -> Stmt {
         TokenKind::Return => parse_return(ts, report),
         TokenKind::Defer => parse_defer(ts, report),
         TokenKind::Break => parse_break(ts, report),
+        TokenKind::Continue => parse_continue(ts, report),
         // `import`/`export` inside a function body is invalid (§13.2).
         // Emit E0110 with a clear message and skip to end-of-line so we
         // don't cascade into E0101 ("expected newline") on the module path.
@@ -138,6 +139,12 @@ fn parse_break(ts: &mut TokenStream, report: &mut Report) -> Stmt {
     let span = ts.advance().span; // consume 'break'
     ts.expect_newline_or_eof(report);
     Stmt::Break(BreakStmt { span })
+}
+
+fn parse_continue(ts: &mut TokenStream, report: &mut Report) -> Stmt {
+    let span = ts.advance().span; // consume 'continue'
+    ts.expect_newline_or_eof(report);
+    Stmt::Continue(ContinueStmt { span })
 }
 
 // -- Control flow --
@@ -292,6 +299,7 @@ fn stmt_span(stmt: &Stmt) -> Span {
         Stmt::Return(s) => s.span,
         Stmt::Defer(s) => s.span,
         Stmt::Break(s) => s.span,
+        Stmt::Continue(s) => s.span,
         Stmt::Expr(s) => s.span,
     }
 }

@@ -1,0 +1,6 @@
+# E0215-continue-outside-loop.tyra
+# expected: error[E0215]: `continue` used outside of a loop
+# Exercises: type checker — `continue` at top level (no enclosing loop).
+# SPEC_REF: §5.2 — continue statement
+
+continue

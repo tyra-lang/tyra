@@ -279,7 +279,7 @@ fn collect_in_stmt(
         }
         Stmt::Defer(d) => collect_in_expr(&d.expr, def_index, ast, source_id, out),
         Stmt::Expr(e) => collect_in_expr(&e.expr, def_index, ast, source_id, out),
-        Stmt::Break(_) => {}
+        Stmt::Break(_) | Stmt::Continue(_) => {}
     }
 }
 

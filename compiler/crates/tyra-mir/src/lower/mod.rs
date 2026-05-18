@@ -663,6 +663,9 @@ pub(crate) struct LowerCtx {
     /// Stack of loop-exit labels for `break` lowering. Each while/for body
     /// push its end_label here; `break` emits a jump to the top of the stack.
     pub(crate) loop_exit_stack: Vec<String>,
+    /// Stack of loop-head (condition-check) labels for `continue` lowering.
+    /// Parallel to loop_exit_stack; `continue` jumps to the top of this stack.
+    pub(crate) loop_head_stack: Vec<String>,
     /// Active type hint from a `let x: T = ...` / `mut x: T = ...`
     /// annotation, used to type context-sensitive RHS expressions like
     /// a bare `None` (would otherwise default to `Option<Int>`).
@@ -728,6 +731,7 @@ impl LowerCtx {
             variant_field_offsets: std::collections::HashMap::new(),
             current_fn_return_type: Ty::Unit,
             loop_exit_stack: Vec::new(),
+            loop_head_stack: Vec::new(),
             binding_type_hint: None,
             adt_struct_defs: std::collections::HashMap::new(),
             deferred_exprs: Vec::new(),
@@ -1216,6 +1220,16 @@ impl LowerCtx {
                     .clone();
                 body.push(Instruction::Jump { label: exit });
             }
+            Stmt::Continue(_) => {
+                // Jump to the innermost loop's head label (condition-check for
+                // while; increment section for for). E0215 guards the stack.
+                let head = self
+                    .loop_head_stack
+                    .last()
+                    .expect("continue without enclosing loop (should be caught by type checker)")
+                    .clone();
+                body.push(Instruction::Jump { label: head });
+            }
             Stmt::Expr(s) => {
                 self.lower_expr(&s.expr, body);
             }
@@ -1577,7 +1591,7 @@ fn count_defer_sites_in_stmt(s: &Stmt) -> usize {
             .as_ref()
             .map(count_defer_sites_in_expr)
             .unwrap_or(0),
-        Stmt::Break(_) => 0,
+        Stmt::Break(_) | Stmt::Continue(_) => 0,
         Stmt::Expr(e) => count_defer_sites_in_expr(&e.expr),
     }
 }
@@ -1694,7 +1708,7 @@ fn collect_let_binding_counts_in_stmt(
         }
         Stmt::Expr(e) => collect_let_binding_counts_in_expr(&e.expr, out),
         Stmt::Defer(d) => collect_let_binding_counts_in_expr(&d.expr, out),
-        Stmt::Break(_) => {}
+        Stmt::Break(_) | Stmt::Continue(_) => {}
     }
 }
 
@@ -1769,7 +1783,7 @@ fn collect_pattern_bindings_in_stmt(s: &Stmt, out: &mut std::collections::HashSe
         }
         Stmt::Expr(e) => collect_pattern_bindings_in_expr(&e.expr, out),
         Stmt::Defer(d) => collect_pattern_bindings_in_expr(&d.expr, out),
-        Stmt::Break(_) => {}
+        Stmt::Break(_) | Stmt::Continue(_) => {}
     }
 }
 

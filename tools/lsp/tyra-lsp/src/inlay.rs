@@ -119,7 +119,7 @@ fn visit_stmt(
         Stmt::Expr(e) => {
             visit_expr(&e.expr, type_index, sources, source_id, vp_start, vp_end, out);
         }
-        Stmt::Break(_) => {}
+        Stmt::Break(_) | Stmt::Continue(_) => {}
     }
 }
 

@@ -164,7 +164,7 @@ fn visit_stmt_defs(stmt: &Stmt, map: &mut HashMap<Span, DefKind>) {
             }
         }
         Stmt::Defer(d) => visit_expr_defs(&d.expr, map),
-        Stmt::Break(_) => {}
+        Stmt::Break(_) | Stmt::Continue(_) => {}
         Stmt::Expr(e) => visit_expr_defs(&e.expr, map),
     }
 }
@@ -542,7 +542,7 @@ fn visit_stmt_tokens(
         Stmt::Defer(d) => {
             visit_expr_tokens(&d.expr, def_index, def_kind_map, source_id, sources, out);
         }
-        Stmt::Break(_) => {}
+        Stmt::Break(_) | Stmt::Continue(_) => {}
         Stmt::Expr(e) => {
             visit_expr_tokens(&e.expr, def_index, def_kind_map, source_id, sources, out);
         }

@@ -137,6 +137,7 @@ fn substitute_stmt(stmt: &Stmt, subst: &HashMap<String, Ty>) -> Stmt {
             span: s.span,
         }),
         Stmt::Break(s) => Stmt::Break(BreakStmt { span: s.span }),
+        Stmt::Continue(s) => Stmt::Continue(ContinueStmt { span: s.span }),
         Stmt::Expr(s) => Stmt::Expr(ExprStmt {
             expr: substitute_expr(&s.expr, subst),
             span: s.span,

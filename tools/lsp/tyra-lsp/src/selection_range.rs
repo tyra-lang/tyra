@@ -53,6 +53,7 @@ fn stmt_span(stmt: &Stmt) -> Span {
         Stmt::Return(r) => r.span,
         Stmt::Defer(d) => d.span,
         Stmt::Break(b) => b.span,
+        Stmt::Continue(c) => c.span,
         Stmt::Expr(e) => e.span,
     }
 }
@@ -135,7 +136,7 @@ fn descend_stmt(stmt: &Stmt, source_id: SourceId, offset: u32, chain: &mut Vec<S
         }
         Stmt::Defer(d) => try_descend_expr(&d.expr, source_id, offset, chain),
         Stmt::Expr(e) => try_descend_expr(&e.expr, source_id, offset, chain),
-        Stmt::Break(_) => {}
+        Stmt::Break(_) | Stmt::Continue(_) => {}
     }
 }
 

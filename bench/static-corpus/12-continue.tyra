@@ -1,0 +1,40 @@
+# 12-continue.tyra
+# continue statement inside while and for loops.
+# Validates: skip-to-next-iteration with continue in while and for.
+
+# SPEC_REF: §5.2 — continue statement
+# SPEC_REF: §10.4 — while loop
+# SPEC_REF: §10.5 — for loop
+
+fn sum_odd(_ xs: List<Int>) -> Int
+  mut total = 0
+  for x in xs
+    if x % 2 == 0
+      continue
+    end
+    total = total + x
+  end
+  total
+end
+
+fn count_down_skipping(_ n: Int, _ skip: Int) -> Int
+  mut i = n
+  mut count = 0
+  while i > 0
+    i = i - 1
+    if i == skip
+      continue
+    end
+    count = count + 1
+  end
+  count
+end
+
+fn main() -> Unit
+  let xs = [1, 2, 3, 4, 5, 6, 7]
+  let odd_sum = sum_odd(xs)
+  print("odd sum: #{odd_sum}")
+
+  let c = count_down_skipping(5, 2)
+  print("count: #{c}")
+end

@@ -142,7 +142,7 @@ fn collect_sym_stmt(
         }
         Stmt::Defer(d) => collect_sym_expr(&d.expr, out, seen),
         Stmt::Expr(e) => collect_sym_expr(&e.expr, out, seen),
-        Stmt::Break(_) => {}
+        Stmt::Break(_) | Stmt::Continue(_) => {}
     }
 }
 
@@ -312,7 +312,7 @@ fn check_stmt_restrictions(stmt: &Stmt, report: &mut Report) {
         Stmt::Let(s) => check_expr_restrictions(&s.value, report),
         Stmt::Mut(s) => check_expr_restrictions(&s.value, report),
         Stmt::Defer(s) => check_expr_restrictions(&s.expr, report),
-        Stmt::Break(_) => {}
+        Stmt::Break(_) | Stmt::Continue(_) => {}
         Stmt::Expr(s) => check_expr_restrictions(&s.expr, report),
     }
 }
@@ -513,7 +513,7 @@ fn resolve_stmt(stmt: &Stmt, scopes: &mut ScopeStack, def_index: &mut DefIndex, 
         Stmt::Defer(s) => {
             resolve_expr(&s.expr, scopes, def_index, report);
         }
-        Stmt::Break(_) => {}
+        Stmt::Break(_) | Stmt::Continue(_) => {}
         Stmt::Expr(s) => {
             resolve_expr(&s.expr, scopes, def_index, report);
         }

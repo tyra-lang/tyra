@@ -834,7 +834,7 @@ end
 
 - C-style `for (;;)` is not adopted
 - The value is `Unit`
-- `continue` is not adopted in v0.1 (`break` is adopted)
+- `continue` transfers control to the next iteration of the enclosing loop (valid inside while/for only; E0215 outside a loop)
 
 ---
 
@@ -1670,7 +1670,6 @@ The following are postponed for later specification:
 - guard clauses (`when pattern if condition`)
 - tuple types
 - structured concurrency
-- `continue` (`break` is adopted in §10.5)
 - Module-level initialization semantics (`let`/`mut` at module scope)
 - Detailed APIs for Tier 2 standard library modules (collections, time, test, log, float) — `fs`, `json`, `http`, and `string` are frozen in §17.3
 - Extended `string` API (replace, join, char_at, regex) — `split` and `split_whitespace` are frozen in §17.3.4 alongside the other v0.1 functions

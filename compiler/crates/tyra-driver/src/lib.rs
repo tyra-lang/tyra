@@ -552,7 +552,7 @@ fn auto_import_stdlib(ast: &mut tyra_ast::SourceFile) {
             }
             Stmt::Expr(e) => walk_expr(&e.expr, needed),
             Stmt::Defer(d) => walk_expr(&d.expr, needed),
-            Stmt::Break(_) => {}
+            Stmt::Break(_) | Stmt::Continue(_) => {}
         }
     }
 
@@ -788,7 +788,7 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
             }
             Stmt::Expr(e) => substitute_in_expr(&mut e.expr, renames),
             Stmt::Defer(d) => substitute_in_expr(&mut d.expr, renames),
-            Stmt::Break(_) => {}
+            Stmt::Break(_) | Stmt::Continue(_) => {}
         }
     }
 
@@ -913,7 +913,7 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
             }
             Stmt::Expr(e) => process_expr(&mut e.expr, counter),
             Stmt::Defer(d) => process_expr(&mut d.expr, counter),
-            Stmt::Break(_) => {}
+            Stmt::Break(_) | Stmt::Continue(_) => {}
         }
     }
 
@@ -1021,7 +1021,7 @@ fn rename_let_shadows(ast: &mut tyra_ast::SourceFile) {
                         }
                     }
                     Stmt::Defer(d) => self.walk_expr(&mut d.expr, active),
-                    Stmt::Break(_) => {}
+                    Stmt::Break(_) | Stmt::Continue(_) => {}
                 }
             }
         }
@@ -1224,6 +1224,7 @@ fn stmt_span(s: &tyra_ast::Stmt) -> tyra_ast::Span {
         Stmt::Expr(e) => e.span.clone(),
         Stmt::Defer(d) => d.span.clone(),
         Stmt::Break(b) => b.span.clone(),
+        Stmt::Continue(c) => c.span.clone(),
     }
 }
 
@@ -1511,5 +1512,128 @@ mod tests {
             "expected clean compile, got: {:?}",
             report.diagnostics()
         );
+    }
+
+    #[test]
+    fn continue_inside_while_is_valid() {
+        let src = concat!(
+            "fn main() -> Unit\n",
+            "  mut i = 0\n",
+            "  while i < 5\n",
+            "    i = i + 1\n",
+            "    if i == 3\n",
+            "      continue\n",
+            "    end\n",
+            "    print(\"done\")\n",
+            "  end\n",
+            "end\n",
+        );
+        let CheckResult { report, .. } = check_in_memory("c.tyra".into(), src.into(), None);
+        assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn continue_inside_for_is_valid() {
+        let src = concat!(
+            "fn main() -> Unit\n",
+            "  let xs = [1, 2, 3, 4, 5]\n",
+            "  for i in xs\n",
+            "    if i == 3\n",
+            "      continue\n",
+            "    end\n",
+            "    print(\"done\")\n",
+            "  end\n",
+            "end\n",
+        );
+        let CheckResult { report, .. } = check_in_memory("c.tyra".into(), src.into(), None);
+        assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn continue_outside_loop_emits_e0215() {
+        let CheckResult { report, .. } = check_in_memory(
+            "bad.tyra".into(),
+            "fn main() -> Unit\n  continue\nend\n".into(),
+            None,
+        );
+        assert!(report.has_errors(), "expected E0215 error");
+        let codes: Vec<&str> = report
+            .diagnostics()
+            .iter()
+            .filter_map(|d| d.code.as_deref())
+            .collect();
+        assert!(codes.contains(&"E0215"), "expected E0215, got: {codes:?}");
+    }
+
+    #[test]
+    fn continue_inside_lambda_in_loop_emits_e0215() {
+        // Lambda body is an independent frame; outer loop's depth must not bleed in.
+        let src = concat!(
+            "fn main() -> Unit\n",
+            "  while true\n",
+            "    let f = fn() -> Unit\n",
+            "      continue\n",
+            "    end\n",
+            "    break\n",
+            "  end\n",
+            "end\n",
+        );
+        let CheckResult { report, .. } = check_in_memory("bad.tyra".into(), src.into(), None);
+        assert!(report.has_errors(), "expected E0215 inside lambda");
+        let codes: Vec<&str> = report
+            .diagnostics()
+            .iter()
+            .filter_map(|d| d.code.as_deref())
+            .collect();
+        assert!(codes.contains(&"E0215"), "expected E0215, got: {codes:?}");
+    }
+
+    #[test]
+    fn break_inside_lambda_in_loop_emits_e0214() {
+        // Lambda body is an independent frame; outer loop's depth must not bleed in.
+        let src = concat!(
+            "fn main() -> Unit\n",
+            "  while true\n",
+            "    let f = fn() -> Unit\n",
+            "      break\n",
+            "    end\n",
+            "    break\n",
+            "  end\n",
+            "end\n",
+        );
+        let CheckResult { report, .. } = check_in_memory("bad.tyra".into(), src.into(), None);
+        assert!(report.has_errors(), "expected E0214 inside lambda");
+        let codes: Vec<&str> = report
+            .diagnostics()
+            .iter()
+            .filter_map(|d| d.code.as_deref())
+            .collect();
+        assert!(codes.contains(&"E0214"), "expected E0214, got: {codes:?}");
+    }
+
+    #[test]
+    fn lambda_return_type_mismatch_emits_e0309() {
+        // Lambda's return type annotation must be checked against the lambda body,
+        // not against the enclosing function's return type.
+        // Key: outer fn returns String so that without lambda isolation,
+        // `return "hello"` inside `fn() -> Unit` would be silently accepted
+        // (String == String from the outer frame). With correct isolation the
+        // lambda's own `-> Unit` annotation is used and String != Unit → E0309.
+        let src = concat!(
+            "fn outer() -> String\n",
+            "  let f = fn() -> Unit\n",
+            "    return \"hello\"\n",
+            "  end\n",
+            "  \"ok\"\n",
+            "end\n",
+        );
+        let CheckResult { report, .. } = check_in_memory("bad.tyra".into(), src.into(), None);
+        assert!(report.has_errors(), "expected E0309 in lambda");
+        let codes: Vec<&str> = report
+            .diagnostics()
+            .iter()
+            .filter_map(|d| d.code.as_deref())
+            .collect();
+        assert!(codes.contains(&"E0309"), "expected E0309, got: {codes:?}");
     }
 }

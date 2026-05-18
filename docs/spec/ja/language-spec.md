@@ -828,7 +828,7 @@ end
 
 - C 風 `for (;;)` は採用しない
 - 戻り値は `Unit` である
-- `continue` は v0.1 では採用しない（`break` は採用）
+- `continue` はループの次のイテレーションへ制御を移す（`break` と同様にループ内でのみ有効、ループ外では E0215）
 
 ---
 
@@ -1679,7 +1679,6 @@ end
 - guard clause (`when pattern if condition`)
 - tuple 型
 - structured concurrency
-- `continue`（`break` は §10.5 で採用済）
 - モジュールレベルの初期化セマンティクス (`let`/`mut` のモジュールスコープ)
 - Tier 2 標準ライブラリ API の詳細 (collections, time, test, log, float) — `fs`, `json`, `http`, `string` は §17.3 で v0.1 凍結済
 - `string` の拡張 API (replace, join, char_at, 正規表現) — `split` / `split_whitespace` は §17.3.4 に追加凍結、それ以外は v0.2 以降

@@ -753,6 +753,20 @@ mod tests {
     }
 
     #[test]
+    fn continue_keyword() {
+        assert_eq!(kinds("continue"), vec![TokenKind::Continue, TokenKind::Eof]);
+    }
+
+    #[test]
+    fn continue_not_ident() {
+        let (tokens, _) = lex("continue");
+        assert!(
+            !matches!(&tokens[0].kind, TokenKind::Ident(_)),
+            "continue must be a keyword, not an identifier"
+        );
+    }
+
+    #[test]
     fn triple_equals() {
         assert_eq!(kinds("==="), vec![TokenKind::EqEqEq, TokenKind::Eof]);
     }

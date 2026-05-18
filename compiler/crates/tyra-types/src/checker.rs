@@ -1001,6 +1001,15 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
                 );
             }
         }
+        Stmt::Continue(s) => {
+            if !env.in_loop() {
+                report.add(
+                    Diagnostic::error("`continue` used outside of a loop")
+                        .with_code("E0215")
+                        .with_label(Label::new(s.span, "`continue` is only valid inside while/for")),
+                );
+            }
+        }
         Stmt::Expr(s) => {
             infer_expr(&s.expr, env, report);
         }
@@ -1450,6 +1459,9 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 .as_ref()
                 .map(Ty::from_type_expr)
                 .unwrap_or(Ty::Unit);
+            let saved_loop_depth = env.loop_depth;
+            env.loop_depth = 0;
+            env.push_return_type(ret_ty.clone());
             env.push();
             for (param, ty) in lam.params.iter().zip(&param_tys) {
                 env.define(param.name.clone(), ty.clone());
@@ -1458,6 +1470,8 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 check_stmt(stmt, env, report);
             }
             env.pop();
+            env.pop_return_type();
+            env.loop_depth = saved_loop_depth;
             Ty::Fn(param_tys, Box::new(ret_ty))
         }
 
@@ -2154,8 +2168,8 @@ fn check_redundant_arms(match_expr: &MatchExpr, report: &mut Report) {
 fn stmt_type(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) -> Ty {
     match stmt {
         Stmt::Expr(s) => infer_expr(&s.expr, env, report),
-        // `return` and `break` are divergent — control never falls through.
-        Stmt::Return(_) | Stmt::Break(_) => Ty::Never,
+        // `return`, `break`, and `continue` are divergent — control never falls through.
+        Stmt::Return(_) | Stmt::Break(_) | Stmt::Continue(_) => Ty::Never,
         _ => Ty::Unit,
     }
 }

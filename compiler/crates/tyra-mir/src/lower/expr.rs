@@ -380,12 +380,22 @@ impl super::LowerCtx {
                         });
                     }
 
-                    // User's loop body
+                    // User's loop body.
+                    // `continue` must jump past the user body to the increment,
+                    // so introduce a dedicated continue_label before the increment.
+                    let continue_label = self.fresh_label("for_continue");
                     self.loop_exit_stack.push(end_label.clone());
+                    self.loop_head_stack.push(continue_label.clone());
                     for stmt in &f.body {
                         self.lower_stmt(stmt, body);
                     }
+                    self.loop_head_stack.pop();
                     self.loop_exit_stack.pop();
+                    // Explicit jump to terminate the body block (required by LLVM IR).
+                    // Dead code if the body already ended with break/return, which is
+                    // handled the same way as while's unconditional back-edge jump.
+                    body.push(Instruction::Jump { label: continue_label.clone() });
+                    body.push(Instruction::Label(continue_label));
 
                     // Increment: i = i + 1
                     let one = self.fresh_temp();
@@ -430,11 +440,17 @@ impl super::LowerCtx {
                             source: iter_val,
                         });
                     }
+                    let stub_continue = self.fresh_label("for_continue");
                     self.loop_exit_stack.push(stub_end.clone());
+                    self.loop_head_stack.push(stub_continue.clone());
                     for stmt in &f.body {
                         self.lower_stmt(stmt, body);
                     }
+                    self.loop_head_stack.pop();
                     self.loop_exit_stack.pop();
+                    body.push(Instruction::Jump { label: stub_continue.clone() });
+                    body.push(Instruction::Label(stub_continue));
+                    body.push(Instruction::Jump { label: stub_end.clone() });
                     body.push(Instruction::Label(stub_end));
                 }
 
@@ -466,9 +482,11 @@ impl super::LowerCtx {
                 });
                 body.push(Instruction::Label(format!("{loop_label}_body")));
                 self.loop_exit_stack.push(end_label.clone());
+                self.loop_head_stack.push(loop_label.clone());
                 for stmt in &w.body {
                     self.lower_stmt(stmt, body);
                 }
+                self.loop_head_stack.pop();
                 self.loop_exit_stack.pop();
                 body.push(Instruction::Jump { label: loop_label });
                 body.push(Instruction::Label(end_label));
