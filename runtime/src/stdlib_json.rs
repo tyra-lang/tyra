@@ -521,7 +521,7 @@ mod tests {
         let msg = tyra_json_err_msg();
         let s = unsafe { CStr::from_ptr(msg) }.to_str().unwrap().to_string();
         assert!(!s.is_empty());
-        unsafe { free_errmsg(msg) };
+        free_errmsg(msg);
     }
 
     #[test]
@@ -536,7 +536,7 @@ mod tests {
         let _ = unsafe { tyra_json_parse(good.as_ptr()) };
         let s1 = unsafe { CStr::from_ptr(msg1) }.to_str().unwrap();
         assert!(!s1.is_empty());
-        unsafe { free_errmsg(msg1) };
+        free_errmsg(msg1);
     }
 
     #[test]
@@ -626,6 +626,6 @@ mod tests {
         let msg = tyra_json_err_msg();
         let s = unsafe { CStr::from_ptr(msg) }.to_str().unwrap().to_string();
         assert!(s.contains("EOF") || s.contains("unexpected"));
-        unsafe { free_errmsg(msg) };
+        free_errmsg(msg);
     }
 }
