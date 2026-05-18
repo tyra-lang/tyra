@@ -9,31 +9,19 @@
 //! the plumbing lands in a later phase together with a generalized
 //! "intrinsic returns List<String>" codegen helper.
 //!
-//! All returned strings are allocated via `CString::into_raw`, which uses
-//! the system allocator, not `GC_malloc` — the Boehm GC does not manage
-//! these buffers, so they are never freed in v0.1 (same trade-off as
-//! fs / io). Input strings are borrowed from the caller's C string; we
-//! never mutate them.
+//! All returned strings are allocated via `gc_string::alloc_gc_cstring`,
+//! which uses `GC_malloc_atomic` so the Boehm GC manages their lifetime.
+//! Input strings are borrowed from the caller's C string; we never mutate them.
 
+use crate::gc_string::alloc_gc_cstring;
 use std::cell::Cell;
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use std::os::raw::{c_char, c_int};
 
 thread_local! {
     /// parse_int result flag: 0 = Ok, 1 = ParseFailed.
     /// Meaningful only immediately after `tyra_string_parse_int`.
     static STRING_PARSE_ERRNO: Cell<c_int> = const { Cell::new(0) };
-}
-
-fn leak_cstring(s: String) -> *const c_char {
-    let mut cleaned = s;
-    if let Some(pos) = cleaned.as_bytes().iter().position(|&b| b == 0) {
-        cleaned.truncate(pos);
-    }
-    match CString::new(cleaned) {
-        Ok(c) => c.into_raw(),
-        Err(_) => CString::new("").unwrap().into_raw(),
-    }
 }
 
 /// Borrow a `&str` from a caller-provided C string. Returns `""` when the
@@ -80,7 +68,7 @@ pub unsafe extern "C" fn tyra_string_trim(s: *const c_char) -> *const c_char {
             &input[start..end]
         }
     };
-    leak_cstring(out.to_string())
+    alloc_gc_cstring(out)
 }
 
 /// `__string_to_upper(s) -> String` — ASCII-only upper-casing.
@@ -90,7 +78,7 @@ pub unsafe extern "C" fn tyra_string_to_upper(s: *const c_char) -> *const c_char
         .chars()
         .map(|c| if c.is_ascii() { c.to_ascii_uppercase() } else { c })
         .collect();
-    leak_cstring(out)
+    alloc_gc_cstring(&out)
 }
 
 /// `__string_to_lower(s) -> String` — ASCII-only lower-casing.
@@ -100,7 +88,7 @@ pub unsafe extern "C" fn tyra_string_to_lower(s: *const c_char) -> *const c_char
         .chars()
         .map(|c| if c.is_ascii() { c.to_ascii_lowercase() } else { c })
         .collect();
-    leak_cstring(out)
+    alloc_gc_cstring(&out)
 }
 
 /// `__string_contains(s, needle) -> Bool`.
@@ -174,7 +162,7 @@ pub unsafe extern "C" fn tyra_string_byte_at(s: *const c_char, index: i64) -> i6
 ///
 /// v0.1 is byte-level: slicing in the middle of a multi-byte UTF-8
 /// sequence yields an invalid-UTF-8 buffer which is then coerced to an
-/// empty string by `leak_cstring`'s UTF-8 borrow. Callers should respect
+/// empty string by `alloc_gc_cstring`'s interior-NUL stripping. Callers should respect
 /// code-point boundaries themselves until a grapheme-aware API lands.
 ///
 /// # Safety
@@ -190,14 +178,14 @@ pub unsafe extern "C" fn tyra_string_substring(
     let lo = start.clamp(0, len) as usize;
     let hi = end.clamp(0, len) as usize;
     if lo >= hi {
-        return leak_cstring(String::new());
+        return alloc_gc_cstring("");
     }
     let bytes = &input.as_bytes()[lo..hi];
     // If the byte slice is not valid UTF-8 (mid-codepoint cut), fall back
     // to an empty string — v0.1 keeps the result well-formed.
     match std::str::from_utf8(bytes) {
-        Ok(s) => leak_cstring(s.to_string()),
-        Err(_) => leak_cstring(String::new()),
+        Ok(s) => alloc_gc_cstring(s),
+        Err(_) => alloc_gc_cstring(""),
     }
 }
 
@@ -213,8 +201,8 @@ pub unsafe extern "C" fn tyra_string_reverse(s: *const c_char) -> *const c_char 
     let mut bytes = input.as_bytes().to_vec();
     bytes.reverse();
     match String::from_utf8(bytes) {
-        Ok(s) => leak_cstring(s),
-        Err(_) => leak_cstring(String::new()),
+        Ok(s) => alloc_gc_cstring(&s),
+        Err(_) => alloc_gc_cstring(""),
     }
 }
 
@@ -226,17 +214,17 @@ pub unsafe extern "C" fn tyra_string_reverse(s: *const c_char) -> *const c_char 
 pub extern "C" fn tyra_string_from_byte(b: i64) -> *const c_char {
     let byte = (b & 0xFF) as u8;
     match String::from_utf8(vec![byte]) {
-        Ok(s) => leak_cstring(s),
-        Err(_) => leak_cstring(String::new()),
+        Ok(s) => alloc_gc_cstring(&s),
+        Err(_) => alloc_gc_cstring(""),
     }
 }
 
 /// Layout shared with codegen for List<String>-returning intrinsics.
 /// Mirrors `%struct.List__String = type { ptr, i64 }` in LLVM IR. The
 /// caller alloca's a 16-byte slot, passes its address, and we fill in
-/// (data, len). Both the string entries (`CString::into_raw`) and the
-/// array (`Box::leak`) are system-allocator allocations, not `GC_malloc` —
-/// they leak for the process lifetime, never reclaimed in v0.1.
+/// (data, len). String entries use `alloc_gc_cstring` (GC-managed);
+/// the array wrapper (`Box::leak`) is a system-allocator allocation that
+/// outlives the list's use.
 #[repr(C)]
 pub struct ListStringRet {
     data: *mut *const c_char,
@@ -272,7 +260,7 @@ pub unsafe extern "C" fn tyra_string_split_whitespace(
     let input = borrow_utf8(s);
     let parts: Vec<*const c_char> = input
         .split_whitespace()
-        .map(|p| leak_cstring(p.to_string()))
+        .map(|p| alloc_gc_cstring(p))
         .collect();
     unsafe { fill_list_string_ret(out, parts) };
 }
@@ -295,11 +283,11 @@ pub unsafe extern "C" fn tyra_string_split(
     let input = borrow_utf8(s);
     let separator = borrow_utf8(sep);
     let parts: Vec<*const c_char> = if separator.is_empty() {
-        vec![leak_cstring(input.to_string())]
+        vec![alloc_gc_cstring(input)]
     } else {
         input
             .split(separator)
-            .map(|p| leak_cstring(p.to_string()))
+            .map(|p| alloc_gc_cstring(p))
             .collect()
     };
     unsafe { fill_list_string_ret(out, parts) };
@@ -308,6 +296,7 @@ pub unsafe extern "C" fn tyra_string_split(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::CString;
 
     fn cs(s: &str) -> CString {
         CString::new(s).unwrap()
@@ -455,7 +444,7 @@ mod tests {
         // Higher bits truncated: 0x141 & 0xFF = 0x41 = 'A'.
         let p = tyra_string_from_byte(0x141);
         assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "A");
-        // 0x00 would produce a NUL byte; leak_cstring truncates at NUL
+        // 0x00 would produce a NUL byte; alloc_gc_cstring truncates at NUL
         // so the result is empty.
         let p = tyra_string_from_byte(0);
         assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "");

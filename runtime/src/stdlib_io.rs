@@ -17,18 +17,15 @@
 //! - `tyra_io_eof` returns the EOF state set by the most recent
 //!   `tyra_io_read_line` call on the same thread. 1 = EOF, 0 = not EOF.
 //!
-//! Allocation: `CString::into_raw` allocates via Rust's system allocator,
-//! not `GC_malloc`. The Boehm GC does not manage these buffers, so they
-//! are never reclaimed in v0.1 — same trade-off as `tyra_fs_read`.
-//! Acceptable for CLI / one-shot tools; long-lived processes that loop on
-//! `read_line` leak heap memory unboundedly until GC_malloc integration lands.
+//! Allocation: returned strings use `gc_string::alloc_gc_cstring`
+//! (`GC_malloc_atomic`), so the Boehm GC manages their lifetime.
 //!
 //! NUL handling: input containing interior NUL bytes is truncated at the
 //! first NUL (Tyra `String` is C-string-backed in v0.1). Binary stdin is
 //! not a supported workload.
 
+use crate::gc_string::alloc_gc_cstring;
 use std::cell::Cell;
-use std::ffi::CString;
 use std::io::{self, BufRead, Read};
 use std::os::raw::{c_char, c_int};
 
@@ -38,18 +35,6 @@ thread_local! {
 
 fn set_eof(eof: bool) {
     IO_EOF.with(|e| e.set(if eof { 1 } else { 0 }));
-}
-
-fn leak_cstring(s: String) -> *const c_char {
-    // Strip interior NULs to avoid CString::new failing on binary input.
-    let mut cleaned = s;
-    if let Some(pos) = cleaned.as_bytes().iter().position(|&b| b == 0) {
-        cleaned.truncate(pos);
-    }
-    match CString::new(cleaned) {
-        Ok(c) => c.into_raw(),
-        Err(_) => CString::new("").unwrap().into_raw(),
-    }
 }
 
 /// Read one line from stdin (without the trailing newline). Returns the
@@ -63,7 +48,7 @@ pub extern "C" fn tyra_io_read_line() -> *const c_char {
     match lock.read_line(&mut buf) {
         Ok(0) => {
             set_eof(true);
-            leak_cstring(String::new())
+            alloc_gc_cstring("")
         }
         Ok(_) => {
             set_eof(false);
@@ -74,12 +59,12 @@ pub extern "C" fn tyra_io_read_line() -> *const c_char {
                     buf.pop();
                 }
             }
-            leak_cstring(buf)
+            alloc_gc_cstring(&buf)
         }
         Err(_) => {
             // On read error treat as EOF-with-empty-result for v0.1.
             set_eof(true);
-            leak_cstring(String::new())
+            alloc_gc_cstring("")
         }
     }
 }
@@ -92,7 +77,7 @@ pub extern "C" fn tyra_io_read_to_end() -> *const c_char {
     let mut buf = String::new();
     let _ = lock.read_to_string(&mut buf);
     set_eof(true);
-    leak_cstring(buf)
+    alloc_gc_cstring(&buf)
 }
 
 /// Return 1 iff the most recent `tyra_io_read_line` on this thread hit

@@ -5,33 +5,20 @@
 //! Scope (v0.1): equality, approximate equality, abs, floor, ceil, round,
 //! to_string, parse (with errno), from_int, to_int (truncate), min, max.
 //!
-//! All returned strings are allocated via `CString::into_raw`, which uses
-//! the system allocator, not `GC_malloc` — the Boehm GC does not manage
-//! these buffers, so they are never freed in v0.1 (same trade-off as
-//! fs / io / string).
+//! All returned strings are allocated via `gc_string::alloc_gc_cstring`,
+//! which uses `GC_malloc_atomic` so the Boehm GC manages their lifetime.
 //!
 //! Bool returns use `c_int` (1=true, 0=false); codegen truncates `i32 → i1`.
 //! Int returns use `i64`, Float returns use `f64`, String returns use `*const c_char`.
 
+use crate::gc_string::alloc_gc_cstring;
 use std::cell::Cell;
-use std::ffi::CString;
 use std::os::raw::{c_char, c_int};
 
 thread_local! {
     /// parse_float result flag: 0 = Ok, 1 = ParseFailed.
     /// Meaningful only immediately after `tyra_float_parse`.
     static FLOAT_PARSE_ERRNO: Cell<c_int> = const { Cell::new(0) };
-}
-
-fn leak_cstring(s: String) -> *const c_char {
-    let mut cleaned = s;
-    if let Some(pos) = cleaned.as_bytes().iter().position(|&b| b == 0) {
-        cleaned.truncate(pos);
-    }
-    match CString::new(cleaned) {
-        Ok(c) => c.into_raw(),
-        Err(_) => CString::new("").unwrap().into_raw(),
-    }
 }
 
 /// `__float_eq(a, b) -> Bool` — exact float equality.
@@ -85,10 +72,17 @@ pub extern "C" fn tyra_float_max(a: f64, b: f64) -> f64 {
 
 /// `__float_to_string(x) -> String` — decimal representation.
 ///
-/// Uses Rust's default `Display` for `f64`, e.g. `3.14`, `0`, `-1.5`.
+/// Integer-valued floats always include a decimal point (e.g. `0.0`, `1.0`)
+/// so that the output is unambiguously a Float, not an Int.
+/// Non-finite values use Rust's standard forms: `inf`, `-inf`, `NaN`.
 #[unsafe(no_mangle)]
 pub extern "C" fn tyra_float_to_string(x: f64) -> *const c_char {
-    leak_cstring(format!("{}", x))
+    let s = if x.is_finite() && x.fract() == 0.0 {
+        format!("{:.1}", x)
+    } else {
+        format!("{}", x)
+    };
+    alloc_gc_cstring(&s)
 }
 
 /// `__float_parse(s) -> Float` — parse a float from a string.
@@ -206,10 +200,26 @@ mod tests {
         assert_eq!(s, "3.14");
         let p = tyra_float_to_string(0.0);
         let s = unsafe { std::ffi::CStr::from_ptr(p) }.to_str().unwrap();
-        assert_eq!(s, "0");
+        assert_eq!(s, "0.0");
         let p = tyra_float_to_string(-1.5);
         let s = unsafe { std::ffi::CStr::from_ptr(p) }.to_str().unwrap();
         assert_eq!(s, "-1.5");
+    }
+
+    #[test]
+    fn to_string_integer_valued_preserves_dot_zero() {
+        for (input, expected) in [
+            (1.0_f64, "1.0"),
+            (-2.0_f64, "-2.0"),
+            (100.0_f64, "100.0"),
+            (f64::INFINITY, "inf"),
+            (f64::NEG_INFINITY, "-inf"),
+            (f64::NAN, "NaN"),
+        ] {
+            let p = tyra_float_to_string(input);
+            let s = unsafe { std::ffi::CStr::from_ptr(p) }.to_str().unwrap();
+            assert_eq!(s, expected, "tyra_float_to_string({input}) wrong");
+        }
     }
 
     #[test]

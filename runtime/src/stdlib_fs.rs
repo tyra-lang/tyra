@@ -10,12 +10,8 @@
 //!   2 = PermissionDenied
 //!   3 = IoError (catch-all; `tyra_fs_errmsg` carries a description)
 //!
-//! v0.1 limitations:
-//! - Returned strings are allocated via `CString::into_raw` (system
-//!   allocator), not `GC_malloc`. The Boehm GC does not manage these
-//!   buffers, so they are never freed in v0.1. Acceptable for v0.1 CLI
-//!   workloads; revisit when GC_malloc is wired through the runtime
-//!   (M9 follow-up).
+//! Returned strings use `gc_string::alloc_gc_cstring` (`GC_malloc_atomic`)
+//! so the Boehm GC manages their lifetime (M2 fix).
 //! - The `__fs_*` intrinsics are registered in the Tyra prelude so that
 //!   `stdlib/fs.tyra` can call them without an `import` (which would
 //!   create a module cycle). Direct user calls are technically possible
@@ -28,8 +24,9 @@
 //! point (= no scheduler handoff in M9) in between. `stdlib/fs.tyra`
 //! satisfies this by calling the intrinsics back-to-back.
 
+use crate::gc_string::alloc_gc_cstring;
 use std::cell::{Cell, RefCell};
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use std::fs;
 use std::io;
 use std::io::ErrorKind;
@@ -41,7 +38,7 @@ thread_local! {
     // Invariant: every fs entrypoint either calls `set_errno` (which
     // clears the message) or `set_io_error*` (which sets it). The message
     // is only meaningful when `FS_ERRNO == 3`; for other codes it is "".
-    // `tyra_fs_errmsg` copies into a caller-owned CString so the
+    // `tyra_fs_errmsg` copies into a GC-managed allocation so the
     // thread-local can be overwritten safely afterwards.
     static FS_ERRMSG: RefCell<String> = const { RefCell::new(String::new()) };
 }
@@ -107,13 +104,12 @@ pub unsafe extern "C" fn tyra_fs_read(path: *const c_char) -> *const c_char {
     };
     match fs::read_to_string(path_str) {
         Ok(content) => {
-            set_errno(0);
-            match CString::new(content) {
-                Ok(cs) => cs.into_raw() as *const c_char,
-                Err(_) => {
-                    set_synthetic_io_error("file contains interior NUL byte");
-                    EMPTY.as_ptr() as *const c_char
-                }
+            if content.as_bytes().contains(&0) {
+                set_synthetic_io_error("file contains interior NUL byte");
+                EMPTY.as_ptr() as *const c_char
+            } else {
+                set_errno(0);
+                alloc_gc_cstring(&content)
             }
         }
         Err(e) => {
@@ -157,20 +153,16 @@ pub unsafe extern "C" fn tyra_fs_write(path: *const c_char, contents: *const c_c
     }
 }
 
-/// Return the last I/O error message for the calling thread as a caller-
-/// owned heap CString. Meaningful only when `tyra_fs_errno() == 3`
-/// (IoError catch-all); returns an empty string for other codes.
+/// Return the last I/O error message for the calling thread as a GC-managed
+/// C string. Meaningful only when `tyra_fs_errno() == 3` (IoError catch-all);
+/// returns an empty string for other codes.
 ///
-/// The returned pointer is heap-allocated via `CString::into_raw` and will
-/// outlive any subsequent fs call. v0.1 accepts the leak (same trade-off
-/// as `tyra_json_err_msg`). Note: even the empty-string case allocates.
-/// `stdlib/fs.tyra` calls this only under the `IoError` match arm, so in
-/// normal Tyra code paths the leak occurs at most once per failed op.
+/// The returned pointer is managed by the Boehm GC and must not be freed
+/// by the caller. `stdlib/fs.tyra` calls this only under the `IoError` arm.
 #[unsafe(no_mangle)]
 pub extern "C" fn tyra_fs_errmsg() -> *const c_char {
     let s = FS_ERRMSG.with(|m| m.borrow().clone());
-    let cs = CString::new(s).unwrap_or_else(|_| CString::new("io error").unwrap());
-    cs.into_raw() as *const c_char
+    alloc_gc_cstring(&s)
 }
 
 /// Return 1 if `path` refers to an existing filesystem entry, 0 otherwise.
@@ -226,7 +218,7 @@ mod tests {
         let msg = tyra_fs_errmsg();
         let s = unsafe { CStr::from_ptr(msg) }.to_str().unwrap().to_string();
         assert_eq!(s, "");
-        unsafe { drop(CString::from_raw(msg as *mut c_char)); }
+        // GC manages the errmsg buffer; no manual free needed.
     }
 
     #[cfg(unix)]
@@ -240,7 +232,7 @@ mod tests {
         let msg = tyra_fs_errmsg();
         let s = unsafe { CStr::from_ptr(msg) }.to_str().unwrap().to_string();
         assert!(!s.is_empty(), "errmsg must be populated for IoError");
-        unsafe { drop(CString::from_raw(msg as *mut c_char)); }
+        // GC manages the errmsg buffer; no manual free needed.
     }
 
     #[test]
@@ -252,7 +244,7 @@ mod tests {
         let msg = tyra_fs_errmsg();
         let s = unsafe { CStr::from_ptr(msg) }.to_str().unwrap().to_string();
         assert!(s.contains("null"), "expected null-path message, got {s:?}");
-        unsafe { drop(CString::from_raw(msg as *mut c_char)); }
+        // GC manages the errmsg buffer; no manual free needed.
     }
 
     #[test]
@@ -268,7 +260,7 @@ mod tests {
         let msg = tyra_fs_errmsg();
         let s = unsafe { CStr::from_ptr(msg) }.to_str().unwrap().to_string();
         assert_eq!(s, "", "NotFound must not carry prior IoError message");
-        unsafe { drop(CString::from_raw(msg as *mut c_char)); }
+        // GC manages the errmsg buffer; no manual free needed.
     }
 
     #[test]

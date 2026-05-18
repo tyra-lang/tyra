@@ -26,6 +26,8 @@ use std::ptr;
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 
+mod gc_string;
+
 mod stdlib_fs;
 pub use stdlib_fs::{
     tyra_fs_errmsg, tyra_fs_errno, tyra_fs_exists, tyra_fs_read, tyra_fs_write,
@@ -190,6 +192,14 @@ mod gc {
         fn GC_get_stack_base(sb: *mut GCStackBase) -> i32;
         fn GC_register_my_thread(sb: *const GCStackBase) -> i32;
         fn GC_unregister_my_thread() -> i32;
+        fn GC_malloc_atomic(size: usize) -> *mut c_void;
+    }
+
+    pub(crate) fn malloc_atomic(size: usize) -> *mut c_void {
+        // GC_malloc_atomic requires GC_init to have been called first.
+        // init() is Once-guarded so this is a no-op after the first call.
+        init();
+        unsafe { GC_malloc_atomic(size) }
     }
 
     static INIT: Once = Once::new();

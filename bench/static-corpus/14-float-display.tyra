@@ -1,0 +1,15 @@
+# 14-float-display.tyra
+# Validates that integer-valued floats display with ".0" suffix (M2: C2).
+#
+# SPEC_REF: §17.3.4 — Float.to_string display rule
+
+fn main() -> Unit
+  let a = 0.0
+  let b = 1.0
+  let c = -2.0
+  let d = 3.14
+  print("#{a}")
+  print("#{b}")
+  print("#{c}")
+  print("#{d}")
+end

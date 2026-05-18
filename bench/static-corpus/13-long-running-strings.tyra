@@ -1,0 +1,20 @@
+# 13-long-running-strings.tyra
+# Exercises repeated string allocation to verify GC-managed FFI strings
+# do not grow unboundedly (M2: CString::into_raw -> GC_malloc_atomic).
+# A lightweight smoke-test: 1000 iterations rather than millions.
+#
+# SPEC_REF: §17.3.4 — String stdlib
+
+fn make_label(_ n: Int) -> String
+  "item-#{n}"
+end
+
+fn main() -> Unit
+  mut i = 0
+  mut last = ""
+  while i < 1000
+    last = make_label(i)
+    i = i + 1
+  end
+  print("last: #{last}")
+end

@@ -30,6 +30,7 @@
 //! caller owns it and the thread-local can be safely overwritten by a
 //! subsequent `tyra_json_parse` without invalidating outstanding pointers.
 
+use crate::gc_string::alloc_gc_cstring;
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
@@ -350,8 +351,7 @@ pub extern "C" fn tyra_json_err_msg() -> *const c_char {
             .map(|(m, _, _)| m.clone())
             .unwrap_or_default()
     });
-    let cs = CString::new(s).unwrap_or_else(|_| CString::new("parse error").unwrap());
-    cs.into_raw() as *const c_char
+    alloc_gc_cstring(&s)
 }
 
 #[unsafe(no_mangle)]
@@ -475,14 +475,8 @@ mod tests {
 
     fn cstr(s: &str) -> CString { CString::new(s).unwrap() }
 
-    // Free heap-allocated error-message strings to keep miri/loom/asan happy
-    // in cfg(test) builds. In production Tyra links against the runtime as a
-    // staticlib and relies on process exit to reclaim these.
-    unsafe fn free_errmsg(p: *const c_char) {
-        if !p.is_null() {
-            drop(unsafe { CString::from_raw(p as *mut c_char) });
-        }
-    }
+    // errmsg pointers are GC-managed; no manual free needed.
+    fn free_errmsg(_p: *const c_char) {}
 
     #[test]
     fn parse_object_and_get() {
