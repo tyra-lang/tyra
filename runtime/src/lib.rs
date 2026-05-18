@@ -193,13 +193,25 @@ mod gc {
         fn GC_register_my_thread(sb: *const GCStackBase) -> i32;
         fn GC_unregister_my_thread() -> i32;
         fn GC_malloc_atomic(size: usize) -> *mut c_void;
+        /// GC_malloc allocates a GC-managed buffer whose contents are
+        /// scanned for interior pointers by the Boehm collector.
+        /// Use when the buffer contains pointer values that point to other
+        /// GC-managed objects that must be kept alive.
+        fn GC_malloc(size: usize) -> *mut c_void;
     }
 
+    /// Allocate a GC-managed buffer that will NOT be scanned for interior
+    /// pointers. Use for raw byte buffers (strings, scalars).
     pub(crate) fn malloc_atomic(size: usize) -> *mut c_void {
-        // GC_malloc_atomic requires GC_init to have been called first.
-        // init() is Once-guarded so this is a no-op after the first call.
         init();
         unsafe { GC_malloc_atomic(size) }
+    }
+
+    /// Allocate a GC-managed buffer whose contents ARE scanned for interior
+    /// pointers. Use when the buffer holds pointers to other GC objects.
+    pub(crate) fn malloc(size: usize) -> *mut c_void {
+        init();
+        unsafe { GC_malloc(size) }
     }
 
     static INIT: Once = Once::new();

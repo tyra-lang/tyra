@@ -222,8 +222,9 @@ pub extern "C" fn tyra_string_from_byte(b: i64) -> *const c_char {
 /// Layout shared with codegen for List<String>-returning intrinsics.
 /// Mirrors `%struct.List__String = type { ptr, i64 }` in LLVM IR. The
 /// caller alloca's a 16-byte slot, passes its address, and we fill in
-/// (data, len). Both the string entries and the pointer array are
-/// allocated via GC_malloc_atomic so the Boehm GC manages them.
+/// (data, len). String entries use alloc_gc_cstring (GC_malloc_atomic).
+/// The pointer array uses GC_malloc so the collector scans it and keeps
+/// the referenced strings alive for the lifetime of the list.
 #[repr(C)]
 pub struct ListStringRet {
     data: *mut *const c_char,
@@ -235,22 +236,27 @@ unsafe fn fill_list_string_ret(out: *mut ListStringRet, parts: Vec<*const c_char
         return;
     }
     let len = parts.len();
-    // Allocate the pointer array via GC_malloc_atomic. The array contains
-    // raw pointer values (no interior GC references), so atomic allocation
-    // is correct and the GC does not need to scan its elements.
-    let data = if len == 0 {
-        std::ptr::null_mut()
+    // Use GC_malloc (not atomic) so the collector scans this array for
+    // interior pointers. Each element is a *const c_char produced by
+    // alloc_gc_cstring; without scanning, those strings would have no
+    // traceable reference and could be collected while the list is live.
+    let (data, final_len) = if len == 0 {
+        (std::ptr::null_mut(), 0i64)
     } else {
-        let buf = crate::gc::malloc_atomic(len * std::mem::size_of::<*const c_char>())
+        let buf = crate::gc::malloc(len * std::mem::size_of::<*const c_char>())
             as *mut *const c_char;
-        if !buf.is_null() {
+        if buf.is_null() {
+            // Allocation failure: return empty list to avoid null-data/len>0
+            // inconsistency that would cause callers to dereference null.
+            (std::ptr::null_mut(), 0i64)
+        } else {
             unsafe { std::ptr::copy_nonoverlapping(parts.as_ptr(), buf, len) };
+            (buf, len as i64)
         }
-        buf
     };
     unsafe {
         (*out).data = data;
-        (*out).len = len as i64;
+        (*out).len = final_len;
     }
 }
 
