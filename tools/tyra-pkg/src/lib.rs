@@ -37,6 +37,8 @@ pub enum PkgError {
     NoProject,
     /// Dependency with this name is already declared.
     DuplicateDep(String),
+    /// Dependency with this name is not declared.
+    DepNotFound(String),
     /// Package or dep name violates naming rules.
     InvalidName(String),
     /// `git` binary not found in PATH.
@@ -65,6 +67,9 @@ impl std::fmt::Display for PkgError {
             ),
             PkgError::DuplicateDep(n) => {
                 write!(f, "dependency `{n}` is already declared in [dependencies]")
+            }
+            PkgError::DepNotFound(n) => {
+                write!(f, "dependency `{n}` is not declared in [dependencies]")
             }
             PkgError::InvalidName(n) => write!(
                 f,
@@ -226,6 +231,27 @@ pub fn run_add_from(
     run_add(&root, dep_name, source)
 }
 
+/// `tyra mod remove <dep_name>`
+///
+/// Removes the named dependency entry from `[dependencies]` in `Tyra.toml`.
+pub fn run_remove(project_root: &Path, dep_name: &str) -> Result<(), PkgError> {
+    let manifest = load_manifest(project_root)?;
+    if !manifest.dependencies.contains_key(dep_name) {
+        return Err(PkgError::DepNotFound(dep_name.to_string()));
+    }
+    let manifest_path = project_root.join("Tyra.toml");
+    let content = std::fs::read_to_string(&manifest_path)?;
+    let updated = remove_dependency_line(&content, dep_name);
+    std::fs::write(&manifest_path, updated)?;
+    Ok(())
+}
+
+/// Locate the project root walking up from `start`, then call `run_remove`.
+pub fn run_remove_from(start: &Path, dep_name: &str) -> Result<(), PkgError> {
+    let root = find_project_root(start).ok_or(PkgError::NoProject)?;
+    run_remove(&root, dep_name)
+}
+
 /// `tyra mod sync`
 ///
 /// Clones all git dependencies declared in `project_root/Tyra.toml` into
@@ -258,6 +284,48 @@ pub fn run_sync(project_root: &Path) -> Result<SyncReport, PkgError> {
 pub fn run_sync_from(start: &Path) -> Result<SyncReport, PkgError> {
     let root = find_project_root(start).ok_or(PkgError::NoProject)?;
     run_sync(&root)
+}
+
+/// `tyra mod sync --check`
+///
+/// Validates all dependencies without mutating the cache:
+/// - path deps: load manifest and check invariants
+/// - git deps: verify cache entry exists and passes `validate_dep_root`
+///
+/// Returns a list of issues found (empty = all good).
+pub fn run_sync_check(project_root: &Path) -> Result<Vec<String>, PkgError> {
+    let manifest = load_manifest(project_root)?;
+    let mut issues: Vec<String> = Vec::new();
+
+    let mut deps: Vec<(&String, &Dependency)> = manifest.dependencies.iter().collect();
+    deps.sort_by_key(|(k, _)| k.as_str());
+
+    for (dep_name, dep) in &deps {
+        match (&dep.path, &dep.git, &dep.rev) {
+            (Some(rel), _, _) => {
+                let dep_root = project_root.join(rel);
+                if let Err(e) = validate_dep_root(dep_name, &dep_root) {
+                    issues.push(format!("{dep_name}: {e}"));
+                }
+            }
+            (None, Some(url), Some(rev)) => {
+                let cache_dir = cache_dir_for(dep_name, url, rev);
+                if !cache_dir.join("Tyra.toml").is_file() {
+                    issues.push(format!("{dep_name}: not synced (run `tyra mod sync`)"));
+                } else if let Err(e) = validate_dep_root(dep_name, &cache_dir) {
+                    issues.push(format!("{dep_name}: {e}"));
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(issues)
+}
+
+/// Locate the project root walking up from `start`, then call `run_sync_check`.
+pub fn run_sync_check_from(start: &Path) -> Result<Vec<String>, PkgError> {
+    let root = find_project_root(start).ok_or(PkgError::NoProject)?;
+    run_sync_check(&root)
 }
 
 /// Canonical cache directory for a git dependency.
@@ -465,6 +533,27 @@ fn insert_dependency_line(content: &str, new_line: &str) -> String {
         result.push(new_line.to_string());
     }
 
+    let mut s = result.join("\n");
+    if trailing_newline {
+        s.push('\n');
+    }
+    s
+}
+
+/// Remove the line for `dep_name` from the `[dependencies]` section of a
+/// `Tyra.toml` string. Leaves the section header intact even if the section
+/// becomes empty.
+fn remove_dependency_line(content: &str, dep_name: &str) -> String {
+    let trailing_newline = content.ends_with('\n');
+    let result: Vec<&str> = content
+        .lines()
+        .filter(|l| {
+            let t = l.trim_start();
+            // Drop lines that start with `dep_name` followed by `=` or whitespace+`=`.
+            !(t.starts_with(dep_name)
+                && t[dep_name.len()..].trim_start().starts_with('='))
+        })
+        .collect();
     let mut s = result.join("\n");
     if trailing_newline {
         s.push('\n');
@@ -902,5 +991,91 @@ mod tests {
         let content = "[package]\nname    = \"x\"\nversion = \"0.1.0\"\nedition = \"2026\"\n";
         let result = insert_dependency_line(content, "foo = { path = \"../foo\" }");
         assert!(result.ends_with('\n'));
+    }
+
+    // --- run_remove ---
+
+    #[test]
+    fn remove_dep_removes_the_line() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Tyra.toml"),
+            "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nmylib = { path = \"../mylib\" }\nutils = { path = \"../utils\" }\n",
+        )
+        .unwrap();
+        run_remove(dir.path(), "mylib").unwrap();
+        let content = fs::read_to_string(dir.path().join("Tyra.toml")).unwrap();
+        assert!(!content.contains("mylib"), "mylib must be removed");
+        assert!(content.contains("utils = { path"), "utils must remain");
+    }
+
+    #[test]
+    fn remove_nonexistent_dep_is_error() {
+        let dir = tempfile::tempdir().unwrap();
+        make_manifest(dir.path(), "myapp");
+        let result = run_remove(dir.path(), "nonexistent");
+        assert!(matches!(result, Err(PkgError::DepNotFound(_))));
+    }
+
+    // --- remove_dependency_line (unit) ---
+
+    #[test]
+    fn remove_line_leaves_section_header() {
+        let content =
+            "[package]\nname    = \"x\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nalpha = { path = \"../alpha\" }\n";
+        let result = remove_dependency_line(content, "alpha");
+        assert!(result.contains("[dependencies]"), "header must remain");
+        assert!(!result.contains("alpha = "));
+    }
+
+    #[test]
+    fn remove_line_preserves_others() {
+        let content =
+            "[package]\nname    = \"x\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nalpha = { path = \"../alpha\" }\nbeta = { path = \"../beta\" }\n";
+        let result = remove_dependency_line(content, "alpha");
+        assert!(!result.contains("alpha = "));
+        assert!(result.contains("beta = { path = \"../beta\" }"));
+    }
+
+    // --- run_sync_check ---
+
+    #[test]
+    fn sync_check_path_dep_valid_passes() {
+        let root = tempfile::tempdir().unwrap();
+        let lib_dir = tempfile::tempdir().unwrap();
+        make_manifest(lib_dir.path(), "mylib");
+        // Add root module
+        let src = lib_dir.path().join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("mylib.tyra"), "export fn greet() -> String\n  \"hi\"\nend\n").unwrap();
+        fs::write(
+            root.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\nmylib = {{ path = \"{}\" }}\n",
+                lib_dir.path().display()
+            ),
+        )
+        .unwrap();
+        let issues = run_sync_check(root.path()).unwrap();
+        assert!(issues.is_empty(), "expected no issues, got: {issues:?}");
+    }
+
+    #[test]
+    fn sync_check_unsynced_git_dep_is_issue() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Tyra.toml"),
+            "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nutils = { git = \"https://github.com/example/utils.git\", \
+             rev = \"abc1234\" }\n",
+        )
+        .unwrap();
+        let issues = run_sync_check(dir.path()).unwrap();
+        assert!(!issues.is_empty(), "unsynced git dep must be flagged");
+        assert!(issues[0].contains("not synced"));
     }
 }

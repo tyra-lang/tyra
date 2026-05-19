@@ -6,13 +6,14 @@
 //   tyra build <file.tyra>               Compile to a native binary
 //   tyra emit-ir <file.tyra>             Emit LLVM IR to stdout
 //   tyra fmt [--check] <file.tyra|dir>   Format source (--check: exit 1 if changed)
-//   tyra test [path]                     Run *_test.tyra files (default: .)
-//   tyra new [--lib] <name>              Scaffold a new project
+//   tyra test [--filter <pat>] [--list] [path]  Run *_test.tyra files (default: .)
+//   tyra new [--lib] [--vcs none] <name> Scaffold a new project
 //   tyra mod init [--name <name>]        Create Tyra.toml for an existing directory
 //   tyra mod add <name> --path <path>    Add a path dependency
 //   tyra mod add <name> --git <url> --rev <rev>  Add a git dependency
-//   tyra mod tree                        Show the dependency tree
-//   tyra mod sync                        Clone git deps into ~/.tyra/cache/git/
+//   tyra mod remove <name>               Remove a dependency
+//   tyra mod tree [--json]               Show the dependency tree
+//   tyra mod sync [--check]              Clone git deps; --check validates without mutating
 //   tyra bench ai-gen [options]          Run the AI-generation benchmark
 //   tyra --version                       Show version info
 //
@@ -202,8 +203,9 @@ fn main() {
             }
         }
         "test" => {
-            // Parse: tyra test [--filter <pattern>] [path]
+            // Parse: tyra test [--filter <pattern>] [--list] [path]
             let mut filter: Option<String> = None;
+            let mut list_mode = false;
             let mut path_arg: Option<&str> = None;
             let mut rest = args[2..].iter().peekable();
             while let Some(arg) = rest.next() {
@@ -218,9 +220,10 @@ fn main() {
                                 }),
                         );
                     }
+                    "--list" => list_mode = true,
                     other if other.starts_with("--") => {
                         eprintln!("error: unknown flag `{other}` for `tyra test`");
-                        eprintln!("usage: tyra test [--filter <pattern>] [path]");
+                        eprintln!("usage: tyra test [--filter <pattern>] [--list] [path]");
                         process::exit(1);
                     }
                     other => {
@@ -261,43 +264,60 @@ fn main() {
                 process::exit(0);
             }
 
-            let mut total_pass: usize = 0;
-            let mut total_fail: usize = 0;
-            for test_file in &test_files {
-                let (p, f) = run_test_file_filtered(test_file, filter.as_deref());
-                total_pass += p;
-                total_fail += f;
-            }
-            eprintln!("\n{} passed, {} failed", total_pass, total_fail);
-            if total_fail > 0 {
-                process::exit(1);
+            if list_mode {
+                for test_file in &test_files {
+                    list_test_fns(test_file, filter.as_deref());
+                }
+            } else {
+                let mut total_pass: usize = 0;
+                let mut total_fail: usize = 0;
+                for test_file in &test_files {
+                    let (p, f) = run_test_file_filtered(test_file, filter.as_deref());
+                    total_pass += p;
+                    total_fail += f;
+                }
+                eprintln!("\n{} passed, {} failed", total_pass, total_fail);
+                if total_fail > 0 {
+                    process::exit(1);
+                }
             }
         }
         "new" => {
             let rest = &args[2..];
             let mut lib_flag = false;
+            let mut vcs_none = false;
             let mut positional: Vec<&str> = Vec::new();
-            for arg in rest {
-                if arg.as_str() == "--lib" {
-                    lib_flag = true;
-                } else if arg.starts_with("--") {
-                    eprintln!("error: unknown flag `{arg}`");
-                    eprintln!("usage: tyra new [--lib] <name>");
-                    process::exit(1);
-                } else {
-                    positional.push(arg.as_str());
+            let mut rest_iter = rest.iter().peekable();
+            while let Some(arg) = rest_iter.next() {
+                match arg.as_str() {
+                    "--lib" => lib_flag = true,
+                    "--vcs" => {
+                        let val = rest_iter.next().map(String::as_str).unwrap_or("");
+                        if val == "none" {
+                            vcs_none = true;
+                        } else {
+                            eprintln!("error: unknown --vcs value `{val}` (expected `none`)");
+                            process::exit(1);
+                        }
+                    }
+                    other if other.starts_with("--") => {
+                        eprintln!("error: unknown flag `{other}`");
+                        eprintln!("usage: tyra new [--lib] [--vcs none] <name>");
+                        process::exit(1);
+                    }
+                    other => positional.push(other),
                 }
             }
             if positional.len() > 1 {
                 eprintln!("error: unexpected argument `{}`", positional[1]);
-                eprintln!("usage: tyra new [--lib] <name>");
+                eprintln!("usage: tyra new [--lib] [--vcs none] <name>");
                 process::exit(1);
             }
             let name = match positional.first() {
                 Some(n) => *n,
                 None => {
                     eprintln!("error: `tyra new` requires a project name");
-                    eprintln!("usage: tyra new [--lib] <name>");
+                    eprintln!("usage: tyra new [--lib] [--vcs none] <name>");
                     process::exit(1);
                 }
             };
@@ -306,14 +326,21 @@ fn main() {
             } else {
                 tyra_new::ProjectKind::Bin
             };
+            let vcs = if vcs_none {
+                tyra_new::VcsMode::None
+            } else {
+                tyra_new::VcsMode::Git
+            };
             let dest = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-            match tyra_new::create_project(name, kind, &dest) {
+            match tyra_new::create_project(name, kind, vcs, &dest) {
                 Ok(()) => {
                     let type_label = if lib_flag { "lib" } else { "bin" };
                     println!("created {type_label} project `{name}`");
                     println!("  {name}/Tyra.toml");
                     println!("  {name}/src/{name}.tyra");
-                    println!("  {name}/.gitignore");
+                    if !vcs_none {
+                        println!("  {name}/.gitignore");
+                    }
                     println!("  {name}/README.md");
                 }
                 Err(tyra_new::NewError::AlreadyExists(p)) => {
@@ -465,34 +492,19 @@ fn main() {
                     }
                 }
                 "tree" => {
-                    if args.len() > 3 {
-                        eprintln!("error: `tyra mod tree` takes no arguments");
+                    let json_flag = args.get(3).map(String::as_str) == Some("--json");
+                    if args.len() > 3 && !json_flag {
+                        eprintln!("error: unknown argument `{}`", args[3]);
+                        eprintln!("usage: tyra mod tree [--json]");
                         process::exit(1);
                     }
                     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
                     match tyra_pkg::run_tree_from(&cwd) {
-                        Ok(tree) => print!("{tree}"),
-                        Err(e) => {
-                            eprintln!("error: {e}");
-                            process::exit(1);
-                        }
-                    }
-                }
-                "sync" => {
-                    if args.len() > 3 {
-                        eprintln!("error: `tyra mod sync` takes no arguments");
-                        process::exit(1);
-                    }
-                    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-                    match tyra_pkg::run_sync_from(&cwd) {
-                        Ok(report) => {
-                            if report.synced.is_empty()
-                                && report.cached.is_empty()
-                                && report.skipped.is_empty()
-                            {
-                                println!("nothing to sync (no dependencies declared)");
+                        Ok(tree) => {
+                            if json_flag {
+                                print!("{}", tree_to_json(&tree));
                             } else {
-                                print!("{report}");
+                                print!("{tree}");
                             }
                         }
                         Err(e) => {
@@ -501,13 +513,75 @@ fn main() {
                         }
                     }
                 }
+                "sync" => {
+                    let check_flag = args.get(3).map(String::as_str) == Some("--check");
+                    if args.len() > 3 && !check_flag {
+                        eprintln!("error: unknown argument `{}`", args[3]);
+                        eprintln!("usage: tyra mod sync [--check]");
+                        process::exit(1);
+                    }
+                    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                    if check_flag {
+                        match tyra_pkg::run_sync_check_from(&cwd) {
+                            Ok(issues) => {
+                                if issues.is_empty() {
+                                    println!("all dependencies ok");
+                                } else {
+                                    for issue in &issues {
+                                        eprintln!("error: {issue}");
+                                    }
+                                    process::exit(1);
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("error: {e}");
+                                process::exit(1);
+                            }
+                        }
+                    } else {
+                        match tyra_pkg::run_sync_from(&cwd) {
+                            Ok(report) => {
+                                if report.synced.is_empty()
+                                    && report.cached.is_empty()
+                                    && report.skipped.is_empty()
+                                {
+                                    println!("nothing to sync (no dependencies declared)");
+                                } else {
+                                    print!("{report}");
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("error: {e}");
+                                process::exit(1);
+                            }
+                        }
+                    }
+                }
+                "remove" => {
+                    let dep_name = match args.get(3).map(String::as_str) {
+                        Some(n) if !n.starts_with("--") => n,
+                        _ => {
+                            eprintln!("error: `tyra mod remove` requires a dependency name");
+                            eprintln!("usage: tyra mod remove <name>");
+                            process::exit(1);
+                        }
+                    };
+                    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                    match tyra_pkg::run_remove_from(&cwd, dep_name) {
+                        Ok(()) => println!("removed dependency `{dep_name}`"),
+                        Err(e) => {
+                            eprintln!("error: {e}");
+                            process::exit(1);
+                        }
+                    }
+                }
                 "" => {
-                    eprintln!("usage: tyra mod <init|add|tree|sync>");
+                    eprintln!("usage: tyra mod <init|add|remove|tree|sync>");
                     process::exit(1);
                 }
                 cmd => {
                     eprintln!("error: unknown mod subcommand `{cmd}`");
-                    eprintln!("usage: tyra mod <init|add|tree|sync>");
+                    eprintln!("usage: tyra mod <init|add|remove|tree|sync>");
                     process::exit(1);
                 }
             }
@@ -573,16 +647,74 @@ fn print_usage() {
     eprintln!("  build <file.tyra>                        compile to a native binary");
     eprintln!("  emit-ir <file.tyra>                      emit LLVM IR to stdout");
     eprintln!("  fmt [--check] <file.tyra|dir>            format source in-place; accepts a directory");
-    eprintln!("  test [path]                              run *_test.tyra files (default: current dir)");
-    eprintln!("  new [--lib] <name>                       scaffold a new project in the current directory");
+    eprintln!("  test [--filter <pat>] [--list] [path]   run *_test.tyra files (default: current dir)");
+    eprintln!("  new [--lib] [--vcs none] <name>          scaffold a new project in the current directory");
     eprintln!("  mod init [--name <name>]                 create Tyra.toml for an existing directory");
     eprintln!("  mod add <name> --path <path>             add a path dependency");
     eprintln!("  mod add <name> --git <url> --rev <rev>   add a git dependency");
-    eprintln!("  mod tree                                 show the dependency tree");
-    eprintln!("  mod sync                                 clone git deps into ~/.tyra/cache/git/");
+    eprintln!("  mod remove <name>                        remove a dependency");
+    eprintln!("  mod tree [--json]                        show the dependency tree");
+    eprintln!("  mod sync [--check]                       clone git deps; --check validates without mutating");
     eprintln!("  bench ai-gen [options]                   run the AI-generation benchmark (wraps bench/ai-gen/harness.py)");
     eprintln!("  --version                                show version info");
     eprintln!("  --help                                   show this help");
+}
+
+/// Convert the human-readable tree output of `run_tree` into a minimal JSON
+/// structure: `{"name":"...","version":"...","deps":[...]}`.  Parses the
+/// indented tree text so no extra crate is needed.
+fn tree_to_json(tree: &str) -> String {
+    fn escape(s: &str) -> String {
+        s.replace('\\', "\\\\").replace('"', "\\\"")
+    }
+    fn node_json(name: &str, version: &str, source: &str, note: &str) -> String {
+        let src = escape(source);
+        let note_field = if note.is_empty() {
+            String::new()
+        } else {
+            format!(",\"note\":\"{}\"", escape(note))
+        };
+        format!(
+            "{{\"name\":\"{}\",\"version\":\"{}\",\"source\":\"{}\"{}}}",
+            escape(name),
+            escape(version),
+            src,
+            note_field
+        )
+    }
+
+    let mut lines = tree.lines();
+    // First line: "<name> <version>"
+    let first = lines.next().unwrap_or("");
+    let mut parts = first.splitn(2, ' ');
+    let root_name = parts.next().unwrap_or("");
+    let root_ver = parts.next().unwrap_or("");
+
+    // Remaining lines are dep nodes; collect them as flat JSON objects.
+    let mut deps_json: Vec<String> = Vec::new();
+    for line in lines {
+        let trimmed = line.trim_start_matches(|c| matches!(c, '│' | ' ' | '├' | '└' | '─'));
+        if trimmed.is_empty() { continue; }
+        // Format: "<name> <version> (source: ...) [note]"  or similar
+        let (before_note, note): (&str, &str) =
+            if let Some(s) = trimmed.strip_suffix(']') {
+                if let Some(p) = s.rfind('[') {
+                    (s[..p].trim_end(), &s[p + 1..])
+                } else { (trimmed, "") }
+            } else { (trimmed, "") };
+        let mut toks = before_note.splitn(3, ' ');
+        let dep_name = toks.next().unwrap_or("");
+        let dep_ver = toks.next().unwrap_or("");
+        let source = toks.next().unwrap_or("").trim_matches(|c| c == '(' || c == ')');
+        deps_json.push(node_json(dep_name, dep_ver, source, note));
+    }
+
+    format!(
+        "{{\"name\":\"{}\",\"version\":\"{}\",\"deps\":[{}]}}\n",
+        escape(root_name),
+        escape(root_ver),
+        deps_json.join(",")
+    )
 }
 
 /// Walk up from cwd (and from the executable's dir) to find bench/ai-gen/harness.py.
@@ -657,6 +789,35 @@ fn find_test_fns(ast: &tyra_ast::SourceFile) -> Vec<String> {
             None
         })
         .collect()
+}
+
+/// Print test function names found in `test_file` (one per line, tab-separated
+/// as `<file>\t<fn_name>`), applying an optional substring filter.
+fn list_test_fns(test_file: &Path, filter: Option<&str>) {
+    let source = match std::fs::read_to_string(test_file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read {}: {e}", test_file.display());
+            return;
+        }
+    };
+    let dir = test_file.parent().unwrap_or(Path::new("."));
+    let workspace_dir = if dir.as_os_str().is_empty() { Some(Path::new(".")) } else { Some(dir) };
+    let check = tyra_driver::check_in_memory(
+        test_file.to_string_lossy().into_owned(),
+        source,
+        workspace_dir,
+    );
+    if check.report.has_errors() {
+        eprint!("{}", check.report.render(&check.sources));
+        return;
+    }
+    let fns = find_test_fns(&check.ast);
+    for name in fns {
+        if filter.map(|p| name.contains(p)).unwrap_or(true) {
+            println!("{}\t{name}", test_file.display());
+        }
+    }
 }
 
 /// Build a complete Tyra source that appends a synthesized `fn main` calling

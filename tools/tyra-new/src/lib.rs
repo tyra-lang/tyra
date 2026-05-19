@@ -15,6 +15,14 @@ pub enum ProjectKind {
     Lib,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VcsMode {
+    /// Write `.gitignore` (default).
+    Git,
+    /// Skip all VCS files.
+    None,
+}
+
 #[derive(Debug)]
 pub enum NewError {
     /// Target directory already exists.
@@ -58,11 +66,16 @@ impl From<std::io::Error> for NewError {
 /// Creates `<dest>/<name>/` with:
 /// - `Tyra.toml`
 /// - `src/<name>.tyra`
-/// - `.gitignore`
+/// - `.gitignore` (unless `vcs == VcsMode::None`)
 /// - `README.md`
 ///
 /// Fails with `NewError::AlreadyExists` if `<dest>/<name>/` already exists.
-pub fn create_project(name: &str, kind: ProjectKind, dest: &Path) -> Result<(), NewError> {
+pub fn create_project(
+    name: &str,
+    kind: ProjectKind,
+    vcs: VcsMode,
+    dest: &Path,
+) -> Result<(), NewError> {
     validate_name(name)?;
 
     let project_dir = dest.join(name);
@@ -75,7 +88,9 @@ pub fn create_project(name: &str, kind: ProjectKind, dest: &Path) -> Result<(), 
 
     write_file(&project_dir.join("Tyra.toml"), &render_manifest(name))?;
     write_file(&src_dir.join(format!("{name}.tyra")), render_source(kind))?;
-    write_file(&project_dir.join(".gitignore"), GITIGNORE)?;
+    if vcs == VcsMode::Git {
+        write_file(&project_dir.join(".gitignore"), GITIGNORE)?;
+    }
     write_file(&project_dir.join("README.md"), &render_readme(name))?;
 
     Ok(())
@@ -153,7 +168,7 @@ mod tests {
 
     fn scaffold(name: &str, kind: ProjectKind) -> (tempfile::TempDir, std::path::PathBuf) {
         let dir = tempfile::tempdir().unwrap();
-        create_project(name, kind, dir.path()).unwrap();
+        create_project(name, kind, VcsMode::Git, dir.path()).unwrap();
         let proj = dir.path().join(name);
         (dir, proj)
     }
@@ -202,35 +217,35 @@ mod tests {
     fn existing_dir_returns_already_exists_error() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir(dir.path().join("myapp")).unwrap();
-        let result = create_project("myapp", ProjectKind::Bin, dir.path());
+        let result = create_project("myapp", ProjectKind::Bin, VcsMode::Git, dir.path());
         assert!(matches!(result, Err(NewError::AlreadyExists(_))));
     }
 
     #[test]
     fn invalid_name_empty() {
         let dir = tempfile::tempdir().unwrap();
-        let result = create_project("", ProjectKind::Bin, dir.path());
+        let result = create_project("", ProjectKind::Bin, VcsMode::Git, dir.path());
         assert!(matches!(result, Err(NewError::InvalidName(_))));
     }
 
     #[test]
     fn invalid_name_starts_with_digit() {
         let dir = tempfile::tempdir().unwrap();
-        let result = create_project("1app", ProjectKind::Bin, dir.path());
+        let result = create_project("1app", ProjectKind::Bin, VcsMode::Git, dir.path());
         assert!(matches!(result, Err(NewError::InvalidName(_))));
     }
 
     #[test]
     fn invalid_name_hyphen() {
         let dir = tempfile::tempdir().unwrap();
-        let result = create_project("my-app", ProjectKind::Bin, dir.path());
+        let result = create_project("my-app", ProjectKind::Bin, VcsMode::Git, dir.path());
         assert!(matches!(result, Err(NewError::InvalidName(_))));
     }
 
     #[test]
     fn name_with_underscore_is_valid() {
         let dir = tempfile::tempdir().unwrap();
-        create_project("my_app", ProjectKind::Bin, dir.path()).unwrap();
+        create_project("my_app", ProjectKind::Bin, VcsMode::Git, dir.path()).unwrap();
         assert!(dir.path().join("my_app/Tyra.toml").is_file());
     }
 
@@ -245,42 +260,59 @@ mod tests {
     #[test]
     fn invalid_name_uppercase() {
         let dir = tempfile::tempdir().unwrap();
-        let result = create_project("MyApp", ProjectKind::Bin, dir.path());
+        let result = create_project("MyApp", ProjectKind::Bin, VcsMode::Git, dir.path());
         assert!(matches!(result, Err(NewError::InvalidName(_))));
     }
 
     #[test]
     fn invalid_name_mixed_case() {
         let dir = tempfile::tempdir().unwrap();
-        let result = create_project("myApp", ProjectKind::Bin, dir.path());
+        let result = create_project("myApp", ProjectKind::Bin, VcsMode::Git, dir.path());
         assert!(matches!(result, Err(NewError::InvalidName(_))));
     }
 
     #[test]
     fn invalid_name_reserved_word_fn() {
         let dir = tempfile::tempdir().unwrap();
-        let result = create_project("fn", ProjectKind::Bin, dir.path());
+        let result = create_project("fn", ProjectKind::Bin, VcsMode::Git, dir.path());
         assert!(matches!(result, Err(NewError::InvalidName(_))));
     }
 
     #[test]
     fn invalid_name_reserved_word_match() {
         let dir = tempfile::tempdir().unwrap();
-        let result = create_project("match", ProjectKind::Bin, dir.path());
+        let result = create_project("match", ProjectKind::Bin, VcsMode::Git, dir.path());
         assert!(matches!(result, Err(NewError::InvalidName(_))));
     }
 
     #[test]
     fn invalid_name_reserved_word_import() {
         let dir = tempfile::tempdir().unwrap();
-        let result = create_project("import", ProjectKind::Bin, dir.path());
+        let result = create_project("import", ProjectKind::Bin, VcsMode::Git, dir.path());
         assert!(matches!(result, Err(NewError::InvalidName(_))));
     }
 
     #[test]
     fn invalid_name_reserved_word_end() {
         let dir = tempfile::tempdir().unwrap();
-        let result = create_project("end", ProjectKind::Bin, dir.path());
+        let result = create_project("end", ProjectKind::Bin, VcsMode::Git, dir.path());
         assert!(matches!(result, Err(NewError::InvalidName(_))));
+    }
+
+    #[test]
+    fn vcs_none_skips_gitignore() {
+        let dir = tempfile::tempdir().unwrap();
+        create_project("myapp", ProjectKind::Bin, VcsMode::None, dir.path()).unwrap();
+        let proj = dir.path().join("myapp");
+        assert!(!proj.join(".gitignore").exists(), ".gitignore must not be created");
+        assert!(proj.join("Tyra.toml").is_file());
+        assert!(proj.join("README.md").is_file());
+    }
+
+    #[test]
+    fn vcs_git_creates_gitignore() {
+        let dir = tempfile::tempdir().unwrap();
+        create_project("myapp", ProjectKind::Bin, VcsMode::Git, dir.path()).unwrap();
+        assert!(dir.path().join("myapp").join(".gitignore").is_file());
     }
 }
