@@ -37,19 +37,22 @@ pub fn is_bin_source(src: &str) -> bool {
         if trimmed.starts_with('#') {
             continue;
         }
-        // `fn main` is a bin entry point only when `main` is not part of a
-        // longer identifier (e.g. `fn mainframe` or `fn main_loop` are lib fns).
-        if trimmed.starts_with("fn main") {
-            let after = &trimmed["fn main".len()..];
-            let boundary = after
-                .chars()
-                .next()
-                .map(|c| c == '(' || c == ' ' || c == '\t')
-                .unwrap_or(true); // "fn main" with nothing after → bin
-            if boundary {
-                return true;
+        // `fn main` or `export fn main` is a bin entry point only when `main`
+        // is not part of a longer identifier (e.g. `fn mainframe` is a lib fn).
+        // export fn main(...) is still a bin — export does not change the
+        // entry-point semantics (ADR 0009).
+        for prefix in &["fn main", "export fn main"] {
+            if trimmed.starts_with(prefix) {
+                let after = &trimmed[prefix.len()..];
+                let boundary = after
+                    .chars()
+                    .next()
+                    .map(|c| c == '(' || c == ' ' || c == '\t')
+                    .unwrap_or(true);
+                if boundary {
+                    return true;
+                }
             }
-            // Falls through to the declaration-prefix check below (still a fn).
         }
         // If the line is not a declaration or structural keyword, it is an
         // executable statement at top level.
@@ -173,6 +176,28 @@ export fn run() -> Unit
 end
 ";
         assert!(!is_bin_source(src), "#! line must not be treated as executable statement");
+    }
+
+    // Regression: export fn main(...) must be treated as bin (ADR 0009).
+    #[test]
+    fn export_fn_main_is_bin() {
+        let src = "\
+export fn main() -> Unit
+  print(\"hello\\n\")
+end
+";
+        assert!(is_bin_source(src), "export fn main must be treated as bin");
+    }
+
+    // export fn mainframe must still be lib.
+    #[test]
+    fn export_fn_mainframe_is_lib() {
+        let src = "\
+export fn mainframe(args: List<String>) -> Unit
+  ()
+end
+";
+        assert!(!is_bin_source(src), "export fn mainframe must not be treated as bin");
     }
 
     // fn main with no parens on the same line is still bin.
