@@ -23,6 +23,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
   - Discovers `fn test_*() -> Result<Unit, String>` functions automatically
   - Synthesizes a test runner without requiring language-level test syntax
   - Non-zero binary exit (panic, abort) is always counted as a failure
+  - E0216: `*_test.tyra` files must not contain `fn main` or top-level executable statements
 
 **Runtime**
 - FFI string ownership fixed: all functions returning strings to Tyra now allocate via `GC_malloc_atomic` instead of `CString::into_raw`, eliminating the long-running string leak
@@ -45,6 +46,10 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - Generic `List<T>`, `map` / `filter` / `fold` — requires lambda C ABI; deferred
 - `Set<T>` — deferred
 - `test "name"` language syntax — deferred (separate ADR)
+- `tyra fmt` line-length enforcement and expression wrapping — deferred to v0.2.x
+- `tyra test --filter <pattern>` — deferred to v0.2.x
+- `assert.panics` — requires per-test process isolation; deferred
+- Generic `assert.eq<T>` — requires trait bound support; deferred
 
 ---
 

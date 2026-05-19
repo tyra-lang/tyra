@@ -1516,7 +1516,30 @@ tyra fmt
 tyra mod
 ```
 
-### 18.1 Goals
+### 18.1 tyra test
+
+- Recursively discovers `*_test.tyra` files from the given path
+- Automatically finds functions matching `fn test_*() -> Result<Unit, String>` (no parameters)
+- Outputs TAP version 14 results; exits 1 if any test fails
+- **E0216**: `*_test.tyra` files must not contain `fn main` or top-level executable statements
+
+```tyra
+# example_test.tyra
+import assert
+
+fn test_add() -> Result<Unit, String>
+  assert.eq(1 + 1, 2)?
+  Ok(())
+end
+```
+
+```bash
+tyra test              # run all *_test.tyra files under the current directory
+tyra test src/         # run files under a given directory
+tyra test math_test.tyra  # run a single file
+```
+
+### 18.2 Goals
 
 - Reproduce Go-style operational simplicity
 - Reduce learning cost

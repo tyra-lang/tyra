@@ -1525,7 +1525,30 @@ tyra fmt
 tyra mod
 ```
 
-### 18.1 目的
+### 18.1 tyra test
+
+- `*_test.tyra` という名前のファイルを対象ディレクトリから再帰的に探索する
+- `fn test_*() -> Result<Unit, String>`（引数なし）の関数をテスト関数として自動発見する
+- TAP version 14 形式で結果を出力し、1 件以上失敗すれば exit 1 を返す
+- **E0216**: `*_test.tyra` ファイルに `fn main` またはトップレベル実行文を置くことはできない
+
+```tyra
+# example_test.tyra
+import assert
+
+fn test_add() -> Result<Unit, String>
+  assert.eq(1 + 1, 2)?
+  Ok(())
+end
+```
+
+```bash
+tyra test              # カレントディレクトリ以下の *_test.tyra を全件実行
+tyra test src/         # 指定ディレクトリ以下を実行
+tyra test math_test.tyra  # 単一ファイルを実行
+```
+
+### 18.2 目的
 
 - Go 的な運用性を再現する
 - 学習コストを減らす

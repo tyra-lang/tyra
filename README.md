@@ -2,7 +2,7 @@
 
 A statically-typed, AI-friendly programming language for backend services, CLI tools, and business applications.
 
-> **v0.1.0 — initial release with known limitations.** Suitable for small CLI tools, learning, and language evaluation. [See known limitations](#known-limitations) before using in production.
+> **v0.2.0** — adds `tyra fmt`, `tyra test`, `stdlib/assert`, `continue`, and runtime fixes. Suitable for small CLI tools, learning, and language evaluation. [See known limitations](#known-limitations) before using in production.
 
 ---
 
@@ -39,7 +39,7 @@ The answer is a language that:
 - **Distinguishes value types and reference types** at the language level — so memory semantics are visible, not inferred
 - **Separates traits (replaceable behaviors) from abilities (structural properties)** — a novel design that prevents the trait/derive boilerplate of Rust
 - **Uses `end` blocks, not braces** — so block boundaries are unambiguous in any visual context
-- **Has one official toolchain**: `check`, `run`, and `build` today; `fmt`, `test`, and `deploy` planned — all in a single CLI
+- **Has one official toolchain**: `check`, `run`, `build`, `fmt`, and `test` today; `deploy` and `mod` planned — all in a single CLI
 
 ## Design influences
 
@@ -99,42 +99,66 @@ let p1 = Point(x: 1.0, y: 2.0)
 let p2 = p1.copy(x: 3.0)
 ```
 
+## Quick start: testing
+
+Create a `*_test.tyra` file and run `tyra test`:
+
+```tyra
+# math_test.tyra
+import assert
+
+fn test_add() -> Result<Unit, String>
+  assert.eq(1 + 1, 2)?
+  Ok(())
+end
+```
+
+```bash
+tyra test          # run all *_test.tyra files in the current directory
+tyra test src/     # run a specific directory
+```
+
+See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for the full guide.
+
 ## Status
 
-**Stable in v0.1.0** — supported and tested:
+**Stable in v0.2.0** — supported and tested:
 
 | Component | Notes |
 | --- | --- |
-| Language specification v0.1 | ✅ Complete |
+| Language specification v0.2 | ✅ Complete |
 | Lexer, Parser, Type checker | ✅ Complete |
 | LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 |
-| Standard library: string, list, fs, io, float, json | ✅ Complete |
+| Standard library: string, list, fs, io, float, json, assert | ✅ Complete |
 | `tyra check / run / build` CLI | ✅ Complete |
+| `tyra fmt [--check] <file\|dir>` formatter | ✅ Complete |
+| `tyra test [path]` runner — TAP output, E0216 validation | ✅ Complete |
+| `continue` statement | ✅ Complete |
 | LSP server (`tyra-lsp`) + VS Code extension | ✅ Development install |
-| Static conformance corpus (10 programs + error cases) | ✅ CI-gated |
+| Static conformance corpus (14 programs + error cases) | ✅ CI-gated |
 
-**Experimental in v0.1.0** — included but not production-ready:
+**Experimental in v0.2.0** — included but not production-ready:
 
 | Component | Notes |
 | --- | --- |
 | `http.server` stdlib | ⚠️ Basic GET/POST routing only; not production-ready |
 
-**Not in v0.1.0**:
+**Not in v0.2.0** — explicit backlog:
 
 | Component | Notes |
 | --- | --- |
-| `tyra fmt` formatter | ⏳ Planned for v0.2 |
-| `tyra test` runner | ⏳ Planned for v0.2 |
-| Package manager | ⏳ Planned for later |
-| Pre-built binaries (homebrew, apt) | ⏳ Planned for v0.2 |
-| VS Code Marketplace publication | ⏳ Planned for v0.2 |
+| `tyra fmt` line-length enforcement | ⏳ v0.2.x |
+| `tyra test --filter <pattern>` | ⏳ v0.2.x |
+| `assert.panics` | ⏳ Requires per-test process isolation |
+| `test "name"` language syntax | ⏳ Separate ADR |
+| Package manager | ⏳ Later |
+| Pre-built binaries (homebrew, apt) | ⏳ Later |
+| VS Code Marketplace publication | ⏳ Later |
 
 ## Known limitations
 
-- **String GC**: allocated strings are not reclaimed by the garbage collector. Acceptable for short-lived CLI programs; not suitable for long-running servers.
 - **Windows**: untested. Build via WSL2 is recommended.
 - **`http.server`**: experimental. Single-threaded, no TLS, no middleware. Do not use in production.
-- **Format precision**: `Float` display uses Rust's default `Display`, which may differ from your expectations for edge values.
 - **Breaking changes**: expect breaking changes before v1.0.
 
 ## Documentation
