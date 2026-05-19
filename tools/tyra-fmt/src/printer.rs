@@ -959,9 +959,18 @@ impl<'src> Printer<'src> {
                         if !first {
                             self.out.push_str(", ");
                         }
-                        self.out.push_str(&field.field_name);
-                        self.out.push_str(": ");
-                        self.print_pattern(&field.pattern);
+                        if field.field_name.is_empty() {
+                            // Positional / wildcard: `Ok(_)` → field_name is ""
+                            self.print_pattern(&field.pattern);
+                        } else if matches!(&field.pattern.kind, PatternKind::Ident(n) if n == &field.field_name) {
+                            // Shorthand: `Ok(v)` stored as field_name="v", pattern=Ident("v")
+                            self.out.push_str(&field.field_name);
+                        } else {
+                            // Explicit: `Card(last4: binding)`
+                            self.out.push_str(&field.field_name);
+                            self.out.push_str(": ");
+                            self.print_pattern(&field.pattern);
+                        }
                         first = false;
                     }
                     self.out.push(')');

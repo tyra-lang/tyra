@@ -99,6 +99,53 @@ mod tests {
     }
 
     #[test]
+    fn constructor_pattern_shorthand_preserved() {
+        // `Ok(v)` must not expand to `Ok(v: v)`
+        let src = "fn f(r: Result<Int, String>) -> Unit\n  match r\n  when Ok(v)\n    ()\n  when Err(msg)\n    ()\n  end\nend\n";
+        let out = fmt_source(src).unwrap();
+        assert!(
+            out.contains("when Ok(v)"),
+            "shorthand Ok(v) must not expand to Ok(v: v): {out:?}"
+        );
+        assert!(
+            !out.contains("Ok(v: v)"),
+            "expanded form must not appear: {out:?}"
+        );
+        let second = fmt_source(&out).unwrap();
+        assert_eq!(out, second, "must be idempotent");
+    }
+
+    #[test]
+    fn constructor_pattern_wildcard_preserved() {
+        // `Ok(_)` must not expand to `Ok(: _)` or `Ok(_: _)`
+        let src = "fn f(r: Result<Int, String>) -> Unit\n  match r\n  when Ok(_)\n    ()\n  when Err(_)\n    ()\n  end\nend\n";
+        let out = fmt_source(src).unwrap();
+        assert!(
+            out.contains("when Ok(_)"),
+            "wildcard Ok(_) must be preserved: {out:?}"
+        );
+        assert!(
+            !out.contains("Ok(_: _)") && !out.contains("Ok(: _)"),
+            "mangled wildcard form must not appear: {out:?}"
+        );
+        let second = fmt_source(&out).unwrap();
+        assert_eq!(out, second, "must be idempotent");
+    }
+
+    #[test]
+    fn constructor_pattern_explicit_form_preserved() {
+        // `Card(last4: binding)` where field_name != binding must stay explicit
+        let src = "fn f(c: Card) -> Unit\n  match c\n  when Card(last4: digits)\n    ()\n  end\nend\n";
+        let out = fmt_source(src).unwrap();
+        assert!(
+            out.contains("when Card(last4: digits)"),
+            "explicit field:binding form must be preserved: {out:?}"
+        );
+        let second = fmt_source(&out).unwrap();
+        assert_eq!(out, second, "must be idempotent");
+    }
+
+    #[test]
     fn inline_comment_on_alias_type_def_preserved() {
         let src = "type UserId = Int # stable wire id\n";
         let out = fmt_source(src).unwrap();

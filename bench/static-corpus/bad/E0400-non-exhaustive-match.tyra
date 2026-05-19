@@ -5,7 +5,7 @@
 # SPEC_REF: §11 — match expressions
 fn unwrap_only_some(_ v: Option<Int>) -> Int
   match v
-  when Some(n: n)
+  when Some(n)
     n
   end
 end
