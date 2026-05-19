@@ -2,7 +2,7 @@
 
 A statically-typed, AI-friendly programming language for backend services, CLI tools, and business applications.
 
-> **v0.2.0** — adds `tyra fmt`, `tyra test`, `stdlib/assert`, `continue`, and runtime fixes. Suitable for small CLI tools, learning, and language evaluation. [See known limitations](#known-limitations) before using in production.
+> **v0.3.0** — adds `tyra new`, `tyra mod` (project lifecycle), `tyra bench ai-gen`, `tyra test --filter`, and `tyra fmt` line-length wrapping. [See known limitations](#known-limitations) before using in production.
 
 ---
 
@@ -122,7 +122,7 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 
 ## Status
 
-**Stable in v0.2.0** — supported and tested:
+**Stable in v0.3.0** — supported and tested:
 
 | Component | Notes |
 | --- | --- |
@@ -131,27 +131,30 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 |
 | Standard library: string, list, fs, io, float, json, assert | ✅ Complete |
 | `tyra check / run / build` CLI | ✅ Complete |
-| `tyra fmt [--check] <file\|dir>` formatter | ✅ Complete |
-| `tyra test [path]` runner — TAP output, E0216 validation | ✅ Complete |
+| `tyra fmt [--check] <file\|dir>` formatter + 100-col line wrapping | ✅ Complete |
+| `tyra test [--filter <pat>] [path]` runner — TAP output, E0216 validation | ✅ Complete |
 | `continue` statement | ✅ Complete |
+| `tyra new <name> [--lib]` — project scaffolding | ✅ Complete |
+| `tyra mod init/add/tree/sync` — dependency management | ✅ Complete |
+| `tyra bench ai-gen` — AI generation benchmark runner | ✅ Complete |
 | LSP server (`tyra-lsp`) + VS Code extension | ✅ Development install |
 | Static conformance corpus (14 programs + error cases) | ✅ CI-gated |
 
-**Experimental in v0.2.0** — included but not production-ready:
+**Experimental in v0.3.0** — included but not production-ready:
 
 | Component | Notes |
 | --- | --- |
 | `http.server` stdlib | ⚠️ Basic GET/POST routing only; not production-ready |
 
-**Not in v0.2.0** — explicit backlog:
+**Not in v0.3.0** — explicit backlog:
 
 | Component | Notes |
 | --- | --- |
-| `tyra fmt` line-length enforcement | ⏳ v0.2.x |
-| `tyra test --filter <pattern>` | ⏳ v0.2.x |
+| SemVer resolver, `Tyra.lock` | ⏳ v0.5+ |
+| Registry (`tyra publish`) | ⏳ v0.5+ |
+| Lambda C ABI, generic `List<T>` | ⏳ v0.4.0 |
 | `assert.panics` | ⏳ Requires per-test process isolation |
 | `test "name"` language syntax | ⏳ Separate ADR |
-| Package manager | ⏳ Later |
 | Pre-built binaries (homebrew, apt) | ⏳ Later |
 | VS Code Marketplace publication | ⏳ Later |
 

@@ -7,6 +7,50 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ---
 
+## [0.3.0] - 2026-05-19
+
+### Stable
+
+**Project lifecycle**
+- `Tyra.toml` manifest — `[package]` (name, version, edition) and `[dependencies]` (path / git+rev)
+- `tyra new <name> [--lib]` — scaffold a new bin or lib project (`src/<name>.tyra`, `.gitignore`, `README.md`)
+- `tyra mod init [--name <name>]` — create `Tyra.toml` for an existing directory
+- `tyra mod add <name> --path <path>` / `--git <url> --rev <rev>` — append a dependency entry
+- `tyra mod tree` — render the dependency tree (cycle detection, diamond DAG safe)
+- `tyra mod sync` — clone git dependencies into `~/.tyra/cache/git/<dep>-<urlhash>/<rev>/`
+
+**Import resolution (ADR 0010)**
+- Three-layer uniqueness rule: local `src/` → `[dependencies]` → stdlib
+- `E0217` on ambiguous import (two layers provide the same path); no silent shadowing
+- `E0218` for bin package dependencies and cached git dep name mismatches
+
+**Dependency invariants (ADR 0009)**
+- Bin packages cannot be imported (E0218)
+- Dependency key must equal `package.name` in the target manifest (no aliasing)
+- Root module `src/<name>.tyra` must exist at `tyra mod sync` time
+- All checks apply to both fresh clones and stale/manually-populated caches
+
+**AI benchmark**
+- `tyra bench ai-gen [options]` — thin wrapper over `bench/ai-gen/harness.py`; all harness flags forwarded verbatim
+
+**Toolchain improvements**
+- `tyra test [--filter <pattern>] [path]` — substring filter on `test_*` function names
+- `tyra fmt` line-length wrapping (100-col limit) — long function signatures wrap one-param-per-line; idempotent
+
+### Known Limitations
+
+- Dependency version solving and `Tyra.lock` not yet supported (path and git-rev pin only)
+- Registry (`tyra publish`, crates.io equivalent) not yet available
+- Windows native build untested (WSL2 recommended)
+
+### Not in This Release
+
+- Lambda C ABI, generic `List<T>`, `map`/`filter`/`fold` → v0.4.0
+- SemVer resolver, `Tyra.lock` → v0.5+
+- Pre-built binaries (Homebrew, apt) → separate release
+
+---
+
 ## [0.2.0] - 2026-05-19
 
 ### Stable
