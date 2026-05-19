@@ -66,3 +66,6 @@ ADRs are numbered sequentially: `0001`, `0002`, etc. Numbers are never reused. I
 | [0005](0005-multi-constraint-generics.md) | Allow up to two constraints per type parameter | Accepted | 2026-04-15 |
 | [0006](0006-top-level-expressions.md) | Allow top-level expressions as implicit main | Accepted | 2026-04-15 |
 | [0007](0007-boehm-gc-reference-impl.md) | Use Boehm GC as the v0.1 reference garbage collector | Accepted | 2026-04-19 |
+| [0008](0008-test-runner.md) | Test runner design (v0.2) | Accepted | 2026-05-19 |
+| [0009](0009-project-manifest.md) | Project manifest and package namespace (v0.3) | Accepted | 2026-05-19 |
+| [0010](0010-dependency-resolution.md) | Import resolution and dependency lookup (v0.3) | Accepted | 2026-05-19 |
