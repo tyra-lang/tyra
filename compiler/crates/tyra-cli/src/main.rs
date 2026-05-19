@@ -1,7 +1,7 @@
 // tyra CLI: the Tyra language compiler.
 //
 // Usage:
-//   tyra check [--release] [<file.tyra>]         Type-check without codegen
+//   tyra check [<file.tyra>]                      Type-check without codegen
 //   tyra run   [--release] [<file.tyra>]         Compile and run a Tyra program
 //   tyra build [--release] [<file.tyra>] [-o <out>]  Compile to a native binary
 //   tyra emit-ir <file.tyra>                     Emit LLVM IR to stdout
@@ -1116,8 +1116,9 @@ fn run_test_file_inner_captured(test_file: &Path, filter: Option<&str>) -> (usiz
     let source = match std::fs::read_to_string(test_file) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("error: cannot read {}: {e}", test_file.display());
-            return (0, 1, String::new());
+            let msg = format!("cannot read {}: {e}", test_file.display());
+            eprintln!("error: {msg}");
+            return (0, 1, infra_failure_tap(&msg));
         }
     };
     let dir = test_file.parent().unwrap_or(Path::new("."));
@@ -1129,8 +1130,9 @@ fn run_test_file_inner_captured(test_file: &Path, filter: Option<&str>) -> (usiz
         workspace_dir,
     );
     if check.report.has_errors() {
-        eprint!("{}", check.report.render(&check.sources));
-        return (0, 1, String::new());
+        let rendered = check.report.render(&check.sources);
+        eprint!("{rendered}");
+        return (0, 1, infra_failure_tap("compile error (see stderr)"));
     }
     let all_fns = find_test_fns(&check.ast);
     let test_fns: Vec<String> = if let Some(pat) = filter {
@@ -1145,18 +1147,28 @@ fn run_test_file_inner_captured(test_file: &Path, filter: Option<&str>) -> (usiz
     let runner_path = dir.join(&runner_name);
     let runner_source = synthesize_runner(&source, &test_fns);
     if let Err(e) = std::fs::write(&runner_path, &runner_source) {
-        eprintln!("error: cannot write runner: {e}");
-        return (0, 1, String::new());
+        let msg = format!("cannot write runner: {e}");
+        eprintln!("error: {msg}");
+        return (0, 1, infra_failure_tap(&msg));
     }
     let result = tyra_driver::run_and_capture(&runner_path);
     let _ = std::fs::remove_file(&runner_path);
     if result.report.has_errors() {
-        eprint!("{}", result.report.render(&result.sources));
-        return (0, test_fns.len(), String::new());
+        let rendered = result.report.render(&result.sources);
+        eprint!("{rendered}");
+        let n = test_fns.len();
+        return (0, n, infra_failure_tap("compile error (see stderr)"));
     }
     let tap = result.stdout.unwrap_or_default();
     let (pass, fail) = count_tap_lines(&tap);
     (pass, fail, tap)
+}
+
+/// Produce a minimal TAP string representing one infrastructure failure.
+/// Used in JUnit mode so the XML testsuite reflects the real failure count
+/// instead of silently showing tests="0" failures="0".
+fn infra_failure_tap(msg: &str) -> String {
+    format!("TAP version 14\n1..1\nnot ok 1 - infrastructure failure\n# {msg}\n")
 }
 
 fn count_tap_lines(output: &str) -> (usize, usize) {
