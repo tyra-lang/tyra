@@ -493,14 +493,13 @@ fn main() {
                 }
                 "tree" => {
                     let json_flag = args.get(3).map(String::as_str) == Some("--json");
-                    let max_args = if json_flag { 4 } else { 3 };
-                    if args.len() > max_args + 1 {
-                        eprintln!("error: unexpected argument `{}`", args[max_args + 1]);
+                    if args.len() > 3 && !json_flag {
+                        eprintln!("error: unknown argument `{}`", args[3]);
                         eprintln!("usage: tyra mod tree [--json]");
                         process::exit(1);
                     }
-                    if args.len() > 3 && !json_flag {
-                        eprintln!("error: unknown argument `{}`", args[3]);
+                    if args.len() > 4 {
+                        eprintln!("error: unexpected argument `{}`", args[4]);
                         eprintln!("usage: tyra mod tree [--json]");
                         process::exit(1);
                     }

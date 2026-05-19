@@ -1172,4 +1172,189 @@ mod tests {
         assert!(!issues.is_empty(), "unsynced git dep must be flagged");
         assert!(issues[0].contains("not synced"));
     }
+
+    // --- run_tree_json ---
+
+    #[test]
+    fn tree_json_no_deps_is_valid_root_object() {
+        let dir = tempfile::tempdir().unwrap();
+        make_manifest(dir.path(), "myapp");
+        let json = run_tree_json(dir.path()).unwrap();
+        assert!(json.contains("\"name\":\"myapp\""), "missing name field: {json}");
+        assert!(json.contains("\"version\":\"0.1.0\""), "missing version field: {json}");
+        assert!(json.contains("\"deps\":[]"), "empty deps array missing: {json}");
+    }
+
+    #[test]
+    fn tree_json_path_dep_nested_in_parent_deps() {
+        // Regression: the old tree_to_json() flattened all nodes to root.deps.
+        // dep_node_json() must produce: root.deps[0].deps[0] == child, not root.deps[1].
+        let root = tempfile::tempdir().unwrap();
+        let lib_dir = tempfile::tempdir().unwrap();
+        let child_dir = tempfile::tempdir().unwrap();
+
+        // child has no deps
+        make_manifest(child_dir.path(), "child");
+        // lib depends on child
+        fs::write(
+            lib_dir.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"mylib\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\nchild = {{ path = \"{}\" }}\n",
+                child_dir.path().display()
+            ),
+        )
+        .unwrap();
+        // root depends on lib
+        fs::write(
+            root.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\nmylib = {{ path = \"{}\" }}\n",
+                lib_dir.path().display()
+            ),
+        )
+        .unwrap();
+
+        let json = run_tree_json(root.path()).unwrap();
+
+        // child must appear inside mylib's deps, not at the root deps level.
+        // A flat (broken) output would contain "child" at root.deps; the correct
+        // output nests it inside the mylib node's own deps array.
+        // Verify by checking the structure: root.deps has one element (mylib),
+        // which itself has a non-empty deps array containing child.
+        assert!(json.contains("\"key\":\"mylib\""), "mylib missing: {json}");
+        assert!(json.contains("\"key\":\"child\""), "child missing: {json}");
+
+        // In the correct nested output the child node comes *after* the mylib
+        // node's opening brace, i.e., inside its deps array.
+        let mylib_pos = json.find("\"key\":\"mylib\"").unwrap();
+        let child_pos = json.find("\"key\":\"child\"").unwrap();
+        assert!(
+            child_pos > mylib_pos,
+            "child must be nested inside mylib, not at root level: {json}"
+        );
+
+        // Root deps array must contain exactly one direct element (mylib).
+        // Count top-level "key" occurrences inside root.deps [...] by checking
+        // that only one "\"key\"" appears at the root of the object (before the
+        // first nested "{" at depth > 1). We do this structurally: parse the
+        // root deps array extent and count only the first-level keys.
+        // Simpler proxy: root has one direct dep key "mylib"; child is not a
+        // sibling of mylib in the JSON text at the first deps level.
+        // We verify this by confirming the JSON starts with the root object and
+        // root.deps is a single-element array.
+        let after_root_deps = json.find("\"deps\":[").unwrap();
+        let root_deps_content = &json[after_root_deps..];
+        // The root deps array ends at the first ']' that closes it (depth 1).
+        // Count that only one "\"key\":" token lives at depth 1 within root.deps.
+        let mut depth = 0usize;
+        let mut top_level_keys = 0usize;
+        let chars: Vec<char> = root_deps_content.chars().collect();
+        let mut i = 0;
+        while i < chars.len() {
+            match chars[i] {
+                '[' | '{' => depth += 1,
+                ']' | '}' => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 { break; }
+                }
+                '"' if depth == 2 => {
+                    // Check for "key": pattern at depth 2 (inside root.deps[x])
+                    let rest: String = chars[i..].iter().collect();
+                    if rest.starts_with("\"key\":") {
+                        top_level_keys += 1;
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        assert_eq!(top_level_keys, 1, "root.deps must have exactly 1 direct element: {json}");
+    }
+
+    #[test]
+    fn tree_json_cycle_emits_cycle_true() {
+        let dir_a = tempfile::tempdir().unwrap();
+        let dir_b = tempfile::tempdir().unwrap();
+        fs::write(
+            dir_a.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"pkg_a\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\npkg_b = {{ path = \"{}\" }}\n",
+                dir_b.path().display()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir_b.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"pkg_b\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\npkg_a = {{ path = \"{}\" }}\n",
+                dir_a.path().display()
+            ),
+        )
+        .unwrap();
+        let json = run_tree_json(dir_a.path()).unwrap();
+        assert!(json.contains("\"cycle\":true"), "cycle node missing: {json}");
+    }
+
+    #[test]
+    fn tree_json_git_dep_emits_synced_false() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Tyra.toml"),
+            "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nutils = { git = \"https://github.com/example/utils.git\", \
+             rev = \"abc1234\" }\n",
+        )
+        .unwrap();
+        let json = run_tree_json(dir.path()).unwrap();
+        assert!(json.contains("\"synced\":false"), "git dep must report synced:false: {json}");
+        assert!(json.contains("\"key\":\"utils\""), "utils key missing: {json}");
+        assert!(json.contains("\"rev\":\"abc1234\""), "rev missing: {json}");
+    }
+
+    #[test]
+    fn tree_json_diamond_not_flagged_as_cycle() {
+        // app -> a -> common
+        // app -> b -> common
+        // common appears twice (diamond), neither node should have "cycle":true.
+        let dir_app = tempfile::tempdir().unwrap();
+        let dir_a = tempfile::tempdir().unwrap();
+        let dir_b = tempfile::tempdir().unwrap();
+        let dir_common = tempfile::tempdir().unwrap();
+        make_manifest(dir_common.path(), "common");
+        fs::write(
+            dir_a.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"pkg_a\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\ncommon = {{ path = \"{}\" }}\n",
+                dir_common.path().display()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir_b.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"pkg_b\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\ncommon = {{ path = \"{}\" }}\n",
+                dir_common.path().display()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir_app.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"app\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\npkg_a = {{ path = \"{}\" }}\npkg_b = {{ path = \"{}\" }}\n",
+                dir_a.path().display(),
+                dir_b.path().display()
+            ),
+        )
+        .unwrap();
+        let json = run_tree_json(dir_app.path()).unwrap();
+        assert!(!json.contains("\"cycle\":true"), "diamond must not be flagged as cycle: {json}");
+        assert_eq!(json.matches("\"key\":\"common\"").count(), 2, "common must appear twice: {json}");
+    }
 }
