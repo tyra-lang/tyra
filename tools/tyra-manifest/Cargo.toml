@@ -1,0 +1,18 @@
+[package]
+name = "tyra-manifest"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Tyra.toml manifest parser and project root discovery"
+
+[lib]
+name = "tyra_manifest"
+path = "src/lib.rs"
+
+[dependencies]
+toml  = { version = "0.8", features = ["parse"] }
+serde = { version = "1",   features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3"
