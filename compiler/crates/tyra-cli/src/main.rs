@@ -1,11 +1,12 @@
 // tyra CLI: the Tyra language compiler.
 //
 // Usage:
-//   tyra check <file.tyra>     Type-check without codegen
-//   tyra run <file.tyra>       Compile and run a Tyra program
-//   tyra build <file.tyra>     Compile to a native binary
-//   tyra emit-ir <file.tyra>   Emit LLVM IR to stdout
-//   tyra --version             Show version info
+//   tyra check <file.tyra>          Type-check without codegen
+//   tyra run <file.tyra>            Compile and run a Tyra program
+//   tyra build <file.tyra>          Compile to a native binary
+//   tyra emit-ir <file.tyra>        Emit LLVM IR to stdout
+//   tyra fmt [--check] <file.tyra|dir>  Format source (--check: exit 1 if changed)
+//   tyra --version                  Show version info
 //
 // spec reference: §18 (toolchain)
 
@@ -137,6 +138,61 @@ fn main() {
                 print!("{ir}");
             }
         }
+        "fmt" => {
+            let rest = &args[2..];
+            let check_only = rest.first().map(|s| s.as_str()) == Some("--check");
+            let file_arg = if check_only { rest.get(1) } else { rest.first() };
+            let path = match file_arg {
+                Some(p) => Path::new(p),
+                None => {
+                    eprintln!("error: `tyra fmt` requires a source file or directory");
+                    eprintln!("usage: tyra fmt [--check] <file.tyra|dir>");
+                    process::exit(1);
+                }
+            };
+            let files: Vec<std::path::PathBuf> = if path.is_dir() {
+                match collect_tyra_files(path) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!("error: cannot walk {}: {e}", path.display());
+                        process::exit(1);
+                    }
+                }
+            } else {
+                vec![path.to_path_buf()]
+            };
+            let mut any_would_change = false;
+            for file in &files {
+                let src = match std::fs::read_to_string(file) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("error: cannot read {}: {e}", file.display());
+                        process::exit(1);
+                    }
+                };
+                let formatted = match tyra_fmt::fmt_source(&src) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("error: {}: {e}", file.display());
+                        process::exit(1);
+                    }
+                };
+                if check_only {
+                    if src != formatted {
+                        eprintln!("{}: would reformat", file.display());
+                        any_would_change = true;
+                    }
+                } else if src != formatted {
+                    if let Err(e) = std::fs::write(file, &formatted) {
+                        eprintln!("error: cannot write {}: {e}", file.display());
+                        process::exit(1);
+                    }
+                }
+            }
+            if check_only && any_would_change {
+                process::exit(1);
+            }
+        }
         cmd => {
             eprintln!("error: unknown command `{cmd}`");
             print_usage();
@@ -151,10 +207,28 @@ fn print_usage() {
     eprintln!("usage: tyra <command> [options]");
     eprintln!();
     eprintln!("commands:");
-    eprintln!("  check <file.tyra>        type-check without codegen (exit 0 = clean)");
-    eprintln!("  run <file.tyra>          compile and run a Tyra program");
-    eprintln!("  build <file.tyra>        compile to a native binary");
-    eprintln!("  emit-ir <file.tyra>      emit LLVM IR to stdout");
-    eprintln!("  --version                show version info");
-    eprintln!("  --help                   show this help");
+    eprintln!("  check <file.tyra>                type-check without codegen (exit 0 = clean)");
+    eprintln!("  run <file.tyra>                  compile and run a Tyra program");
+    eprintln!("  build <file.tyra>                compile to a native binary");
+    eprintln!("  emit-ir <file.tyra>              emit LLVM IR to stdout");
+    eprintln!("  fmt [--check] <file.tyra|dir>    format source in-place; accepts a directory");
+    eprintln!("  --version                        show version info");
+    eprintln!("  --help                           show this help");
+}
+
+/// Recursively collect all `.tyra` files under `dir`.
+/// Returns an error if any directory entry cannot be read.
+fn collect_tyra_files(
+    dir: &Path,
+) -> Result<Vec<std::path::PathBuf>, std::io::Error> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            files.extend(collect_tyra_files(&path)?);
+        } else if path.extension().and_then(|e| e.to_str()) == Some("tyra") {
+            files.push(path);
+        }
+    }
+    Ok(files)
 }

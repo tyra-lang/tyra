@@ -1,0 +1,17 @@
+[package]
+name = "tyra-fmt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Source formatter for the Tyra language"
+
+[lib]
+name = "tyra_fmt"
+path = "src/lib.rs"
+
+[dependencies]
+tyra-diagnostics = { workspace = true }
+tyra-lexer       = { workspace = true }
+tyra-ast         = { workspace = true }
+tyra-parser      = { workspace = true }

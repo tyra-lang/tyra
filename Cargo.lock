@@ -840,6 +840,7 @@ version = "0.1.0"
 dependencies = [
  "tyra-diagnostics",
  "tyra-driver",
+ "tyra-fmt",
  "tyra-runtime",
 ]
 
@@ -866,6 +867,16 @@ dependencies = [
  "tyra-parser",
  "tyra-resolve",
  "tyra-types",
+]
+
+[[package]]
+name = "tyra-fmt"
+version = "0.1.0"
+dependencies = [
+ "tyra-ast",
+ "tyra-diagnostics",
+ "tyra-lexer",
+ "tyra-parser",
 ]
 
 [[package]]

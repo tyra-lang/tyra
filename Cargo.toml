@@ -12,6 +12,7 @@ members = [
     "compiler/crates/tyra-cli",
     "runtime",
     "tools/lsp/tyra-lsp",
+    "tools/tyra-fmt",
 ]
 resolver = "2"
 
@@ -33,3 +34,4 @@ tyra-mir = { path = "compiler/crates/tyra-mir" }
 tyra-codegen-llvm = { path = "compiler/crates/tyra-codegen-llvm" }
 tyra-driver = { path = "compiler/crates/tyra-driver" }
 tyra-runtime = { path = "runtime" }
+tyra-fmt     = { path = "tools/tyra-fmt" }
