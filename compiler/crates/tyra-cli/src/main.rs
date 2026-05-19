@@ -1,21 +1,22 @@
 // tyra CLI: the Tyra language compiler.
 //
 // Usage:
-//   tyra check <file.tyra>               Type-check without codegen
-//   tyra run <file.tyra>                 Compile and run a Tyra program
-//   tyra build <file.tyra>               Compile to a native binary
-//   tyra emit-ir <file.tyra>             Emit LLVM IR to stdout
-//   tyra fmt [--check] <file.tyra|dir>   Format source (--check: exit 1 if changed)
-//   tyra test [--filter <pat>] [--list] [path]  Run *_test.tyra files (default: .)
-//   tyra new [--lib] [--vcs none] <name> Scaffold a new project
-//   tyra mod init [--name <name>]        Create Tyra.toml for an existing directory
-//   tyra mod add <name> --path <path>    Add a path dependency
+//   tyra check [--release] [<file.tyra>]         Type-check without codegen
+//   tyra run   [--release] [<file.tyra>]         Compile and run a Tyra program
+//   tyra build [--release] [<file.tyra>] [-o <out>]  Compile to a native binary
+//   tyra emit-ir <file.tyra>                     Emit LLVM IR to stdout
+//   tyra fmt [--check] <file.tyra|dir>           Format source (--check: exit 1 if changed)
+//   tyra test [--filter <pat>] [--list] [--format tap|junit] [path]
+//   tyra new [--lib] [--vcs none] <name>         Scaffold a new project
+//   tyra mod init [--name <name>]                Create Tyra.toml for an existing directory
+//   tyra mod add <name> --path <path>            Add a path dependency
 //   tyra mod add <name> --git <url> --rev <rev>  Add a git dependency
-//   tyra mod remove <name>               Remove a dependency
-//   tyra mod tree [--json]               Show the dependency tree
-//   tyra mod sync [--check]              Clone git deps; --check validates without mutating
-//   tyra bench ai-gen [options]          Run the AI-generation benchmark
-//   tyra --version                       Show version info
+//   tyra mod remove <name>                       Remove a dependency
+//   tyra mod tree [--json]                       Show the dependency tree
+//   tyra mod sync [--check]                      Clone git deps; --check validates without mutating
+//   tyra mod clean                               Remove ~/.tyra/cache/
+//   tyra bench ai-gen [options]                  Run the AI-generation benchmark
+//   tyra --version                               Show version info
 //
 // spec reference: §18 (toolchain)
 
@@ -66,45 +67,121 @@ fn main() {
             print_usage();
         }
         "run" => {
-            if args.len() < 3 {
-                eprintln!("error: `tyra run` requires a source file");
-                eprintln!("usage: tyra run <file.tyra>");
-                process::exit(1);
+            let mut release = false;
+            let mut file_arg: Option<&str> = None;
+            for arg in &args[2..] {
+                match arg.as_str() {
+                    "--release" => release = true,
+                    a if a.starts_with("--") => {
+                        eprintln!("error: unknown flag `{a}`");
+                        eprintln!("usage: tyra run [--release] [<file.tyra>]");
+                        process::exit(1);
+                    }
+                    a => {
+                        if file_arg.is_some() {
+                            eprintln!("error: unexpected argument `{a}`");
+                            process::exit(1);
+                        }
+                        file_arg = Some(a);
+                    }
+                }
             }
-            let path = Path::new(&args[2]);
-            let result = tyra_driver::run(path);
+            let path = match file_arg {
+                Some(f) => PathBuf::from(f),
+                None => match project_entry_point() {
+                    Ok(p) => p,
+                    Err(e) => { eprintln!("error: {e}"); process::exit(1); }
+                },
+            };
+            let result = if release {
+                tyra_driver::run_release(&path)
+            } else {
+                tyra_driver::run(&path)
+            };
             if result.report.has_errors() {
                 eprint!("{}", result.report.render(&result.sources));
                 process::exit(1);
             }
         }
         "build" => {
-            if args.len() < 3 {
-                eprintln!("error: `tyra build` requires a source file");
-                eprintln!("usage: tyra build <file.tyra> [-o output]");
-                process::exit(1);
+            let mut release = false;
+            let mut file_arg: Option<String> = None;
+            let mut output_arg: Option<String> = None;
+            let mut rest_iter = args[2..].iter().peekable();
+            while let Some(arg) = rest_iter.next() {
+                match arg.as_str() {
+                    "--release" => release = true,
+                    "-o" => {
+                        output_arg = Some(
+                            rest_iter.next().cloned().unwrap_or_else(|| {
+                                eprintln!("error: `-o` requires an output path");
+                                process::exit(1);
+                            }),
+                        );
+                    }
+                    a if a.starts_with("--") => {
+                        eprintln!("error: unknown flag `{a}`");
+                        eprintln!("usage: tyra build [--release] [<file.tyra>] [-o <out>]");
+                        process::exit(1);
+                    }
+                    a => {
+                        if file_arg.is_some() {
+                            eprintln!("error: unexpected argument `{a}`");
+                            process::exit(1);
+                        }
+                        file_arg = Some(a.to_string());
+                    }
+                }
             }
-            let source_path = Path::new(&args[2]);
-            let output_path = if args.len() >= 5 && args[3] == "-o" {
-                Path::new(&args[4]).to_path_buf()
-            } else {
-                source_path.with_extension("")
+            let source_path = match file_arg {
+                Some(ref f) => PathBuf::from(f),
+                None => match project_entry_point() {
+                    Ok(p) => p,
+                    Err(e) => { eprintln!("error: {e}"); process::exit(1); }
+                },
             };
-
-            let result = tyra_driver::compile_to_binary(source_path, &output_path);
+            let output_path = match output_arg {
+                Some(ref o) => PathBuf::from(o),
+                None => source_path.with_extension(""),
+            };
+            let result = if release {
+                tyra_driver::compile_to_binary_release(&source_path, &output_path)
+            } else {
+                tyra_driver::compile_to_binary(&source_path, &output_path)
+            };
             if result.report.has_errors() {
                 eprint!("{}", result.report.render(&result.sources));
                 process::exit(1);
             }
-            println!("compiled to {}", output_path.display());
+            let mode = if release { " (release)" } else { "" };
+            println!("compiled to {}{mode}", output_path.display());
         }
         "check" => {
-            if args.len() < 3 {
-                eprintln!("error: `tyra check` requires a source file");
-                eprintln!("usage: tyra check <file.tyra>");
-                process::exit(1);
+            let mut file_arg: Option<&str> = None;
+            for arg in &args[2..] {
+                match arg.as_str() {
+                    a if a.starts_with("--") => {
+                        eprintln!("error: unknown flag `{a}`");
+                        eprintln!("usage: tyra check [<file.tyra>]");
+                        process::exit(1);
+                    }
+                    a => {
+                        if file_arg.is_some() {
+                            eprintln!("error: unexpected argument `{a}`");
+                            process::exit(1);
+                        }
+                        file_arg = Some(a);
+                    }
+                }
             }
-            let path = Path::new(&args[2]);
+            let path_buf = match file_arg {
+                Some(f) => PathBuf::from(f),
+                None => match project_entry_point() {
+                    Ok(p) => p,
+                    Err(e) => { eprintln!("error: {e}"); process::exit(1); }
+                },
+            };
+            let path = path_buf.as_path();
             let source = match std::fs::read_to_string(path) {
                 Ok(s) => s,
                 Err(e) => {
@@ -203,9 +280,10 @@ fn main() {
             }
         }
         "test" => {
-            // Parse: tyra test [--filter <pattern>] [--list] [path]
+            // Parse: tyra test [--filter <pat>] [--list] [--format tap|junit] [path]
             let mut filter: Option<String> = None;
             let mut list_mode = false;
+            let mut junit = false;
             let mut path_arg: Option<&str> = None;
             let mut rest = args[2..].iter().peekable();
             while let Some(arg) = rest.next() {
@@ -221,9 +299,23 @@ fn main() {
                         );
                     }
                     "--list" => list_mode = true,
+                    "--format" => {
+                        match rest.next().map(String::as_str) {
+                            Some("tap") => {}
+                            Some("junit") => junit = true,
+                            Some(v) => {
+                                eprintln!("error: unknown --format value `{v}` (expected `tap` or `junit`)");
+                                process::exit(1);
+                            }
+                            None => {
+                                eprintln!("error: --format requires a value (tap or junit)");
+                                process::exit(1);
+                            }
+                        }
+                    }
                     other if other.starts_with("--") => {
                         eprintln!("error: unknown flag `{other}` for `tyra test`");
-                        eprintln!("usage: tyra test [--filter <pattern>] [--list] [path]");
+                        eprintln!("usage: tyra test [--filter <pattern>] [--list] [--format tap|junit] [path]");
                         process::exit(1);
                     }
                     other => {
@@ -267,6 +359,19 @@ fn main() {
             if list_mode {
                 for test_file in &test_files {
                     list_test_fns(test_file, filter.as_deref());
+                }
+            } else if junit {
+                let mut suites: Vec<(String, Vec<TestRecord>)> = Vec::new();
+                let mut total_fail: usize = 0;
+                for test_file in &test_files {
+                    let (_, f, tap) = run_test_file_capture(test_file, filter.as_deref());
+                    total_fail += f;
+                    let records = parse_tap_to_records(&tap);
+                    suites.push((test_file.display().to_string(), records));
+                }
+                print!("{}", render_junit_xml(&suites));
+                if total_fail > 0 {
+                    process::exit(1);
                 }
             } else {
                 let mut total_pass: usize = 0;
@@ -594,13 +699,29 @@ fn main() {
                         }
                     }
                 }
+                "clean" => {
+                    if args.len() > 3 {
+                        eprintln!("error: unexpected argument `{}`", args[3]);
+                        eprintln!("usage: tyra mod clean");
+                        process::exit(1);
+                    }
+                    let cache_root = tyra_pkg::tyra_cache_root();
+                    match tyra_pkg::run_clean() {
+                        Ok(true) => println!("cleaned cache ({})", cache_root.display()),
+                        Ok(false) => println!("cache already empty"),
+                        Err(e) => {
+                            eprintln!("error: {e}");
+                            process::exit(1);
+                        }
+                    }
+                }
                 "" => {
-                    eprintln!("usage: tyra mod <init|add|remove|tree|sync>");
+                    eprintln!("usage: tyra mod <init|add|remove|tree|sync|clean>");
                     process::exit(1);
                 }
                 cmd => {
                     eprintln!("error: unknown mod subcommand `{cmd}`");
-                    eprintln!("usage: tyra mod <init|add|remove|tree|sync>");
+                    eprintln!("usage: tyra mod <init|add|remove|tree|sync|clean>");
                     process::exit(1);
                 }
             }
@@ -661,12 +782,13 @@ fn print_usage() {
     eprintln!("usage: tyra <command> [options]");
     eprintln!();
     eprintln!("commands:");
-    eprintln!("  check <file.tyra>                        type-check without codegen (exit 0 = clean)");
-    eprintln!("  run <file.tyra>                          compile and run a Tyra program");
-    eprintln!("  build <file.tyra>                        compile to a native binary");
+    eprintln!("  check [<file.tyra>]                      type-check (defaults to project entry point)");
+    eprintln!("  run   [--release] [<file.tyra>]          compile and run (defaults to project entry point)");
+    eprintln!("  build [--release] [<file.tyra>] [-o out] compile to binary (defaults to project entry point)");
     eprintln!("  emit-ir <file.tyra>                      emit LLVM IR to stdout");
     eprintln!("  fmt [--check] <file.tyra|dir>            format source in-place; accepts a directory");
-    eprintln!("  test [--filter <pat>] [--list] [path]   run *_test.tyra files (default: current dir)");
+    eprintln!("  test [--filter <pat>] [--list]           run *_test.tyra files (default: current dir)");
+    eprintln!("       [--format tap|junit] [path]");
     eprintln!("  new [--lib] [--vcs none] <name>          scaffold a new project in the current directory");
     eprintln!("  mod init [--name <name>]                 create Tyra.toml for an existing directory");
     eprintln!("  mod add <name> --path <path>             add a path dependency");
@@ -674,7 +796,8 @@ fn print_usage() {
     eprintln!("  mod remove <name>                        remove a dependency");
     eprintln!("  mod tree [--json]                        show the dependency tree");
     eprintln!("  mod sync [--check]                       clone git deps; --check validates without mutating");
-    eprintln!("  bench ai-gen [options]                   run the AI-generation benchmark (wraps bench/ai-gen/harness.py)");
+    eprintln!("  mod clean                                remove ~/.tyra/cache/");
+    eprintln!("  bench ai-gen [options]                   run the AI-generation benchmark");
     eprintln!("  --version                                show version info");
     eprintln!("  --help                                   show this help");
 }
@@ -949,4 +1072,161 @@ fn collect_tyra_files(
         }
     }
     Ok(files)
+}
+
+// ─── Project root helpers ─────────────────────────────────────────────────────
+
+/// Resolve the entry-point source file from the nearest `Tyra.toml`.
+/// Used by `run`/`build`/`check` when no source file is specified.
+fn project_entry_point() -> Result<PathBuf, String> {
+    let cwd = std::env::current_dir()
+        .map_err(|e| format!("cannot determine working directory: {e}"))?;
+    let root = tyra_manifest::find_project_root(&cwd).ok_or_else(|| {
+        "no Tyra.toml found; specify a source file or run `tyra new <name>` to create a project"
+            .to_string()
+    })?;
+    let manifest = tyra_manifest::load_manifest(&root)
+        .map_err(|e| format!("cannot load Tyra.toml: {e}"))?;
+    let entry = root.join("src").join(format!("{}.tyra", manifest.package.name));
+    if !entry.is_file() {
+        return Err(format!(
+            "entry point `{}` not found; expected `src/{}.tyra`",
+            entry.display(),
+            manifest.package.name
+        ));
+    }
+    Ok(entry)
+}
+
+// ─── JUnit output helpers ─────────────────────────────────────────────────────
+
+struct TestRecord {
+    name: String,
+    passed: bool,
+    failure_msg: String,
+}
+
+/// Run a test file and return `(pass, fail, raw_tap_output)`.
+/// The TAP output is captured (not printed) so the caller can render it.
+fn run_test_file_capture(test_file: &Path, filter: Option<&str>) -> (usize, usize, String) {
+    run_test_file_inner_captured(test_file, filter)
+}
+
+fn run_test_file_inner_captured(test_file: &Path, filter: Option<&str>) -> (usize, usize, String) {
+    let source = match std::fs::read_to_string(test_file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read {}: {e}", test_file.display());
+            return (0, 1, String::new());
+        }
+    };
+    let dir = test_file.parent().unwrap_or(Path::new("."));
+    let workspace_dir =
+        if dir.as_os_str().is_empty() { Some(Path::new(".")) } else { Some(dir) };
+    let check = tyra_driver::check_in_memory(
+        test_file.to_string_lossy().into_owned(),
+        source.clone(),
+        workspace_dir,
+    );
+    if check.report.has_errors() {
+        eprint!("{}", check.report.render(&check.sources));
+        return (0, 1, String::new());
+    }
+    let all_fns = find_test_fns(&check.ast);
+    let test_fns: Vec<String> = if let Some(pat) = filter {
+        all_fns.into_iter().filter(|n| n.contains(pat)).collect()
+    } else {
+        all_fns
+    };
+    if test_fns.is_empty() {
+        return (0, 0, String::new());
+    }
+    let runner_name = format!("__tyra_junit_runner_{}.tyra", std::process::id());
+    let runner_path = dir.join(&runner_name);
+    let runner_source = synthesize_runner(&source, &test_fns);
+    if let Err(e) = std::fs::write(&runner_path, &runner_source) {
+        eprintln!("error: cannot write runner: {e}");
+        return (0, 1, String::new());
+    }
+    let result = tyra_driver::run_and_capture(&runner_path);
+    let _ = std::fs::remove_file(&runner_path);
+    if result.report.has_errors() {
+        eprint!("{}", result.report.render(&result.sources));
+        return (0, test_fns.len(), String::new());
+    }
+    let tap = result.stdout.unwrap_or_default();
+    let (pass, fail) = count_tap_lines(&tap);
+    (pass, fail, tap)
+}
+
+fn count_tap_lines(output: &str) -> (usize, usize) {
+    let mut pass = 0usize;
+    let mut fail = 0usize;
+    for line in output.lines() {
+        if line.starts_with("not ok ") { fail += 1; }
+        else if line.starts_with("ok ") { pass += 1; }
+    }
+    (pass, fail)
+}
+
+fn parse_tap_to_records(tap: &str) -> Vec<TestRecord> {
+    let mut records: Vec<TestRecord> = Vec::new();
+    let mut last_failed: Option<usize> = None;
+    for line in tap.lines() {
+        if let Some(rest) = line.strip_prefix("not ok ") {
+            let name = rest.splitn(2, " - ").nth(1).unwrap_or(rest).to_string();
+            records.push(TestRecord { name, passed: false, failure_msg: String::new() });
+            last_failed = Some(records.len() - 1);
+        } else if let Some(rest) = line.strip_prefix("ok ") {
+            let name = rest.splitn(2, " - ").nth(1).unwrap_or(rest).to_string();
+            records.push(TestRecord { name, passed: true, failure_msg: String::new() });
+            last_failed = None;
+        } else if let Some(msg) = line.strip_prefix("# ") {
+            if let Some(idx) = last_failed {
+                if !records[idx].failure_msg.is_empty() {
+                    records[idx].failure_msg.push('\n');
+                }
+                records[idx].failure_msg.push_str(msg);
+            }
+        }
+    }
+    records
+}
+
+fn render_junit_xml(suites: &[(String, Vec<TestRecord>)]) -> String {
+    let mut xml = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites>\n");
+    for (file, records) in suites {
+        let tests = records.len();
+        let failures = records.iter().filter(|r| !r.passed).count();
+        let classname = std::path::Path::new(file.as_str())
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(file.as_str());
+        xml.push_str(&format!(
+            "  <testsuite name=\"{}\" tests=\"{tests}\" failures=\"{failures}\">\n",
+            xml_escape(file)
+        ));
+        for r in records {
+            let name = xml_escape(&r.name);
+            let cls = xml_escape(classname);
+            if r.passed {
+                xml.push_str(&format!("    <testcase name=\"{name}\" classname=\"{cls}\"/>\n"));
+            } else {
+                let msg = xml_escape(&r.failure_msg);
+                xml.push_str(&format!(
+                    "    <testcase name=\"{name}\" classname=\"{cls}\">\n      <failure message=\"{msg}\"/>\n    </testcase>\n"
+                ));
+            }
+        }
+        xml.push_str("  </testsuite>\n");
+    }
+    xml.push_str("</testsuites>\n");
+    xml
+}
+
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }

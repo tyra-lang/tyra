@@ -15,6 +15,7 @@ tyra-ast.workspace = true
 tyra-diagnostics.workspace = true
 tyra-driver.workspace = true
 tyra-fmt.workspace = true
+tyra-manifest.workspace = true
 tyra-new.workspace = true
 tyra-pkg.workspace = true
 # Pulled in to force `cargo build -p tyra-cli` to also build the runtime

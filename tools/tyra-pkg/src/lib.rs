@@ -5,6 +5,8 @@
 //! - `run_add(project_root, dep_name, source)` — append a dependency entry
 //! - `run_tree(project_root)` — render the dependency tree as a string
 //! - `run_sync(project_root)` — clone git deps into `~/.tyra/cache/git/`
+//! - `run_clean()` — remove the entire `~/.tyra/cache/` directory
+//! - `tyra_cache_root()` — path to the Tyra cache root (`~/.tyra/cache/`)
 //! - `cache_dir_for(dep_name, url, rev)` — canonical cache path for a git dep
 
 use std::collections::HashSet;
@@ -317,6 +319,28 @@ pub fn run_sync(project_root: &Path) -> Result<SyncReport, PkgError> {
 pub fn run_sync_from(start: &Path) -> Result<SyncReport, PkgError> {
     let root = find_project_root(start).ok_or(PkgError::NoProject)?;
     run_sync(&root)
+}
+
+/// Returns the root of the Tyra local cache: `~/.tyra/cache/`.
+pub fn tyra_cache_root() -> PathBuf {
+    let home = std::env::var("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."));
+    home.join(".tyra").join("cache")
+}
+
+/// `tyra mod clean`
+///
+/// Removes the entire `~/.tyra/cache/` directory.  Returns `true` if the
+/// directory existed and was removed, `false` if it was already absent.
+pub fn run_clean() -> Result<bool, PkgError> {
+    let root = tyra_cache_root();
+    if root.exists() {
+        std::fs::remove_dir_all(&root)?;
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }
 
 /// `tyra mod sync --check`

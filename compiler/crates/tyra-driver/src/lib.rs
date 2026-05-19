@@ -1438,8 +1438,17 @@ fn stmt_span(s: &tyra_ast::Stmt) -> tyra_ast::Span {
     }
 }
 
-/// Compile a Tyra source file to a native binary.
+/// Compile a Tyra source file to a native binary (debug, `-O0`).
 pub fn compile_to_binary(source_path: &Path, output_path: &Path) -> CompileResult {
+    compile_to_binary_opts(source_path, output_path, false)
+}
+
+/// Compile a Tyra source file to a native binary (release, `-O2`).
+pub fn compile_to_binary_release(source_path: &Path, output_path: &Path) -> CompileResult {
+    compile_to_binary_opts(source_path, output_path, true)
+}
+
+fn compile_to_binary_opts(source_path: &Path, output_path: &Path, release: bool) -> CompileResult {
     let result = compile_to_ir(source_path);
     if !result.success {
         return result;
@@ -1470,11 +1479,12 @@ pub fn compile_to_binary(source_path: &Path, output_path: &Path) -> CompileResul
     // async runtime staticlib (libtyra_runtime.a, M9). The runtime is built
     // by cargo into the same target/ directory as the `tyra` binary itself,
     // so we locate it relative to the current executable.
+    let opt_flag = if release { "-O2" } else { "-O0" };
     let mut clang_args: Vec<String> = vec![
         ir_path.to_str().unwrap().into(),
         "-o".into(),
         output_path.to_str().unwrap().into(),
-        "-O0".into(),
+        opt_flag.into(),
     ];
     // libgc: probe common install prefixes. Homebrew on Apple Silicon and
     // Intel place libgc under different roots; Linux package managers use
@@ -1643,10 +1653,18 @@ pub fn run_and_capture(source_path: &Path) -> CapturedRunResult {
 }
 
 pub fn run(source_path: &Path) -> CompileResult {
+    run_opts(source_path, false)
+}
+
+pub fn run_release(source_path: &Path) -> CompileResult {
+    run_opts(source_path, true)
+}
+
+fn run_opts(source_path: &Path, release: bool) -> CompileResult {
     let tmp_dir = std::env::temp_dir();
     let binary_path = tmp_dir.join(format!("tyra_run_{}", std::process::id()));
 
-    let result = compile_to_binary(source_path, &binary_path);
+    let result = compile_to_binary_opts(source_path, &binary_path, release);
     if !result.success {
         return result;
     }
