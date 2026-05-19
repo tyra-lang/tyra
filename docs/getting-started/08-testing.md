@@ -73,8 +73,11 @@ Import `assert` to get typed assertion functions:
 | `assert.is_ok(result)` | a `Result` is `Ok` |
 | `assert.is_err(result)` | a `Result` is `Err` |
 
-All helpers return `Result<Unit, String>`. Use `?` to stop the test on the first
-failure, or ignore the return value to keep running after a failure.
+All helpers return `Result<Unit, String>`. Use `?` to propagate the failure and
+stop the test immediately. If you do not use `?`, the return value is discarded
+and the test continues — but you must explicitly return `Err(...)` yourself for
+the runner to count it as a failure. A test that ends with `Ok(())` always
+passes, regardless of any ignored assertion results.
 
 ---
 

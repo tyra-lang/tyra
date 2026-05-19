@@ -16,7 +16,8 @@ and related developer experience tooling.
 - Preserves all comments: standalone, inline on statements, inline on item
   headers (fn, import, type alias, ADT, trait, impl)
 - Idempotent: formatting an already-formatted file is a no-op
-- 2-space indentation, line width 100
+- 2-space indentation
+- Line-length enforcement and expression wrapping are deferred to v0.2.x
 
 ### `tyra test`
 
