@@ -2,16 +2,16 @@ use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 
 use tokio::sync::Mutex;
+use tower_lsp::LspService;
 use tower_lsp::lsp_types::*;
-use tower_lsp::{LspService};
 use tyra_diagnostics::{Diagnostic as TyraDiag, Label, SourceMap, Span};
 use tyra_driver::{CompletionKind, SymbolList};
 
-use crate::{DocState, TyraLsp, DIAG_SOURCE, to_lsp_diagnostic};
 use crate::completion::{
-    build_completion_items, detect_member_receiver, lookup_receiver_ty,
-    module_member_completions, type_method_completions,
+    build_completion_items, detect_member_receiver, lookup_receiver_ty, module_member_completions,
+    type_method_completions,
 };
+use crate::{DIAG_SOURCE, DocState, TyraLsp, to_lsp_diagnostic};
 
 fn make_source() -> (SourceMap, tyra_diagnostics::SourceId) {
     let mut sources = SourceMap::new();
@@ -38,8 +38,7 @@ fn to_lsp_diagnostic_range_conversion() {
 #[test]
 fn to_lsp_diagnostic_second_line() {
     let (sources, id) = make_source();
-    let diag = TyraDiag::error("msg")
-        .with_label(Label::new(Span::new(id, 6, 11), "second line"));
+    let diag = TyraDiag::error("msg").with_label(Label::new(Span::new(id, 6, 11), "second line"));
     let lsp = to_lsp_diagnostic(&diag, &sources);
     assert_eq!(lsp.range.start.line, 1);
     assert_eq!(lsp.range.start.character, 0);
@@ -57,8 +56,7 @@ fn to_lsp_diagnostic_no_label_falls_back_to_origin() {
 #[test]
 fn to_lsp_diagnostic_message_combines_label() {
     let (sources, id) = make_source();
-    let diag = TyraDiag::error("primary")
-        .with_label(Label::new(Span::new(id, 0, 1), "label text"));
+    let diag = TyraDiag::error("primary").with_label(Label::new(Span::new(id, 0, 1), "label text"));
     let lsp = to_lsp_diagnostic(&diag, &sources);
     assert_eq!(lsp.message, "primary — label text");
 }
@@ -86,17 +84,26 @@ fn to_lsp_diagnostic_source_is_tyra() {
 #[test]
 fn hover_type_index_lookup() {
     let src = "let x: Int = 1\n";
-    let tyra_driver::CheckResult { report, sources, type_index, source_id, .. } =
-        tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
-    assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+    let tyra_driver::CheckResult {
+        report,
+        sources,
+        type_index,
+        source_id,
+        ..
+    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    assert!(
+        !report.has_errors(),
+        "unexpected errors: {:?}",
+        report.diagnostics()
+    );
 
-    let offset = sources.offset_at(source_id, 0, 4).expect("offset_at failed");
+    let offset = sources
+        .offset_at(source_id, 0, 4)
+        .expect("offset_at failed");
 
     let best = type_index
         .iter()
-        .filter(|(span, _)| {
-            span.source == source_id && span.start <= offset && offset < span.end
-        })
+        .filter(|(span, _)| span.source == source_id && span.start <= offset && offset < span.end)
         .min_by_key(|(span, _)| span.end - span.start);
 
     let (_span, ty) = best.expect("no type found at offset");
@@ -108,11 +115,22 @@ fn hover_type_index_lookup() {
 #[test]
 fn goto_definition_def_index_lookup() {
     let src = "let x: Int = 1\nlet y = x + 1\n";
-    let tyra_driver::CheckResult { report, sources, def_index, source_id, .. } =
-        tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
-    assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+    let tyra_driver::CheckResult {
+        report,
+        sources,
+        def_index,
+        source_id,
+        ..
+    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    assert!(
+        !report.has_errors(),
+        "unexpected errors: {:?}",
+        report.diagnostics()
+    );
 
-    let ref_offset = sources.offset_at(source_id, 1, 8).expect("offset_at failed");
+    let ref_offset = sources
+        .offset_at(source_id, 1, 8)
+        .expect("offset_at failed");
 
     let best = def_index
         .iter()
@@ -122,7 +140,10 @@ fn goto_definition_def_index_lookup() {
         .min_by_key(|(span, _)| span.end - span.start);
 
     let (_, def_span) = best.expect("no definition found for x reference");
-    assert_eq!(def_span.start, 0, "expected definition at start of `let x` stmt");
+    assert_eq!(
+        def_span.start, 0,
+        "expected definition at start of `let x` stmt"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -167,7 +188,10 @@ async fn goto_definition_returns_location() {
     let resp = service.ready().await.unwrap().call(def_req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
 
-    assert!(body["result"].is_object(), "expected a Location object, got: {body}");
+    assert!(
+        body["result"].is_object(),
+        "expected a Location object, got: {body}"
+    );
     assert!(
         body["result"]["uri"]
             .as_str()
@@ -182,9 +206,19 @@ async fn goto_definition_returns_location() {
 #[test]
 fn completion_returns_prelude_and_locals() {
     let src = "let xs = [1]\n";
-    let tyra_driver::CheckResult { report, sources, symbols, source_id, ast, .. } =
-        tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
-    assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+    let tyra_driver::CheckResult {
+        report,
+        sources,
+        symbols,
+        source_id,
+        ast,
+        ..
+    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    assert!(
+        !report.has_errors(),
+        "unexpected errors: {:?}",
+        report.diagnostics()
+    );
 
     let state = DocState {
         text: src.to_string(),
@@ -202,7 +236,10 @@ fn completion_returns_prelude_and_locals() {
 
     assert!(labels.contains(&"xs"), "missing user-defined `xs`");
     assert!(labels.contains(&"println"), "missing prelude `println`");
-    assert!(labels.contains(&"Some"), "missing prelude constructor `Some`");
+    assert!(
+        labels.contains(&"Some"),
+        "missing prelude constructor `Some`"
+    );
     assert!(labels.contains(&"Int"), "missing prelude type `Int`");
     assert!(labels.contains(&"let"), "missing keyword `let`");
 }
@@ -210,8 +247,13 @@ fn completion_returns_prelude_and_locals() {
 #[test]
 fn completion_excludes_intrinsics() {
     let src = "let x = 1\n";
-    let tyra_driver::CheckResult { sources, symbols, source_id, ast, .. } =
-        tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    let tyra_driver::CheckResult {
+        sources,
+        symbols,
+        source_id,
+        ast,
+        ..
+    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
     let state = DocState {
         text: src.to_string(),
         sources,
@@ -272,7 +314,10 @@ async fn completion_returns_array_with_println() {
     let resp = service.ready().await.unwrap().call(comp_req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
 
-    assert!(body["result"].is_array(), "expected array response, got: {body}");
+    assert!(
+        body["result"].is_array(),
+        "expected array response, got: {body}"
+    );
     let labels: Vec<&str> = body["result"]
         .as_array()
         .unwrap()
@@ -290,7 +335,13 @@ async fn completion_returns_array_with_println() {
 #[test]
 fn detect_member_receiver_unit() {
     let mk = |line: &str, ch: u32| -> Option<String> {
-        detect_member_receiver(line, Position { line: 0, character: ch })
+        detect_member_receiver(
+            line,
+            Position {
+                line: 0,
+                character: ch,
+            },
+        )
     };
 
     assert_eq!(mk("string.", 7), Some("string".into()));
@@ -300,7 +351,13 @@ fn detect_member_receiver_unit() {
     assert_eq!(mk("  .", 3), None);
     assert_eq!(mk("foo.bar.", 8), Some("bar".into()));
     assert_eq!(
-        detect_member_receiver("let x = 1\nstring.", Position { line: 1, character: 7 }),
+        detect_member_receiver(
+            "let x = 1\nstring.",
+            Position {
+                line: 1,
+                character: 7
+            }
+        ),
         Some("string".into())
     );
     assert_eq!(mk("1.", 2), None);
@@ -309,8 +366,14 @@ fn detect_member_receiver_unit() {
 #[test]
 fn completion_after_module_dot_returns_module_members() {
     let src = "let x = 1\n";
-    let tyra_driver::CheckResult { sources, type_index, def_index, source_id, ast, .. } =
-        tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    let tyra_driver::CheckResult {
+        sources,
+        type_index,
+        def_index,
+        source_id,
+        ast,
+        ..
+    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
     let symbols: SymbolList = vec![
         ("mymod__foo".into(), CompletionKind::Function),
         ("mymod__bar".into(), CompletionKind::Function),
@@ -328,22 +391,38 @@ fn completion_after_module_dot_returns_module_members() {
         version: 0,
     };
 
-    let pos = Position { line: 0, character: 6 };
+    let pos = Position {
+        line: 0,
+        character: 6,
+    };
     let receiver = detect_member_receiver(&state.text, pos).expect("should detect receiver");
     assert_eq!(receiver, "mymod");
 
     let items = module_member_completions(&receiver, &state);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
-    assert!(labels.contains(&"foo"), "expected `foo` in members: {labels:?}");
-    assert!(labels.contains(&"bar"), "expected `bar` in members: {labels:?}");
+    assert!(
+        labels.contains(&"foo"),
+        "expected `foo` in members: {labels:?}"
+    );
+    assert!(
+        labels.contains(&"bar"),
+        "expected `bar` in members: {labels:?}"
+    );
     assert!(!labels.contains(&"other"), "`other` should not appear");
 }
 
 #[test]
 fn completion_after_dot_no_match_returns_empty() {
     let src = "let x = 1\nlet r = unknown_module.\n";
-    let tyra_driver::CheckResult { sources, type_index, def_index, symbols, source_id, ast, .. } =
-        tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    let tyra_driver::CheckResult {
+        sources,
+        type_index,
+        def_index,
+        symbols,
+        source_id,
+        ast,
+        ..
+    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
     let state = DocState {
         text: src.to_string(),
         sources,
@@ -355,18 +434,27 @@ fn completion_after_dot_no_match_returns_empty() {
         diagnostics: vec![],
         version: 0,
     };
-    let pos = Position { line: 1, character: 23 };
+    let pos = Position {
+        line: 1,
+        character: 23,
+    };
     let receiver = detect_member_receiver(src, pos).expect("should detect receiver");
     assert_eq!(receiver, "unknown_module");
 
     let module_items = module_member_completions(&receiver, &state);
-    assert!(module_items.is_empty(), "expected no module members for unknown receiver");
+    assert!(
+        module_items.is_empty(),
+        "expected no module members for unknown receiver"
+    );
 
     let ty_items = match lookup_receiver_ty(&receiver, &state) {
         Some(ty) => type_method_completions(&ty),
         None => vec![],
     };
-    assert!(ty_items.is_empty(), "expected no type methods for unknown receiver");
+    assert!(
+        ty_items.is_empty(),
+        "expected no type methods for unknown receiver"
+    );
 }
 
 // ── Find References ───────────────────────────────────────────────────────────
@@ -376,9 +464,19 @@ fn references_finds_uses_from_def_site() {
     use crate::references::{find_def_span_at_cursor, find_uses_for_def};
 
     let src = "let x: Int = 1\nlet y = x + 1\nlet z = x * 2\n";
-    let tyra_driver::CheckResult { report, sources, def_index, source_id, ast, .. } =
-        tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
-    assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+    let tyra_driver::CheckResult {
+        report,
+        sources,
+        def_index,
+        source_id,
+        ast,
+        ..
+    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    assert!(
+        !report.has_errors(),
+        "unexpected errors: {:?}",
+        report.diagnostics()
+    );
 
     let state = DocState {
         text: src.to_string(),
@@ -404,9 +502,19 @@ fn references_finds_uses_from_use_site() {
     use crate::references::{find_def_span_at_cursor, find_uses_for_def};
 
     let src = "let x: Int = 1\nlet y = x + 1\nlet z = x * 2\n";
-    let tyra_driver::CheckResult { report, sources, def_index, source_id, ast, .. } =
-        tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
-    assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+    let tyra_driver::CheckResult {
+        report,
+        sources,
+        def_index,
+        source_id,
+        ast,
+        ..
+    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    assert!(
+        !report.has_errors(),
+        "unexpected errors: {:?}",
+        report.diagnostics()
+    );
 
     let state = DocState {
         text: src.to_string(),
@@ -432,9 +540,19 @@ fn references_includes_declaration_when_requested() {
     use crate::references::{find_def_span_at_cursor, find_uses_for_def};
 
     let src = "let x: Int = 1\nlet y = x + 1\n";
-    let tyra_driver::CheckResult { report, sources, def_index, source_id, ast, .. } =
-        tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
-    assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+    let tyra_driver::CheckResult {
+        report,
+        sources,
+        def_index,
+        source_id,
+        ast,
+        ..
+    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    assert!(
+        !report.has_errors(),
+        "unexpected errors: {:?}",
+        report.diagnostics()
+    );
 
     let state = DocState {
         text: src.to_string(),
@@ -455,7 +573,10 @@ fn references_includes_declaration_when_requested() {
     spans.push(def_span);
 
     assert_eq!(spans.len(), 2, "expected use + declaration, got: {spans:?}");
-    assert!(spans.contains(&def_span), "declaration span should be present");
+    assert!(
+        spans.contains(&def_span),
+        "declaration span should be present"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -501,7 +622,10 @@ async fn references_returns_location_array() {
     let resp = service.ready().await.unwrap().call(refs_req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
 
-    assert!(body["result"].is_array(), "expected array of locations, got: {body}");
+    assert!(
+        body["result"].is_array(),
+        "expected array of locations, got: {body}"
+    );
     assert!(
         !body["result"].as_array().unwrap().is_empty(),
         "expected at least one reference location, got: {body}"
@@ -578,9 +702,19 @@ fn rename_renames_all_uses_and_declaration() {
     use crate::rename::{extract_identifier_at, find_binding_name_span};
 
     let src = "let x: Int = 1\nlet y = x + 1\nlet z = x * 2\n";
-    let tyra_driver::CheckResult { report, sources, def_index, source_id, ast, .. } =
-        tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
-    assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+    let tyra_driver::CheckResult {
+        report,
+        sources,
+        def_index,
+        source_id,
+        ast,
+        ..
+    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    assert!(
+        !report.has_errors(),
+        "unexpected errors: {:?}",
+        report.diagnostics()
+    );
 
     let state = DocState {
         text: src.to_string(),
@@ -603,8 +737,8 @@ fn rename_renames_all_uses_and_declaration() {
     let use_spans = find_uses_for_def(&state.def_index, def_span, source_id);
     assert_eq!(use_spans.len(), 2, "expected 2 use-spans");
 
-    let name_span = find_binding_name_span(src, def_span, &old_name)
-        .expect("find_binding_name_span");
+    let name_span =
+        find_binding_name_span(src, def_span, &old_name).expect("find_binding_name_span");
     // name_span should cover the 'x' in "let x: Int = 1" (byte 4..5)
     assert_eq!(&src[name_span.start as usize..name_span.end as usize], "x");
 
@@ -655,7 +789,13 @@ async fn rename_returns_workspace_edit() {
         }))
         .id(2)
         .finish();
-    let resp = service.ready().await.unwrap().call(rename_req).await.unwrap();
+    let resp = service
+        .ready()
+        .await
+        .unwrap()
+        .call(rename_req)
+        .await
+        .unwrap();
     let body = serde_json::to_value(&resp).unwrap();
 
     let changes = &body["result"]["changes"];
@@ -663,7 +803,10 @@ async fn rename_returns_workspace_edit() {
     let file_edits = changes["file:///tmp/rename_test.tyra"]
         .as_array()
         .expect("expected edits array for the file");
-    assert!(!file_edits.is_empty(), "expected at least one edit, got: {body}");
+    assert!(
+        !file_edits.is_empty(),
+        "expected at least one edit, got: {body}"
+    );
     assert!(
         file_edits.iter().all(|e| e["newText"] == "renamed"),
         "all edits should use new name 'renamed', got: {body}"
@@ -714,7 +857,13 @@ async fn rename_from_def_site_returns_workspace_edit() {
         }))
         .id(2)
         .finish();
-    let resp = service.ready().await.unwrap().call(rename_req).await.unwrap();
+    let resp = service
+        .ready()
+        .await
+        .unwrap()
+        .call(rename_req)
+        .await
+        .unwrap();
     let body = serde_json::to_value(&resp).unwrap();
 
     let edits = body["result"]["changes"]["file:///tmp/rename_def_test.tyra"]
@@ -727,8 +876,14 @@ async fn rename_from_def_site_returns_workspace_edit() {
         "all edits should use 'renamed', got: {body}"
     );
     // Edits should be sorted: declaration (line 0) before use (line 1).
-    assert_eq!(edits[0]["range"]["start"]["line"], 0, "first edit should be declaration");
-    assert_eq!(edits[1]["range"]["start"]["line"], 1, "second edit should be use");
+    assert_eq!(
+        edits[0]["range"]["start"]["line"], 0,
+        "first edit should be declaration"
+    );
+    assert_eq!(
+        edits[1]["range"]["start"]["line"], 1,
+        "second edit should be use"
+    );
 }
 
 /// `new_name = \"let\"` (keyword) must produce an invalid_params error.
@@ -772,10 +927,19 @@ async fn rename_invalid_identifier_returns_error() {
         }))
         .id(2)
         .finish();
-    let resp = service.ready().await.unwrap().call(rename_req).await.unwrap();
+    let resp = service
+        .ready()
+        .await
+        .unwrap()
+        .call(rename_req)
+        .await
+        .unwrap();
     let body = serde_json::to_value(&resp).unwrap();
 
-    assert!(body["error"].is_object(), "expected error object, got: {body}");
+    assert!(
+        body["error"].is_object(),
+        "expected error object, got: {body}"
+    );
 }
 
 // ── Document symbols ─────────────────────────────────────────────────────────
@@ -828,7 +992,9 @@ async fn document_symbol_returns_top_level_items() {
 
     // Bar should have one child `x`.
     let bar = symbols.iter().find(|s| s["name"] == "Bar").unwrap();
-    let children = bar["children"].as_array().expect("Bar should have children");
+    let children = bar["children"]
+        .as_array()
+        .expect("Bar should have children");
     assert_eq!(children.len(), 1);
     assert_eq!(children[0]["name"], "x");
 }
@@ -859,7 +1025,10 @@ async fn document_symbol_returns_none_for_unopened_uri() {
     let resp = service.ready().await.unwrap().call(sym_req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
 
-    assert!(body["result"].is_null(), "expected null result for unopened uri, got: {body}");
+    assert!(
+        body["result"].is_null(),
+        "expected null result for unopened uri, got: {body}"
+    );
 }
 
 // ── Semantic tokens ───────────────────────────────────────────────────────────
@@ -903,8 +1072,13 @@ async fn semantic_tokens_full_returns_tokens() {
     let resp = service.ready().await.unwrap().call(tok_req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
 
-    let data = body["result"]["data"].as_array().expect("expected data array");
-    assert!(!data.is_empty(), "expected non-empty token data, got: {body}");
+    let data = body["result"]["data"]
+        .as_array()
+        .expect("expected data array");
+    assert!(
+        !data.is_empty(),
+        "expected non-empty token data, got: {body}"
+    );
     // data is flat [delta_line, delta_start, length, token_type, token_modifiers, ...]
     // First token should be `fn` (KEYWORD = type 0) at line 0 col 0
     assert_eq!(data[0], 0, "first token delta_line should be 0");
@@ -993,7 +1167,10 @@ async fn signature_help_returns_user_fn_signature() {
     let body = serde_json::to_value(&resp).unwrap();
 
     let result = &body["result"];
-    assert!(result.is_object(), "expected SignatureHelp object, got: {body}");
+    assert!(
+        result.is_object(),
+        "expected SignatureHelp object, got: {body}"
+    );
 
     let sigs = result["signatures"].as_array().expect("signatures array");
     assert_eq!(sigs.len(), 1, "expected 1 signature, got: {body}");
@@ -1091,7 +1268,10 @@ async fn did_open_publishes_e0110_diagnostic() {
         .finish();
     let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
 
-    let msg = socket.next().await.expect("expected publishDiagnostics notification");
+    let msg = socket
+        .next()
+        .await
+        .expect("expected publishDiagnostics notification");
     let body = serde_json::to_value(&msg).unwrap();
     assert_eq!(body["method"], "textDocument/publishDiagnostics");
     let diags = body["params"]["diagnostics"].as_array().unwrap();
@@ -1168,12 +1348,12 @@ async fn code_action_returns_typo_quickfix() {
     let body = serde_json::to_value(&resp).unwrap();
 
     let actions = body["result"].as_array().expect("expected array result");
-    assert!(!actions.is_empty(), "expected at least one code action, got: {body}");
+    assert!(
+        !actions.is_empty(),
+        "expected at least one code action, got: {body}"
+    );
 
-    let titles: Vec<&str> = actions
-        .iter()
-        .filter_map(|a| a["title"].as_str())
-        .collect();
+    let titles: Vec<&str> = actions.iter().filter_map(|a| a["title"].as_str()).collect();
     assert!(
         titles.iter().any(|t| t.contains("print")),
         "expected a `print` suggestion in {titles:?}"
@@ -1210,7 +1390,10 @@ async fn code_action_returns_none_for_unopened_uri() {
 
     let resp = service.ready().await.unwrap().call(ca_req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
-    assert!(body["result"].is_null(), "expected null for unopened URI, got: {body}");
+    assert!(
+        body["result"].is_null(),
+        "expected null for unopened URI, got: {body}"
+    );
 }
 
 // ── Inlay hints ───────────────────────────────────────────────────────────────
@@ -1262,12 +1445,12 @@ async fn inlay_hint_returns_type_for_let() {
     let body = serde_json::to_value(&resp).unwrap();
 
     let hints = body["result"].as_array().expect("expected array result");
-    assert!(!hints.is_empty(), "expected at least one inlay hint, got: {body}");
+    assert!(
+        !hints.is_empty(),
+        "expected at least one inlay hint, got: {body}"
+    );
 
-    let labels: Vec<&str> = hints
-        .iter()
-        .filter_map(|h| h["label"].as_str())
-        .collect();
+    let labels: Vec<&str> = hints.iter().filter_map(|h| h["label"].as_str()).collect();
     assert!(
         labels.iter().any(|l| *l == ": Int"),
         "expected `: Int` label, got: {labels:?}"
@@ -1306,7 +1489,10 @@ async fn inlay_hint_returns_none_for_unopened_uri() {
 
     let resp = service.ready().await.unwrap().call(hint_req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
-    assert!(body["result"].is_null(), "expected null for unopened URI, got: {body}");
+    assert!(
+        body["result"].is_null(),
+        "expected null for unopened URI, got: {body}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1352,7 +1538,10 @@ async fn folding_range_returns_ranges_for_fn() {
     let body = serde_json::to_value(&resp).unwrap();
 
     let ranges = body["result"].as_array().expect("expected array result");
-    assert!(!ranges.is_empty(), "expected at least one folding range, got: {body}");
+    assert!(
+        !ranges.is_empty(),
+        "expected at least one folding range, got: {body}"
+    );
     assert_eq!(
         ranges[0]["startLine"].as_u64().unwrap(),
         0,
@@ -1388,7 +1577,10 @@ async fn folding_range_returns_none_for_unopened_uri() {
 
     let resp = service.ready().await.unwrap().call(fold_req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
-    assert!(body["result"].is_null(), "expected null for unopened URI, got: {body}");
+    assert!(
+        body["result"].is_null(),
+        "expected null for unopened URI, got: {body}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1527,7 +1719,10 @@ async fn document_highlight_returns_none_for_unopened_uri() {
 
     let resp = service.ready().await.unwrap().call(hl_req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
-    assert!(body["result"].is_null(), "expected null for unopened URI, got: {body}");
+    assert!(
+        body["result"].is_null(),
+        "expected null for unopened URI, got: {body}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1575,7 +1770,10 @@ async fn selection_range_handler_returns_chain_for_known_position() {
     let body = serde_json::to_value(&resp).unwrap();
 
     let result = body["result"].as_array().expect("expected array result");
-    assert!(!result.is_empty(), "expected at least one SelectionRange, got: {body}");
+    assert!(
+        !result.is_empty(),
+        "expected at least one SelectionRange, got: {body}"
+    );
     // Each entry should have a 'range' field.
     assert!(
         result[0]["range"].is_object(),
@@ -1612,7 +1810,10 @@ async fn selection_range_handler_returns_none_for_unopened_uri() {
 
     let resp = service.ready().await.unwrap().call(req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
-    assert!(body["result"].is_null(), "expected null for unopened URI, got: {body}");
+    assert!(
+        body["result"].is_null(),
+        "expected null for unopened URI, got: {body}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1661,8 +1862,15 @@ async fn prepare_call_hierarchy_handler_returns_item() {
     let body = serde_json::to_value(&resp).unwrap();
 
     let items = body["result"].as_array().expect("expected array result");
-    assert!(!items.is_empty(), "expected at least one CallHierarchyItem, got: {body}");
-    assert_eq!(items[0]["name"].as_str(), Some("foo"), "item name should be 'foo'");
+    assert!(
+        !items.is_empty(),
+        "expected at least one CallHierarchyItem, got: {body}"
+    );
+    assert_eq!(
+        items[0]["name"].as_str(),
+        Some("foo"),
+        "item name should be 'foo'"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1705,7 +1913,13 @@ async fn incoming_calls_handler_returns_caller() {
         }))
         .id(2)
         .finish();
-    let prepare_resp = service.ready().await.unwrap().call(prepare_req).await.unwrap();
+    let prepare_resp = service
+        .ready()
+        .await
+        .unwrap()
+        .call(prepare_req)
+        .await
+        .unwrap();
     let prepare_body = serde_json::to_value(&prepare_resp).unwrap();
     let item = prepare_body["result"].as_array().unwrap()[0].clone();
 
@@ -1718,7 +1932,10 @@ async fn incoming_calls_handler_returns_caller() {
     let body = serde_json::to_value(&resp).unwrap();
 
     let calls = body["result"].as_array().expect("expected array result");
-    assert!(!calls.is_empty(), "expected at least one incoming call, got: {body}");
+    assert!(
+        !calls.is_empty(),
+        "expected at least one incoming call, got: {body}"
+    );
     assert_eq!(
         calls[0]["from"]["name"].as_str(),
         Some("bar"),
@@ -1884,7 +2101,10 @@ async fn goto_type_definition_handler_returns_location() {
         .as_u64()
         .or_else(|| body["result"]["range"]["start"]["line"].as_u64())
         .expect("expected start line in result");
-    assert_eq!(start_line, 0, "expected jump to line 0 ('value User'), got: {body}");
+    assert_eq!(
+        start_line, 0,
+        "expected jump to line 0 ('value User'), got: {body}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1931,7 +2151,10 @@ async fn goto_implementation_handler_returns_locations() {
     let body = serde_json::to_value(&resp).unwrap();
 
     let arr = body["result"].as_array().expect("expected array result");
-    assert!(!arr.is_empty(), "expected at least one implementation, got: {body}");
+    assert!(
+        !arr.is_empty(),
+        "expected at least one implementation, got: {body}"
+    );
     assert_eq!(
         arr[0]["range"]["start"]["line"].as_u64(),
         Some(4),
@@ -1986,7 +2209,10 @@ async fn goto_declaration_handler_returns_location() {
         .as_u64()
         .or_else(|| body["result"]["range"]["start"]["line"].as_u64())
         .expect("expected start line in result");
-    assert_eq!(start_line, 0, "expected jump to line 0 ('trait Foo'), got: {body}");
+    assert_eq!(
+        start_line, 0,
+        "expected jump to line 0 ('trait Foo'), got: {body}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2031,9 +2257,15 @@ async fn workspace_symbol_handler_returns_matches() {
 
     let arr = body["result"].as_array().expect("expected array result");
     assert!(!arr.is_empty(), "expected at least one symbol, got: {body}");
-    let names: Vec<_> = arr.iter().map(|s| s["name"].as_str().unwrap_or("")).collect();
+    let names: Vec<_> = arr
+        .iter()
+        .map(|s| s["name"].as_str().unwrap_or(""))
+        .collect();
     assert!(names.contains(&"greet"), "expected 'greet' in: {names:?}");
-    assert!(!names.contains(&"foo"), "expected 'foo' excluded, got: {names:?}");
+    assert!(
+        !names.contains(&"foo"),
+        "expected 'foo' excluded, got: {names:?}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2078,7 +2310,10 @@ async fn code_lens_handler_returns_lenses() {
     let arr = body["result"].as_array().expect("expected array result");
     assert!(!arr.is_empty(), "expected at least one lens, got: {body}");
     let title = arr[0]["command"]["title"].as_str().unwrap_or("");
-    assert!(title.contains("references"), "expected 'references' in title, got: {title}");
+    assert!(
+        title.contains("references"),
+        "expected 'references' in title, got: {title}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2125,9 +2360,18 @@ async fn diagnostic_handler_returns_full_report_with_items() {
     let resp = service.ready().await.unwrap().call(req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
 
-    assert_eq!(body["result"]["kind"].as_str(), Some("full"), "expected full report: {body}");
-    let items = body["result"]["items"].as_array().expect("expected items array");
-    assert!(!items.is_empty(), "expected at least one diagnostic for type error, got: {body}");
+    assert_eq!(
+        body["result"]["kind"].as_str(),
+        Some("full"),
+        "expected full report: {body}"
+    );
+    let items = body["result"]["items"]
+        .as_array()
+        .expect("expected items array");
+    assert!(
+        !items.is_empty(),
+        "expected at least one diagnostic for type error, got: {body}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2160,9 +2404,18 @@ async fn diagnostic_handler_returns_empty_report_for_unopened_uri() {
     let resp = service.ready().await.unwrap().call(req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
 
-    assert_eq!(body["result"]["kind"].as_str(), Some("full"), "expected full report: {body}");
-    let items = body["result"]["items"].as_array().expect("expected items array");
-    assert!(items.is_empty(), "expected empty items for unopened URI, got: {body}");
+    assert_eq!(
+        body["result"]["kind"].as_str(),
+        Some("full"),
+        "expected full report: {body}"
+    );
+    let items = body["result"]["items"]
+        .as_array()
+        .expect("expected items array");
+    assert!(
+        items.is_empty(),
+        "expected empty items for unopened URI, got: {body}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2214,8 +2467,14 @@ async fn prepare_rename_returns_range_for_let_binding() {
         Some("x"),
         "expected placeholder 'x': {body}"
     );
-    assert_eq!(body["result"]["range"]["start"]["character"].as_u64(), Some(4));
-    assert_eq!(body["result"]["range"]["end"]["character"].as_u64(), Some(5));
+    assert_eq!(
+        body["result"]["range"]["start"]["character"].as_u64(),
+        Some(4)
+    );
+    assert_eq!(
+        body["result"]["range"]["end"]["character"].as_u64(),
+        Some(5)
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2260,7 +2519,10 @@ async fn prepare_rename_returns_none_outside_identifier() {
         .finish();
     let resp = service.ready().await.unwrap().call(req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
-    assert!(body["result"].is_null(), "expected null result outside identifier: {body}");
+    assert!(
+        body["result"].is_null(),
+        "expected null result outside identifier: {body}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2305,7 +2567,10 @@ async fn prepare_rename_rejects_keyword() {
         .finish();
     let resp = service.ready().await.unwrap().call(req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
-    assert!(body["error"].is_object(), "expected error for keyword rename: {body}");
+    assert!(
+        body["error"].is_object(),
+        "expected error for keyword rename: {body}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2358,9 +2623,16 @@ async fn document_link_handler_returns_link_for_local_import() {
     let body = serde_json::to_value(&resp).unwrap();
 
     let arr = body["result"].as_array().expect("expected array result");
-    assert_eq!(arr.len(), 1, "expected 1 link for `import math`, got: {body}");
+    assert_eq!(
+        arr.len(),
+        1,
+        "expected 1 link for `import math`, got: {body}"
+    );
     let target = arr[0]["target"].as_str().expect("expected target string");
-    assert!(target.ends_with("math.tyra"), "target should point to math.tyra: {target}");
+    assert!(
+        target.ends_with("math.tyra"),
+        "target should point to math.tyra: {target}"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -2458,13 +2730,29 @@ async fn workspace_diagnostic_returns_reports_for_all_open_docs() {
     let resp = service.ready().await.unwrap().call(req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
 
-    let items = body["result"]["items"].as_array().expect("expected items array");
-    assert_eq!(items.len(), 1, "expected 1 document report for the open doc, got: {body}");
+    let items = body["result"]["items"]
+        .as_array()
+        .expect("expected items array");
+    assert_eq!(
+        items.len(),
+        1,
+        "expected 1 document report for the open doc, got: {body}"
+    );
 
     // The single item must be a Full report with diagnostics.
-    assert_eq!(items[0]["kind"].as_str(), Some("full"), "expected kind=full: {}", items[0]);
-    let diags = items[0]["items"].as_array().expect("expected items in doc report");
-    assert!(!diags.is_empty(), "expected ≥1 diagnostic for the erroneous doc");
+    assert_eq!(
+        items[0]["kind"].as_str(),
+        Some("full"),
+        "expected kind=full: {}",
+        items[0]
+    );
+    let diags = items[0]["items"]
+        .as_array()
+        .expect("expected items in doc report");
+    assert!(
+        !diags.is_empty(),
+        "expected ≥1 diagnostic for the erroneous doc"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2493,8 +2781,13 @@ async fn workspace_diagnostic_returns_empty_when_no_docs_open() {
     let resp = service.ready().await.unwrap().call(req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
 
-    let items = body["result"]["items"].as_array().expect("expected items array");
-    assert!(items.is_empty(), "expected empty items when no docs open, got: {body}");
+    let items = body["result"]["items"]
+        .as_array()
+        .expect("expected items array");
+    assert!(
+        items.is_empty(),
+        "expected empty items when no docs open, got: {body}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2536,6 +2829,11 @@ async fn did_change_watched_files_handler_does_not_crash() {
         .finish();
     let resp = service.ready().await.unwrap().call(req).await.unwrap();
     let body = serde_json::to_value(&resp).unwrap();
-    let items = body["result"]["items"].as_array().expect("expected items array");
-    assert!(items.is_empty(), "expected empty items when no docs open, got: {body}");
+    let items = body["result"]["items"]
+        .as_array()
+        .expect("expected items array");
+    assert!(
+        items.is_empty(),
+        "expected empty items when no docs open, got: {body}"
+    );
 }

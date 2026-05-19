@@ -187,10 +187,7 @@ pub enum Instruction {
     },
 
     /// `dest = list_len(list)` — extract the length (field 1) from a list struct (§11).
-    ListLen {
-        dest: String,
-        list: Operand,
-    },
+    ListLen { dest: String, list: Operand },
 
     /// `dest = list_get(list, index, elem_type)` — panicking index access (§11).
     /// Aborts if index >= length.

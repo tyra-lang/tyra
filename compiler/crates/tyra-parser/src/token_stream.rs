@@ -123,10 +123,7 @@ impl TokenStream {
             TokenKind::Newline => {
                 self.pos += 1;
             }
-            TokenKind::Eof
-            | TokenKind::End
-            | TokenKind::Else
-            | TokenKind::When => {} // OK — implicit block terminator
+            TokenKind::Eof | TokenKind::End | TokenKind::Else | TokenKind::When => {} // OK — implicit block terminator
             _ => {
                 let span = self.tokens[self.pos].span;
                 report.add(

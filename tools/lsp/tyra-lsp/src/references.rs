@@ -1,4 +1,4 @@
-use tyra_diagnostics::{Span, SourceId};
+use tyra_diagnostics::{SourceId, Span};
 use tyra_driver::DefIndex;
 
 use crate::DocState;

@@ -207,9 +207,9 @@ fn collect_sym_expr(
             collect_sym_expr(e, out, seen);
             collect_sym_expr(i, out, seen);
         }
-        ExprKind::Propagate(e)
-        | ExprKind::Await(e)
-        | ExprKind::Spawn(e) => collect_sym_expr(e, out, seen),
+        ExprKind::Propagate(e) | ExprKind::Await(e) | ExprKind::Spawn(e) => {
+            collect_sym_expr(e, out, seen)
+        }
         ExprKind::ListLit(items) => {
             for item in items {
                 collect_sym_expr(item, out, seen);
@@ -440,7 +440,12 @@ fn collect_top_level(items: &[Item], scopes: &mut ScopeStack, report: &mut Repor
 }
 
 /// Pass 2: resolve references in each item.
-fn resolve_item(item: &Item, scopes: &mut ScopeStack, def_index: &mut DefIndex, report: &mut Report) {
+fn resolve_item(
+    item: &Item,
+    scopes: &mut ScopeStack,
+    def_index: &mut DefIndex,
+    report: &mut Report,
+) {
     match item {
         Item::FnDef(f) => resolve_fn(f, scopes, def_index, report),
         Item::ImplDef(imp) => {
@@ -477,13 +482,23 @@ fn resolve_fn(f: &FnDef, scopes: &mut ScopeStack, def_index: &mut DefIndex, repo
     scopes.pop();
 }
 
-fn resolve_body(stmts: &[Stmt], scopes: &mut ScopeStack, def_index: &mut DefIndex, report: &mut Report) {
+fn resolve_body(
+    stmts: &[Stmt],
+    scopes: &mut ScopeStack,
+    def_index: &mut DefIndex,
+    report: &mut Report,
+) {
     for stmt in stmts {
         resolve_stmt(stmt, scopes, def_index, report);
     }
 }
 
-fn resolve_stmt(stmt: &Stmt, scopes: &mut ScopeStack, def_index: &mut DefIndex, report: &mut Report) {
+fn resolve_stmt(
+    stmt: &Stmt,
+    scopes: &mut ScopeStack,
+    def_index: &mut DefIndex,
+    report: &mut Report,
+) {
     match stmt {
         Stmt::Let(s) => {
             resolve_expr(&s.value, scopes, def_index, report);
@@ -520,25 +535,28 @@ fn resolve_stmt(stmt: &Stmt, scopes: &mut ScopeStack, def_index: &mut DefIndex, 
     }
 }
 
-fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, def_index: &mut DefIndex, report: &mut Report) {
+fn resolve_expr(
+    expr: &Expr,
+    scopes: &mut ScopeStack,
+    def_index: &mut DefIndex,
+    report: &mut Report,
+) {
     match &expr.kind {
         // Names that need resolution
-        ExprKind::Ident(name) => {
-            match scopes.lookup(name) {
-                None => {
-                    report.add(
-                        Diagnostic::error(format!("undefined name `{name}`"))
-                            .with_code("E0200")
-                            .with_label(Label::new(expr.span, "not found in this scope")),
-                    );
-                }
-                Some(sym) => {
-                    if let Some(def_span) = symbol_span(sym) {
-                        def_index.insert(expr.span, def_span);
-                    }
+        ExprKind::Ident(name) => match scopes.lookup(name) {
+            None => {
+                report.add(
+                    Diagnostic::error(format!("undefined name `{name}`"))
+                        .with_code("E0200")
+                        .with_label(Label::new(expr.span, "not found in this scope")),
+                );
+            }
+            Some(sym) => {
+                if let Some(def_span) = symbol_span(sym) {
+                    def_index.insert(expr.span, def_span);
                 }
             }
-        }
+        },
 
         // Recursive cases
         ExprKind::BinaryOp(l, _, r) => {
@@ -639,7 +657,12 @@ fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, def_index: &mut DefIndex, 
     }
 }
 
-fn resolve_if(if_expr: &IfExpr, scopes: &mut ScopeStack, def_index: &mut DefIndex, report: &mut Report) {
+fn resolve_if(
+    if_expr: &IfExpr,
+    scopes: &mut ScopeStack,
+    def_index: &mut DefIndex,
+    report: &mut Report,
+) {
     resolve_expr(&if_expr.condition, scopes, def_index, report);
     scopes.push();
     resolve_body(&if_expr.then_body, scopes, def_index, report);
@@ -751,7 +774,12 @@ mod tests {
         use crate::CompletionKind;
         let src = "import list\nfn greet()\nend\nlet v = 1\n";
         let (_, symbols) = resolve_with_symbols(src);
-        let find = |name: &str| symbols.iter().find(|(n, _)| n == name).map(|(_, k)| k.clone());
+        let find = |name: &str| {
+            symbols
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, k)| k.clone())
+        };
         assert_eq!(find("greet"), Some(CompletionKind::Function));
         assert_eq!(find("v"), Some(CompletionKind::Variable));
         assert_eq!(find("list"), Some(CompletionKind::Module));

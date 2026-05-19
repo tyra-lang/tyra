@@ -32,9 +32,7 @@ use std::thread;
 mod gc_string;
 
 mod stdlib_fs;
-pub use stdlib_fs::{
-    tyra_fs_errmsg, tyra_fs_errno, tyra_fs_exists, tyra_fs_read, tyra_fs_write,
-};
+pub use stdlib_fs::{tyra_fs_errmsg, tyra_fs_errno, tyra_fs_exists, tyra_fs_read, tyra_fs_write};
 
 mod stdlib_json;
 pub use stdlib_json::{
@@ -73,9 +71,9 @@ pub use stdlib_string::{
 pub mod stdlib_float;
 pub use stdlib_float::{
     tyra_float_abs, tyra_float_approx_eq, tyra_float_ceil, tyra_float_eq, tyra_float_floor,
-    tyra_float_from_int, tyra_float_is_infinite, tyra_float_is_nan, tyra_float_max,
-    tyra_float_min, tyra_float_parse, tyra_float_parse_errno, tyra_float_round,
-    tyra_float_to_int, tyra_float_to_string,
+    tyra_float_from_int, tyra_float_is_infinite, tyra_float_is_nan, tyra_float_max, tyra_float_min,
+    tyra_float_parse, tyra_float_parse_errno, tyra_float_round, tyra_float_to_int,
+    tyra_float_to_string,
 };
 
 /// Thunk signature emitted by codegen for each `spawn` site.
@@ -404,10 +402,7 @@ pub unsafe extern "C" fn tyra_task_join_all(
 /// so each source task stays alive until both the caller and the
 /// dispatcher release it.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn tyra_task_select(
-    tasks: *const *const Task,
-    n: i64,
-) -> *const Task {
+pub unsafe extern "C" fn tyra_task_select(tasks: *const *const Task, n: i64) -> *const Task {
     assert!(n > 0, "tyra_task_select: empty task list");
     assert!(!tasks.is_null(), "tyra_task_select: null buffer");
 

@@ -181,7 +181,11 @@ pub unsafe extern "C" fn tyra_fs_exists(path: *const c_char) -> c_int {
         Ok(s) => s,
         Err(_) => return 0,
     };
-    if std::path::Path::new(path_str).exists() { 1 } else { 0 }
+    if std::path::Path::new(path_str).exists() {
+        1
+    } else {
+        0
+    }
 }
 
 #[cfg(test)]

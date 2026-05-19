@@ -17,9 +17,7 @@ use tyra_diagnostics::{SourceId, SourceMap, Span};
 ///   - `inline`: lines that have code before a `#` comment (e.g. `let x = 1 # note`)
 ///
 /// String literals are handled so `"#{x}"` interpolation is not misidentified.
-pub fn extract_comments(
-    src: &str,
-) -> (BTreeMap<u32, String>, BTreeMap<u32, String>) {
+pub fn extract_comments(src: &str) -> (BTreeMap<u32, String>, BTreeMap<u32, String>) {
     let mut standalone = BTreeMap::new();
     let mut inline = BTreeMap::new();
     for (i, line) in src.lines().enumerate() {
@@ -444,8 +442,12 @@ impl<'src> Printer<'src> {
     fn print_fn_header(&mut self, f: &FnDef) {
         // Build prefix up to the opening paren.
         let mut prefix = String::new();
-        if f.is_export { prefix.push_str("export "); }
-        if f.is_async  { prefix.push_str("async "); }
+        if f.is_export {
+            prefix.push_str("export ");
+        }
+        if f.is_async {
+            prefix.push_str("async ");
+        }
         prefix.push_str("fn ");
         prefix.push_str(&f.name);
 
@@ -601,8 +603,7 @@ impl<'src> Printer<'src> {
             // expressions where parse_postfix records ts.peek_span() (the
             // Newline token) as the span end, making span.end point to the
             // first byte of the next line rather than the last byte of this one.
-            let stmt_end_line =
-                self.line_of(stmt_span(stmt).end.saturating_sub(1));
+            let stmt_end_line = self.line_of(stmt_span(stmt).end.saturating_sub(1));
             self.emit_pending_comments(stmt_start_line);
             self.print_stmt(stmt);
             // Re-emit any inline comment that was on the same source line.
@@ -988,7 +989,8 @@ impl<'src> Printer<'src> {
                         if field.field_name.is_empty() {
                             // Positional / wildcard: `Ok(_)` → field_name is ""
                             self.print_pattern(&field.pattern);
-                        } else if matches!(&field.pattern.kind, PatternKind::Ident(n) if n == &field.field_name) {
+                        } else if matches!(&field.pattern.kind, PatternKind::Ident(n) if n == &field.field_name)
+                        {
                             // Shorthand: `Ok(v)` stored as field_name="v", pattern=Ident("v")
                             self.out.push_str(&field.field_name);
                         } else {

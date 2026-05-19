@@ -48,7 +48,13 @@ pub fn parse_stmt(ts: &mut TokenStream, report: &mut Report) -> Stmt {
             ) {
                 ts.advance();
             }
-            Stmt::Expr(ExprStmt { expr: Expr { kind: ExprKind::UnitLit, span }, span })
+            Stmt::Expr(ExprStmt {
+                expr: Expr {
+                    kind: ExprKind::UnitLit,
+                    span,
+                },
+                span,
+            })
         }
         _ => {
             let start = ts.peek_span();
@@ -174,7 +180,10 @@ pub fn parse_if(ts: &mut TokenStream, report: &mut Report) -> IfExpr {
         let expr = parse_expr(ts, report);
         let stmt_span = expr_start.merge(expr.span);
         ts.skip_newlines();
-        vec![Stmt::Expr(ExprStmt { expr, span: stmt_span })]
+        vec![Stmt::Expr(ExprStmt {
+            expr,
+            span: stmt_span,
+        })]
     };
 
     let else_body = if ts.check(&TokenKind::Else) {

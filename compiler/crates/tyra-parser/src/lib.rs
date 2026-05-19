@@ -234,7 +234,11 @@ mod tests {
         // `if cond expr else expr end` — no newlines, all on one line
         let source = "let n = if x > 0 x else 0 end\n";
         let (ast, report) = parse_str(source);
-        assert!(!report.has_errors(), "inline if errors: {:?}", report.diagnostics());
+        assert!(
+            !report.has_errors(),
+            "inline if errors: {:?}",
+            report.diagnostics()
+        );
         if let Item::Stmt(Stmt::Let(s)) = &ast.items[0] {
             assert!(matches!(s.value.kind, ExprKind::If(_)));
         } else {
@@ -247,7 +251,11 @@ mod tests {
         // inline if without else (then-body is single expr, no else branch)
         let source = "if k < n k end\n";
         let (ast, report) = parse_str(source);
-        assert!(!report.has_errors(), "inline if no-else errors: {:?}", report.diagnostics());
+        assert!(
+            !report.has_errors(),
+            "inline if no-else errors: {:?}",
+            report.diagnostics()
+        );
         if let Item::Stmt(Stmt::Expr(ExprStmt { expr, .. })) = &ast.items[0] {
             if let ExprKind::If(if_expr) = &expr.kind {
                 assert!(if_expr.else_body.is_none());
@@ -265,7 +273,11 @@ mod tests {
         // `break` inside a while body should parse without errors
         let source = "while true\n  break\nend\n";
         let (ast, report) = parse_str(source);
-        assert!(!report.has_errors(), "break parse errors: {:?}", report.diagnostics());
+        assert!(
+            !report.has_errors(),
+            "break parse errors: {:?}",
+            report.diagnostics()
+        );
         if let Item::Stmt(Stmt::Expr(ExprStmt { expr, .. })) = &ast.items[0] {
             if let ExprKind::While(w) = &expr.kind {
                 assert!(matches!(w.body[0], Stmt::Break(_)));
@@ -282,7 +294,11 @@ mod tests {
         // break inside an if inside a while
         let source = "while true\n  if x > 0\n    break\n  end\nend\n";
         let (ast, report) = parse_str(source);
-        assert!(!report.has_errors(), "break-in-if errors: {:?}", report.diagnostics());
+        assert!(
+            !report.has_errors(),
+            "break-in-if errors: {:?}",
+            report.diagnostics()
+        );
         if let Item::Stmt(Stmt::Expr(ExprStmt { expr, .. })) = &ast.items[0] {
             assert!(matches!(expr.kind, ExprKind::While(_)));
         } else {
@@ -623,8 +639,14 @@ print("hello")
             .filter_map(|d| d.code.as_deref())
             .collect();
         assert!(codes.contains(&"E0110"), "expected E0110, got: {codes:?}");
-        assert!(!codes.contains(&"E0101"), "E0101 cascade should be suppressed, got: {codes:?}");
-        assert!(!codes.contains(&"E0104"), "E0104 should not fire, got: {codes:?}");
+        assert!(
+            !codes.contains(&"E0101"),
+            "E0101 cascade should be suppressed, got: {codes:?}"
+        );
+        assert!(
+            !codes.contains(&"E0104"),
+            "E0104 should not fire, got: {codes:?}"
+        );
     }
 
     #[test]

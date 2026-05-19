@@ -56,7 +56,9 @@ impl super::LowerCtx {
         // Check for qualified ADT constructor: Payment.Card(last4: "1234")
         if let ExprKind::FieldAccess(obj, variant_name) = &callee.kind
             && let ExprKind::Ident(type_name) = &obj.kind
-            && self.adt_variant_fields.contains_key(&(type_name.clone(), variant_name.clone()))
+            && self
+                .adt_variant_fields
+                .contains_key(&(type_name.clone(), variant_name.clone()))
         {
             let vfields = self
                 .adt_variant_fields
@@ -89,20 +91,22 @@ impl super::LowerCtx {
             // Fill all payload slots with zeroinitializer, then overwrite this variant's slots.
             let mut field_operands = vec![Operand::Const(Constant::Int(0)); max_field_count];
 
-            let mut used_args: std::collections::HashSet<usize> =
-                std::collections::HashSet::new();
+            let mut used_args: std::collections::HashSet<usize> = std::collections::HashSet::new();
 
             for (fi, (fname, _fty)) in vfields.iter().enumerate() {
                 let slot = variant_offset - 1 + fi; // 0-based index into field_operands
-                let labeled = args.iter().enumerate().find(|(idx, a)| {
-                    !used_args.contains(idx) && a.label.as_deref() == Some(fname)
-                });
+                let labeled = args
+                    .iter()
+                    .enumerate()
+                    .find(|(idx, a)| !used_args.contains(idx) && a.label.as_deref() == Some(fname));
                 let resolved = if let Some((idx, a)) = labeled {
                     used_args.insert(idx);
                     Some(a)
                 } else {
-                    let positional =
-                        args.iter().enumerate().find(|(idx, _)| !used_args.contains(idx));
+                    let positional = args
+                        .iter()
+                        .enumerate()
+                        .find(|(idx, _)| !used_args.contains(idx));
                     if let Some((idx, a)) = positional {
                         used_args.insert(idx);
                         Some(a)
@@ -141,17 +145,19 @@ impl super::LowerCtx {
             let mut used_args: std::collections::HashSet<usize> = std::collections::HashSet::new();
             for (fname, fty) in &field_defs {
                 // First try label match
-                let labeled = args.iter().enumerate().find(|(idx, a)| {
-                    !used_args.contains(idx) && a.label.as_deref() == Some(fname)
-                });
+                let labeled = args
+                    .iter()
+                    .enumerate()
+                    .find(|(idx, a)| !used_args.contains(idx) && a.label.as_deref() == Some(fname));
                 let resolved = if let Some((idx, a)) = labeled {
                     used_args.insert(idx);
                     Some(a)
                 } else {
                     // Positional fallback: next unused arg
-                    let positional = args.iter().enumerate().find(|(idx, _)| {
-                        !used_args.contains(idx)
-                    });
+                    let positional = args
+                        .iter()
+                        .enumerate()
+                        .find(|(idx, _)| !used_args.contains(idx));
                     if let Some((idx, a)) = positional {
                         used_args.insert(idx);
                         Some(a)
@@ -219,10 +225,7 @@ impl super::LowerCtx {
                         body.push(Instruction::Call {
                             dest: Some(dest.clone()),
                             func: "__map_contains_string_int".into(),
-                            args: vec![
-                                Operand::Var(handle),
-                                Operand::Var(key_val),
-                            ],
+                            args: vec![Operand::Var(handle), Operand::Var(key_val)],
                         });
                         return dest;
                     }
@@ -300,7 +303,10 @@ impl super::LowerCtx {
             let obj_val = self.lower_expr(obj, body);
 
             // Determine if receiver is Option<T> (check lowered temp in generic_var_types)
-            let opt_type = self.generic_var_types.get(&obj_val).cloned()
+            let opt_type = self
+                .generic_var_types
+                .get(&obj_val)
+                .cloned()
                 .or_else(|| self.infer_expr_type(obj))
                 .or_else(|| {
                     if let ExprKind::Ident(name) = &obj.kind {
@@ -316,20 +322,14 @@ impl super::LowerCtx {
 
                 // Infer err type from the argument expression, variable
                 // tracking, or the enclosing function's return type
-                let err_type = self.infer_expr_type(&args[0].value)
-                    .or_else(|| {
-                        self.var_types.get(&err_arg).map(|n| Ty::Named(n.clone()))
-                    })
-                    .or_else(|| {
-                        self.current_fn_return_type.result_err_type().cloned()
-                    })
+                let err_type = self
+                    .infer_expr_type(&args[0].value)
+                    .or_else(|| self.var_types.get(&err_arg).map(|n| Ty::Named(n.clone())))
+                    .or_else(|| self.current_fn_return_type.result_err_type().cloned())
                     .unwrap_or(Ty::Named("Error".into()));
 
                 let inner_t = oty.option_inner().cloned().unwrap_or(Ty::Int);
-                let result_type = Ty::Generic(
-                    "Result".into(),
-                    vec![inner_t, err_type],
-                );
+                let result_type = Ty::Generic("Result".into(), vec![inner_t, err_type]);
                 self.register_adt_type(&result_type);
                 let result_type_name = result_type.monomorphized_name();
                 let opt_type_name = oty.monomorphized_name();
@@ -386,10 +386,7 @@ impl super::LowerCtx {
                     dest: ok_val.clone(),
                     type_name: result_type_name.clone(),
                     tag: 0,
-                    fields: vec![
-                        Operand::Var(payload),
-                        Operand::Const(Constant::Int(0)),
-                    ],
+                    fields: vec![Operand::Var(payload), Operand::Const(Constant::Int(0))],
                 });
                 body.push(Instruction::Store {
                     dest: result_slot.clone(),
@@ -406,10 +403,7 @@ impl super::LowerCtx {
                     dest: err_val.clone(),
                     type_name: result_type_name,
                     tag: 1,
-                    fields: vec![
-                        Operand::Const(Constant::Int(0)),
-                        Operand::Var(err_arg),
-                    ],
+                    fields: vec![Operand::Const(Constant::Int(0)), Operand::Var(err_arg)],
                 });
                 body.push(Instruction::Store {
                     dest: result_slot.clone(),
@@ -459,9 +453,7 @@ impl super::LowerCtx {
             if let Some((type_name, field_defs)) = self.resolve_struct_type(obj) {
                 if !self.data_types.contains(&type_name) {
                     let obj_val = self.lower_expr(obj, body);
-                    return self.lower_copy(
-                        &obj_val, &type_name, &field_defs, args, body,
-                    );
+                    return self.lower_copy(&obj_val, &type_name, &field_defs, args, body);
                 }
             }
             // Not a value type — fall through to method call or generic call
@@ -505,8 +497,7 @@ impl super::LowerCtx {
                     // reaching the call site. If that rule is ever
                     // relaxed, this gate needs a "user-defined fn only"
                     // predicate.
-                    if (mangled_name == "AppServer__get"
-                        || mangled_name == "AppServer__post")
+                    if (mangled_name == "AppServer__get" || mangled_name == "AppServer__post")
                         && args.len() == 2
                         && self.imported_modules.contains("http.server")
                     {
@@ -534,7 +525,11 @@ impl super::LowerCtx {
                                  handler slot as `String`; anything other \
                                  than a bare function identifier here would \
                                  produce undefined behavior at dispatch time.",
-                                if mangled_name == "AppServer__get" { "get" } else { "post" }
+                                if mangled_name == "AppServer__get" {
+                                    "get"
+                                } else {
+                                    "post"
+                                }
                             );
                         }
                     }
@@ -553,9 +548,15 @@ impl super::LowerCtx {
                     });
                     if let Some(ref ty) = ret_ty {
                         match ty {
-                            Ty::String => { self.string_vars.insert(dest.clone()); }
-                            Ty::Float => { self.float_vars.insert(dest.clone()); }
-                            Ty::Named(n) => { self.var_types.insert(dest.clone(), n.clone()); }
+                            Ty::String => {
+                                self.string_vars.insert(dest.clone());
+                            }
+                            Ty::Float => {
+                                self.float_vars.insert(dest.clone());
+                            }
+                            Ty::Named(n) => {
+                                self.var_types.insert(dest.clone(), n.clone());
+                            }
                             Ty::Generic(_, _) => {
                                 self.generic_var_types.insert(dest.clone(), ty.clone());
                                 self.var_types.insert(dest.clone(), ty.monomorphized_name());
@@ -615,8 +616,7 @@ impl super::LowerCtx {
                     let list_temp = self.lower_expr(list_expr, body);
                     let dest = self.fresh_temp();
                     if fn_name == "join_all" {
-                        let list_ty =
-                            Ty::Generic("List".into(), vec![elem_ty.clone()]);
+                        let list_ty = Ty::Generic("List".into(), vec![elem_ty.clone()]);
                         self.register_adt_type(&list_ty);
                         body.push(Instruction::JoinAll {
                             dest: dest.clone(),
@@ -633,15 +633,13 @@ impl super::LowerCtx {
                         // also recording a var_types entry so downstream
                         // passes that query type by temp name find a
                         // meaningful string rather than None.
-                        let task_ty =
-                            Ty::Generic("Task".into(), vec![elem_ty.clone()]);
+                        let task_ty = Ty::Generic("Task".into(), vec![elem_ty.clone()]);
                         body.push(Instruction::Select {
                             dest: dest.clone(),
                             list: Operand::Var(list_temp),
                             elem_type: elem_ty.clone(),
                         });
-                        self.task_result_types
-                            .insert(dest.clone(), elem_ty.clone());
+                        self.task_result_types.insert(dest.clone(), elem_ty.clone());
                         self.var_types
                             .insert(dest.clone(), task_ty.monomorphized_name());
                     }
@@ -690,8 +688,10 @@ impl super::LowerCtx {
                         ExprKind::Ident(name) => self
                             .generic_var_types
                             .get(name)
-                            .map(|t| matches!(t, Ty::Generic(n, ta)
-                                if n == "List" && matches!(ta.first(), Some(Ty::Int))))
+                            .map(|t| {
+                                matches!(t, Ty::Generic(n, ta)
+                                if n == "List" && matches!(ta.first(), Some(Ty::Int)))
+                            })
                             .unwrap_or(true),
                         _ => true,
                     };
@@ -708,8 +708,7 @@ impl super::LowerCtx {
                                 };
                                 let list_val = self.lower_expr(first, body);
                                 let elem_val = self.lower_expr(&args[1].value, body);
-                                let list_ty =
-                                    Ty::Generic("List".into(), vec![elem_type.clone()]);
+                                let list_ty = Ty::Generic("List".into(), vec![elem_type.clone()]);
                                 self.register_adt_type(&list_ty);
                                 let dest = self.fresh_temp();
                                 body.push(Instruction::ListPush {
@@ -718,8 +717,7 @@ impl super::LowerCtx {
                                     elem: Operand::Var(elem_val),
                                     elem_type,
                                 });
-                                self.generic_var_types
-                                    .insert(dest.clone(), list_ty.clone());
+                                self.generic_var_types.insert(dest.clone(), list_ty.clone());
                                 self.var_types
                                     .insert(dest.clone(), list_ty.monomorphized_name());
                                 return dest;
@@ -775,14 +773,14 @@ impl super::LowerCtx {
 
                     // Module-qualified struct constructor: server.Response(fields) → StructInit
                     if fn_name.chars().next().map_or(false, |c| c.is_uppercase()) {
-                        if let Some(field_defs) = self.struct_fields.get(fn_name.as_str()).cloned() {
+                        if let Some(field_defs) = self.struct_fields.get(fn_name.as_str()).cloned()
+                        {
                             let mut field_operands = Vec::with_capacity(field_defs.len());
                             let mut used_args: std::collections::HashSet<usize> =
                                 std::collections::HashSet::new();
                             for (fname, _fty) in &field_defs {
                                 let labeled = args.iter().enumerate().find(|(idx, a)| {
-                                    !used_args.contains(idx)
-                                        && a.label.as_deref() == Some(fname)
+                                    !used_args.contains(idx) && a.label.as_deref() == Some(fname)
                                 });
                                 let resolved = if let Some((idx, a)) = labeled {
                                     used_args.insert(idx);
@@ -847,9 +845,15 @@ impl super::LowerCtx {
                     });
                     if let Some(ref ty) = ret_ty {
                         match ty {
-                            Ty::String => { self.string_vars.insert(dest.clone()); }
-                            Ty::Float => { self.float_vars.insert(dest.clone()); }
-                            Ty::Named(n) => { self.var_types.insert(dest.clone(), n.clone()); }
+                            Ty::String => {
+                                self.string_vars.insert(dest.clone());
+                            }
+                            Ty::Float => {
+                                self.float_vars.insert(dest.clone());
+                            }
+                            Ty::Named(n) => {
+                                self.var_types.insert(dest.clone(), n.clone());
+                            }
                             Ty::Generic(_, _) => {
                                 self.generic_var_types.insert(dest.clone(), ty.clone());
                                 self.var_types.insert(dest.clone(), ty.monomorphized_name());
@@ -940,35 +944,41 @@ impl super::LowerCtx {
                 None
             };
             if let Some(resolved_fn) = actual_fn {
-            if self.is_string_expr(obj) {
-                let recv_temp = self.lower_expr(obj, body);
-                let mut arg_operands = vec![Operand::Var(recv_temp)];
-                for a in args {
-                    let t = self.lower_expr(&a.value, body);
-                    arg_operands.push(Operand::Var(t));
-                }
-                let dest = self.fresh_temp();
-                let ret_ty = self.fn_return_types.get(&resolved_fn).cloned();
-                body.push(Instruction::Call {
-                    dest: Some(dest.clone()),
-                    func: resolved_fn,
-                    args: arg_operands,
-                });
-                if let Some(ref ty) = ret_ty {
-                    match ty {
-                        Ty::String => { self.string_vars.insert(dest.clone()); }
-                        Ty::Float => { self.float_vars.insert(dest.clone()); }
-                        Ty::Named(n) => { self.var_types.insert(dest.clone(), n.clone()); }
-                        Ty::Generic(_, _) => {
-                            self.register_adt_type(ty);
-                            self.generic_var_types.insert(dest.clone(), ty.clone());
-                            self.var_types.insert(dest.clone(), ty.monomorphized_name());
-                        }
-                        _ => {}
+                if self.is_string_expr(obj) {
+                    let recv_temp = self.lower_expr(obj, body);
+                    let mut arg_operands = vec![Operand::Var(recv_temp)];
+                    for a in args {
+                        let t = self.lower_expr(&a.value, body);
+                        arg_operands.push(Operand::Var(t));
                     }
+                    let dest = self.fresh_temp();
+                    let ret_ty = self.fn_return_types.get(&resolved_fn).cloned();
+                    body.push(Instruction::Call {
+                        dest: Some(dest.clone()),
+                        func: resolved_fn,
+                        args: arg_operands,
+                    });
+                    if let Some(ref ty) = ret_ty {
+                        match ty {
+                            Ty::String => {
+                                self.string_vars.insert(dest.clone());
+                            }
+                            Ty::Float => {
+                                self.float_vars.insert(dest.clone());
+                            }
+                            Ty::Named(n) => {
+                                self.var_types.insert(dest.clone(), n.clone());
+                            }
+                            Ty::Generic(_, _) => {
+                                self.register_adt_type(ty);
+                                self.generic_var_types.insert(dest.clone(), ty.clone());
+                                self.var_types.insert(dest.clone(), ty.monomorphized_name());
+                            }
+                            _ => {}
+                        }
+                    }
+                    return dest;
                 }
-                return dest;
-            }
             } else if self.is_string_expr(obj) {
                 // String receiver but no `string__<method>` / `__string_<method>`
                 // exists.  Without this guard, the call falls through to the

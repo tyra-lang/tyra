@@ -11,11 +11,7 @@ use tyra_types::Ty;
 
 /// Create a monomorphized copy of a FnDef with type parameters substituted.
 /// Replaces all occurrences of type parameter names with their concrete types.
-pub fn substitute_fn_def(
-    f: &FnDef,
-    subst: &HashMap<String, Ty>,
-    mangled_name: &str,
-) -> FnDef {
+pub fn substitute_fn_def(f: &FnDef, subst: &HashMap<String, Ty>, mangled_name: &str) -> FnDef {
     let params = f
         .params
         .iter()
@@ -32,11 +28,7 @@ pub fn substitute_fn_def(
         .as_ref()
         .map(|rt| substitute_type_expr(rt, subst));
 
-    let body = f
-        .body
-        .iter()
-        .map(|s| substitute_stmt(s, subst))
-        .collect();
+    let body = f.body.iter().map(|s| substitute_stmt(s, subst)).collect();
 
     FnDef {
         name: mangled_name.to_string(),
@@ -77,7 +69,10 @@ fn substitute_type_expr(te: &TypeExpr, subst: &HashMap<String, Ty>) -> TypeExpr 
             TypeExprKind::Fn(new_params, new_ret)
         }
     };
-    TypeExpr { kind, span: te.span }
+    TypeExpr {
+        kind,
+        span: te.span,
+    }
 }
 
 /// Convert an internal Ty back to an AST TypeExprKind for substitution.
@@ -211,17 +206,11 @@ fn substitute_expr(expr: &Expr, subst: &HashMap<String, Ty>) -> Expr {
             Box::new(substitute_expr(obj, subst)),
             Box::new(substitute_expr(idx, subst)),
         ),
-        ExprKind::Propagate(inner) => {
-            ExprKind::Propagate(Box::new(substitute_expr(inner, subst)))
-        }
+        ExprKind::Propagate(inner) => ExprKind::Propagate(Box::new(substitute_expr(inner, subst))),
         ExprKind::Await(inner) => ExprKind::Await(Box::new(substitute_expr(inner, subst))),
         ExprKind::Spawn(inner) => ExprKind::Spawn(Box::new(substitute_expr(inner, subst))),
-        ExprKind::If(if_expr) => {
-            ExprKind::If(Box::new(substitute_if_expr(if_expr, subst)))
-        }
-        ExprKind::Match(m) => {
-            ExprKind::Match(Box::new(substitute_match_expr(m, subst)))
-        }
+        ExprKind::If(if_expr) => ExprKind::If(Box::new(substitute_if_expr(if_expr, subst))),
+        ExprKind::Match(m) => ExprKind::Match(Box::new(substitute_match_expr(m, subst))),
         ExprKind::For(f) => ExprKind::For(Box::new(ForExpr {
             binding: f.binding.clone(),
             iter: substitute_expr(&f.iter, subst),

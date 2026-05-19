@@ -1,5 +1,7 @@
 use tower_lsp::lsp_types::SelectionRange;
-use tyra_ast::{ElseBranch, Expr, ExprKind, IfExpr, Item, LambdaExpr, SourceFile, Stmt, StringPart};
+use tyra_ast::{
+    ElseBranch, Expr, ExprKind, IfExpr, Item, LambdaExpr, SourceFile, Stmt, StringPart,
+};
 use tyra_diagnostics::{SourceId, SourceMap, Span};
 
 use crate::span_to_lsp_range;
@@ -397,8 +399,8 @@ mod tests {
             "fn f(n: Int)\n",  // line 0
             "  if n == 1\n",   // line 1
             "    let x = 1\n", // line 2
-            "  end\n",          // line 3
-            "end\n",            // line 4
+            "  end\n",         // line 3
+            "end\n",           // line 4
         );
         // Cursor on 'x' → line 2, col 8
         let sr = run(src, 2, 8).expect("expected Some SelectionRange");

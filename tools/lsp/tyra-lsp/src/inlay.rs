@@ -1,6 +1,4 @@
-use tower_lsp::lsp_types::{
-    InlayHint, InlayHintKind, InlayHintLabel, Position, Range,
-};
+use tower_lsp::lsp_types::{InlayHint, InlayHintKind, InlayHintLabel, Position, Range};
 use tyra_ast::{ElseBranch, Expr, ExprKind, Item, SourceFile, Stmt};
 use tyra_diagnostics::{SourceId, SourceMap};
 use tyra_driver::{Ty, TypeIndex};
@@ -27,7 +25,9 @@ pub(crate) fn build_hints(
     for item in &ast.items {
         match item {
             Item::FnDef(f) => {
-                visit_stmts(&f.body, type_index, sources, source_id, vp_start, vp_end, &mut out);
+                visit_stmts(
+                    &f.body, type_index, sources, source_id, vp_start, vp_end, &mut out,
+                );
             }
             Item::ImplDef(b) => {
                 for method in &b.methods {
@@ -43,7 +43,9 @@ pub(crate) fn build_hints(
                 }
             }
             Item::Stmt(s) => {
-                visit_stmt(s, type_index, sources, source_id, vp_start, vp_end, &mut out);
+                visit_stmt(
+                    s, type_index, sources, source_id, vp_start, vp_end, &mut out,
+                );
             }
             _ => {}
         }
@@ -79,34 +81,22 @@ fn visit_stmt(
         Stmt::Let(l) => {
             if l.type_annotation.is_none() {
                 maybe_emit(
-                    l.span,
-                    &l.name,
-                    "let ",
-                    type_index,
-                    sources,
-                    source_id,
-                    vp_start,
-                    vp_end,
-                    out,
+                    l.span, &l.name, "let ", type_index, sources, source_id, vp_start, vp_end, out,
                 );
             }
-            visit_expr(&l.value, type_index, sources, source_id, vp_start, vp_end, out);
+            visit_expr(
+                &l.value, type_index, sources, source_id, vp_start, vp_end, out,
+            );
         }
         Stmt::Mut(m) => {
             if m.type_annotation.is_none() {
                 maybe_emit(
-                    m.span,
-                    &m.name,
-                    "mut ",
-                    type_index,
-                    sources,
-                    source_id,
-                    vp_start,
-                    vp_end,
-                    out,
+                    m.span, &m.name, "mut ", type_index, sources, source_id, vp_start, vp_end, out,
                 );
             }
-            visit_expr(&m.value, type_index, sources, source_id, vp_start, vp_end, out);
+            visit_expr(
+                &m.value, type_index, sources, source_id, vp_start, vp_end, out,
+            );
         }
         Stmt::Return(r) => {
             if let Some(e) = &r.value {
@@ -114,10 +104,14 @@ fn visit_stmt(
             }
         }
         Stmt::Defer(d) => {
-            visit_expr(&d.expr, type_index, sources, source_id, vp_start, vp_end, out);
+            visit_expr(
+                &d.expr, type_index, sources, source_id, vp_start, vp_end, out,
+            );
         }
         Stmt::Expr(e) => {
-            visit_expr(&e.expr, type_index, sources, source_id, vp_start, vp_end, out);
+            visit_expr(
+                &e.expr, type_index, sources, source_id, vp_start, vp_end, out,
+            );
         }
         Stmt::Break(_) | Stmt::Continue(_) => {}
     }
@@ -158,7 +152,10 @@ fn visit_expr(
                 }
                 Some(ElseBranch::ElseIf(nested)) => {
                     visit_expr(
-                        &Expr { kind: ExprKind::If(nested.clone()), span: nested.span },
+                        &Expr {
+                            kind: ExprKind::If(nested.clone()),
+                            span: nested.span,
+                        },
                         type_index,
                         sources,
                         source_id,
@@ -171,21 +168,41 @@ fn visit_expr(
             }
         }
         ExprKind::While(w) => {
-            visit_expr(&w.condition, type_index, sources, source_id, vp_start, vp_end, out);
-            visit_stmts(&w.body, type_index, sources, source_id, vp_start, vp_end, out);
+            visit_expr(
+                &w.condition,
+                type_index,
+                sources,
+                source_id,
+                vp_start,
+                vp_end,
+                out,
+            );
+            visit_stmts(
+                &w.body, type_index, sources, source_id, vp_start, vp_end, out,
+            );
         }
         ExprKind::For(f) => {
-            visit_expr(&f.iter, type_index, sources, source_id, vp_start, vp_end, out);
-            visit_stmts(&f.body, type_index, sources, source_id, vp_start, vp_end, out);
+            visit_expr(
+                &f.iter, type_index, sources, source_id, vp_start, vp_end, out,
+            );
+            visit_stmts(
+                &f.body, type_index, sources, source_id, vp_start, vp_end, out,
+            );
         }
         ExprKind::Match(m) => {
-            visit_expr(&m.subject, type_index, sources, source_id, vp_start, vp_end, out);
+            visit_expr(
+                &m.subject, type_index, sources, source_id, vp_start, vp_end, out,
+            );
             for arm in &m.arms {
-                visit_stmts(&arm.body, type_index, sources, source_id, vp_start, vp_end, out);
+                visit_stmts(
+                    &arm.body, type_index, sources, source_id, vp_start, vp_end, out,
+                );
             }
         }
         ExprKind::Lambda(l) => {
-            visit_stmts(&l.body, type_index, sources, source_id, vp_start, vp_end, out);
+            visit_stmts(
+                &l.body, type_index, sources, source_id, vp_start, vp_end, out,
+            );
         }
         // Leaf / structural expressions with no nested stmts.
         _ => {}
@@ -209,7 +226,9 @@ fn maybe_emit(
     vp_end: usize,
     out: &mut Vec<InlayHint>,
 ) {
-    let Some(ty) = type_index.get(&stmt_span) else { return };
+    let Some(ty) = type_index.get(&stmt_span) else {
+        return;
+    };
 
     // Skip unresolved / error types — they'd produce noise.
     if matches!(ty, Ty::Var(_) | Ty::Error) {
@@ -246,7 +265,7 @@ fn maybe_emit(
 mod tests {
     use std::collections::HashMap;
 
-    use tyra_diagnostics::{Span, SourceMap};
+    use tyra_diagnostics::{SourceMap, Span};
     use tyra_driver::{Ty, TypeIndex};
 
     use super::*;
@@ -254,10 +273,22 @@ mod tests {
     fn compile_hints(src: &str) -> Vec<InlayHint> {
         let result = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
         let viewport = Range {
-            start: Position { line: 0, character: 0 },
-            end: Position { line: u32::MAX, character: 0 },
+            start: Position {
+                line: 0,
+                character: 0,
+            },
+            end: Position {
+                line: u32::MAX,
+                character: 0,
+            },
         };
-        build_hints(&result.ast, &result.type_index, &result.sources, result.source_id, viewport)
+        build_hints(
+            &result.ast,
+            &result.type_index,
+            &result.sources,
+            result.source_id,
+            viewport,
+        )
     }
 
     #[test]
@@ -271,13 +302,19 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert!(labels.iter().any(|l| l == ": Int"), "expected `: Int`, got {labels:?}");
+        assert!(
+            labels.iter().any(|l| l == ": Int"),
+            "expected `: Int`, got {labels:?}"
+        );
     }
 
     #[test]
     fn let_with_annotation_skipped() {
         let hints = compile_hints("fn main()\n  let x: Int = 1\nend\n");
-        assert!(hints.is_empty(), "expected no hints when annotation present, got: {hints:?}");
+        assert!(
+            hints.is_empty(),
+            "expected no hints when annotation present, got: {hints:?}"
+        );
     }
 
     #[test]
@@ -290,7 +327,10 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert!(labels.iter().any(|l| l == ": Float"), "expected `: Float`, got {labels:?}");
+        assert!(
+            labels.iter().any(|l| l == ": Float"),
+            "expected `: Float`, got {labels:?}"
+        );
     }
 
     #[test]
@@ -301,12 +341,28 @@ mod tests {
         let stmt_span = Span::new(id, 7, 17);
         let mut type_index: TypeIndex = HashMap::new();
         type_index.insert(stmt_span, Ty::Var(0));
-        let result = tyra_driver::check_in_memory("t.tyra".into(), "fn f()\n  let x = 1\nend\n".into(), None);
+        let result = tyra_driver::check_in_memory(
+            "t.tyra".into(),
+            "fn f()\n  let x = 1\nend\n".into(),
+            None,
+        );
         let viewport = Range {
-            start: Position { line: 0, character: 0 },
-            end: Position { line: u32::MAX, character: 0 },
+            start: Position {
+                line: 0,
+                character: 0,
+            },
+            end: Position {
+                line: u32::MAX,
+                character: 0,
+            },
         };
-        let hints = build_hints(&result.ast, &type_index, &result.sources, result.source_id, viewport);
+        let hints = build_hints(
+            &result.ast,
+            &type_index,
+            &result.sources,
+            result.source_id,
+            viewport,
+        );
         assert!(hints.is_empty(), "Var type should produce no hint");
     }
 
@@ -317,12 +373,28 @@ mod tests {
         let stmt_span = Span::new(id, 7, 17);
         let mut type_index: TypeIndex = HashMap::new();
         type_index.insert(stmt_span, Ty::Error);
-        let result = tyra_driver::check_in_memory("t.tyra".into(), "fn f()\n  let x = 1\nend\n".into(), None);
+        let result = tyra_driver::check_in_memory(
+            "t.tyra".into(),
+            "fn f()\n  let x = 1\nend\n".into(),
+            None,
+        );
         let viewport = Range {
-            start: Position { line: 0, character: 0 },
-            end: Position { line: u32::MAX, character: 0 },
+            start: Position {
+                line: 0,
+                character: 0,
+            },
+            end: Position {
+                line: u32::MAX,
+                character: 0,
+            },
         };
-        let hints = build_hints(&result.ast, &type_index, &result.sources, result.source_id, viewport);
+        let hints = build_hints(
+            &result.ast,
+            &type_index,
+            &result.sources,
+            result.source_id,
+            viewport,
+        );
         assert!(hints.is_empty(), "Error type should produce no hint");
     }
 
@@ -350,8 +422,14 @@ mod tests {
         let result = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
         // viewport: only line 1 (0-indexed)
         let viewport = Range {
-            start: Position { line: 1, character: 0 },
-            end: Position { line: 2, character: 0 },
+            start: Position {
+                line: 1,
+                character: 0,
+            },
+            end: Position {
+                line: 2,
+                character: 0,
+            },
         };
         let hints = build_hints(
             &result.ast,
@@ -360,6 +438,10 @@ mod tests {
             result.source_id,
             viewport,
         );
-        assert_eq!(hints.len(), 1, "expected exactly 1 hint in viewport, got: {hints:?}");
+        assert_eq!(
+            hints.len(),
+            1,
+            "expected exactly 1 hint in viewport, got: {hints:?}"
+        );
     }
 }

@@ -5,8 +5,8 @@ mod resolver;
 mod scope;
 
 pub use resolver::resolve;
-pub use scope::{ScopeStack, Symbol};
 pub use scope::{PRELUDE_CONSTRUCTORS, PRELUDE_FUNCTIONS, PRELUDE_TYPES};
+pub use scope::{ScopeStack, Symbol};
 
 use std::collections::HashMap;
 use tyra_diagnostics::Span;

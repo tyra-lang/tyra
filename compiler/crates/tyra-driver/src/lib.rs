@@ -7,9 +7,9 @@
 use std::path::Path;
 use std::process::Command;
 
-use tyra_diagnostics::{Report, SourceMap};
 pub use tyra_ast::SourceFile;
 pub use tyra_diagnostics::SourceId;
+use tyra_diagnostics::{Report, SourceMap};
 pub use tyra_resolve::{CompletionKind, DefIndex, SymbolList};
 pub use tyra_resolve::{PRELUDE_CONSTRUCTORS, PRELUDE_FUNCTIONS, PRELUDE_TYPES};
 pub use tyra_types::{Ty, TypeIndex};
@@ -103,7 +103,15 @@ pub fn check_in_memory(
     }
 
     let type_index = tyra_types::check(&ast, &mut report);
-    CheckResult { report, sources, type_index, def_index, symbols: symbol_list, source_id, ast }
+    CheckResult {
+        report,
+        sources,
+        type_index,
+        def_index,
+        symbols: symbol_list,
+        source_id,
+        ast,
+    }
 }
 
 /// Compile a Tyra source file to LLVM IR text.
@@ -647,7 +655,11 @@ fn git_dep_cache_root(dep_name: &str, url: &str, rev: &str) -> std::path::PathBu
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::path::PathBuf::from("."));
     let dir_name = format!("{dep_name}-{}", url_hash_12(url));
-    home.join(".tyra").join("cache").join("git").join(dir_name).join(rev)
+    home.join(".tyra")
+        .join("cache")
+        .join("git")
+        .join(dir_name)
+        .join(rev)
 }
 
 /// 12-character lowercase hex of FNV-1a(url). Mirrors `tyra_pkg::url_hash`.
@@ -666,13 +678,12 @@ fn url_hash_12(url: &str) -> String {
 /// the model frequently forgets these imports; auto-adding them is harmless
 /// (unused imports do not affect output) and removes a class of E0200 hits.
 fn auto_import_stdlib(ast: &mut tyra_ast::SourceFile) {
-    use tyra_ast::{Expr, ExprKind, Item, ImportDecl, Stmt};
+    use tyra_ast::{Expr, ExprKind, ImportDecl, Item, Stmt};
 
     const AUTO: &[&str] = &["string", "list", "io"];
 
     // Collect already-imported single-segment module names.
-    let mut already: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let mut already: std::collections::HashSet<String> = std::collections::HashSet::new();
     for item in &ast.items {
         if let Item::Import(imp) = item
             && imp.path.len() == 1
@@ -683,8 +694,7 @@ fn auto_import_stdlib(ast: &mut tyra_ast::SourceFile) {
     }
 
     // Walk the AST collecting module names referenced by `<module>.<fn>(...)`.
-    let mut needed: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let mut needed: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     // Method names that are unambiguous markers for the string stdlib.
     // If any of these appear as `<expr>.<method>(...)` we conservatively
@@ -694,8 +704,16 @@ fn auto_import_stdlib(ast: &mut tyra_ast::SourceFile) {
     // (an `impl` block defining its own `byte_at`) just produce one extra
     // unused import, which is harmless.
     const STRING_METHOD_HINTS: &[&str] = &[
-        "byte_at", "substring", "from_byte", "parse_int", "parse_errno",
-        "starts_with", "ends_with", "to_upper", "to_lower", "is_empty",
+        "byte_at",
+        "substring",
+        "from_byte",
+        "parse_int",
+        "parse_errno",
+        "starts_with",
+        "ends_with",
+        "to_upper",
+        "to_lower",
+        "is_empty",
         "trim",
     ];
 
@@ -932,10 +950,7 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
         }
     }
 
-    fn substitute_in_expr(
-        e: &mut Expr,
-        renames: &std::collections::HashMap<String, String>,
-    ) {
+    fn substitute_in_expr(e: &mut Expr, renames: &std::collections::HashMap<String, String>) {
         match &mut e.kind {
             ExprKind::Ident(name) => {
                 if let Some(new) = renames.get(name) {
@@ -1024,10 +1039,7 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
         }
     }
 
-    fn substitute_in_stmt(
-        s: &mut Stmt,
-        renames: &std::collections::HashMap<String, String>,
-    ) {
+    fn substitute_in_stmt(s: &mut Stmt, renames: &std::collections::HashMap<String, String>) {
         match s {
             Stmt::Let(l) => substitute_in_expr(&mut l.value, renames),
             Stmt::Mut(m) => substitute_in_expr(&mut m.value, renames),
@@ -1180,10 +1192,20 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
         }
     }
 
-    let _ = (Pattern { kind: PatternKind::Wildcard, span: ast.span },
-             PatternField { field_name: String::new(),
-                             pattern: Pattern { kind: PatternKind::Wildcard, span: ast.span },
-                             span: ast.span });
+    let _ = (
+        Pattern {
+            kind: PatternKind::Wildcard,
+            span: ast.span,
+        },
+        PatternField {
+            field_name: String::new(),
+            pattern: Pattern {
+                kind: PatternKind::Wildcard,
+                span: ast.span,
+            },
+            span: ast.span,
+        },
+    );
 
     for item in &mut ast.items {
         match item {
@@ -1596,7 +1618,8 @@ fn compile_to_binary_opts(source_path: &Path, output_path: &Path, release: bool)
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 // Detect missing libgc and surface an actionable diagnostic
                 // instead of the raw linker error.
-                let msg = if stderr.contains("-lgc") || stderr.contains("library 'gc'")
+                let msg = if stderr.contains("-lgc")
+                    || stderr.contains("library 'gc'")
                     || stderr.contains("cannot find -lgc")
                 {
                     format!(
@@ -1608,9 +1631,7 @@ fn compile_to_binary_opts(source_path: &Path, output_path: &Path, release: bool)
                 } else {
                     format!("clang failed: {stderr}")
                 };
-                report.add(
-                    tyra_diagnostics::Diagnostic::error(msg).with_code("E0500"),
-                );
+                report.add(tyra_diagnostics::Diagnostic::error(msg).with_code("E0500"));
                 CompileResult {
                     success: false,
                     report,
@@ -1762,7 +1783,11 @@ mod tests {
             "fn main() -> Unit\n  print(\"hello\")\nend\n".into(),
             None,
         );
-        assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+        assert!(
+            !report.has_errors(),
+            "unexpected errors: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1783,11 +1808,8 @@ mod tests {
 
     #[test]
     fn check_in_memory_reports_parse_error() {
-        let CheckResult { report, .. } = check_in_memory(
-            "bad.tyra".into(),
-            "let x = \n".into(),
-            None,
-        );
+        let CheckResult { report, .. } =
+            check_in_memory("bad.tyra".into(), "let x = \n".into(), None);
         assert!(report.has_errors(), "expected parse error");
     }
 
@@ -1802,7 +1824,11 @@ mod tests {
 
         // local module resolves
         let got = resolve_import_file(&dir, &["foo".to_string()]);
-        assert_eq!(got.as_deref(), Some(foo_path.as_path()), "should find foo.tyra");
+        assert_eq!(
+            got.as_deref(),
+            Some(foo_path.as_path()),
+            "should find foo.tyra"
+        );
 
         // non-existent module
         let got = resolve_import_file(&dir, &["bar".to_string()]);
@@ -1849,11 +1875,19 @@ mod tests {
         let stdlib_dir = dir.path().join("stdlib");
         fs::create_dir(&stdlib_dir).unwrap();
         fs::write(stdlib_dir.join("assert.tyra"), "").unwrap();
-        fs::write(stdlib_dir.join("mymod.tyra"), "export fn f() -> Unit\nend\n").unwrap();
+        fs::write(
+            stdlib_dir.join("mymod.tyra"),
+            "export fn f() -> Unit\nend\n",
+        )
+        .unwrap();
 
-        let _guard = EnvGuard { prev: std::env::var("TYRA_STDLIB").ok() };
+        let _guard = EnvGuard {
+            prev: std::env::var("TYRA_STDLIB").ok(),
+        };
         // SAFETY: see EnvGuard::drop.
-        unsafe { std::env::set_var("TYRA_STDLIB", &stdlib_dir); }
+        unsafe {
+            std::env::set_var("TYRA_STDLIB", &stdlib_dir);
+        }
         let result = resolve_import_file(main_dir, &["mymod".to_string()]);
 
         assert!(
@@ -1978,7 +2012,11 @@ mod tests {
             "end\n",
         );
         let CheckResult { report, .. } = check_in_memory("c.tyra".into(), src.into(), None);
-        assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+        assert!(
+            !report.has_errors(),
+            "unexpected errors: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1995,7 +2033,11 @@ mod tests {
             "end\n",
         );
         let CheckResult { report, .. } = check_in_memory("c.tyra".into(), src.into(), None);
-        assert!(!report.has_errors(), "unexpected errors: {:?}", report.diagnostics());
+        assert!(
+            !report.has_errors(),
+            "unexpected errors: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]

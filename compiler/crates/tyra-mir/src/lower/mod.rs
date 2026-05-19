@@ -58,17 +58,13 @@ pub fn lower(file: &SourceFile) -> Program {
                             .iter()
                             .map(|f| (f.name.clone(), Ty::from_type_expr(&f.type_annotation)))
                             .collect();
-                        ctx.adt_variant_fields.insert(
-                            (t.name.clone(), variant.name.clone()),
-                            vfields.clone(),
-                        );
+                        ctx.adt_variant_fields
+                            .insert((t.name.clone(), variant.name.clone()), vfields.clone());
 
                         // Record the starting slot for this variant (1-based struct field index).
                         let offset = struct_fields.len();
-                        ctx.variant_field_offsets.insert(
-                            (t.name.clone(), variant.name.clone()),
-                            offset,
-                        );
+                        ctx.variant_field_offsets
+                            .insert((t.name.clone(), variant.name.clone()), offset);
 
                         // Append this variant's fields as separate slots.
                         struct_fields.extend(vfields);
@@ -127,11 +123,9 @@ pub fn lower(file: &SourceFile) -> Program {
                 // sys.args() -> List<String>
                 let list_string = Ty::Generic("List".into(), vec![Ty::String]);
                 ctx.register_adt_type(&list_string);
-                ctx.fn_return_types
-                    .insert("sys__args".into(), list_string);
+                ctx.fn_return_types.insert("sys__args".into(), list_string);
                 // sys.exit(_ code: Int) -> Never
-                ctx.fn_return_types
-                    .insert("sys__exit".into(), Ty::Never);
+                ctx.fn_return_types.insert("sys__exit".into(), Ty::Never);
             }
             // M10 phase 1: __fs_read_raw / __fs_errno are registered below
             // (outside the import loop) since they are prelude-level, not
@@ -149,8 +143,7 @@ pub fn lower(file: &SourceFile) -> Program {
         .insert("__fs_read_raw".into(), vec![Ty::String]);
     ctx.fn_return_types.insert("__fs_errno".into(), Ty::Int);
     ctx.fn_param_types.insert("__fs_errno".into(), vec![]);
-    ctx.fn_return_types
-        .insert("__fs_errmsg".into(), Ty::String);
+    ctx.fn_return_types.insert("__fs_errmsg".into(), Ty::String);
     ctx.fn_param_types.insert("__fs_errmsg".into(), vec![]);
     ctx.fn_return_types
         .insert("__fs_write_raw".into(), Ty::Unit);
@@ -167,8 +160,7 @@ pub fn lower(file: &SourceFile) -> Program {
     ctx.fn_return_types.insert("__http_status".into(), Ty::Int);
     ctx.fn_param_types
         .insert("__http_status".into(), vec![Ty::Int]);
-    ctx.fn_return_types
-        .insert("__http_body".into(), Ty::String);
+    ctx.fn_return_types.insert("__http_body".into(), Ty::String);
     ctx.fn_param_types
         .insert("__http_body".into(), vec![Ty::Int]);
     ctx.fn_return_types.insert("__http_errno".into(), Ty::Int);
@@ -179,7 +171,8 @@ pub fn lower(file: &SourceFile) -> Program {
     // M11 phase 2: http server intrinsics.
     ctx.fn_return_types
         .insert("__http_server_new".into(), Ty::Int);
-    ctx.fn_param_types.insert("__http_server_new".into(), vec![]);
+    ctx.fn_param_types
+        .insert("__http_server_new".into(), vec![]);
     ctx.fn_return_types
         .insert("__http_server_route".into(), Ty::Unit);
     ctx.fn_param_types.insert(
@@ -239,8 +232,7 @@ pub fn lower(file: &SourceFile) -> Program {
     ctx.fn_param_types.insert("__io_read_line".into(), vec![]);
     ctx.fn_return_types
         .insert("__io_read_to_end".into(), Ty::String);
-    ctx.fn_param_types
-        .insert("__io_read_to_end".into(), vec![]);
+    ctx.fn_param_types.insert("__io_read_to_end".into(), vec![]);
     ctx.fn_return_types.insert("__io_eof".into(), Ty::Bool);
     ctx.fn_param_types.insert("__io_eof".into(), vec![]);
 
@@ -328,20 +320,17 @@ pub fn lower(file: &SourceFile) -> Program {
         .insert("__float_floor".into(), Ty::Float);
     ctx.fn_param_types
         .insert("__float_floor".into(), vec![Ty::Float]);
-    ctx.fn_return_types
-        .insert("__float_ceil".into(), Ty::Float);
+    ctx.fn_return_types.insert("__float_ceil".into(), Ty::Float);
     ctx.fn_param_types
         .insert("__float_ceil".into(), vec![Ty::Float]);
     ctx.fn_return_types
         .insert("__float_round".into(), Ty::Float);
     ctx.fn_param_types
         .insert("__float_round".into(), vec![Ty::Float]);
-    ctx.fn_return_types
-        .insert("__float_min".into(), Ty::Float);
+    ctx.fn_return_types.insert("__float_min".into(), Ty::Float);
     ctx.fn_param_types
         .insert("__float_min".into(), vec![Ty::Float, Ty::Float]);
-    ctx.fn_return_types
-        .insert("__float_max".into(), Ty::Float);
+    ctx.fn_return_types.insert("__float_max".into(), Ty::Float);
     ctx.fn_param_types
         .insert("__float_max".into(), vec![Ty::Float, Ty::Float]);
     ctx.fn_return_types
@@ -360,8 +349,7 @@ pub fn lower(file: &SourceFile) -> Program {
         .insert("__float_from_int".into(), Ty::Float);
     ctx.fn_param_types
         .insert("__float_from_int".into(), vec![Ty::Int]);
-    ctx.fn_return_types
-        .insert("__float_to_int".into(), Ty::Int);
+    ctx.fn_return_types.insert("__float_to_int".into(), Ty::Int);
     ctx.fn_param_types
         .insert("__float_to_int".into(), vec![Ty::Float]);
     ctx.fn_return_types
@@ -415,8 +403,10 @@ pub fn lower(file: &SourceFile) -> Program {
         .insert("__list_int_min".into(), vec![list_int.clone()]);
     ctx.fn_return_types
         .insert("__list_int_contains".into(), Ty::Bool);
-    ctx.fn_param_types
-        .insert("__list_int_contains".into(), vec![list_int.clone(), Ty::Int]);
+    ctx.fn_param_types.insert(
+        "__list_int_contains".into(),
+        vec![list_int.clone(), Ty::Int],
+    );
     ctx.fn_return_types
         .insert("__list_int_index_of".into(), opt_int);
     ctx.fn_param_types
@@ -456,10 +446,8 @@ pub fn lower(file: &SourceFile) -> Program {
                         .map(Ty::from_type_expr)
                         .unwrap_or(Ty::Unit);
                     ctx.fn_return_types.insert(mangled.clone(), ret_ty);
-                    ctx.impl_methods.insert(
-                        (target_name.clone(), method.name.clone()),
-                        mangled,
-                    );
+                    ctx.impl_methods
+                        .insert((target_name.clone(), method.name.clone()), mangled);
                 }
             }
         }
@@ -532,17 +520,13 @@ pub fn lower(file: &SourceFile) -> Program {
             if ctx.mut_vars.contains(name) {
                 continue;
             }
-            body.push(Instruction::Alloca {
-                dest: name.clone(),
-            });
+            body.push(Instruction::Alloca { dest: name.clone() });
             ctx.pattern_vars.insert(name.clone());
             ctx.local_binding_names.insert(name.clone());
         }
         for (name, count) in &let_counts {
             if *count > 1 && !ctx.pattern_vars.contains(name) && !ctx.mut_vars.contains(name) {
-                body.push(Instruction::Alloca {
-                    dest: name.clone(),
-                });
+                body.push(Instruction::Alloca { dest: name.clone() });
                 ctx.pattern_vars.insert(name.clone());
                 ctx.local_binding_names.insert(name.clone());
             }
@@ -930,9 +914,7 @@ impl LowerCtx {
             if self.mut_vars.contains(name) {
                 continue;
             }
-            body.push(Instruction::Alloca {
-                dest: name.clone(),
-            });
+            body.push(Instruction::Alloca { dest: name.clone() });
             self.pattern_vars.insert(name.clone());
             self.local_binding_names.insert(name.clone());
         }
@@ -941,9 +923,7 @@ impl LowerCtx {
         // emit a Load on subsequent Ident references.
         for (name, count) in &let_counts {
             if *count > 1 && !self.pattern_vars.contains(name) && !self.mut_vars.contains(name) {
-                body.push(Instruction::Alloca {
-                    dest: name.clone(),
-                });
+                body.push(Instruction::Alloca { dest: name.clone() });
                 self.pattern_vars.insert(name.clone());
                 self.local_binding_names.insert(name.clone());
             }
@@ -992,15 +972,13 @@ impl LowerCtx {
             } else if let Some(last_temp) = pre_defer_last_temp {
                 // If fn returns Result<T,E> but the tail temp is T (extracted by ?),
                 // wrap it in Ok(T) so the return type matches.
-                let ret_val =
-                    self.maybe_wrap_ok_for_return(last_temp, &return_type, &mut body);
+                let ret_val = self.maybe_wrap_ok_for_return(last_temp, &return_type, &mut body);
                 body.push(Instruction::Return {
                     value: Some(Operand::Var(ret_val)),
                 });
             } else if let Some(expr_val) = last_expr_result {
                 // Last expression was a simple variable reference (no instruction generated)
-                let ret_val =
-                    self.maybe_wrap_ok_for_return(expr_val, &return_type, &mut body);
+                let ret_val = self.maybe_wrap_ok_for_return(expr_val, &return_type, &mut body);
                 body.push(Instruction::Return {
                     value: Some(Operand::Var(ret_val)),
                 });
@@ -1052,7 +1030,8 @@ impl LowerCtx {
                 // Track generic types (Option/Result) from the value temp
                 if let Some(gt) = self.generic_var_types.get(&val).cloned() {
                     self.generic_var_types.insert(s.name.clone(), gt.clone());
-                    self.var_types.insert(s.name.clone(), gt.monomorphized_name());
+                    self.var_types
+                        .insert(s.name.clone(), gt.monomorphized_name());
                 }
                 // Fallback: if the LHS carries an explicit Generic type
                 // annotation (`let xs: List<Int> = []`), use it for the
@@ -1065,8 +1044,10 @@ impl LowerCtx {
                     let ann_ty = Ty::from_type_expr(ann);
                     if ann_ty.is_option() || ann_ty.is_result() || ann_ty.is_list() {
                         self.register_adt_type(&ann_ty);
-                        self.generic_var_types.insert(s.name.clone(), ann_ty.clone());
-                        self.var_types.insert(s.name.clone(), ann_ty.monomorphized_name());
+                        self.generic_var_types
+                            .insert(s.name.clone(), ann_ty.clone());
+                        self.var_types
+                            .insert(s.name.clone(), ann_ty.monomorphized_name());
                     } else if let Ty::Named(n) = &ann_ty {
                         self.var_types.insert(s.name.clone(), n.clone());
                     }
@@ -1085,9 +1066,7 @@ impl LowerCtx {
                 // verifier. Semantically equivalent: subsequent Ident("v")
                 // lookups already Load from the alloca for pattern_vars /
                 // mut_vars (see lower/expr.rs:82).
-                if self.pattern_vars.contains(&s.name)
-                    || self.mut_vars.contains(&s.name)
-                {
+                if self.pattern_vars.contains(&s.name) || self.mut_vars.contains(&s.name) {
                     body.push(Instruction::Store {
                         dest: s.name.clone(),
                         value: Operand::Var(val),
@@ -1127,15 +1106,18 @@ impl LowerCtx {
                 // returned from a user function, Option/Result from a call).
                 if let Some(gt) = self.generic_var_types.get(&val).cloned() {
                     self.generic_var_types.insert(s.name.clone(), gt.clone());
-                    self.var_types.insert(s.name.clone(), gt.monomorphized_name());
+                    self.var_types
+                        .insert(s.name.clone(), gt.monomorphized_name());
                 }
                 // Fallback to explicit annotation (see Stmt::Let rationale).
                 if let Some(ann) = &s.type_annotation {
                     let ann_ty = Ty::from_type_expr(ann);
                     if ann_ty.is_option() || ann_ty.is_result() || ann_ty.is_list() {
                         self.register_adt_type(&ann_ty);
-                        self.generic_var_types.insert(s.name.clone(), ann_ty.clone());
-                        self.var_types.insert(s.name.clone(), ann_ty.monomorphized_name());
+                        self.generic_var_types
+                            .insert(s.name.clone(), ann_ty.clone());
+                        self.var_types
+                            .insert(s.name.clone(), ann_ty.monomorphized_name());
                     } else if let Ty::Named(n) = &ann_ty {
                         self.var_types.insert(s.name.clone(), n.clone());
                     }
@@ -1157,8 +1139,8 @@ impl LowerCtx {
                 // Record the name as mut BEFORE the guard so later reads in
                 // the same statement's value expression (rare but possible
                 // via closures / self-reference) see the slot semantics.
-                let already_slotted = self.pattern_vars.contains(&s.name)
-                    || self.mut_vars.contains(&s.name);
+                let already_slotted =
+                    self.pattern_vars.contains(&s.name) || self.mut_vars.contains(&s.name);
                 self.mut_vars.insert(s.name.clone());
                 if !already_slotted {
                     body.push(Instruction::Alloca {
@@ -1319,12 +1301,8 @@ impl LowerCtx {
         body.push(Instruction::Label(else_label));
         let else_start = body.len();
         let else_tail: BlockTail = match &if_expr.else_body {
-            Some(ElseBranch::Else(stmts)) => {
-                self.lower_block_collect_tail(stmts, body)
-            }
-            Some(ElseBranch::ElseIf(inner)) => {
-                BlockTail::Value(self.lower_if(inner, body))
-            }
+            Some(ElseBranch::Else(stmts)) => self.lower_block_collect_tail(stmts, body),
+            Some(ElseBranch::ElseIf(inner)) => BlockTail::Value(self.lower_if(inner, body)),
             None => BlockTail::Fallback,
         };
         if !range_terminates(body, else_start) {
@@ -1363,8 +1341,7 @@ impl LowerCtx {
     /// full set of deferred expressions. The list is cleared at lower_fn entry.
     fn emit_deferred(&mut self, body: &mut Vec<Instruction>) {
         // Clone to avoid borrow conflict (deferred_exprs is on self).
-        let entries: Vec<(String, Expr)> =
-            self.deferred_exprs.iter().rev().cloned().collect();
+        let entries: Vec<(String, Expr)> = self.deferred_exprs.iter().rev().cloned().collect();
         for (flag, expr) in &entries {
             // Runtime check: only execute this deferred expression if its
             // activation flag was set to true by a reached `defer` stmt.
@@ -1549,9 +1526,9 @@ pub(crate) fn block_ends_with_assignment(body: &[Instruction], start: usize) -> 
     // instruction that actually expresses the block's tail value.
     for inst in body[start..].iter().rev() {
         match inst {
-            Instruction::Jump { .. }
-            | Instruction::Label(_)
-            | Instruction::Alloca { .. } => continue,
+            Instruction::Jump { .. } | Instruction::Label(_) | Instruction::Alloca { .. } => {
+                continue;
+            }
             Instruction::Store { dest, .. } => {
                 // A Store into a temp (`_t42`) is internal plumbing (e.g. a
                 // nested if's result-slot propagation); it is NOT a user
@@ -1568,12 +1545,18 @@ pub(crate) fn block_ends_with_assignment(body: &[Instruction], start: usize) -> 
 }
 
 pub(crate) fn range_terminates(body: &[Instruction], start: usize) -> bool {
-    body[start..].iter().rev().find(|i| {
-        !matches!(i, Instruction::Alloca { .. } | Instruction::Label(_))
-    }).is_some_and(|i| matches!(
-        i,
-        Instruction::Return { .. } | Instruction::Jump { .. } | Instruction::BranchIf { .. }
-    ))
+    body[start..]
+        .iter()
+        .rev()
+        .find(|i| !matches!(i, Instruction::Alloca { .. } | Instruction::Label(_)))
+        .is_some_and(|i| {
+            matches!(
+                i,
+                Instruction::Return { .. }
+                    | Instruction::Jump { .. }
+                    | Instruction::BranchIf { .. }
+            )
+        })
 }
 
 /// Walk a Stmt slice and count every `Stmt::Defer` reachable through
@@ -1589,11 +1572,7 @@ fn count_defer_sites_in_stmt(s: &Stmt) -> usize {
         Stmt::Defer(_) => 1,
         Stmt::Let(l) => count_defer_sites_in_expr(&l.value),
         Stmt::Mut(m) => count_defer_sites_in_expr(&m.value),
-        Stmt::Return(r) => r
-            .value
-            .as_ref()
-            .map(count_defer_sites_in_expr)
-            .unwrap_or(0),
+        Stmt::Return(r) => r.value.as_ref().map(count_defer_sites_in_expr).unwrap_or(0),
         Stmt::Break(_) | Stmt::Continue(_) => 0,
         Stmt::Expr(e) => count_defer_sites_in_expr(&e.expr),
     }
@@ -1632,8 +1611,7 @@ fn count_defer_sites_in_expr(e: &Expr) -> usize {
             // is the chosen v0.1 semantics and differs from Go's
             // per-iteration defer stack. Rationale: avoids unbounded
             // accumulation in long-running loops.
-            count_defer_sites_in_expr(&w.condition)
-                + count_defer_sites_in_stmts(&w.body)
+            count_defer_sites_in_expr(&w.condition) + count_defer_sites_in_stmts(&w.body)
         }
         ExprKind::For(f) => {
             count_defer_sites_in_expr(&f.iter) + count_defer_sites_in_stmts(&f.body)
@@ -1691,10 +1669,7 @@ pub(crate) fn collect_let_binding_counts_in_stmts(
     }
 }
 
-fn collect_let_binding_counts_in_stmt(
-    s: &Stmt,
-    out: &mut std::collections::HashMap<String, u32>,
-) {
+fn collect_let_binding_counts_in_stmt(s: &Stmt, out: &mut std::collections::HashMap<String, u32>) {
     match s {
         Stmt::Let(l) => {
             *out.entry(l.name.clone()).or_insert(0) += 1;
@@ -1715,10 +1690,7 @@ fn collect_let_binding_counts_in_stmt(
     }
 }
 
-fn collect_let_binding_counts_in_expr(
-    e: &Expr,
-    out: &mut std::collections::HashMap<String, u32>,
-) {
+fn collect_let_binding_counts_in_expr(e: &Expr, out: &mut std::collections::HashMap<String, u32>) {
     match &e.kind {
         ExprKind::If(i) => {
             collect_let_binding_counts_in_expr(&i.condition, out);
@@ -1820,10 +1792,7 @@ fn collect_pattern_bindings_in_expr(e: &Expr, out: &mut std::collections::HashSe
     }
 }
 
-fn collect_pattern_bindings_in_else(
-    eb: &ElseBranch,
-    out: &mut std::collections::HashSet<String>,
-) {
+fn collect_pattern_bindings_in_else(eb: &ElseBranch, out: &mut std::collections::HashSet<String>) {
     match eb {
         ElseBranch::Else(stmts) => collect_pattern_bindings_in_stmts(stmts, out),
         ElseBranch::ElseIf(i) => {

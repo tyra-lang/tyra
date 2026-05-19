@@ -46,12 +46,8 @@ fn builtin_primitive_return(fname: &str) -> Option<Ty> {
         "__io_read_line" | "__io_read_to_end" => Some(Ty::String),
         "__io_eof" => Some(Ty::Bool),
         // §17.3.4: string stdlib intrinsics.
-        "__string_trim"
-        | "__string_to_upper"
-        | "__string_to_lower"
-        | "__string_substring"
-        | "__string_reverse"
-        | "__string_from_byte" => Some(Ty::String),
+        "__string_trim" | "__string_to_upper" | "__string_to_lower" | "__string_substring"
+        | "__string_reverse" | "__string_from_byte" => Some(Ty::String),
         "__string_is_empty"
         | "__string_contains"
         | "__string_starts_with"
@@ -59,14 +55,8 @@ fn builtin_primitive_return(fname: &str) -> Option<Ty> {
         // __string_len / __string_parse_int / __string_parse_errno return
         // Int (default i64 path — no tracking needed).
         // §17.3.x: float stdlib intrinsics.
-        "__float_abs"
-        | "__float_floor"
-        | "__float_ceil"
-        | "__float_round"
-        | "__float_min"
-        | "__float_max"
-        | "__float_parse"
-        | "__float_from_int" => Some(Ty::Float),
+        "__float_abs" | "__float_floor" | "__float_ceil" | "__float_round" | "__float_min"
+        | "__float_max" | "__float_parse" | "__float_from_int" => Some(Ty::Float),
         "__float_to_string" => Some(Ty::String),
         "__float_eq" | "__float_approx_eq" | "__float_is_nan" | "__float_is_infinite" => {
             Some(Ty::Bool)
@@ -158,7 +148,11 @@ fn scan_primitive_temps(
                 bool_temps.insert(name.clone());
             }
             Ty::Named(type_name) => {
-                if struct_map.get(type_name.as_str()).map(|i| i.is_data).unwrap_or(false) {
+                if struct_map
+                    .get(type_name.as_str())
+                    .map(|i| i.is_data)
+                    .unwrap_or(false)
+                {
                     string_temps.insert(name.clone()); // data type ptr treated as ptr
                 }
             }
@@ -180,8 +174,14 @@ fn scan_primitive_temps(
                 }
                 _ => {}
             },
-            Instruction::StructInit { dest, type_name, .. } => {
-                if struct_map.get(type_name.as_str()).map(|i| i.is_data).unwrap_or(false) {
+            Instruction::StructInit {
+                dest, type_name, ..
+            } => {
+                if struct_map
+                    .get(type_name.as_str())
+                    .map(|i| i.is_data)
+                    .unwrap_or(false)
+                {
                     string_temps.insert(dest.clone()); // data type StructInit result is a ptr
                 }
             }
@@ -235,7 +235,11 @@ fn scan_primitive_temps(
                             bool_temps.insert(dest.clone());
                         } else if let Ty::Named(ft_name) = field_ty {
                             // Field is itself a data type: result is a ptr
-                            if struct_map.get(ft_name.as_str()).map(|i| i.is_data).unwrap_or(false) {
+                            if struct_map
+                                .get(ft_name.as_str())
+                                .map(|i| i.is_data)
+                                .unwrap_or(false)
+                            {
                                 string_temps.insert(dest.clone());
                             }
                         }
@@ -276,7 +280,11 @@ fn scan_primitive_temps(
                         }
                         Ty::Named(type_name) => {
                             // If return type is a data type, result is a ptr
-                            if struct_map.get(type_name.as_str()).map(|i| i.is_data).unwrap_or(false) {
+                            if struct_map
+                                .get(type_name.as_str())
+                                .map(|i| i.is_data)
+                                .unwrap_or(false)
+                            {
                                 string_temps.insert(dest.clone());
                             }
                         }
@@ -331,7 +339,11 @@ fn scan_primitive_temps(
                             bool_temps.insert(dest.clone());
                         } else if let Ty::Named(ft_name) = field_ty {
                             // If payload type is a data type, result is a ptr
-                            if struct_map.get(ft_name.as_str()).map(|i| i.is_data).unwrap_or(false) {
+                            if struct_map
+                                .get(ft_name.as_str())
+                                .map(|i| i.is_data)
+                                .unwrap_or(false)
+                            {
                                 string_temps.insert(dest.clone());
                             }
                         }
@@ -737,7 +749,11 @@ fn pre_scan_struct_types(
             Instruction::Load { dest, source } => {
                 if let Some(stype) = alloca_types.get(source).cloned() {
                     // Only propagate to struct_temps for value types (data types are ptrs)
-                    if struct_map.get(stype.as_str()).map(|i| !i.is_data).unwrap_or(true) {
+                    if struct_map
+                        .get(stype.as_str())
+                        .map(|i| !i.is_data)
+                        .unwrap_or(true)
+                    {
                         struct_temps.insert(dest.clone(), stype);
                     }
                 }

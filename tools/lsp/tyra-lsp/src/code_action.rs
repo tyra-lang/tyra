@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
+use tower_lsp::lsp_types::Url;
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, Diagnostic, NumberOrString, TextEdit,
     WorkspaceEdit,
 };
-use tower_lsp::lsp_types::Url;
-use tyra_driver::{SymbolList, PRELUDE_CONSTRUCTORS, PRELUDE_FUNCTIONS, PRELUDE_TYPES};
+use tyra_driver::{PRELUDE_CONSTRUCTORS, PRELUDE_FUNCTIONS, PRELUDE_TYPES, SymbolList};
 
 /// Build code-action suggestions for the given diagnostics.
 ///
@@ -72,14 +72,20 @@ fn e0200_actions(uri: &Url, diag: &Diagnostic, symbols: &SymbolList) -> Vec<Code
     scored
         .into_iter()
         .map(|(dist, good)| {
-            let edit = TextEdit { range: diag.range, new_text: good.to_string() };
+            let edit = TextEdit {
+                range: diag.range,
+                new_text: good.to_string(),
+            };
             let mut changes = HashMap::new();
             changes.insert(uri.clone(), vec![edit]);
             let action = CodeAction {
                 title: format!("Replace `{bad}` with `{good}`"),
                 kind: Some(CodeActionKind::QUICKFIX),
                 diagnostics: Some(vec![diag.clone()]),
-                edit: Some(WorkspaceEdit { changes: Some(changes), ..Default::default() }),
+                edit: Some(WorkspaceEdit {
+                    changes: Some(changes),
+                    ..Default::default()
+                }),
                 is_preferred: Some(dist == 1),
                 ..Default::default()
             };
@@ -168,14 +174,18 @@ mod tests {
 
     #[test]
     fn extracts_bad_name_from_e0200_message() {
-        assert_eq!(extract_backtick_name("undefined name `pirnt`"), Some("pirnt"));
+        assert_eq!(
+            extract_backtick_name("undefined name `pirnt`"),
+            Some("pirnt")
+        );
         assert_eq!(extract_backtick_name("undefined name `foo`"), Some("foo"));
         assert_eq!(extract_backtick_name("no backticks here"), None);
     }
 
     #[test]
     fn suggests_typo_correction_for_e0200() {
-        let symbols: SymbolList = vec![("myvar".to_string(), tyra_driver::CompletionKind::Function)];
+        let symbols: SymbolList =
+            vec![("myvar".to_string(), tyra_driver::CompletionKind::Function)];
         let diag = make_e0200("undefined name `pirnt`");
         let actions = build_actions(
             &Url::parse("file:///test.tyra").unwrap(),
@@ -199,10 +209,15 @@ mod tests {
     #[test]
     fn no_suggestion_when_distance_too_large() {
         // "zzzzqqqq" is far from every symbol and every prelude name.
-        let symbols: SymbolList = vec![("xyzzy".to_string(), tyra_driver::CompletionKind::Function)];
+        let symbols: SymbolList =
+            vec![("xyzzy".to_string(), tyra_driver::CompletionKind::Function)];
         let diag = make_e0200("undefined name `zzzzqqqq`");
-        let actions =
-            build_actions(&Url::parse("file:///test.tyra").unwrap(), &[diag], &symbols, None);
+        let actions = build_actions(
+            &Url::parse("file:///test.tyra").unwrap(),
+            &[diag],
+            &symbols,
+            None,
+        );
         assert!(actions.is_empty());
     }
 
@@ -210,8 +225,12 @@ mod tests {
     fn ignores_non_e0200_diagnostics() {
         let symbols: SymbolList = vec![];
         let diag = make_diag_with_code("E0309");
-        let actions =
-            build_actions(&Url::parse("file:///test.tyra").unwrap(), &[diag], &symbols, None);
+        let actions = build_actions(
+            &Url::parse("file:///test.tyra").unwrap(),
+            &[diag],
+            &symbols,
+            None,
+        );
         assert!(actions.is_empty());
     }
 
@@ -220,9 +239,16 @@ mod tests {
         // E0200 from a missing-module import has a different message prefix.
         let symbols: SymbolList = vec![];
         let diag = make_e0200("cannot import `math`: module not found");
-        let actions =
-            build_actions(&Url::parse("file:///test.tyra").unwrap(), &[diag], &symbols, None);
-        assert!(actions.is_empty(), "expected no actions for import error, got: {actions:?}");
+        let actions = build_actions(
+            &Url::parse("file:///test.tyra").unwrap(),
+            &[diag],
+            &symbols,
+            None,
+        );
+        assert!(
+            actions.is_empty(),
+            "expected no actions for import error, got: {actions:?}"
+        );
     }
 
     #[test]
@@ -237,6 +263,9 @@ mod tests {
             &symbols,
             Some(&only),
         );
-        assert!(actions.is_empty(), "expected no quickfix when only=source, got: {actions:?}");
+        assert!(
+            actions.is_empty(),
+            "expected no quickfix when only=source, got: {actions:?}"
+        );
     }
 }

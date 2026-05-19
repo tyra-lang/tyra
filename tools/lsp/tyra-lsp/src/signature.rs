@@ -70,11 +70,17 @@ pub(crate) fn find_active_call(text: &str, offset: usize) -> Option<ActiveCall<'
                     j += 1;
                 }
                 b'(' => {
-                    stack.push(Frame { paren_pos: j, comma_count: 0 });
+                    stack.push(Frame {
+                        paren_pos: j,
+                        comma_count: 0,
+                    });
                     j += 1;
                 }
                 b'[' | b'{' => {
-                    stack.push(Frame { paren_pos: usize::MAX, comma_count: 0 });
+                    stack.push(Frame {
+                        paren_pos: usize::MAX,
+                        comma_count: 0,
+                    });
                     j += 1;
                 }
                 b')' | b']' | b'}' => {
@@ -125,7 +131,10 @@ pub(crate) fn find_active_call(text: &str, offset: usize) -> Option<ActiveCall<'
         return None;
     }
 
-    Some(ActiveCall { callee, active_parameter })
+    Some(ActiveCall {
+        callee,
+        active_parameter,
+    })
 }
 
 /// Build an LSP `SignatureInformation` from a user-defined function definition.
@@ -163,11 +172,31 @@ pub(crate) fn build_signature_for_fn(f: &FnDef) -> SignatureInformation {
 /// Look up a hardcoded signature for a small set of prelude functions.
 pub(crate) fn prelude_signature(name: &str) -> Option<SignatureInformation> {
     static TABLE: &[(&str, &str, &[&str])] = &[
-        ("print",    "fn print(value: String) -> Unit",    &["value: String"]),
-        ("println",  "fn println(value: String) -> Unit",  &["value: String"]),
-        ("eprint",   "fn eprint(value: String) -> Unit",   &["value: String"]),
-        ("eprintln", "fn eprintln(value: String) -> Unit", &["value: String"]),
-        ("panic",    "fn panic(message: String) -> Never", &["message: String"]),
+        (
+            "print",
+            "fn print(value: String) -> Unit",
+            &["value: String"],
+        ),
+        (
+            "println",
+            "fn println(value: String) -> Unit",
+            &["value: String"],
+        ),
+        (
+            "eprint",
+            "fn eprint(value: String) -> Unit",
+            &["value: String"],
+        ),
+        (
+            "eprintln",
+            "fn eprintln(value: String) -> Unit",
+            &["value: String"],
+        ),
+        (
+            "panic",
+            "fn panic(message: String) -> Never",
+            &["message: String"],
+        ),
     ];
 
     let (_, label, params) = TABLE.iter().find(|(n, _, _)| *n == name)?;
@@ -195,8 +224,7 @@ fn type_expr_name(kind: &TypeExprKind) -> String {
             if args.is_empty() {
                 n.clone()
             } else {
-                let arg_names: Vec<String> =
-                    args.iter().map(|a| type_expr_name(&a.kind)).collect();
+                let arg_names: Vec<String> = args.iter().map(|a| type_expr_name(&a.kind)).collect();
                 format!("{}<{}>", n, arg_names.join(", "))
             }
         }

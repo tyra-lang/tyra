@@ -271,11 +271,7 @@ fn parse_request(stream: &mut std::net::TcpStream) -> Option<(String, String, St
     Some((method, path, body_str))
 }
 
-fn write_simple(
-    stream: &mut std::net::TcpStream,
-    status: i64,
-    body: &str,
-) -> std::io::Result<()> {
+fn write_simple(stream: &mut std::net::TcpStream, status: i64, body: &str) -> std::io::Result<()> {
     let reason = match status {
         200 => "OK",
         201 => "Created",
@@ -375,7 +371,8 @@ mod tests {
 
         let port = start_test_server(srv);
         let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
-        s.write_all(b"GET /hello HTTP/1.1\r\nHost: x\r\n\r\n").unwrap();
+        s.write_all(b"GET /hello HTTP/1.1\r\nHost: x\r\n\r\n")
+            .unwrap();
         let mut buf = String::new();
         s.read_to_string(&mut buf).unwrap();
         assert!(buf.starts_with("HTTP/1.1 200 OK"), "got: {buf}");
@@ -388,7 +385,8 @@ mod tests {
         let srv = tyra_http_server_new();
         let port = start_test_server(srv);
         let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
-        s.write_all(b"GET /nope HTTP/1.1\r\nHost: x\r\n\r\n").unwrap();
+        s.write_all(b"GET /nope HTTP/1.1\r\nHost: x\r\n\r\n")
+            .unwrap();
         let mut buf = String::new();
         s.read_to_string(&mut buf).unwrap();
         assert!(buf.starts_with("HTTP/1.1 404"), "got: {buf}");
@@ -409,7 +407,8 @@ mod tests {
         }
         let port = start_test_server(srv);
         let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
-        s.write_all(b"GET /bad HTTP/1.1\r\nHost: x\r\n\r\n").unwrap();
+        s.write_all(b"GET /bad HTTP/1.1\r\nHost: x\r\n\r\n")
+            .unwrap();
         let mut buf = String::new();
         s.read_to_string(&mut buf).unwrap();
         assert!(buf.starts_with("HTTP/1.1 500"), "got: {buf}");
@@ -429,7 +428,10 @@ mod tests {
         assert_eq!(size_of::<TyraRequest>(), 3 * size_of::<*const c_char>());
         assert_eq!(offset_of!(TyraRequest, method), 0);
         assert_eq!(offset_of!(TyraRequest, path), size_of::<*const c_char>());
-        assert_eq!(offset_of!(TyraRequest, body), 2 * size_of::<*const c_char>());
+        assert_eq!(
+            offset_of!(TyraRequest, body),
+            2 * size_of::<*const c_char>()
+        );
         // Response { status: Int, body: String }
         // Int is i64; body is ptr. Both 8 bytes on LP64.
         assert_eq!(size_of::<TyraResponse>(), 8 + size_of::<*const c_char>());

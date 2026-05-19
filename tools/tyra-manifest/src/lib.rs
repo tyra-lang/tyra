@@ -60,7 +60,10 @@ impl std::fmt::Display for ManifestError {
                 write!(f, "unsupported edition \"{e}\"; only \"2026\" is valid")
             }
             ManifestError::MissingRev { name } => {
-                write!(f, "dependency `{name}`: `rev` is required for git dependencies")
+                write!(
+                    f,
+                    "dependency `{name}`: `rev` is required for git dependencies"
+                )
             }
             ManifestError::ConflictingSource { name } => {
                 write!(
@@ -128,11 +131,11 @@ fn validate(manifest: &Manifest) -> Result<(), ManifestError> {
     for (name, dep) in &manifest.dependencies {
         match (&dep.path, &dep.git) {
             (Some(_), Some(_)) => {
-                return Err(ManifestError::ConflictingSource { name: name.clone() })
+                return Err(ManifestError::ConflictingSource { name: name.clone() });
             }
             (None, None) => return Err(ManifestError::MissingSource { name: name.clone() }),
             (None, Some(_)) if dep.rev.is_none() => {
-                return Err(ManifestError::MissingRev { name: name.clone() })
+                return Err(ManifestError::MissingRev { name: name.clone() });
             }
             _ => {}
         }

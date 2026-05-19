@@ -287,15 +287,25 @@ pub(crate) fn emit_builtin_call(
         }
         "__float_is_nan" => {
             let d = dest.as_deref().unwrap_or("_float_is_nan");
-            let x = args.first().map(|a| operand_ref(a, func)).unwrap_or_else(|| "0.0".into());
+            let x = args
+                .first()
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "0.0".into());
             writeln!(out, "  %{d}.i32 = call i32 @tyra_float_is_nan(double {x})").unwrap();
             writeln!(out, "  %{d} = trunc i32 %{d}.i32 to i1").unwrap();
             true
         }
         "__float_is_infinite" => {
             let d = dest.as_deref().unwrap_or("_float_is_inf");
-            let x = args.first().map(|a| operand_ref(a, func)).unwrap_or_else(|| "0.0".into());
-            writeln!(out, "  %{d}.i32 = call i32 @tyra_float_is_infinite(double {x})").unwrap();
+            let x = args
+                .first()
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "0.0".into());
+            writeln!(
+                out,
+                "  %{d}.i32 = call i32 @tyra_float_is_infinite(double {x})"
+            )
+            .unwrap();
             writeln!(out, "  %{d} = trunc i32 %{d}.i32 to i1").unwrap();
             true
         }
@@ -307,9 +317,18 @@ pub(crate) fn emit_builtin_call(
         }
         "__map_insert_string_int" => {
             let d = dest.as_deref().unwrap_or("_map_ins");
-            let m = args.first().map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
-            let k = args.get(1).map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
-            let v = args.get(2).map(|a| operand_ref(a, func)).unwrap_or_else(|| "0".into());
+            let m = args
+                .first()
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            let k = args
+                .get(1)
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            let v = args
+                .get(2)
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "0".into());
             writeln!(
                 out,
                 "  %{d} = call ptr @tyra_map_insert_string_int(ptr {m}, ptr {k}, i64 {v})"
@@ -319,8 +338,14 @@ pub(crate) fn emit_builtin_call(
         }
         "__map_get_string_int" => {
             let d = dest.as_deref().unwrap_or("_map_get");
-            let m = args.first().map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
-            let k = args.get(1).map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            let m = args
+                .first()
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            let k = args
+                .get(1)
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
             writeln!(
                 out,
                 "  %{d} = call i64 @tyra_map_get_string_int(ptr {m}, ptr {k})"
@@ -330,8 +355,14 @@ pub(crate) fn emit_builtin_call(
         }
         "__map_contains_string_int" => {
             let d = dest.as_deref().unwrap_or("_map_has");
-            let m = args.first().map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
-            let k = args.get(1).map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            let m = args
+                .first()
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            let k = args
+                .get(1)
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
             writeln!(
                 out,
                 "  %{d}.i32 = call i32 @tyra_map_contains_string_int(ptr {m}, ptr {k})"
@@ -369,8 +400,18 @@ pub(crate) fn emit_builtin_call(
             // §17.1: core.sys.exit(_ code: Int) -> Never
             if let Some(arg) = args.first() {
                 let val = operand_ref(arg, func);
-                writeln!(out, "  %{}.i32 = trunc i64 {val} to i32", dest.as_deref().unwrap_or("_exit")).unwrap();
-                writeln!(out, "  call void @exit(i32 %{}.i32)", dest.as_deref().unwrap_or("_exit")).unwrap();
+                writeln!(
+                    out,
+                    "  %{}.i32 = trunc i64 {val} to i32",
+                    dest.as_deref().unwrap_or("_exit")
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "  call void @exit(i32 %{}.i32)",
+                    dest.as_deref().unwrap_or("_exit")
+                )
+                .unwrap();
             } else {
                 writeln!(out, "  call void @exit(i32 0)").unwrap();
             }
@@ -496,28 +537,39 @@ fn emit_sys_args(out: &mut String, dest: Option<&str>, ctx: &EmitCtx) {
     writeln!(out, "  %{d}.done = icmp sge i64 %{d}.i, %{d}.argc64").unwrap();
     writeln!(out, "  br i1 %{d}.done, label %{d}.end, label %{d}.body").unwrap();
     writeln!(out, "{d}.body:").unwrap();
-    writeln!(out, "  %{d}.argp = getelementptr ptr, ptr %{d}.argv, i64 %{d}.i").unwrap();
+    writeln!(
+        out,
+        "  %{d}.argp = getelementptr ptr, ptr %{d}.argv, i64 %{d}.i"
+    )
+    .unwrap();
     writeln!(out, "  %{d}.arg = load ptr, ptr %{d}.argp").unwrap();
-    writeln!(out, "  %{d}.dstp = getelementptr ptr, ptr %{d}.data, i64 %{d}.i").unwrap();
+    writeln!(
+        out,
+        "  %{d}.dstp = getelementptr ptr, ptr %{d}.data, i64 %{d}.i"
+    )
+    .unwrap();
     writeln!(out, "  store ptr %{d}.arg, ptr %{d}.dstp").unwrap();
     writeln!(out, "  %{d}.next = add i64 %{d}.i, 1").unwrap();
     writeln!(out, "  store i64 %{d}.next, ptr %{d}.ctr").unwrap();
     writeln!(out, "  br label %{d}.loop").unwrap();
     writeln!(out, "{d}.end:").unwrap();
     // Build List struct {ptr, i64}
-    writeln!(out, "  %{d}.s0 = insertvalue {list_ty} undef, ptr %{d}.data, 0").unwrap();
-    writeln!(out, "  %{d} = insertvalue {list_ty} %{d}.s0, i64 %{d}.argc64, 1").unwrap();
+    writeln!(
+        out,
+        "  %{d}.s0 = insertvalue {list_ty} undef, ptr %{d}.data, 0"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{d} = insertvalue {list_ty} %{d}.s0, i64 %{d}.argc64, 1"
+    )
+    .unwrap();
 }
 
 /// M10 phase 1: `__fs_read_raw(path: String) -> String`.
 /// Delegates to `@tyra_fs_read` in the runtime. Returns empty C string on
 /// error; the caller is expected to check `__fs_errno()` to discriminate.
-fn emit_fs_read_raw(
-    out: &mut String,
-    dest: Option<&str>,
-    args: &[Operand],
-    func: &Function,
-) {
+fn emit_fs_read_raw(out: &mut String, dest: Option<&str>, args: &[Operand], func: &Function) {
     let d = dest.unwrap_or("_fs_read");
     let path = if let Some(arg) = args.first() {
         operand_ref(arg, func)
@@ -555,17 +607,16 @@ fn emit_fs_write_raw(out: &mut String, args: &[Operand], func: &Function) {
         .get(1)
         .map(|a| operand_ref(a, func))
         .unwrap_or_else(|| "null".into());
-    writeln!(out, "  call void @tyra_fs_write(ptr {path}, ptr {contents})").unwrap();
+    writeln!(
+        out,
+        "  call void @tyra_fs_write(ptr {path}, ptr {contents})"
+    )
+    .unwrap();
 }
 
 /// M10 phase 1b: `__fs_exists(path: String) -> Bool`.
 /// Delegates to `@tyra_fs_exists`; truncates the i32 return to i1.
-fn emit_fs_exists(
-    out: &mut String,
-    dest: Option<&str>,
-    args: &[Operand],
-    func: &Function,
-) {
+fn emit_fs_exists(out: &mut String, dest: Option<&str>, args: &[Operand], func: &Function) {
     let d = dest.unwrap_or("_fs_exists");
     let path = args
         .first()
@@ -663,7 +714,11 @@ fn emit_json_get(out: &mut String, dest: Option<&str>, args: &[Operand], func: &
         .get(1)
         .map(|a| operand_ref(a, func))
         .unwrap_or_else(|| "null".into());
-    writeln!(out, "  %{d} = call i64 @tyra_json_get(i64 {handle}, ptr {key})").unwrap();
+    writeln!(
+        out,
+        "  %{d} = call i64 @tyra_json_get(i64 {handle}, ptr {key})"
+    )
+    .unwrap();
 }
 
 fn emit_json_at(out: &mut String, dest: Option<&str>, args: &[Operand], func: &Function) {
@@ -676,7 +731,11 @@ fn emit_json_at(out: &mut String, dest: Option<&str>, args: &[Operand], func: &F
         .get(1)
         .map(|a| operand_ref(a, func))
         .unwrap_or_else(|| "0".into());
-    writeln!(out, "  %{d} = call i64 @tyra_json_at(i64 {handle}, i64 {index})").unwrap();
+    writeln!(
+        out,
+        "  %{d} = call i64 @tyra_json_at(i64 {handle}, i64 {index})"
+    )
+    .unwrap();
 }
 
 // ---------------------------------------------------------------------------
@@ -757,12 +816,7 @@ fn emit_http_server_new(out: &mut String, dest: Option<&str>) {
 /// across calls in the same function, so this avoids the name-collision
 /// that a handler-operand-derived tag would hit when the same handler
 /// expression is used in two distinct calls within a single function.
-fn emit_http_server_route(
-    out: &mut String,
-    dest: Option<&str>,
-    args: &[Operand],
-    func: &Function,
-) {
+fn emit_http_server_route(out: &mut String, dest: Option<&str>, args: &[Operand], func: &Function) {
     // The `.sptr` intermediate SSA temp is keyed off `dest`, which must
     // be a per-call `fresh_temp()`. `lower_call` always emits one today.
     // Assert defensively so a future refactor that drops dest for void
@@ -1035,17 +1089,16 @@ fn emit_float_double2_to_bool(
         .get(1)
         .map(|x| operand_ref(x, func))
         .unwrap_or_else(|| "0.0".into());
-    writeln!(out, "  %{d}.i32 = call i32 @{callee}(double {a}, double {b})").unwrap();
+    writeln!(
+        out,
+        "  %{d}.i32 = call i32 @{callee}(double {a}, double {b})"
+    )
+    .unwrap();
     writeln!(out, "  %{d} = icmp ne i32 %{d}.i32, 0").unwrap();
 }
 
 /// `__float_approx_eq(a, b, eps) -> Bool` — three double args.
-fn emit_float_approx_eq(
-    out: &mut String,
-    dest: Option<&str>,
-    args: &[Operand],
-    func: &Function,
-) {
+fn emit_float_approx_eq(out: &mut String, dest: Option<&str>, args: &[Operand], func: &Function) {
     let d = dest.unwrap_or("_float_approx");
     let a = args
         .first()
@@ -1100,16 +1153,15 @@ fn emit_float_double2_to_double(
         .get(1)
         .map(|x| operand_ref(x, func))
         .unwrap_or_else(|| "0.0".into());
-    writeln!(out, "  %{d} = call double @{callee}(double {a}, double {b})").unwrap();
+    writeln!(
+        out,
+        "  %{d} = call double @{callee}(double {a}, double {b})"
+    )
+    .unwrap();
 }
 
 /// `__float_to_string(x) -> String`.
-fn emit_float_to_string(
-    out: &mut String,
-    dest: Option<&str>,
-    args: &[Operand],
-    func: &Function,
-) {
+fn emit_float_to_string(out: &mut String, dest: Option<&str>, args: &[Operand], func: &Function) {
     let d = dest.unwrap_or("_float_str");
     let x = args
         .first()
@@ -1119,12 +1171,7 @@ fn emit_float_to_string(
 }
 
 /// `__float_parse(s) -> Float`.
-fn emit_float_parse(
-    out: &mut String,
-    dest: Option<&str>,
-    args: &[Operand],
-    func: &Function,
-) {
+fn emit_float_parse(out: &mut String, dest: Option<&str>, args: &[Operand], func: &Function) {
     let d = dest.unwrap_or("_float_parse");
     let s = args
         .first()
@@ -1134,12 +1181,7 @@ fn emit_float_parse(
 }
 
 /// `__float_from_int(n) -> Float`.
-fn emit_float_from_int(
-    out: &mut String,
-    dest: Option<&str>,
-    args: &[Operand],
-    func: &Function,
-) {
+fn emit_float_from_int(out: &mut String, dest: Option<&str>, args: &[Operand], func: &Function) {
     let d = dest.unwrap_or("_float_from_int");
     let n = args
         .first()
@@ -1149,12 +1191,7 @@ fn emit_float_from_int(
 }
 
 /// `__float_to_int(x) -> Int`.
-fn emit_float_to_int(
-    out: &mut String,
-    dest: Option<&str>,
-    args: &[Operand],
-    func: &Function,
-) {
+fn emit_float_to_int(out: &mut String, dest: Option<&str>, args: &[Operand], func: &Function) {
     let d = dest.unwrap_or("_float_to_int");
     let x = args
         .first()
@@ -1186,7 +1223,11 @@ fn emit_parse_int(
     // Alloca for endptr
     writeln!(out, "  %{d}.endp = alloca ptr").unwrap();
     // Call strtol(str, &endptr, 10)
-    writeln!(out, "  %{d}.val = call i64 @strtol(ptr {val}, ptr %{d}.endp, i32 10)").unwrap();
+    writeln!(
+        out,
+        "  %{d}.val = call i64 @strtol(ptr {val}, ptr %{d}.endp, i32 10)"
+    )
+    .unwrap();
     // Load endptr
     writeln!(out, "  %{d}.ep = load ptr, ptr %{d}.endp").unwrap();
     // Check: endptr == str means no conversion at all
@@ -1200,13 +1241,21 @@ fn emit_parse_int(
     // Some path
     writeln!(out, "{d}.some:").unwrap();
     writeln!(out, "  %{d}.some.s0 = insertvalue {opt_ty} undef, i8 0, 0").unwrap();
-    writeln!(out, "  %{d}.some.v = insertvalue {opt_ty} %{d}.some.s0, i64 %{d}.val, 1").unwrap();
+    writeln!(
+        out,
+        "  %{d}.some.v = insertvalue {opt_ty} %{d}.some.s0, i64 %{d}.val, 1"
+    )
+    .unwrap();
     writeln!(out, "  store {opt_ty} %{d}.some.v, ptr %{d}.slot").unwrap();
     writeln!(out, "  br label %{d}.merge").unwrap();
     // None path
     writeln!(out, "{d}.none:").unwrap();
     writeln!(out, "  %{d}.none.s0 = insertvalue {opt_ty} undef, i8 1, 0").unwrap();
-    writeln!(out, "  %{d}.none.v = insertvalue {opt_ty} %{d}.none.s0, i64 0, 1").unwrap();
+    writeln!(
+        out,
+        "  %{d}.none.v = insertvalue {opt_ty} %{d}.none.s0, i64 0, 1"
+    )
+    .unwrap();
     writeln!(out, "  store {opt_ty} %{d}.none.v, ptr %{d}.slot").unwrap();
     writeln!(out, "  br label %{d}.merge").unwrap();
     // Merge
@@ -1282,18 +1331,38 @@ fn emit_list_int_push(
     writeln!(out, "  %{d}.done = icmp sge i64 %{d}.i, %{d}.oldlen").unwrap();
     writeln!(out, "  br i1 %{d}.done, label %{d}.tail, label %{d}.body").unwrap();
     writeln!(out, "{d}.body:").unwrap();
-    writeln!(out, "  %{d}.srcp = getelementptr i64, ptr %{d}.olddata, i64 %{d}.i").unwrap();
+    writeln!(
+        out,
+        "  %{d}.srcp = getelementptr i64, ptr %{d}.olddata, i64 %{d}.i"
+    )
+    .unwrap();
     writeln!(out, "  %{d}.v = load i64, ptr %{d}.srcp").unwrap();
-    writeln!(out, "  %{d}.dstp = getelementptr i64, ptr %{d}.newdata, i64 %{d}.i").unwrap();
+    writeln!(
+        out,
+        "  %{d}.dstp = getelementptr i64, ptr %{d}.newdata, i64 %{d}.i"
+    )
+    .unwrap();
     writeln!(out, "  store i64 %{d}.v, ptr %{d}.dstp").unwrap();
     writeln!(out, "  %{d}.next = add i64 %{d}.i, 1").unwrap();
     writeln!(out, "  store i64 %{d}.next, ptr %{d}.ctr").unwrap();
     writeln!(out, "  br label %{d}.loop").unwrap();
     writeln!(out, "{d}.tail:").unwrap();
-    writeln!(out, "  %{d}.tailp = getelementptr i64, ptr %{d}.newdata, i64 %{d}.oldlen").unwrap();
+    writeln!(
+        out,
+        "  %{d}.tailp = getelementptr i64, ptr %{d}.newdata, i64 %{d}.oldlen"
+    )
+    .unwrap();
     writeln!(out, "  store i64 {x}, ptr %{d}.tailp").unwrap();
-    writeln!(out, "  %{d}.s0 = insertvalue {list_ty} undef, ptr %{d}.newdata, 0").unwrap();
-    writeln!(out, "  %{d} = insertvalue {list_ty} %{d}.s0, i64 %{d}.newlen, 1").unwrap();
+    writeln!(
+        out,
+        "  %{d}.s0 = insertvalue {list_ty} undef, ptr %{d}.newdata, 0"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{d} = insertvalue {list_ty} %{d}.s0, i64 %{d}.newlen, 1"
+    )
+    .unwrap();
 }
 
 /// `__list_int_sum(list)` — fold with `+`, identity `0`.
@@ -1322,7 +1391,11 @@ fn emit_list_int_sum(
     writeln!(out, "  %{d}.done = icmp sge i64 %{d}.i, %{d}.len").unwrap();
     writeln!(out, "  br i1 %{d}.done, label %{d}.end, label %{d}.body").unwrap();
     writeln!(out, "{d}.body:").unwrap();
-    writeln!(out, "  %{d}.p = getelementptr i64, ptr %{d}.data, i64 %{d}.i").unwrap();
+    writeln!(
+        out,
+        "  %{d}.p = getelementptr i64, ptr %{d}.data, i64 %{d}.i"
+    )
+    .unwrap();
     writeln!(out, "  %{d}.v = load i64, ptr %{d}.p").unwrap();
     writeln!(out, "  %{d}.cur = load i64, ptr %{d}.acc").unwrap();
     writeln!(out, "  %{d}.sum = add i64 %{d}.cur, %{d}.v").unwrap();
@@ -1364,7 +1437,11 @@ fn emit_list_int_contains(
     writeln!(out, "  %{d}.done = icmp sge i64 %{d}.i, %{d}.len").unwrap();
     writeln!(out, "  br i1 %{d}.done, label %{d}.end, label %{d}.body").unwrap();
     writeln!(out, "{d}.body:").unwrap();
-    writeln!(out, "  %{d}.p = getelementptr i64, ptr %{d}.data, i64 %{d}.i").unwrap();
+    writeln!(
+        out,
+        "  %{d}.p = getelementptr i64, ptr %{d}.data, i64 %{d}.i"
+    )
+    .unwrap();
     writeln!(out, "  %{d}.v = load i64, ptr %{d}.p").unwrap();
     writeln!(out, "  %{d}.eq = icmp eq i64 %{d}.v, {x}").unwrap();
     writeln!(out, "  br i1 %{d}.eq, label %{d}.hit, label %{d}.cont").unwrap();
@@ -1404,7 +1481,11 @@ fn emit_list_int_index_of(
     writeln!(out, "  %{d}.slot = alloca {opt_ty}").unwrap();
     // Initialize to None so the post-loop fallthrough path is correct.
     writeln!(out, "  %{d}.none0 = insertvalue {opt_ty} undef, i8 1, 0").unwrap();
-    writeln!(out, "  %{d}.none1 = insertvalue {opt_ty} %{d}.none0, i64 0, 1").unwrap();
+    writeln!(
+        out,
+        "  %{d}.none1 = insertvalue {opt_ty} %{d}.none0, i64 0, 1"
+    )
+    .unwrap();
     writeln!(out, "  store {opt_ty} %{d}.none1, ptr %{d}.slot").unwrap();
     writeln!(out, "  %{d}.ctr = alloca i64").unwrap();
     writeln!(out, "  store i64 0, ptr %{d}.ctr").unwrap();
@@ -1414,13 +1495,21 @@ fn emit_list_int_index_of(
     writeln!(out, "  %{d}.done = icmp sge i64 %{d}.i, %{d}.len").unwrap();
     writeln!(out, "  br i1 %{d}.done, label %{d}.end, label %{d}.body").unwrap();
     writeln!(out, "{d}.body:").unwrap();
-    writeln!(out, "  %{d}.p = getelementptr i64, ptr %{d}.data, i64 %{d}.i").unwrap();
+    writeln!(
+        out,
+        "  %{d}.p = getelementptr i64, ptr %{d}.data, i64 %{d}.i"
+    )
+    .unwrap();
     writeln!(out, "  %{d}.v = load i64, ptr %{d}.p").unwrap();
     writeln!(out, "  %{d}.eq = icmp eq i64 %{d}.v, {x}").unwrap();
     writeln!(out, "  br i1 %{d}.eq, label %{d}.hit, label %{d}.cont").unwrap();
     writeln!(out, "{d}.hit:").unwrap();
     writeln!(out, "  %{d}.some0 = insertvalue {opt_ty} undef, i8 0, 0").unwrap();
-    writeln!(out, "  %{d}.some1 = insertvalue {opt_ty} %{d}.some0, i64 %{d}.i, 1").unwrap();
+    writeln!(
+        out,
+        "  %{d}.some1 = insertvalue {opt_ty} %{d}.some0, i64 %{d}.i, 1"
+    )
+    .unwrap();
     writeln!(out, "  store {opt_ty} %{d}.some1, ptr %{d}.slot").unwrap();
     writeln!(out, "  br label %{d}.end").unwrap();
     writeln!(out, "{d}.cont:").unwrap();
@@ -1456,7 +1545,11 @@ fn emit_list_int_min_max(
     writeln!(out, "  br i1 %{d}.empty, label %{d}.none, label %{d}.init").unwrap();
     writeln!(out, "{d}.none:").unwrap();
     writeln!(out, "  %{d}.none0 = insertvalue {opt_ty} undef, i8 1, 0").unwrap();
-    writeln!(out, "  %{d}.none1 = insertvalue {opt_ty} %{d}.none0, i64 0, 1").unwrap();
+    writeln!(
+        out,
+        "  %{d}.none1 = insertvalue {opt_ty} %{d}.none0, i64 0, 1"
+    )
+    .unwrap();
     writeln!(out, "  store {opt_ty} %{d}.none1, ptr %{d}.slot").unwrap();
     writeln!(out, "  br label %{d}.end").unwrap();
     writeln!(out, "{d}.init:").unwrap();
@@ -1472,7 +1565,11 @@ fn emit_list_int_min_max(
     writeln!(out, "  %{d}.done = icmp sge i64 %{d}.i, %{d}.len").unwrap();
     writeln!(out, "  br i1 %{d}.done, label %{d}.some, label %{d}.body").unwrap();
     writeln!(out, "{d}.body:").unwrap();
-    writeln!(out, "  %{d}.p = getelementptr i64, ptr %{d}.data, i64 %{d}.i").unwrap();
+    writeln!(
+        out,
+        "  %{d}.p = getelementptr i64, ptr %{d}.data, i64 %{d}.i"
+    )
+    .unwrap();
     writeln!(out, "  %{d}.v = load i64, ptr %{d}.p").unwrap();
     writeln!(out, "  %{d}.cur = load i64, ptr %{d}.best").unwrap();
     writeln!(out, "  %{d}.better = icmp {cmp} i64 %{d}.v, %{d}.cur").unwrap();
@@ -1487,7 +1584,11 @@ fn emit_list_int_min_max(
     writeln!(out, "{d}.some:").unwrap();
     writeln!(out, "  %{d}.final = load i64, ptr %{d}.best").unwrap();
     writeln!(out, "  %{d}.some0 = insertvalue {opt_ty} undef, i8 0, 0").unwrap();
-    writeln!(out, "  %{d}.some1 = insertvalue {opt_ty} %{d}.some0, i64 %{d}.final, 1").unwrap();
+    writeln!(
+        out,
+        "  %{d}.some1 = insertvalue {opt_ty} %{d}.some0, i64 %{d}.final, 1"
+    )
+    .unwrap();
     writeln!(out, "  store {opt_ty} %{d}.some1, ptr %{d}.slot").unwrap();
     writeln!(out, "  br label %{d}.end").unwrap();
     writeln!(out, "{d}.end:").unwrap();

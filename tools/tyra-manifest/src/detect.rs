@@ -20,8 +20,8 @@
 /// are caught at compile time by `resolve_imports`.
 pub fn is_bin_source(src: &str) -> bool {
     const DECLARATION_PREFIXES: &[&str] = &[
-        "fn ", "fn(", "type ", "value ", "data ", "trait ", "impl ",
-        "import ", "export ", "end", "when ",
+        "fn ", "fn(", "type ", "value ", "data ", "trait ", "impl ", "import ", "export ", "end",
+        "when ",
     ];
 
     for line in src.lines() {
@@ -141,7 +141,10 @@ export fn mainframe(args: List<String>) -> Unit
   ()
 end
 ";
-        assert!(!is_bin_source(src), "fn mainframe must not be treated as bin");
+        assert!(
+            !is_bin_source(src),
+            "fn mainframe must not be treated as bin"
+        );
     }
 
     #[test]
@@ -151,7 +154,10 @@ fn main_loop(state: State) -> State
   state
 end
 ";
-        assert!(!is_bin_source(src), "fn main_loop must not be treated as bin");
+        assert!(
+            !is_bin_source(src),
+            "fn main_loop must not be treated as bin"
+        );
     }
 
     // Regression: #comment (no space after #) must be treated as a comment.
@@ -163,7 +169,10 @@ export fn greet(name: String) -> String
   \"hello, #{name}\"
 end
 ";
-        assert!(!is_bin_source(src), "#todo comment must not be treated as executable statement");
+        assert!(
+            !is_bin_source(src),
+            "#todo comment must not be treated as executable statement"
+        );
     }
 
     #[test]
@@ -174,7 +183,10 @@ export fn run() -> Unit
   ()
 end
 ";
-        assert!(!is_bin_source(src), "#! line must not be treated as executable statement");
+        assert!(
+            !is_bin_source(src),
+            "#! line must not be treated as executable statement"
+        );
     }
 
     // Regression: export fn main(...) must be treated as bin (ADR 0009).
@@ -196,7 +208,10 @@ export fn mainframe(args: List<String>) -> Unit
   ()
 end
 ";
-        assert!(!is_bin_source(src), "export fn mainframe must not be treated as bin");
+        assert!(
+            !is_bin_source(src),
+            "export fn mainframe must not be treated as bin"
+        );
     }
 
     // fn main with no parens on the same line is still bin.

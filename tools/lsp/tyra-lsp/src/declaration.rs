@@ -57,12 +57,12 @@ mod tests {
     fn finds_trait_def_from_impl_trait_name() {
         // Cursor on 'Foo' in 'impl Foo for X' → trait Foo span
         let src = concat!(
-            "trait Foo\n",        // line 0
-            "end\n",              // line 1
-            "value X\n",          // line 2
-            "end\n",              // line 3
-            "impl Foo for X\n",   // line 4
-            "end\n",              // line 5
+            "trait Foo\n",      // line 0
+            "end\n",            // line 1
+            "value X\n",        // line 2
+            "end\n",            // line 3
+            "impl Foo for X\n", // line 4
+            "end\n",            // line 5
         );
         let span = run(src, 4, 5).expect("expected Some span for impl trait name");
         let trait_offset = src.find("trait Foo").unwrap() as u32;
@@ -98,6 +98,9 @@ mod tests {
     fn returns_none_for_let_binding() {
         let src = "fn main()\n  let x = 1\nend\n";
         let result = run(src, 1, 6);
-        assert!(result.is_none(), "expected None for let binding, got: {result:?}");
+        assert!(
+            result.is_none(),
+            "expected None for let binding, got: {result:?}"
+        );
     }
 }

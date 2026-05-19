@@ -28,9 +28,7 @@ impl super::LowerCtx {
                 }
                 false
             }
-            ExprKind::BinaryOp(lhs, _op, rhs) => {
-                self.is_float_expr(lhs) || self.is_float_expr(rhs)
-            }
+            ExprKind::BinaryOp(lhs, _op, rhs) => self.is_float_expr(lhs) || self.is_float_expr(rhs),
             ExprKind::UnaryOp(_, inner) => self.is_float_expr(inner),
             ExprKind::Call(callee, _) => self.call_returns_type(callee, &Ty::Float),
             _ => false,
@@ -75,13 +73,15 @@ impl super::LowerCtx {
 
     /// Check if an if-expression produces String from both branches.
     fn if_expr_is_string(&self, i: &IfExpr) -> bool {
-        let then_is_str = i.then_body.last().map_or(false, |s| {
-            matches!(s, Stmt::Expr(es) if self.is_string_expr(&es.expr))
-        });
+        let then_is_str = i.then_body.last().map_or(
+            false,
+            |s| matches!(s, Stmt::Expr(es) if self.is_string_expr(&es.expr)),
+        );
         let else_is_str = match &i.else_body {
-            Some(ElseBranch::Else(stmts)) => stmts.last().map_or(false, |s| {
-                matches!(s, Stmt::Expr(es) if self.is_string_expr(&es.expr))
-            }),
+            Some(ElseBranch::Else(stmts)) => stmts.last().map_or(
+                false,
+                |s| matches!(s, Stmt::Expr(es) if self.is_string_expr(&es.expr)),
+            ),
             Some(ElseBranch::ElseIf(inner)) => self.if_expr_is_string(inner),
             None => false,
         };
@@ -114,9 +114,7 @@ impl super::LowerCtx {
                     }
                 }
                 // Check impl method return type
-                if let ImplMethodResult::Resolved(mangled) =
-                    self.resolve_impl_method(obj, method)
-                {
+                if let ImplMethodResult::Resolved(mangled) = self.resolve_impl_method(obj, method) {
                     return self
                         .fn_return_types
                         .get(mangled.as_str())
@@ -154,8 +152,7 @@ impl super::LowerCtx {
                     if let ImplMethodResult::Resolved(mangled) =
                         self.resolve_impl_method(obj, method)
                     {
-                        if let Some(Ty::Named(type_name)) = self.fn_return_types.get(&mangled)
-                        {
+                        if let Some(Ty::Named(type_name)) = self.fn_return_types.get(&mangled) {
                             if self.struct_fields.contains_key(type_name) {
                                 return Some(type_name.clone());
                             }
@@ -449,7 +446,8 @@ impl super::LowerCtx {
                 if let ExprKind::Ident(fname) = &callee.kind {
                     // Check if it's a prelude ADT constructor: Some(x), Ok(x), Err(e)
                     if let Some(first_arg) = args.first() {
-                        if let Some(adt_ty) = self.infer_expr_type(&first_arg.value)
+                        if let Some(adt_ty) = self
+                            .infer_expr_type(&first_arg.value)
                             .and_then(|arg_ty| self.infer_adt_call_type(fname, &arg_ty))
                         {
                             return Some(adt_ty);
@@ -465,7 +463,10 @@ impl super::LowerCtx {
                 } else if let ExprKind::FieldAccess(obj, variant) = &callee.kind {
                     if let ExprKind::Ident(type_or_module) = &obj.kind {
                         // ADT payload constructor: TypeName.Variant(args)
-                        if self.variant_tags.contains_key(&(type_or_module.clone(), variant.clone())) {
+                        if self
+                            .variant_tags
+                            .contains_key(&(type_or_module.clone(), variant.clone()))
+                        {
                             return Some(Ty::Named(type_or_module.clone()));
                         }
                         // Module-qualified struct constructor: module.TypeName(args)
@@ -514,7 +515,10 @@ impl super::LowerCtx {
             ExprKind::FieldAccess(obj, field) => {
                 // ADT unit variant constructor: TypeName.Variant
                 if let ExprKind::Ident(type_name) = &obj.kind {
-                    if self.variant_tags.contains_key(&(type_name.clone(), field.clone())) {
+                    if self
+                        .variant_tags
+                        .contains_key(&(type_name.clone(), field.clone()))
+                    {
                         return Some(Ty::Named(type_name.clone()));
                     }
                 }
@@ -523,7 +527,11 @@ impl super::LowerCtx {
                     // Special case: `self` in impl methods uses self_type
                     let struct_name = if var_name == "self" {
                         self.self_type.as_deref().and_then(|sn| {
-                            if self.struct_fields.contains_key(sn) { Some(sn) } else { None }
+                            if self.struct_fields.contains_key(sn) {
+                                Some(sn)
+                            } else {
+                                None
+                            }
                         })
                     } else {
                         self.var_types.get(var_name.as_str()).map(|s| s.as_str())

@@ -1,7 +1,7 @@
 use tower_lsp::lsp_types::{CodeLens, Command};
 use tyra_ast::Item;
 
-use crate::{references, rename, span_to_lsp_range, DocState};
+use crate::{DocState, references, rename, span_to_lsp_range};
 
 /// Build code lenses for top-level `fn` definitions.
 /// Each lens shows the reference count for the function's name.
@@ -9,13 +9,11 @@ pub(crate) fn build_code_lenses(state: &DocState) -> Vec<CodeLens> {
     let mut out = Vec::new();
     for item in &state.ast.items {
         let Item::FnDef(f) = item else { continue };
-        let Some(name_span) = rename::find_binding_name_span(&state.text, f.span, &f.name)
-        else {
-            continue
+        let Some(name_span) = rename::find_binding_name_span(&state.text, f.span, &f.name) else {
+            continue;
         };
         // def_index values store the whole def block span, not the name token span.
-        let uses =
-            references::find_uses_for_def(&state.def_index, f.span, state.source_id);
+        let uses = references::find_uses_for_def(&state.def_index, f.span, state.source_id);
         let title = if uses.len() == 1 {
             "1 reference".to_string()
         } else {
@@ -91,7 +89,10 @@ mod tests {
         let bar_lens = lenses
             .iter()
             .find(|l| l.command.as_ref().map(|c| c.title.as_str()) == Some("0 references"));
-        assert!(bar_lens.is_some(), "expected a lens with '0 references' for bar");
+        assert!(
+            bar_lens.is_some(),
+            "expected a lens with '0 references' for bar"
+        );
     }
 
     #[test]

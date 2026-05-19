@@ -73,11 +73,20 @@ struct ParseErr {
 
 impl<'a> Parser<'a> {
     fn new(bytes: &'a [u8]) -> Self {
-        Parser { bytes, pos: 0, line: 1, col: 1 }
+        Parser {
+            bytes,
+            pos: 0,
+            line: 1,
+            col: 1,
+        }
     }
 
     fn err(&self, msg: impl Into<String>) -> ParseErr {
-        ParseErr { msg: msg.into(), line: self.line, col: self.col }
+        ParseErr {
+            msg: msg.into(),
+            line: self.line,
+            col: self.col,
+        }
     }
 
     fn peek(&self) -> Option<u8> {
@@ -108,7 +117,10 @@ impl<'a> Parser<'a> {
 
     fn expect(&mut self, b: u8) -> Result<(), ParseErr> {
         match self.peek() {
-            Some(c) if c == b => { self.bump(); Ok(()) }
+            Some(c) if c == b => {
+                self.bump();
+                Ok(())
+            }
             Some(c) => Err(self.err(format!("expected '{}', got '{}'", b as char, c as char))),
             None => Err(self.err(format!("expected '{}', got EOF", b as char))),
         }
@@ -135,8 +147,14 @@ impl<'a> Parser<'a> {
 
     fn parse_bool(&mut self) -> Result<JsonValue, ParseErr> {
         match self.peek() {
-            Some(b't') => { self.literal(b"true")?; Ok(JsonValue::Bool(true)) }
-            _ => { self.literal(b"false")?; Ok(JsonValue::Bool(false)) }
+            Some(b't') => {
+                self.literal(b"true")?;
+                Ok(JsonValue::Bool(true))
+            }
+            _ => {
+                self.literal(b"false")?;
+                Ok(JsonValue::Bool(false))
+            }
         }
     }
 
@@ -144,9 +162,12 @@ impl<'a> Parser<'a> {
         for &b in lit {
             match self.bump() {
                 Some(c) if c == b => {}
-                _ => return Err(self.err(format!(
-                    "expected '{}'", std::str::from_utf8(lit).unwrap_or("?")
-                ))),
+                _ => {
+                    return Err(self.err(format!(
+                        "expected '{}'",
+                        std::str::from_utf8(lit).unwrap_or("?")
+                    )));
+                }
             }
         }
         Ok(())
@@ -154,10 +175,17 @@ impl<'a> Parser<'a> {
 
     fn parse_number(&mut self) -> Result<JsonValue, ParseErr> {
         let start = self.pos;
-        if self.peek() == Some(b'-') { self.bump(); }
+        if self.peek() == Some(b'-') {
+            self.bump();
+        }
         let mut has_digit = false;
         while let Some(b) = self.peek() {
-            if b.is_ascii_digit() { self.bump(); has_digit = true; } else { break; }
+            if b.is_ascii_digit() {
+                self.bump();
+                has_digit = true;
+            } else {
+                break;
+            }
         }
         if !has_digit {
             return Err(self.err("invalid number"));
@@ -176,7 +204,9 @@ impl<'a> Parser<'a> {
     fn parse_hex4(&mut self) -> Result<u32, ParseErr> {
         let mut cp: u32 = 0;
         for _ in 0..4 {
-            let d = self.bump().ok_or_else(|| self.err("unterminated \\u escape"))?;
+            let d = self
+                .bump()
+                .ok_or_else(|| self.err("unterminated \\u escape"))?;
             let v = match d {
                 b'0'..=b'9' => (d - b'0') as u32,
                 b'a'..=b'f' => (d - b'a' + 10) as u32,
@@ -211,7 +241,8 @@ impl<'a> Parser<'a> {
                             // by \u and a low surrogate U+DC00..=U+DFFF.
                             let final_cp = if (0xD800..=0xDBFF).contains(&cp) {
                                 if self.bump() != Some(b'\\') || self.bump() != Some(b'u') {
-                                    return Err(self.err("high surrogate not followed by \\u low surrogate"));
+                                    return Err(self
+                                        .err("high surrogate not followed by \\u low surrogate"));
                                 }
                                 let low = self.parse_hex4()?;
                                 if !(0xDC00..=0xDFFF).contains(&low) {
@@ -247,15 +278,27 @@ impl<'a> Parser<'a> {
         self.expect(b'[')?;
         let mut items: Vec<JsonValue> = Vec::new();
         self.skip_ws();
-        if self.peek() == Some(b']') { self.bump(); return Ok(JsonValue::Array(items)); }
+        if self.peek() == Some(b']') {
+            self.bump();
+            return Ok(JsonValue::Array(items));
+        }
         loop {
             let v = self.parse_value()?;
             items.push(v);
             self.skip_ws();
             match self.peek() {
-                Some(b',') => { self.bump(); }
-                Some(b']') => { self.bump(); break; }
-                Some(c) => return Err(self.err(format!("expected ',' or ']' in array, got '{}'", c as char))),
+                Some(b',') => {
+                    self.bump();
+                }
+                Some(b']') => {
+                    self.bump();
+                    break;
+                }
+                Some(c) => {
+                    return Err(
+                        self.err(format!("expected ',' or ']' in array, got '{}'", c as char))
+                    );
+                }
                 None => return Err(self.err("unterminated array")),
             }
         }
@@ -266,7 +309,10 @@ impl<'a> Parser<'a> {
         self.expect(b'{')?;
         let mut items: Vec<(CString, JsonValue)> = Vec::new();
         self.skip_ws();
-        if self.peek() == Some(b'}') { self.bump(); return Ok(JsonValue::Object(items)); }
+        if self.peek() == Some(b'}') {
+            self.bump();
+            return Ok(JsonValue::Object(items));
+        }
         loop {
             self.skip_ws();
             let key = self.parse_string()?;
@@ -276,9 +322,19 @@ impl<'a> Parser<'a> {
             items.push((key, v));
             self.skip_ws();
             match self.peek() {
-                Some(b',') => { self.bump(); }
-                Some(b'}') => { self.bump(); break; }
-                Some(c) => return Err(self.err(format!("expected ',' or '}}' in object, got '{}'", c as char))),
+                Some(b',') => {
+                    self.bump();
+                }
+                Some(b'}') => {
+                    self.bump();
+                    break;
+                }
+                Some(c) => {
+                    return Err(self.err(format!(
+                        "expected ',' or '}}' in object, got '{}'",
+                        c as char
+                    )));
+                }
                 None => return Err(self.err("unterminated object")),
             }
         }
@@ -322,7 +378,11 @@ fn set_err(e: ParseErr) {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_json_parse(text: *const c_char) -> i64 {
     if text.is_null() {
-        set_err(ParseErr { msg: "null input".into(), line: 0, col: 0 });
+        set_err(ParseErr {
+            msg: "null input".into(),
+            line: 0,
+            col: 0,
+        });
         return 0;
     }
     let bytes = unsafe { CStr::from_ptr(text) }.to_bytes();
@@ -333,7 +393,10 @@ pub unsafe extern "C" fn tyra_json_parse(text: *const c_char) -> i64 {
             // allocation (via owned Boxes) and become effectively `'static`.
             Box::leak(Box::new(v)) as *const JsonValue as i64
         }
-        Err(e) => { set_err(e); 0 }
+        Err(e) => {
+            set_err(e);
+            0
+        }
     }
 }
 
@@ -369,7 +432,9 @@ pub extern "C" fn tyra_json_err_col() -> i64 {
 /// Callers must only pass handles produced by `tyra_json_parse` or one of
 /// the child accessors; `0` returns `None`.
 unsafe fn node_ref(h: i64) -> Option<&'static JsonValue> {
-    if h == 0 { return None; }
+    if h == 0 {
+        return None;
+    }
     Some(unsafe { &*(h as *const JsonValue) })
 }
 
@@ -434,7 +499,9 @@ pub unsafe extern "C" fn tyra_json_bool(h: i64) -> c_int {
 /// `key` must be a null-terminated UTF-8 string.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_json_get(h: i64, key: *const c_char) -> i64 {
-    if key.is_null() { return 0; }
+    if key.is_null() {
+        return 0;
+    }
     let key_bytes = unsafe { CStr::from_ptr(key) }.to_bytes();
     match unsafe { node_ref(h) } {
         Some(JsonValue::Object(entries)) => {
@@ -454,7 +521,9 @@ pub unsafe extern "C" fn tyra_json_get(h: i64, key: *const c_char) -> i64 {
 pub unsafe extern "C" fn tyra_json_at(h: i64, index: i64) -> i64 {
     match unsafe { node_ref(h) } {
         Some(JsonValue::Array(items)) => {
-            if index < 0 { return 0; }
+            if index < 0 {
+                return 0;
+            }
             let i = index as usize;
             items
                 .get(i)
@@ -473,7 +542,9 @@ pub unsafe extern "C" fn tyra_json_at(h: i64, index: i64) -> i64 {
 mod tests {
     use super::*;
 
-    fn cstr(s: &str) -> CString { CString::new(s).unwrap() }
+    fn cstr(s: &str) -> CString {
+        CString::new(s).unwrap()
+    }
 
     // errmsg pointers are GC-managed; no manual free needed.
     fn free_errmsg(_p: *const c_char) {}
@@ -487,7 +558,9 @@ mod tests {
         let name_h = unsafe { tyra_json_get(h, k.as_ptr()) };
         assert!(name_h != 0);
         assert_eq!(unsafe { tyra_json_is_string(name_h) }, 1);
-        let s = unsafe { CStr::from_ptr(tyra_json_str(name_h)) }.to_str().unwrap();
+        let s = unsafe { CStr::from_ptr(tyra_json_str(name_h)) }
+            .to_str()
+            .unwrap();
         assert_eq!(s, "alice");
 
         let k2 = cstr("age");
@@ -552,7 +625,9 @@ mod tests {
         let input = cstr(r#""line1\nline2\t\"quoted\"""#);
         let h = unsafe { tyra_json_parse(input.as_ptr()) };
         assert!(h != 0);
-        let s = unsafe { CStr::from_ptr(tyra_json_str(h)) }.to_str().unwrap();
+        let s = unsafe { CStr::from_ptr(tyra_json_str(h)) }
+            .to_str()
+            .unwrap();
         assert_eq!(s, "line1\nline2\t\"quoted\"");
     }
 
@@ -562,7 +637,9 @@ mod tests {
         let input = cstr(r#""\uD83D\uDE00""#);
         let h = unsafe { tyra_json_parse(input.as_ptr()) };
         assert!(h != 0, "surrogate pair must decode successfully");
-        let s = unsafe { CStr::from_ptr(tyra_json_str(h)) }.to_str().unwrap();
+        let s = unsafe { CStr::from_ptr(tyra_json_str(h)) }
+            .to_str()
+            .unwrap();
         assert_eq!(s, "😀");
     }
 
@@ -588,7 +665,9 @@ mod tests {
         let user_h = unsafe { tyra_json_get(h, u.as_ptr()) };
         let n = cstr("name");
         let name_h = unsafe { tyra_json_get(user_h, n.as_ptr()) };
-        let s = unsafe { CStr::from_ptr(tyra_json_str(name_h)) }.to_str().unwrap();
+        let s = unsafe { CStr::from_ptr(tyra_json_str(name_h)) }
+            .to_str()
+            .unwrap();
         assert_eq!(s, "bob");
     }
 
@@ -598,7 +677,9 @@ mod tests {
         let h = unsafe { tyra_json_parse(input.as_ptr()) };
         let check = |i: i64, want: &str| {
             let c = unsafe { tyra_json_at(h, i) };
-            let k = unsafe { CStr::from_ptr(tyra_json_kind(c)) }.to_str().unwrap();
+            let k = unsafe { CStr::from_ptr(tyra_json_kind(c)) }
+                .to_str()
+                .unwrap();
             assert_eq!(k, want);
         };
         check(0, "null");
@@ -614,7 +695,9 @@ mod tests {
         let input = cstr("null");
         let h = unsafe { tyra_json_parse(input.as_ptr()) };
         assert!(h != 0, "null root must have a non-zero handle");
-        let k = unsafe { CStr::from_ptr(tyra_json_kind(h)) }.to_str().unwrap();
+        let k = unsafe { CStr::from_ptr(tyra_json_kind(h)) }
+            .to_str()
+            .unwrap();
         assert_eq!(k, "null");
     }
 

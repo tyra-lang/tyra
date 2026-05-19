@@ -10,11 +10,8 @@ pub(crate) fn collect(query: &str, docs: &HashMap<Url, DocState>) -> Vec<SymbolI
     let q = query.to_lowercase();
     let mut out = Vec::new();
     for (uri, state) in docs {
-        let symbols = crate::outline::build_document_symbols(
-            state.source_id,
-            &state.ast,
-            &state.sources,
-        );
+        let symbols =
+            crate::outline::build_document_symbols(state.source_id, &state.ast, &state.sources);
         flatten(&symbols, uri, None, &q, &mut out);
     }
     out
@@ -35,7 +32,10 @@ fn flatten(
                 kind: s.kind,
                 tags: s.tags.clone(),
                 deprecated: None,
-                location: Location { uri: uri.clone(), range: s.selection_range },
+                location: Location {
+                    uri: uri.clone(),
+                    range: s.selection_range,
+                },
                 container_name: container.map(|c| c.to_string()),
             });
         }
@@ -52,8 +52,7 @@ mod tests {
     use super::*;
 
     fn make_docs(uri: &str, src: &str) -> HashMap<Url, DocState> {
-        let result =
-            tyra_driver::check_in_memory("test.tyra".to_string(), src.to_string(), None);
+        let result = tyra_driver::check_in_memory("test.tyra".to_string(), src.to_string(), None);
         let state = crate::DocState {
             text: src.to_string(),
             sources: result.sources,
@@ -88,6 +87,9 @@ mod tests {
         let syms = collect("GREE", &docs);
         let names: Vec<&str> = syms.iter().map(|s| s.name.as_str()).collect();
         assert!(names.contains(&"greet"), "expected 'greet' in: {names:?}");
-        assert!(!names.contains(&"foo"), "expected 'foo' excluded, got: {names:?}");
+        assert!(
+            !names.contains(&"foo"),
+            "expected 'foo' excluded, got: {names:?}"
+        );
     }
 }

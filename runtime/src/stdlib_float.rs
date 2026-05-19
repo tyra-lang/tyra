@@ -97,7 +97,9 @@ pub unsafe extern "C" fn tyra_float_parse(s: *const c_char) -> f64 {
     let input = if s.is_null() {
         ""
     } else {
-        unsafe { std::ffi::CStr::from_ptr(s) }.to_str().unwrap_or("")
+        unsafe { std::ffi::CStr::from_ptr(s) }
+            .to_str()
+            .unwrap_or("")
     };
     match input.parse::<f64>() {
         Ok(v) => {

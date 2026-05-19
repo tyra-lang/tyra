@@ -343,7 +343,10 @@ mod tests {
 
         let ir = emit_llvm_ir(&program);
         assert!(ir.contains("@strcmp(ptr"), "expected strcmp call");
-        assert!(ir.contains("icmp eq i32"), "expected icmp eq on strcmp result");
+        assert!(
+            ir.contains("icmp eq i32"),
+            "expected icmp eq on strcmp result"
+        );
     }
 
     #[test]
@@ -387,7 +390,10 @@ mod tests {
             struct_defs: vec![tyra_mir::StructDef {
                 name: "Option__Int".into(),
                 // fields[0] named "tag" → is_adt=true; fields[1] = payload
-                fields: vec![("tag".into(), tyra_types::Ty::Int), ("0".into(), tyra_types::Ty::Int)],
+                fields: vec![
+                    ("tag".into(), tyra_types::Ty::Int),
+                    ("0".into(), tyra_types::Ty::Int),
+                ],
                 is_data: false,
                 recursive_fields: vec![false, false],
             }],
@@ -460,8 +466,14 @@ mod tests {
             ir.contains("icmp eq ptr") && ir.contains("br i1"),
             "expected null guard (icmp eq ptr + br i1); IR:\n{ir}"
         );
-        assert!(ir.contains("phi i1"), "expected phi i1 in sdone merge block; IR:\n{ir}");
-        assert!(ir.contains("and i1"), "expected and i1 combining tag and payload; IR:\n{ir}");
+        assert!(
+            ir.contains("phi i1"),
+            "expected phi i1 in sdone merge block; IR:\n{ir}"
+        );
+        assert!(
+            ir.contains("and i1"),
+            "expected and i1 combining tag and payload; IR:\n{ir}"
+        );
         assert!(
             ir.contains("extractvalue %struct.Option__String") && ir.contains(", 1"),
             "expected field-1 extractvalue for String payload; IR:\n{ir}"
@@ -524,7 +536,10 @@ mod tests {
             "expected xor i1 to invert structural equality for !=; IR:\n{ir}"
         );
         // Null guard and phi must still be present
-        assert!(ir.contains("phi i1"), "expected phi i1 in sdone block; IR:\n{ir}");
+        assert!(
+            ir.contains("phi i1"),
+            "expected phi i1 in sdone block; IR:\n{ir}"
+        );
     }
 
     #[test]
@@ -587,11 +602,15 @@ mod tests {
         // Each assert checks that the struct name AND field index appear on the same
         // line, preventing false positives from unrelated IR constants like `i32 2`.
         assert!(
-            ir.lines().any(|l| l.contains("extractvalue %struct.Result__Int__String") && l.contains(", 2")),
+            ir.lines().any(
+                |l| l.contains("extractvalue %struct.Result__Int__String") && l.contains(", 2")
+            ),
             "expected extractvalue of field 2 (String payload) on same IR line; IR:\n{ir}"
         );
         assert!(
-            ir.lines().any(|l| l.contains("extractvalue %struct.Result__Int__String") && l.contains(", 1")),
+            ir.lines().any(
+                |l| l.contains("extractvalue %struct.Result__Int__String") && l.contains(", 1")
+            ),
             "expected extractvalue of field 1 (Int payload, not tag-only fallback) on same IR line; IR:\n{ir}"
         );
     }
@@ -622,9 +641,18 @@ mod tests {
         };
 
         let ir = emit_llvm_ir(&program);
-        assert!(ir.contains("@puts(ptr"), "expected puts call for panic message");
-        assert!(ir.contains("call void @abort()"), "expected abort after panic");
-        assert!(ir.contains("unreachable"), "expected unreachable after abort");
+        assert!(
+            ir.contains("@puts(ptr"),
+            "expected puts call for panic message"
+        );
+        assert!(
+            ir.contains("call void @abort()"),
+            "expected abort after panic"
+        );
+        assert!(
+            ir.contains("unreachable"),
+            "expected unreachable after abort"
+        );
     }
 
     #[test]
@@ -655,9 +683,18 @@ mod tests {
         };
 
         let ir = emit_llvm_ir(&program);
-        assert!(ir.contains("call ptr @GC_malloc"), "data StructInit must use GC_malloc");
-        assert!(ir.contains("getelementptr %struct.User"), "must use GEP to init fields");
-        assert!(!ir.contains("insertvalue"), "data types must not use insertvalue");
+        assert!(
+            ir.contains("call ptr @GC_malloc"),
+            "data StructInit must use GC_malloc"
+        );
+        assert!(
+            ir.contains("getelementptr %struct.User"),
+            "must use GEP to init fields"
+        );
+        assert!(
+            !ir.contains("insertvalue"),
+            "data types must not use insertvalue"
+        );
     }
 
     #[test]
@@ -774,10 +811,22 @@ mod tests {
         };
 
         let ir = emit_llvm_ir(&program);
-        assert!(ir.contains("getelementptr %struct.User"), "FieldGet on data must use GEP");
-        assert!(ir.contains("load i64"), "FieldGet on data must load the field");
-        assert!(!ir.contains("extractvalue"), "data FieldGet must not use extractvalue");
-        assert!(ir.contains("define i64 @get_id(ptr %user)"), "data type param must be ptr");
+        assert!(
+            ir.contains("getelementptr %struct.User"),
+            "FieldGet on data must use GEP"
+        );
+        assert!(
+            ir.contains("load i64"),
+            "FieldGet on data must load the field"
+        );
+        assert!(
+            !ir.contains("extractvalue"),
+            "data FieldGet must not use extractvalue"
+        );
+        assert!(
+            ir.contains("define i64 @get_id(ptr %user)"),
+            "data type param must be ptr"
+        );
     }
 
     #[test]
@@ -791,14 +840,18 @@ mod tests {
                 params: vec![("x".into(), tyra_types::Ty::Int)],
                 return_type: tyra_types::Ty::Int,
                 body: vec![
-                    tyra_mir::Instruction::Jump { label: "loop_body".into() },
+                    tyra_mir::Instruction::Jump {
+                        label: "loop_body".into(),
+                    },
                     tyra_mir::Instruction::Label("loop_body".into()),
                     tyra_mir::Instruction::Alloca { dest: "_t0".into() },
                     tyra_mir::Instruction::Store {
                         dest: "_t0".into(),
                         value: tyra_mir::Operand::Var("x".into()),
                     },
-                    tyra_mir::Instruction::Jump { label: "loop_body".into() },
+                    tyra_mir::Instruction::Jump {
+                        label: "loop_body".into(),
+                    },
                 ],
                 is_main: false,
             }],
@@ -809,7 +862,9 @@ mod tests {
         let ir = emit_llvm_ir(&program);
         let entry_pos = ir.find("entry:").expect("entry block must be present");
         let alloca_pos = ir.find("  %_t0 = alloca").expect("alloca must be emitted");
-        let loop_pos = ir.find("loop_body:").expect("loop_body label must be present");
+        let loop_pos = ir
+            .find("loop_body:")
+            .expect("loop_body label must be present");
         assert!(
             alloca_pos > entry_pos,
             "alloca must come after entry: (was before)"

@@ -29,7 +29,7 @@ thread_local! {
 #[repr(C)]
 pub struct Node {
     next: *mut Node,
-    key: *const c_char,   // owned (CString::into_raw)
+    key: *const c_char, // owned (CString::into_raw)
     value: i64,
 }
 
@@ -38,14 +38,20 @@ unsafe fn alloc_node(next: *mut Node, key: String, value: i64) -> *mut Node {
         Ok(c) => c.into_raw() as *const c_char,
         Err(_) => std::ffi::CString::new("").unwrap().into_raw() as *const c_char,
     };
-    Box::leak(Box::new(Node { next, key: key_c, value })) as *mut Node
+    Box::leak(Box::new(Node {
+        next,
+        key: key_c,
+        value,
+    })) as *mut Node
 }
 
 fn key_eq(node_key: *const c_char, query: &str) -> bool {
     if node_key.is_null() {
         return false;
     }
-    unsafe { CStr::from_ptr(node_key) }.to_str().is_ok_and(|k| k == query)
+    unsafe { CStr::from_ptr(node_key) }
+        .to_str()
+        .is_ok_and(|k| k == query)
 }
 
 /// `__map_new_string_int() -> ptr` — allocate an empty map.
@@ -70,7 +76,10 @@ pub unsafe extern "C" fn tyra_map_insert_string_int(
     let key = if k.is_null() {
         String::new()
     } else {
-        unsafe { CStr::from_ptr(k) }.to_str().unwrap_or("").to_string()
+        unsafe { CStr::from_ptr(k) }
+            .to_str()
+            .unwrap_or("")
+            .to_string()
     };
     unsafe { alloc_node(m, key, v) }
 }
@@ -83,10 +92,7 @@ pub unsafe extern "C" fn tyra_map_insert_string_int(
 /// # Safety
 /// `k` must be a null-terminated UTF-8 string.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn tyra_map_get_string_int(
-    m: *mut Node,
-    k: *const c_char,
-) -> i64 {
+pub unsafe extern "C" fn tyra_map_get_string_int(m: *mut Node, k: *const c_char) -> i64 {
     let query = if k.is_null() {
         MAP_GET_PRESENT.with(|p| p.set(0));
         return 0;
@@ -119,10 +125,7 @@ pub extern "C" fn tyra_map_get_present() -> c_int {
 /// # Safety
 /// `k` must be a null-terminated UTF-8 string.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn tyra_map_contains_string_int(
-    m: *mut Node,
-    k: *const c_char,
-) -> c_int {
+pub unsafe extern "C" fn tyra_map_contains_string_int(m: *mut Node, k: *const c_char) -> c_int {
     let query = if k.is_null() {
         return 0;
     } else {
@@ -153,7 +156,10 @@ mod tests {
         let m = tyra_map_new_string_int();
         let _ = unsafe { tyra_map_get_string_int(m, cs("k").as_ptr()) };
         assert_eq!(tyra_map_get_present(), 0);
-        assert_eq!(unsafe { tyra_map_contains_string_int(m, cs("k").as_ptr()) }, 0);
+        assert_eq!(
+            unsafe { tyra_map_contains_string_int(m, cs("k").as_ptr()) },
+            0
+        );
     }
 
     #[test]
@@ -165,8 +171,14 @@ mod tests {
         assert_eq!(unsafe { tyra_map_get_string_int(m, cs("a").as_ptr()) }, 1);
         assert_eq!(unsafe { tyra_map_get_string_int(m, cs("b").as_ptr()) }, 2);
         assert_eq!(unsafe { tyra_map_get_string_int(m, cs("c").as_ptr()) }, 3);
-        assert_eq!(unsafe { tyra_map_contains_string_int(m, cs("c").as_ptr()) }, 1);
-        assert_eq!(unsafe { tyra_map_contains_string_int(m, cs("z").as_ptr()) }, 0);
+        assert_eq!(
+            unsafe { tyra_map_contains_string_int(m, cs("c").as_ptr()) },
+            1
+        );
+        assert_eq!(
+            unsafe { tyra_map_contains_string_int(m, cs("z").as_ptr()) },
+            0
+        );
     }
 
     #[test]

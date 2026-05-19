@@ -80,44 +80,54 @@ mod tests {
     fn finds_impls_for_trait_name() {
         // Cursor on 'Foo' at line 0, col 6 (in 'trait Foo')
         let src = concat!(
-            "trait Foo\n",          // line 0
-            "end\n",                 // line 1
-            "value User\n",          // line 2
-            "end\n",                 // line 3
-            "impl Foo for User\n",   // line 4
-            "end\n",                 // line 5
+            "trait Foo\n",         // line 0
+            "end\n",               // line 1
+            "value User\n",        // line 2
+            "end\n",               // line 3
+            "impl Foo for User\n", // line 4
+            "end\n",               // line 5
         );
         let spans = run(src, 0, 6);
         assert_eq!(spans.len(), 1, "expected 1 impl span, got: {spans:?}");
         // impl block starts at line 4
         let impl_offset = src.find("impl Foo for User").unwrap() as u32;
-        assert_eq!(spans[0].start, impl_offset, "impl span should start at 'impl Foo for User'");
+        assert_eq!(
+            spans[0].start, impl_offset,
+            "impl span should start at 'impl Foo for User'"
+        );
     }
 
     #[test]
     fn finds_method_impls_from_trait() {
         // Cursor on 'greet' at line 1, col 5 (in 'fn greet()' inside trait)
         let src = concat!(
-            "trait Foo\n",           // line 0
-            "  fn greet()\n",        // line 1
-            "  end\n",               // line 2
-            "end\n",                 // line 3
-            "value Bar\n",           // line 4
-            "end\n",                 // line 5
-            "impl Foo for Bar\n",    // line 6
-            "  fn greet()\n",        // line 7
-            "    1\n",               // line 8
-            "  end\n",               // line 9
-            "end\n",                 // line 10
+            "trait Foo\n",        // line 0
+            "  fn greet()\n",     // line 1
+            "  end\n",            // line 2
+            "end\n",              // line 3
+            "value Bar\n",        // line 4
+            "end\n",              // line 5
+            "impl Foo for Bar\n", // line 6
+            "  fn greet()\n",     // line 7
+            "    1\n",            // line 8
+            "  end\n",            // line 9
+            "end\n",              // line 10
         );
         let spans = run(src, 1, 5);
-        assert_eq!(spans.len(), 1, "expected 1 method impl span, got: {spans:?}");
+        assert_eq!(
+            spans.len(),
+            1,
+            "expected 1 method impl span, got: {spans:?}"
+        );
     }
 
     #[test]
     fn returns_empty_for_let_binding() {
         let src = "fn main()\n  let x = 1\nend\n";
         let spans = run(src, 1, 6);
-        assert!(spans.is_empty(), "expected empty for let binding, got: {spans:?}");
+        assert!(
+            spans.is_empty(),
+            "expected empty for let binding, got: {spans:?}"
+        );
     }
 }

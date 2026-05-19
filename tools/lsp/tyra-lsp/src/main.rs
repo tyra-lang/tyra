@@ -10,8 +10,8 @@ use tyra_driver::{DefIndex, SourceId, SymbolList, TypeIndex};
 
 mod completion;
 use completion::{
-    build_completion_items, detect_member_receiver, lookup_receiver_ty,
-    module_member_completions, type_method_completions,
+    build_completion_items, detect_member_receiver, lookup_receiver_ty, module_member_completions,
+    type_method_completions,
 };
 
 mod call_hierarchy;
@@ -21,19 +21,19 @@ mod declaration;
 mod document_link;
 mod file_delete;
 mod file_rename;
-mod implementation;
-mod type_definition;
-mod type_hierarchy;
-mod workspace_symbol;
 mod folding;
+mod implementation;
 mod inlay;
 mod keywords;
 mod outline;
 mod references;
 mod rename;
-mod signature;
 mod selection_range;
+mod signature;
 mod tokens;
+mod type_definition;
+mod type_hierarchy;
+mod workspace_symbol;
 
 const DIAG_SOURCE: &str = "tyra";
 
@@ -72,7 +72,13 @@ impl TyraLsp {
     /// analysis (didOpen / didChange); pass the document's parent directory
     /// when re-analyzing after external file changes so that imported modules
     /// are re-read from disk.
-    async fn analyze(&self, uri: Url, text: String, version: i32, workspace_dir: Option<std::path::PathBuf>) {
+    async fn analyze(
+        &self,
+        uri: Url,
+        text: String,
+        version: i32,
+        workspace_dir: Option<std::path::PathBuf>,
+    ) {
         let file_name: String = uri
             .to_file_path()
             .ok()
@@ -92,7 +98,15 @@ impl TyraLsp {
         .await;
 
         let lsp_diags = match result {
-            Ok(Ok(tyra_driver::CheckResult { report, sources, type_index, def_index, symbols, source_id, ast })) => {
+            Ok(Ok(tyra_driver::CheckResult {
+                report,
+                sources,
+                type_index,
+                def_index,
+                symbols,
+                source_id,
+                ast,
+            })) => {
                 let diags: Vec<Diagnostic> = report
                     .diagnostics()
                     .iter()
@@ -101,7 +115,17 @@ impl TyraLsp {
 
                 self.documents.lock().await.insert(
                     uri.clone(),
-                    DocState { text, sources, type_index, def_index, symbols, source_id, ast, diagnostics: diags.clone(), version },
+                    DocState {
+                        text,
+                        sources,
+                        type_index,
+                        def_index,
+                        symbols,
+                        source_id,
+                        ast,
+                        diagnostics: diags.clone(),
+                        version,
+                    },
                 );
 
                 diags
@@ -151,9 +175,10 @@ pub(crate) fn to_lsp_diagnostic(
         .map(|label| span_to_lsp_range(label.span, sources))
         .unwrap_or_default();
 
-    let message = first_label
-        .filter(|l| !l.message.is_empty())
-        .map_or_else(|| d.message.clone(), |l| format!("{} — {}", d.message, l.message));
+    let message = first_label.filter(|l| !l.message.is_empty()).map_or_else(
+        || d.message.clone(),
+        |l| format!("{} — {}", d.message, l.message),
+    );
 
     Diagnostic {
         range,
@@ -195,15 +220,20 @@ pub(crate) fn span_to_lsp_range(span: tyra_diagnostics::Span, sources: &SourceMa
 #[tower_lsp::async_trait]
 impl LanguageServer for TyraLsp {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
-        let supports_dynamic = params.capabilities
-            .text_document.as_ref()
+        let supports_dynamic = params
+            .capabilities
+            .text_document
+            .as_ref()
             .and_then(|td| td.type_hierarchy.as_ref())
             .and_then(|th| th.dynamic_registration)
             == Some(true);
-        self.type_hierarchy_dynamic.store(supports_dynamic, Ordering::Relaxed);
+        self.type_hierarchy_dynamic
+            .store(supports_dynamic, Ordering::Relaxed);
 
-        let supports_watched_files_dynamic = params.capabilities
-            .workspace.as_ref()
+        let supports_watched_files_dynamic = params
+            .capabilities
+            .workspace
+            .as_ref()
             .and_then(|w| w.did_change_watched_files.as_ref())
             .and_then(|d| d.dynamic_registration)
             == Some(true);
@@ -248,22 +278,28 @@ impl LanguageServer for TyraLsp {
                     work_done_progress_options: Default::default(),
                 }),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
-                code_lens_provider: Some(CodeLensOptions { resolve_provider: Some(false) }),
+                code_lens_provider: Some(CodeLensOptions {
+                    resolve_provider: Some(false),
+                }),
                 document_link_provider: Some(DocumentLinkOptions {
                     resolve_provider: Some(false),
                     work_done_progress_options: WorkDoneProgressOptions::default(),
                 }),
-                diagnostic_provider: Some(DiagnosticServerCapabilities::Options(DiagnosticOptions {
-                    identifier: Some("tyra".to_string()),
-                    inter_file_dependencies: false,
-                    workspace_diagnostics: true,
-                    work_done_progress_options: WorkDoneProgressOptions::default(),
-                })),
+                diagnostic_provider: Some(DiagnosticServerCapabilities::Options(
+                    DiagnosticOptions {
+                        identifier: Some("tyra".to_string()),
+                        inter_file_dependencies: false,
+                        workspace_diagnostics: true,
+                        work_done_progress_options: WorkDoneProgressOptions::default(),
+                    },
+                )),
                 inlay_hint_provider: Some(OneOf::Left(true)),
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
                 call_hierarchy_provider: Some(CallHierarchyServerCapability::Simple(true)),
-                linked_editing_range_provider: Some(LinkedEditingRangeServerCapabilities::Simple(true)),
+                linked_editing_range_provider: Some(LinkedEditingRangeServerCapabilities::Simple(
+                    true,
+                )),
                 workspace: Some(WorkspaceServerCapabilities {
                     file_operations: Some(WorkspaceFileOperationsServerCapabilities {
                         will_rename: Some(FileOperationRegistrationOptions {
@@ -317,12 +353,18 @@ impl LanguageServer for TyraLsp {
             };
             if let Err(e) = self.client.register_capability(vec![reg]).await {
                 self.client
-                    .log_message(MessageType::WARNING, format!("type hierarchy registration failed: {e}"))
+                    .log_message(
+                        MessageType::WARNING,
+                        format!("type hierarchy registration failed: {e}"),
+                    )
                     .await;
             }
         }
 
-        if self.did_change_watched_files_dynamic.load(Ordering::Relaxed) {
+        if self
+            .did_change_watched_files_dynamic
+            .load(Ordering::Relaxed)
+        {
             let opts = DidChangeWatchedFilesRegistrationOptions {
                 watchers: vec![FileSystemWatcher {
                     glob_pattern: GlobPattern::String("**/*.tyra".into()),
@@ -336,7 +378,10 @@ impl LanguageServer for TyraLsp {
             };
             if let Err(e) = self.client.register_capability(vec![reg]).await {
                 self.client
-                    .log_message(MessageType::WARNING, format!("watched files registration failed: {e}"))
+                    .log_message(
+                        MessageType::WARNING,
+                        format!("watched files registration failed: {e}"),
+                    )
                     .await;
             }
         }
@@ -441,7 +486,9 @@ impl LanguageServer for TyraLsp {
         let uri = &params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
         let docs = self.documents.lock().await;
-        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(state) = docs.get(uri) else {
+            return Ok(None);
+        };
         let Some(offset) = state
             .sources
             .offset_at_utf16(state.source_id, pos.line, pos.character)
@@ -469,15 +516,16 @@ impl LanguageServer for TyraLsp {
         let uri = &params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
         let docs = self.documents.lock().await;
-        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(state) = docs.get(uri) else {
+            return Ok(None);
+        };
         let Some(offset) = state
             .sources
             .offset_at_utf16(state.source_id, pos.line, pos.character)
         else {
             return Ok(None);
         };
-        let spans =
-            implementation::find_implementations(&state.ast, &state.text, offset);
+        let spans = implementation::find_implementations(&state.ast, &state.text, offset);
         if spans.is_empty() {
             return Ok(None);
         }
@@ -498,7 +546,9 @@ impl LanguageServer for TyraLsp {
         let uri = &params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
         let docs = self.documents.lock().await;
-        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(state) = docs.get(uri) else {
+            return Ok(None);
+        };
         let Some(offset) = state
             .sources
             .offset_at_utf16(state.source_id, pos.line, pos.character)
@@ -514,10 +564,7 @@ impl LanguageServer for TyraLsp {
         })))
     }
 
-    async fn completion(
-        &self,
-        params: CompletionParams,
-    ) -> Result<Option<CompletionResponse>> {
+    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let uri = &params.text_document_position.text_document.uri;
         let pos = params.text_document_position.position;
         let docs = self.documents.lock().await;
@@ -536,7 +583,9 @@ impl LanguageServer for TyraLsp {
             return Ok(Some(CompletionResponse::Array(items)));
         }
 
-        Ok(Some(CompletionResponse::Array(build_completion_items(state))))
+        Ok(Some(CompletionResponse::Array(build_completion_items(
+            state,
+        ))))
     }
 
     async fn document_highlight(
@@ -546,7 +595,9 @@ impl LanguageServer for TyraLsp {
         let uri = &params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
         let docs = self.documents.lock().await;
-        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(state) = docs.get(uri) else {
+            return Ok(None);
+        };
         let Some(offset) = state
             .sources
             .offset_at_utf16(state.source_id, pos.line, pos.character)
@@ -556,8 +607,7 @@ impl LanguageServer for TyraLsp {
         let Some(def_span) = references::find_def_span_at_cursor(state, offset) else {
             return Ok(None);
         };
-        let mut spans =
-            references::find_uses_for_def(&state.def_index, def_span, state.source_id);
+        let mut spans = references::find_uses_for_def(&state.def_index, def_span, state.source_id);
         // Narrow def_span to just the binding name token (def_span covers the
         // whole declaration, e.g. an entire `fn ... end` block).
         let def_name_span = rename::extract_identifier_at(&state.text, offset)
@@ -581,7 +631,9 @@ impl LanguageServer for TyraLsp {
         let uri = &params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
         let docs = self.documents.lock().await;
-        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(state) = docs.get(uri) else {
+            return Ok(None);
+        };
         let Some(offset) = state
             .sources
             .offset_at_utf16(state.source_id, pos.line, pos.character)
@@ -603,8 +655,7 @@ impl LanguageServer for TyraLsp {
         let Some(name) = rename::extract_identifier_at(&state.text, offset) else {
             return Ok(None);
         };
-        let Some(def_name_span) =
-            rename::find_binding_name_span(&state.text, def_span, &name)
+        let Some(def_name_span) = rename::find_binding_name_span(&state.text, def_span, &name)
         else {
             return Ok(None);
         };
@@ -613,14 +664,16 @@ impl LanguageServer for TyraLsp {
         if !at_use_site && !(def_name_span.start <= offset && offset < def_name_span.end) {
             return Ok(None);
         }
-        let mut spans =
-            references::find_uses_for_def(&state.def_index, def_span, state.source_id);
+        let mut spans = references::find_uses_for_def(&state.def_index, def_span, state.source_id);
         spans.push(def_name_span);
         let ranges = spans
             .into_iter()
             .map(|s| span_to_lsp_range(s, &state.sources))
             .collect();
-        Ok(Some(LinkedEditingRanges { ranges, word_pattern: None }))
+        Ok(Some(LinkedEditingRanges {
+            ranges,
+            word_pattern: None,
+        }))
     }
 
     async fn prepare_call_hierarchy(
@@ -630,7 +683,9 @@ impl LanguageServer for TyraLsp {
         let uri = &params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
         let docs = self.documents.lock().await;
-        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(state) = docs.get(uri) else {
+            return Ok(None);
+        };
         let Some(offset) = state
             .sources
             .offset_at_utf16(state.source_id, pos.line, pos.character)
@@ -646,7 +701,9 @@ impl LanguageServer for TyraLsp {
     ) -> Result<Option<Vec<CallHierarchyIncomingCall>>> {
         let uri = &params.item.uri;
         let docs = self.documents.lock().await;
-        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(state) = docs.get(uri) else {
+            return Ok(None);
+        };
         Ok(Some(call_hierarchy::incoming(state, uri, &params.item)))
     }
 
@@ -656,7 +713,9 @@ impl LanguageServer for TyraLsp {
     ) -> Result<Option<Vec<CallHierarchyOutgoingCall>>> {
         let uri = &params.item.uri;
         let docs = self.documents.lock().await;
-        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(state) = docs.get(uri) else {
+            return Ok(None);
+        };
         Ok(Some(call_hierarchy::outgoing(state, uri, &params.item)))
     }
 
@@ -666,21 +725,21 @@ impl LanguageServer for TyraLsp {
     ) -> Result<Option<Vec<SelectionRange>>> {
         let uri = &params.text_document.uri;
         let docs = self.documents.lock().await;
-        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(state) = docs.get(uri) else {
+            return Ok(None);
+        };
         let mut out = Vec::with_capacity(params.positions.len());
         for pos in &params.positions {
-            let Some(offset) = state
-                .sources
-                .offset_at_utf16(state.source_id, pos.line, pos.character)
+            let Some(offset) =
+                state
+                    .sources
+                    .offset_at_utf16(state.source_id, pos.line, pos.character)
             else {
                 return Ok(None);
             };
-            let Some(sr) = selection_range::compute(
-                &state.ast,
-                &state.sources,
-                state.source_id,
-                offset,
-            ) else {
+            let Some(sr) =
+                selection_range::compute(&state.ast, &state.sources, state.source_id, offset)
+            else {
                 return Ok(None);
             };
             out.push(sr);
@@ -688,10 +747,7 @@ impl LanguageServer for TyraLsp {
         Ok(Some(out))
     }
 
-    async fn references(
-        &self,
-        params: ReferenceParams,
-    ) -> Result<Option<Vec<Location>>> {
+    async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
         let uri = &params.text_document_position.text_document.uri;
         let pos = params.text_document_position.position;
         let include_decl = params.context.include_declaration;
@@ -738,7 +794,9 @@ impl LanguageServer for TyraLsp {
         let uri = &params.text_document.uri;
         let pos = params.position;
         let docs = self.documents.lock().await;
-        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(state) = docs.get(uri) else {
+            return Ok(None);
+        };
         let Some(offset) = state
             .sources
             .offset_at_utf16(state.source_id, pos.line, pos.character)
@@ -820,8 +878,7 @@ impl LanguageServer for TyraLsp {
             None => return Ok(None),
         };
 
-        let use_spans =
-            references::find_uses_for_def(&state.def_index, def_span, state.source_id);
+        let use_spans = references::find_uses_for_def(&state.def_index, def_span, state.source_id);
         let mut edits: Vec<TextEdit> = use_spans
             .into_iter()
             .map(|s| TextEdit {
@@ -830,9 +887,7 @@ impl LanguageServer for TyraLsp {
             })
             .collect();
 
-        if let Some(name_span) =
-            rename::find_binding_name_span(&state.text, def_span, &old_name)
-        {
+        if let Some(name_span) = rename::find_binding_name_span(&state.text, def_span, &old_name) {
             edits.push(TextEdit {
                 range: span_to_lsp_range(name_span, &state.sources),
                 new_text: new_name.clone(),
@@ -841,27 +896,27 @@ impl LanguageServer for TyraLsp {
 
         // Sort edits by position so clients that apply them in order behave correctly.
         edits.sort_by(|a, b| {
-            a.range.start.line.cmp(&b.range.start.line)
+            a.range
+                .start
+                .line
+                .cmp(&b.range.start.line)
                 .then(a.range.start.character.cmp(&b.range.start.character))
         });
 
         let mut changes = HashMap::new();
         changes.insert(uri.clone(), edits);
-        Ok(Some(WorkspaceEdit { changes: Some(changes), ..Default::default() }))
+        Ok(Some(WorkspaceEdit {
+            changes: Some(changes),
+            ..Default::default()
+        }))
     }
 
-    async fn will_rename_files(
-        &self,
-        params: RenameFilesParams,
-    ) -> Result<Option<WorkspaceEdit>> {
+    async fn will_rename_files(&self, params: RenameFilesParams) -> Result<Option<WorkspaceEdit>> {
         let docs = self.documents.lock().await;
         Ok(file_rename::compute_edits(&docs, &params.files))
     }
 
-    async fn will_delete_files(
-        &self,
-        params: DeleteFilesParams,
-    ) -> Result<Option<WorkspaceEdit>> {
+    async fn will_delete_files(&self, params: DeleteFilesParams) -> Result<Option<WorkspaceEdit>> {
         let docs = self.documents.lock().await;
         Ok(file_delete::compute_edits(&docs, &params.files))
     }
@@ -876,8 +931,7 @@ impl LanguageServer for TyraLsp {
             Some(s) => s,
             None => return Ok(None),
         };
-        let symbols =
-            outline::build_document_symbols(state.source_id, &state.ast, &state.sources);
+        let symbols = outline::build_document_symbols(state.source_id, &state.ast, &state.sources);
         Ok(Some(DocumentSymbolResponse::Nested(symbols)))
     }
 
@@ -887,7 +941,11 @@ impl LanguageServer for TyraLsp {
     ) -> Result<Option<Vec<SymbolInformation>>> {
         let docs = self.documents.lock().await;
         let syms = workspace_symbol::collect(&params.query, &docs);
-        if syms.is_empty() { Ok(None) } else { Ok(Some(syms)) }
+        if syms.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(syms))
+        }
     }
 
     async fn semantic_tokens_full(
@@ -910,10 +968,7 @@ impl LanguageServer for TyraLsp {
         Ok(Some(SemanticTokensResult::Tokens(toks)))
     }
 
-    async fn signature_help(
-        &self,
-        params: SignatureHelpParams,
-    ) -> Result<Option<SignatureHelp>> {
+    async fn signature_help(&self, params: SignatureHelpParams) -> Result<Option<SignatureHelp>> {
         let pos = params.text_document_position_params.position;
         let uri = &params.text_document_position_params.text_document.uri;
         let docs = self.documents.lock().await;
@@ -955,15 +1010,18 @@ impl LanguageServer for TyraLsp {
         }))
     }
 
-    async fn code_lens(
-        &self,
-        params: CodeLensParams,
-    ) -> Result<Option<Vec<CodeLens>>> {
+    async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
         let uri = &params.text_document.uri;
         let docs = self.documents.lock().await;
-        let Some(state) = docs.get(uri) else { return Ok(None); };
+        let Some(state) = docs.get(uri) else {
+            return Ok(None);
+        };
         let lenses = code_lens::build_code_lenses(state);
-        if lenses.is_empty() { Ok(None) } else { Ok(Some(lenses)) }
+        if lenses.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(lenses))
+        }
     }
 
     async fn prepare_type_hierarchy(
@@ -973,8 +1031,11 @@ impl LanguageServer for TyraLsp {
         let pos = params.text_document_position_params.position;
         let uri = &params.text_document_position_params.text_document.uri;
         let docs = self.documents.lock().await;
-        let Some(state) = docs.get(uri) else { return Ok(None); };
-        let offset = state.sources
+        let Some(state) = docs.get(uri) else {
+            return Ok(None);
+        };
+        let offset = state
+            .sources
             .offset_at_utf16(state.source_id, pos.line, pos.character)
             .unwrap_or(0);
         let items = type_hierarchy::prepare(&state.ast, &state.text, &state.sources, uri, offset);
@@ -987,8 +1048,11 @@ impl LanguageServer for TyraLsp {
     ) -> Result<Option<Vec<TypeHierarchyItem>>> {
         let uri = params.item.uri.clone();
         let docs = self.documents.lock().await;
-        let Some(state) = docs.get(&uri) else { return Ok(Some(vec![])); };
-        let items = type_hierarchy::supertypes(&state.ast, &state.text, &state.sources, &uri, &params.item);
+        let Some(state) = docs.get(&uri) else {
+            return Ok(Some(vec![]));
+        };
+        let items =
+            type_hierarchy::supertypes(&state.ast, &state.text, &state.sources, &uri, &params.item);
         Ok(Some(items))
     }
 
@@ -998,8 +1062,11 @@ impl LanguageServer for TyraLsp {
     ) -> Result<Option<Vec<TypeHierarchyItem>>> {
         let uri = params.item.uri.clone();
         let docs = self.documents.lock().await;
-        let Some(state) = docs.get(&uri) else { return Ok(Some(vec![])); };
-        let items = type_hierarchy::subtypes(&state.ast, &state.text, &state.sources, &uri, &params.item);
+        let Some(state) = docs.get(&uri) else {
+            return Ok(Some(vec![]));
+        };
+        let items =
+            type_hierarchy::subtypes(&state.ast, &state.text, &state.sources, &uri, &params.item);
         Ok(Some(items))
     }
 
@@ -1009,7 +1076,10 @@ impl LanguageServer for TyraLsp {
     ) -> Result<DocumentDiagnosticReportResult> {
         let uri = &params.text_document.uri;
         let docs = self.documents.lock().await;
-        let items = docs.get(uri).map(|s| s.diagnostics.clone()).unwrap_or_default();
+        let items = docs
+            .get(uri)
+            .map(|s| s.diagnostics.clone())
+            .unwrap_or_default();
         Ok(DocumentDiagnosticReportResult::Report(
             DocumentDiagnosticReport::Full(RelatedFullDocumentDiagnosticReport {
                 related_documents: None,
@@ -1039,7 +1109,9 @@ impl LanguageServer for TyraLsp {
                 })
             })
             .collect();
-        Ok(WorkspaceDiagnosticReportResult::Report(WorkspaceDiagnosticReport { items }))
+        Ok(WorkspaceDiagnosticReportResult::Report(
+            WorkspaceDiagnosticReport { items },
+        ))
     }
 
     async fn did_change_watched_files(&self, _params: DidChangeWatchedFilesParams) {
@@ -1062,10 +1134,7 @@ impl LanguageServer for TyraLsp {
         }
     }
 
-    async fn document_link(
-        &self,
-        params: DocumentLinkParams,
-    ) -> Result<Option<Vec<DocumentLink>>> {
+    async fn document_link(&self, params: DocumentLinkParams) -> Result<Option<Vec<DocumentLink>>> {
         let uri = &params.text_document.uri;
         let docs = self.documents.lock().await;
         let Some(state) = docs.get(uri) else {
@@ -1075,19 +1144,12 @@ impl LanguageServer for TyraLsp {
             .to_file_path()
             .ok()
             .and_then(|p| p.parent().map(|d| d.to_path_buf()));
-        let links = document_link::collect(
-            &state.ast,
-            &state.text,
-            &state.sources,
-            main_dir.as_deref(),
-        );
+        let links =
+            document_link::collect(&state.ast, &state.text, &state.sources, main_dir.as_deref());
         Ok(if links.is_empty() { None } else { Some(links) })
     }
 
-    async fn code_action(
-        &self,
-        params: CodeActionParams,
-    ) -> Result<Option<CodeActionResponse>> {
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
         let uri = params.text_document.uri;
         let docs = self.documents.lock().await;
         let Some(state) = docs.get(&uri) else {
@@ -1099,13 +1161,14 @@ impl LanguageServer for TyraLsp {
             &state.symbols,
             params.context.only.as_deref(),
         );
-        Ok(if actions.is_empty() { None } else { Some(actions) })
+        Ok(if actions.is_empty() {
+            None
+        } else {
+            Some(actions)
+        })
     }
 
-    async fn inlay_hint(
-        &self,
-        params: InlayHintParams,
-    ) -> Result<Option<Vec<InlayHint>>> {
+    async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
         let uri = &params.text_document.uri;
         let docs = self.documents.lock().await;
         let Some(state) = docs.get(uri) else {
@@ -1121,10 +1184,7 @@ impl LanguageServer for TyraLsp {
         Ok(Some(hints))
     }
 
-    async fn folding_range(
-        &self,
-        params: FoldingRangeParams,
-    ) -> Result<Option<Vec<FoldingRange>>> {
+    async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
         let uri = &params.text_document.uri;
         let docs = self.documents.lock().await;
         let Some(state) = docs.get(uri) else {
@@ -1160,7 +1220,9 @@ impl LanguageServer for TyraLsp {
         let best = state
             .type_index
             .iter()
-            .filter(|(span, _)| span.source == state.source_id && span.start <= offset && offset < span.end)
+            .filter(|(span, _)| {
+                span.source == state.source_id && span.start <= offset && offset < span.end
+            })
             .min_by_key(|(span, _)| span.end - span.start);
 
         let (span, ty) = match best {
@@ -1193,4 +1255,3 @@ async fn main() {
 
 #[cfg(test)]
 mod tests;
-

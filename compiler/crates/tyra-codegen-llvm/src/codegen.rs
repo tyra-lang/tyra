@@ -78,18 +78,17 @@ pub fn emit_llvm_ir(program: &Program) -> String {
                 // ADT tag field (field 0) is i8 in LLVM regardless of MIR type
                 if info.is_adt && i == 0 {
                     "i8".into()
-                } else if info
-                    .recursive_fields
-                    .get(i)
-                    .copied()
-                    .unwrap_or(false)
-                {
+                } else if info.recursive_fields.get(i).copied().unwrap_or(false) {
                     // Recursive self-reference: boxed as GC-heap ptr.
                     "ptr".into()
                 } else {
                     let ty_str = llvm_type_str(ty, &struct_map);
                     // Unit (void) is not valid as a struct field; use i64 placeholder
-                    if ty_str == "void" { "i64".into() } else { ty_str }
+                    if ty_str == "void" {
+                        "i64".into()
+                    } else {
+                        ty_str
+                    }
                 }
             })
             .collect();
@@ -194,7 +193,11 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     // Server`. Tyra's `AppServer._handle` is typed `Int` (i64), so the
     // builtin emit helpers ptrtoint/inttoptr across the boundary.
     writeln!(out, "declare ptr @tyra_http_server_new()").unwrap();
-    writeln!(out, "declare void @tyra_http_server_route(ptr, ptr, ptr, ptr)").unwrap();
+    writeln!(
+        out,
+        "declare void @tyra_http_server_route(ptr, ptr, ptr, ptr)"
+    )
+    .unwrap();
     writeln!(out, "declare i32 @tyra_http_server_listen(ptr, i64)").unwrap();
     // stdin stdlib. See runtime/src/stdlib_io.rs.
     writeln!(out, "declare ptr @tyra_io_read_line()").unwrap();
@@ -219,7 +222,11 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare void @tyra_string_split(ptr, ptr, ptr)").unwrap();
     // §17.3.x: float stdlib. See runtime/src/stdlib_float.rs.
     writeln!(out, "declare i32 @tyra_float_eq(double, double)").unwrap();
-    writeln!(out, "declare i32 @tyra_float_approx_eq(double, double, double)").unwrap();
+    writeln!(
+        out,
+        "declare i32 @tyra_float_approx_eq(double, double, double)"
+    )
+    .unwrap();
     writeln!(out, "declare double @tyra_float_abs(double)").unwrap();
     writeln!(out, "declare double @tyra_float_floor(double)").unwrap();
     writeln!(out, "declare double @tyra_float_ceil(double)").unwrap();
@@ -234,7 +241,11 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare i32 @tyra_float_is_nan(double)").unwrap();
     writeln!(out, "declare i32 @tyra_float_is_infinite(double)").unwrap();
     writeln!(out, "declare ptr @tyra_map_new_string_int()").unwrap();
-    writeln!(out, "declare ptr @tyra_map_insert_string_int(ptr, ptr, i64)").unwrap();
+    writeln!(
+        out,
+        "declare ptr @tyra_map_insert_string_int(ptr, ptr, i64)"
+    )
+    .unwrap();
     writeln!(out, "declare i64 @tyra_map_get_string_int(ptr, ptr)").unwrap();
     writeln!(out, "declare i32 @tyra_map_contains_string_int(ptr, ptr)").unwrap();
     writeln!(out, "declare i32 @tyra_map_get_present()").unwrap();
@@ -384,12 +395,7 @@ fn emit_spawn_thunk(
     // user functions, this thunk call site needs to match.
     if matches!(thunk.result_type, Ty::Unit) {
         // Unit-returning fn: call, discard result, return null.
-        writeln!(
-            out,
-            "  call void @{}({})",
-            thunk.func, call_args_joined
-        )
-        .unwrap();
+        writeln!(out, "  call void @{}({})", thunk.func, call_args_joined).unwrap();
         writeln!(out, "  ret ptr null").unwrap();
     } else {
         writeln!(

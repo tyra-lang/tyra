@@ -98,16 +98,9 @@ impl super::LowerCtx {
     /// Monomorphize a generic function with concrete type arguments (§8.4).
     /// Returns the mangled function name. If not yet monomorphized, creates and
     /// lowers a specialized copy of the function with type parameters substituted.
-    pub(super) fn monomorphize(
-        &mut self,
-        fn_name: &str,
-        type_args: &[Ty],
-    ) -> Option<String> {
+    pub(super) fn monomorphize(&mut self, fn_name: &str, type_args: &[Ty]) -> Option<String> {
         // Generate mangled name: fn_name__Type1__Type2
-        let type_suffix: Vec<String> = type_args
-            .iter()
-            .map(|t| t.monomorphized_name())
-            .collect();
+        let type_suffix: Vec<String> = type_args.iter().map(|t| t.monomorphized_name()).collect();
         let mangled = format!("{}__{}", fn_name, type_suffix.join("__"));
 
         // Check cache

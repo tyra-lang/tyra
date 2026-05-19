@@ -1,12 +1,9 @@
 use std::collections::HashMap;
 
 use tower_lsp::lsp_types::{
-    SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens,
-    SemanticTokensLegend,
+    SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens, SemanticTokensLegend,
 };
-use tyra_ast::{
-    ElseBranch, Expr, ExprKind, Item, SourceFile, Stmt, TypeDefKind, TypeExprKind,
-};
+use tyra_ast::{ElseBranch, Expr, ExprKind, Item, SourceFile, Stmt, TypeDefKind, TypeExprKind};
 use tyra_diagnostics::{SourceId, SourceMap, Span};
 use tyra_driver::{DefIndex, PRELUDE_CONSTRUCTORS, PRELUDE_FUNCTIONS, PRELUDE_TYPES};
 use tyra_lexer::TokenKind;
@@ -63,18 +60,19 @@ struct RawToken {
 
 /// Convert a `Span` to a single-line `RawToken`. Returns `None` for
 /// multi-line spans (forbidden by LSP spec) or spans outside the source.
-fn span_to_raw(
-    span: Span,
-    ty: u32,
-    modifiers: u32,
-    sources: &SourceMap,
-) -> Option<RawToken> {
+fn span_to_raw(span: Span, ty: u32, modifiers: u32, sources: &SourceMap) -> Option<RawToken> {
     let (sl, sc) = sources.line_col_utf16(span.source, span.start)?;
     let (el, ec) = sources.line_col_utf16(span.source, span.end)?;
     if sl != el || ec < sc {
         return None; // multi-line or degenerate
     }
-    Some(RawToken { line: sl, col: sc, length: ec - sc, ty, modifiers })
+    Some(RawToken {
+        line: sl,
+        col: sc,
+        length: ec - sc,
+        ty,
+        modifiers,
+    })
 }
 
 // ── DefKind map ───────────────────────────────────────────────────────────────
@@ -184,7 +182,10 @@ fn visit_expr_defs(expr: &Expr, map: &mut HashMap<Span, DefKind>) {
                 Some(ElseBranch::Else(stmts)) => visit_stmts_defs(stmts, map),
                 Some(ElseBranch::ElseIf(nested)) => {
                     visit_expr_defs(
-                        &Expr { kind: ExprKind::If(nested.clone()), span: nested.span },
+                        &Expr {
+                            kind: ExprKind::If(nested.clone()),
+                            span: nested.span,
+                        },
                         map,
                     );
                 }
@@ -343,8 +344,7 @@ fn lexer_pass(
                         | TokenKind::Trait
                         | TokenKind::Impl,
                     ) => {
-                        if let Some(raw) =
-                            span_to_raw(tok.span, TT_TYPE, MOD_DECLARATION, sources)
+                        if let Some(raw) = span_to_raw(tok.span, TT_TYPE, MOD_DECLARATION, sources)
                         {
                             out.push(raw);
                         }
@@ -616,7 +616,10 @@ fn visit_expr_tokens(
                 }
                 Some(ElseBranch::ElseIf(nested)) => {
                     visit_expr_tokens(
-                        &Expr { kind: ExprKind::If(nested.clone()), span: nested.span },
+                        &Expr {
+                            kind: ExprKind::If(nested.clone()),
+                            span: nested.span,
+                        },
                         def_index,
                         def_kind_map,
                         source_id,
@@ -643,23 +646,9 @@ fn visit_expr_tokens(
             visit_stmts_tokens(&f.body, def_index, def_kind_map, source_id, sources, out);
         }
         ExprKind::Match(m) => {
-            visit_expr_tokens(
-                &m.subject,
-                def_index,
-                def_kind_map,
-                source_id,
-                sources,
-                out,
-            );
+            visit_expr_tokens(&m.subject, def_index, def_kind_map, source_id, sources, out);
             for arm in &m.arms {
-                visit_stmts_tokens(
-                    &arm.body,
-                    def_index,
-                    def_kind_map,
-                    source_id,
-                    sources,
-                    out,
-                );
+                visit_stmts_tokens(&arm.body, def_index, def_kind_map, source_id, sources, out);
             }
         }
         ExprKind::Lambda(l) => {
@@ -706,7 +695,11 @@ fn visit_type_expr_tokens(
 ) {
     match &te.kind {
         TypeExprKind::Named(n) => {
-            let mods = if PRELUDE_TYPES.contains(&n.as_str()) { MOD_DEFAULT_LIBRARY } else { 0 };
+            let mods = if PRELUDE_TYPES.contains(&n.as_str()) {
+                MOD_DEFAULT_LIBRARY
+            } else {
+                0
+            };
             if let Some(raw) = span_to_raw(te.span, TT_TYPE, mods, sources) {
                 out.push(raw);
             }
@@ -718,7 +711,11 @@ fn visit_type_expr_tokens(
                 start: te.span.start,
                 end: te.span.start + n.len() as u32,
             };
-            let mods = if PRELUDE_TYPES.contains(&n.as_str()) { MOD_DEFAULT_LIBRARY } else { 0 };
+            let mods = if PRELUDE_TYPES.contains(&n.as_str()) {
+                MOD_DEFAULT_LIBRARY
+            } else {
+                0
+            };
             if let Some(raw) = span_to_raw(head, TT_TYPE, mods, sources) {
                 out.push(raw);
             }
@@ -758,7 +755,11 @@ fn comment_pass(
                     j += 1;
                 }
                 let end = j as u32;
-                let span = Span { source: source_id, start, end };
+                let span = Span {
+                    source: source_id,
+                    start,
+                    end,
+                };
                 if let Some(raw) = span_to_raw(span, TT_COMMENT, 0, sources) {
                     out.push(raw);
                 }
@@ -828,7 +829,10 @@ pub(crate) fn build_full(
         prev_col = tok.col;
     }
 
-    SemanticTokens { result_id: None, data }
+    SemanticTokens {
+        result_id: None,
+        data,
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -848,10 +852,7 @@ mod tests {
         build_full(src, &ast, &def_index, id, &sources)
     }
 
-    fn find_token_type<'a>(
-        tokens: &'a [SemanticToken],
-        ty: u32,
-    ) -> Option<&'a SemanticToken> {
+    fn find_token_type<'a>(tokens: &'a [SemanticToken], ty: u32) -> Option<&'a SemanticToken> {
         tokens.iter().find(|t| t.token_type == ty)
     }
 
@@ -859,13 +860,31 @@ mod tests {
     fn legend_includes_required_types() {
         let l = legend();
         let type_names: Vec<_> = l.token_types.iter().map(|t| t.as_str()).collect();
-        assert!(type_names.contains(&"keyword"), "missing keyword: {type_names:?}");
-        assert!(type_names.contains(&"function"), "missing function: {type_names:?}");
+        assert!(
+            type_names.contains(&"keyword"),
+            "missing keyword: {type_names:?}"
+        );
+        assert!(
+            type_names.contains(&"function"),
+            "missing function: {type_names:?}"
+        );
         assert!(type_names.contains(&"type"), "missing type: {type_names:?}");
-        assert!(type_names.contains(&"variable"), "missing variable: {type_names:?}");
-        assert!(type_names.contains(&"string"), "missing string: {type_names:?}");
-        assert!(type_names.contains(&"number"), "missing number: {type_names:?}");
-        assert!(type_names.contains(&"comment"), "missing comment: {type_names:?}");
+        assert!(
+            type_names.contains(&"variable"),
+            "missing variable: {type_names:?}"
+        );
+        assert!(
+            type_names.contains(&"string"),
+            "missing string: {type_names:?}"
+        );
+        assert!(
+            type_names.contains(&"number"),
+            "missing number: {type_names:?}"
+        );
+        assert!(
+            type_names.contains(&"comment"),
+            "missing comment: {type_names:?}"
+        );
     }
 
     #[test]
@@ -875,7 +894,10 @@ mod tests {
         assert!(kw.is_some(), "expected at least one KEYWORD token");
         // First keyword is `fn` on line 0, col 0
         let first_kw = &tokens.data[0];
-        assert_eq!(first_kw.token_type, TT_KEYWORD, "first token should be KEYWORD (`fn`)");
+        assert_eq!(
+            first_kw.token_type, TT_KEYWORD,
+            "first token should be KEYWORD (`fn`)"
+        );
         assert_eq!(first_kw.delta_line, 0);
         assert_eq!(first_kw.delta_start, 0);
         assert_eq!(first_kw.length, 2); // "fn"
@@ -934,7 +956,10 @@ mod tests {
         assert_eq!(tokens.data[0].delta_start, 0);
         // Second token: same line, delta_start >= 2 (space after fn)
         if tokens.data.len() > 1 {
-            assert_eq!(tokens.data[1].delta_line, 0, "second token should be on same line");
+            assert_eq!(
+                tokens.data[1].delta_line, 0,
+                "second token should be on same line"
+            );
         }
     }
 }

@@ -310,10 +310,7 @@ fn register_prelude(env: &mut TypeEnv) {
         "__fs_read_raw".to_string(),
         Ty::Fn(vec![Ty::String], Box::new(Ty::String)),
     );
-    env.define(
-        "__fs_errno".to_string(),
-        Ty::Fn(vec![], Box::new(Ty::Int)),
-    );
+    env.define("__fs_errno".to_string(), Ty::Fn(vec![], Box::new(Ty::Int)));
     env.define(
         "__fs_errmsg".to_string(),
         Ty::Fn(vec![], Box::new(Ty::String)),
@@ -430,10 +427,7 @@ fn register_prelude(env: &mut TypeEnv) {
         "__io_read_to_end".to_string(),
         Ty::Fn(vec![], Box::new(Ty::String)),
     );
-    env.define(
-        "__io_eof".to_string(),
-        Ty::Fn(vec![], Box::new(Ty::Bool)),
-    );
+    env.define("__io_eof".to_string(), Ty::Fn(vec![], Box::new(Ty::Bool)));
     // §17.3.4: string stdlib intrinsics. See stdlib/string.tyra.
     env.define(
         "__string_len".to_string(),
@@ -703,14 +697,10 @@ fn collect_top_level_types(items: &[Item], env: &mut TypeEnv) {
     // then each pass conjunction-shrinks based on fields/variants. Sets only
     // shrink, so the fixed point is reached in at most |types| * |abilities|
     // iterations — in practice 1–2 passes.
-    let all_abilities: HashSet<Ability> = [
-        Ability::Eq,
-        Ability::Hash,
-        Ability::Ord,
-        Ability::Debug,
-    ]
-    .into_iter()
-    .collect();
+    let all_abilities: HashSet<Ability> =
+        [Ability::Eq, Ability::Hash, Ability::Ord, Ability::Debug]
+            .into_iter()
+            .collect();
     for name in env.user_defined_types.clone() {
         env.register_type_abilities(name, all_abilities.clone());
     }
@@ -724,7 +714,9 @@ fn collect_top_level_types(items: &[Item], env: &mut TypeEnv) {
                         let field_tys: Vec<Ty> = variants
                             .iter()
                             .flat_map(|v| {
-                                v.fields.iter().map(|f| Ty::from_type_expr(&f.type_annotation))
+                                v.fields
+                                    .iter()
+                                    .map(|f| Ty::from_type_expr(&f.type_annotation))
                             })
                             .collect();
                         let mut abilities = conjunct_field_abilities(&field_tys, env);
@@ -743,8 +735,8 @@ fn collect_top_level_types(items: &[Item], env: &mut TypeEnv) {
                     let mut abilities = conjunct_field_abilities(&field_tys, env);
                     // Ord: §8.6 — only single-field value where that field has Ord.
                     // Empty-field value has zero fields, explicitly not Ord.
-                    let ord_ok = v.fields.len() == 1
-                        && env.ty_has_ability(&field_tys[0], Ability::Ord);
+                    let ord_ok =
+                        v.fields.len() == 1 && env.ty_has_ability(&field_tys[0], Ability::Ord);
                     if !ord_ok {
                         abilities.remove(&Ability::Ord);
                     }
@@ -1006,7 +998,10 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
                 report.add(
                     Diagnostic::error("`continue` used outside of a loop")
                         .with_code("E0215")
-                        .with_label(Label::new(s.span, "`continue` is only valid inside while/for")),
+                        .with_label(Label::new(
+                            s.span,
+                            "`continue` is only valid inside while/for",
+                        )),
                 );
             }
         }
@@ -1049,9 +1044,7 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 infer_expr(k, env, report);
                 infer_expr(v, env, report);
             }
-            if !matches!(key_ty, Ty::String | Ty::Error)
-                || !matches!(val_ty, Ty::Int | Ty::Error)
-            {
+            if !matches!(key_ty, Ty::String | Ty::Error) || !matches!(val_ty, Ty::Int | Ty::Error) {
                 report.add(
                     Diagnostic::error(format!(
                         "map literals are restricted to `Map<String, Int>` in v0.1, \
@@ -1606,7 +1599,9 @@ fn infer_binop(
                 return Ty::Error;
             }
             // §8: user-defined types need Eq ability (auto-derived from fields).
-            if matches!(left, Ty::Named(_) | Ty::Generic(_, _)) && !env.ty_has_ability(left, Ability::Eq) {
+            if matches!(left, Ty::Named(_) | Ty::Generic(_, _))
+                && !env.ty_has_ability(left, Ability::Eq)
+            {
                 report.add(
                     Diagnostic::error(format!(
                         "type `{}` does not have Eq; `==` is not available",
@@ -1789,11 +1784,7 @@ fn bind_pattern_types(pat: &Pattern, env: &mut TypeEnv) {
 /// Check that match arm Constructor patterns are compatible with the subject type.
 /// Catches the common case where `?` strips a Result to `T` but the arms still
 /// use `Some(s)` / `None` or `Ok` / `Err` patterns against the plain value.
-fn check_match_pattern_compatibility(
-    subject_ty: &Ty,
-    match_expr: &MatchExpr,
-    report: &mut Report,
-) {
+fn check_match_pattern_compatibility(subject_ty: &Ty, match_expr: &MatchExpr, report: &mut Report) {
     // Primitive types cannot be matched with Constructor patterns.
     let subject_is_primitive = matches!(
         subject_ty,
@@ -2013,9 +2004,17 @@ fn check_nested_exhaustiveness(
 
     // For each variant whose inner is an ADT, check inner exhaustiveness.
     for (outer_v, inner_ty_name) in &inner_types {
-        let Some(inner_name) = inner_ty_name else { continue };
-        let Some(expected_inner) = env.adt_variants(inner_name) else { continue };
-        let Some(state) = inner_info.iter().find(|(v, _)| v == outer_v).map(|(_, s)| s) else {
+        let Some(inner_name) = inner_ty_name else {
+            continue;
+        };
+        let Some(expected_inner) = env.adt_variants(inner_name) else {
+            continue;
+        };
+        let Some(state) = inner_info
+            .iter()
+            .find(|(v, _)| v == outer_v)
+            .map(|(_, s)| s)
+        else {
             continue;
         };
         if state.has_catchall {
@@ -2096,9 +2095,8 @@ fn check_redundant_arms(match_expr: &MatchExpr, report: &mut Report) {
                 // cannot distinguish it from the earlier arm (zero fields, or every field is
                 // a catch-all). Otherwise, nested patterns may differentiate the arms —
                 // e.g. `Err(NotFound)` vs `Err(Forbidden)` are distinct.
-                let all_fields_catchall = fields
-                    .iter()
-                    .all(|f| is_catchall_pattern(&f.pattern.kind));
+                let all_fields_catchall =
+                    fields.iter().all(|f| is_catchall_pattern(&f.pattern.kind));
                 let head_is_redundant_candidate = fields.is_empty() || all_fields_catchall;
                 if head_is_redundant_candidate && !seen_heads.insert(name.clone()) {
                     report.add(

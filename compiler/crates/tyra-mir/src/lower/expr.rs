@@ -88,7 +88,9 @@ impl super::LowerCtx {
                     return dest;
                 }
 
-                if self.mut_vars.contains(name.as_str()) || self.pattern_vars.contains(name.as_str()) {
+                if self.mut_vars.contains(name.as_str())
+                    || self.pattern_vars.contains(name.as_str())
+                {
                     // Alloca-backed variable (mutable or pattern-bound): load from alloca
                     let temp = self.fresh_temp();
                     body.push(Instruction::Load {
@@ -130,7 +132,9 @@ impl super::LowerCtx {
                 // Propagate ADT type from lhs to rhs so `line != None` where
                 // `line: Option<String>` constructs None as Option<String>
                 // rather than the default Option<Int>.
-                let lhs_adt_hint = self.generic_var_types.get(&l)
+                let lhs_adt_hint = self
+                    .generic_var_types
+                    .get(&l)
                     .filter(|t| t.is_option() || t.is_result())
                     .cloned();
                 let prev_hint = self.binding_type_hint.clone();
@@ -159,9 +163,7 @@ impl super::LowerCtx {
                 }
 
                 // Value type comparison: extract fields and compare
-                if let Some(dest) = self.lower_value_type_binop(
-                    &l, &r, *op, lhs, rhs, body,
-                ) {
+                if let Some(dest) = self.lower_value_type_binop(&l, &r, *op, lhs, rhs, body) {
                     return dest;
                 }
 
@@ -234,9 +236,7 @@ impl super::LowerCtx {
                         // Field mutation: obj.field = val
                         if let ExprKind::Ident(obj_name) = &obj.kind {
                             if self.mut_vars.contains(obj_name.as_str()) {
-                                self.lower_field_assign(
-                                    obj_name, obj, field, &val, body,
-                                );
+                                self.lower_field_assign(obj_name, obj, field, &val, body);
                             }
                         }
                     }
@@ -345,10 +345,8 @@ impl super::LowerCtx {
                         Ty::Generic(_, _) => {
                             self.generic_var_types
                                 .insert(f.binding.clone(), elem_type.clone());
-                            self.var_types.insert(
-                                f.binding.clone(),
-                                elem_type.monomorphized_name(),
-                            );
+                            self.var_types
+                                .insert(f.binding.clone(), elem_type.monomorphized_name());
                         }
                         _ => {}
                     }
@@ -367,8 +365,7 @@ impl super::LowerCtx {
                     // weakens, Store will silently produce mistyped IR and
                     // LLVM will emit a type-mismatch E0500; tighten with a
                     // MIR-level assert at that point.
-                    if self.pattern_vars.contains(&f.binding)
-                        || self.mut_vars.contains(&f.binding)
+                    if self.pattern_vars.contains(&f.binding) || self.mut_vars.contains(&f.binding)
                     {
                         body.push(Instruction::Store {
                             dest: f.binding.clone(),
@@ -395,7 +392,9 @@ impl super::LowerCtx {
                     // Explicit jump to terminate the body block (required by LLVM IR).
                     // Dead code if the body already ended with break/return, which is
                     // handled the same way as while's unconditional back-edge jump.
-                    body.push(Instruction::Jump { label: continue_label.clone() });
+                    body.push(Instruction::Jump {
+                        label: continue_label.clone(),
+                    });
                     body.push(Instruction::Label(continue_label));
 
                     // Increment: i = i + 1
@@ -415,9 +414,7 @@ impl super::LowerCtx {
                         dest: idx_var,
                         value: Operand::Var(next_idx),
                     });
-                    body.push(Instruction::Jump {
-                        label: loop_label,
-                    });
+                    body.push(Instruction::Jump { label: loop_label });
 
                     // End
                     body.push(Instruction::Label(end_label));
@@ -428,8 +425,7 @@ impl super::LowerCtx {
                     // `iter_val`. Upheld by the type checker today.
                     let stub_end = self.fresh_label("for_end");
                     self.local_binding_names.insert(f.binding.clone());
-                    if self.pattern_vars.contains(&f.binding)
-                        || self.mut_vars.contains(&f.binding)
+                    if self.pattern_vars.contains(&f.binding) || self.mut_vars.contains(&f.binding)
                     {
                         body.push(Instruction::Store {
                             dest: f.binding.clone(),
@@ -449,9 +445,13 @@ impl super::LowerCtx {
                     }
                     self.loop_head_stack.pop();
                     self.loop_exit_stack.pop();
-                    body.push(Instruction::Jump { label: stub_continue.clone() });
+                    body.push(Instruction::Jump {
+                        label: stub_continue.clone(),
+                    });
                     body.push(Instruction::Label(stub_continue));
-                    body.push(Instruction::Jump { label: stub_end.clone() });
+                    body.push(Instruction::Jump {
+                        label: stub_end.clone(),
+                    });
                     body.push(Instruction::Label(stub_end));
                 }
 
@@ -527,7 +527,8 @@ impl super::LowerCtx {
                     // Re-register the unboxed value with the underlying type
                     // so downstream propagate/match see the true ADT.
                     if matches!(&result_type, Ty::Generic(_, _)) {
-                        self.generic_var_types.insert(dest.clone(), result_type.clone());
+                        self.generic_var_types
+                            .insert(dest.clone(), result_type.clone());
                     }
                     self.var_types
                         .insert(dest.clone(), result_type.monomorphized_name());
@@ -627,12 +628,20 @@ impl super::LowerCtx {
                         });
                         // Track field type so downstream callers can infer it correctly
                         match &field_ty {
-                            Ty::String => { self.string_vars.insert(dest.clone()); }
-                            Ty::Float => { self.float_vars.insert(dest.clone()); }
-                            Ty::Named(n) => { self.var_types.insert(dest.clone(), n.clone()); }
+                            Ty::String => {
+                                self.string_vars.insert(dest.clone());
+                            }
+                            Ty::Float => {
+                                self.float_vars.insert(dest.clone());
+                            }
+                            Ty::Named(n) => {
+                                self.var_types.insert(dest.clone(), n.clone());
+                            }
                             Ty::Generic(_, _) => {
-                                self.generic_var_types.insert(dest.clone(), field_ty.clone());
-                                self.var_types.insert(dest.clone(), field_ty.monomorphized_name());
+                                self.generic_var_types
+                                    .insert(dest.clone(), field_ty.clone());
+                                self.var_types
+                                    .insert(dest.clone(), field_ty.monomorphized_name());
                             }
                             _ => {}
                         }
@@ -682,8 +691,10 @@ impl super::LowerCtx {
                         self.var_types.insert(dest.clone(), n.clone());
                     }
                     Ty::Generic(_, _) => {
-                        self.generic_var_types.insert(dest.clone(), elem_type.clone());
-                        self.var_types.insert(dest.clone(), elem_type.monomorphized_name());
+                        self.generic_var_types
+                            .insert(dest.clone(), elem_type.clone());
+                        self.var_types
+                            .insert(dest.clone(), elem_type.monomorphized_name());
                     }
                     _ => {}
                 }
@@ -702,17 +713,17 @@ impl super::LowerCtx {
             ExprKind::TurbofishCall(callee, type_args, args) => {
                 // spec §8.4: turbofish call — monomorphize generic function
                 if let ExprKind::Ident(fn_name) = &callee.kind {
-                    let concrete_types: Vec<Ty> = type_args
-                        .iter()
-                        .map(Ty::from_type_expr)
-                        .collect();
+                    let concrete_types: Vec<Ty> =
+                        type_args.iter().map(Ty::from_type_expr).collect();
 
                     // Built-in turbofish functions (parse::<T>)
                     if fn_name == "parse" && concrete_types.len() == 1 {
-                        let mangled_name = format!("parse__{}", concrete_types[0].monomorphized_name());
+                        let mangled_name =
+                            format!("parse__{}", concrete_types[0].monomorphized_name());
                         let ret_ty = Ty::Generic("Option".into(), vec![concrete_types[0].clone()]);
                         self.register_adt_type(&ret_ty);
-                        self.fn_return_types.insert(mangled_name.clone(), ret_ty.clone());
+                        self.fn_return_types
+                            .insert(mangled_name.clone(), ret_ty.clone());
 
                         let arg_operands: Vec<Operand> = args
                             .iter()
@@ -729,7 +740,8 @@ impl super::LowerCtx {
                             args: arg_operands,
                         });
                         self.generic_var_types.insert(dest.clone(), ret_ty.clone());
-                        self.var_types.insert(dest.clone(), ret_ty.monomorphized_name());
+                        self.var_types
+                            .insert(dest.clone(), ret_ty.monomorphized_name());
                         return dest;
                     }
 
@@ -757,9 +769,15 @@ impl super::LowerCtx {
                         // Track result type
                         if let Some(ref ty) = ret_ty {
                             match ty {
-                                Ty::String => { self.string_vars.insert(dest.clone()); }
-                                Ty::Float => { self.float_vars.insert(dest.clone()); }
-                                Ty::Named(n) => { self.var_types.insert(dest.clone(), n.clone()); }
+                                Ty::String => {
+                                    self.string_vars.insert(dest.clone());
+                                }
+                                Ty::Float => {
+                                    self.float_vars.insert(dest.clone());
+                                }
+                                Ty::Named(n) => {
+                                    self.var_types.insert(dest.clone(), n.clone());
+                                }
                                 Ty::Generic(_, _) => {
                                     self.generic_var_types.insert(dest.clone(), ty.clone());
                                     self.var_types.insert(dest.clone(), ty.monomorphized_name());
@@ -844,10 +862,7 @@ impl super::LowerCtx {
                 //   handle = __map_insert_string_int(handle, k, v)  (×N)
                 //   wrap in Map__String__Int { handle }
                 // Type checker has already rejected non-(String, Int) shapes.
-                let map_ty = Ty::Generic(
-                    "Map".into(),
-                    vec![Ty::String, Ty::Int],
-                );
+                let map_ty = Ty::Generic("Map".into(), vec![Ty::String, Ty::Int]);
                 self.register_adt_type(&map_ty);
 
                 // Start with an empty handle.
@@ -883,7 +898,8 @@ impl super::LowerCtx {
                     type_name: "Map__String__Int".into(),
                     fields: vec![Operand::Var(handle)],
                 });
-                self.var_types.insert(dest.clone(), "Map__String__Int".into());
+                self.var_types
+                    .insert(dest.clone(), "Map__String__Int".into());
                 self.generic_var_types.insert(dest.clone(), map_ty);
                 dest
             }

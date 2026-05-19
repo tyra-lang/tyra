@@ -5,9 +5,9 @@ use tower_lsp::lsp_types::{FileDelete, Position, Range, TextEdit, Url, Workspace
 use tyra_ast::Item;
 use tyra_diagnostics::Span;
 
+use crate::DocState;
 use crate::document_link::path_token_span;
 use crate::file_rename::module_segments_for;
-use crate::DocState;
 
 /// For each open document, produce `TextEdit`s that delete the entire import
 /// line for any `import <module>` statement that resolves to a deleted file.
@@ -47,7 +47,9 @@ pub(crate) fn compute_edits(
                 continue;
             }
             // Skip synthetic auto-imports: their spans point to non-import tokens.
-            let Some(span) = path_token_span(&state.text, imp.span) else { continue };
+            let Some(span) = path_token_span(&state.text, imp.span) else {
+                continue;
+            };
             let actual = state
                 .text
                 .get(span.start as usize..span.end as usize)
@@ -128,8 +130,7 @@ mod tests {
     }
 
     fn make_doc(src: &str) -> (Url, DocState) {
-        let result =
-            tyra_driver::check_in_memory("main.tyra".to_string(), src.to_string(), None);
+        let result = tyra_driver::check_in_memory("main.tyra".to_string(), src.to_string(), None);
         let uri = Url::from_file_path("/workspace/main.tyra").unwrap();
         let state = DocState {
             text: src.to_string(),

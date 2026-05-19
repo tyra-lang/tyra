@@ -69,8 +69,7 @@ pub(crate) fn emit_instruction(
                 if ret_ty == "void" {
                     writeln!(out, "  call void @{fname}({user_args})").unwrap();
                 } else if let Some(d) = dest {
-                    writeln!(out, "  %{d} = call {ret_ty} @{fname}({user_args})")
-                        .unwrap();
+                    writeln!(out, "  %{d} = call {ret_ty} @{fname}({user_args})").unwrap();
                 } else {
                     writeln!(out, "  call {ret_ty} @{fname}({user_args})").unwrap();
                 }
@@ -100,8 +99,16 @@ pub(crate) fn emit_instruction(
             // being "ptr" — data payloads and other ptr-like fields must not
             // accidentally go through strcmp.
             if matches!(op, MirBinOp::EqInt | MirBinOp::NeqInt) {
-                let lhs_stype = if let Operand::Var(n) = lhs { ctx.struct_temps.get(n.as_str()) } else { None };
-                let rhs_stype = if let Operand::Var(n) = rhs { ctx.struct_temps.get(n.as_str()) } else { None };
+                let lhs_stype = if let Operand::Var(n) = lhs {
+                    ctx.struct_temps.get(n.as_str())
+                } else {
+                    None
+                };
+                let rhs_stype = if let Operand::Var(n) = rhs {
+                    ctx.struct_temps.get(n.as_str())
+                } else {
+                    None
+                };
                 if let Some(stype) = lhs_stype.or(rhs_stype) {
                     let info = &ctx.struct_map[stype.as_str()];
                     let llvm_ty = &info.llvm_name;
@@ -125,14 +132,17 @@ pub(crate) fn emit_instruction(
                     // Classify each field: StrPtr (Ty::String, non-recursive) takes
                     // priority over the LLVM-type-based Scalar check so that data
                     // payloads and other ptr-like fields are never routed to strcmp.
-                    enum FieldKind { Scalar, StrPtr, Unsupported }
+                    enum FieldKind {
+                        Scalar,
+                        StrPtr,
+                        Unsupported,
+                    }
                     let field_kinds: Vec<FieldKind> = (0..num_fields)
                         .map(|fi| {
                             if fi == 0 {
                                 FieldKind::Scalar // tag is always i8
                             } else if !info.recursive_fields.get(fi).copied().unwrap_or(false)
-                                && info.field_types.get(fi)
-                                    == Some(&tyra_types::Ty::String)
+                                && info.field_types.get(fi) == Some(&tyra_types::Ty::String)
                             {
                                 FieldKind::StrPtr
                             } else if matches!(
@@ -157,22 +167,40 @@ pub(crate) fn emit_instruction(
                         //   (snull / scmp / sdone+phi).
                         let mut prev_acc: Option<String> = None;
                         for (fi, fty) in field_llvm.iter().enumerate() {
-                            writeln!(out, "  %{dest}.l{fi} = extractvalue {llvm_ty} {l}, {fi}").unwrap();
-                            writeln!(out, "  %{dest}.r{fi} = extractvalue {llvm_ty} {r}, {fi}").unwrap();
+                            writeln!(out, "  %{dest}.l{fi} = extractvalue {llvm_ty} {l}, {fi}")
+                                .unwrap();
+                            writeln!(out, "  %{dest}.r{fi} = extractvalue {llvm_ty} {r}, {fi}")
+                                .unwrap();
                             match &field_kinds[fi] {
                                 FieldKind::StrPtr => {
                                     // Null guard: inactive variant fields are null-filled by
                                     // AdtInit; calling strcmp(null,…) would SIGSEGV.
-                                    writeln!(out, "  %{dest}.ln{fi} = icmp eq ptr %{dest}.l{fi}, null").unwrap();
-                                    writeln!(out, "  %{dest}.rn{fi} = icmp eq ptr %{dest}.r{fi}, null").unwrap();
-                                    writeln!(out, "  %{dest}.anyn{fi} = or i1 %{dest}.ln{fi}, %{dest}.rn{fi}").unwrap();
+                                    writeln!(
+                                        out,
+                                        "  %{dest}.ln{fi} = icmp eq ptr %{dest}.l{fi}, null"
+                                    )
+                                    .unwrap();
+                                    writeln!(
+                                        out,
+                                        "  %{dest}.rn{fi} = icmp eq ptr %{dest}.r{fi}, null"
+                                    )
+                                    .unwrap();
+                                    writeln!(
+                                        out,
+                                        "  %{dest}.anyn{fi} = or i1 %{dest}.ln{fi}, %{dest}.rn{fi}"
+                                    )
+                                    .unwrap();
                                     writeln!(out, "  br i1 %{dest}.anyn{fi}, label %{dest}.snull{fi}, label %{dest}.scmp{fi}").unwrap();
                                     writeln!(out, "{dest}.snull{fi}:").unwrap();
                                     writeln!(out, "  %{dest}.pe{fi} = icmp eq ptr %{dest}.l{fi}, %{dest}.r{fi}").unwrap();
                                     writeln!(out, "  br label %{dest}.sdone{fi}").unwrap();
                                     writeln!(out, "{dest}.scmp{fi}:").unwrap();
                                     writeln!(out, "  %{dest}.sc{fi} = call i32 @strcmp(ptr %{dest}.l{fi}, ptr %{dest}.r{fi})").unwrap();
-                                    writeln!(out, "  %{dest}.se{fi} = icmp eq i32 %{dest}.sc{fi}, 0").unwrap();
+                                    writeln!(
+                                        out,
+                                        "  %{dest}.se{fi} = icmp eq i32 %{dest}.sc{fi}, 0"
+                                    )
+                                    .unwrap();
                                     writeln!(out, "  br label %{dest}.sdone{fi}").unwrap();
                                     writeln!(out, "{dest}.sdone{fi}:").unwrap();
                                     writeln!(out, "  %{dest}.e{fi} = phi i1 [ %{dest}.pe{fi}, %{dest}.snull{fi} ], [ %{dest}.se{fi}, %{dest}.scmp{fi} ]").unwrap();
@@ -189,7 +217,8 @@ pub(crate) fn emit_instruction(
                             prev_acc = Some(match prev_acc {
                                 None => format!("%{dest}.e{fi}"),
                                 Some(prev) => {
-                                    writeln!(out, "  %{dest}.a{fi} = and i1 {prev}, %{dest}.e{fi}").unwrap();
+                                    writeln!(out, "  %{dest}.a{fi} = and i1 {prev}, %{dest}.e{fi}")
+                                        .unwrap();
                                     format!("%{dest}.a{fi}")
                                 }
                             });
@@ -208,7 +237,11 @@ pub(crate) fn emit_instruction(
                     let cmp = if is_eq { "eq" } else { "ne" };
                     writeln!(out, "  %{dest}.l_tag = extractvalue {llvm_ty} {l}, 0").unwrap();
                     writeln!(out, "  %{dest}.r_tag = extractvalue {llvm_ty} {r}, 0").unwrap();
-                    writeln!(out, "  %{dest} = icmp {cmp} i8 %{dest}.l_tag, %{dest}.r_tag").unwrap();
+                    writeln!(
+                        out,
+                        "  %{dest} = icmp {cmp} i8 %{dest}.l_tag, %{dest}.r_tag"
+                    )
+                    .unwrap();
                     return;
                 }
             }
@@ -254,16 +287,8 @@ pub(crate) fn emit_instruction(
                     } else {
                         "ne"
                     };
-                    writeln!(
-                        out,
-                        "  %{dest}.cmp = call i32 @strcmp(ptr {l}, ptr {r})"
-                    )
-                    .unwrap();
-                    writeln!(
-                        out,
-                        "  %{dest} = icmp {cmp_op} i32 %{dest}.cmp, 0"
-                    )
-                    .unwrap();
+                    writeln!(out, "  %{dest}.cmp = call i32 @strcmp(ptr {l}, ptr {r})").unwrap();
+                    writeln!(out, "  %{dest} = icmp {cmp_op} i32 %{dest}.cmp, 0").unwrap();
                     return; // Already wrote %dest, skip the generic writeln below
                 }
                 MirBinOp::And => format!("and i1 {l}, {r}"),
@@ -300,16 +325,12 @@ pub(crate) fn emit_instruction(
                 let stype = &ctx.struct_temps[source.as_str()];
                 let llvm_ty = &ctx.struct_map[stype.as_str()].llvm_name;
                 writeln!(out, "  %{dest}.copy.addr = alloca {llvm_ty}").unwrap();
-                writeln!(out, "  store {llvm_ty} %{source}, ptr %{dest}.copy.addr")
-                    .unwrap();
-                writeln!(out, "  %{dest} = load {llvm_ty}, ptr %{dest}.copy.addr")
-                    .unwrap();
+                writeln!(out, "  store {llvm_ty} %{source}, ptr %{dest}.copy.addr").unwrap();
+                writeln!(out, "  %{dest} = load {llvm_ty}, ptr %{dest}.copy.addr").unwrap();
             } else if ctx.string_temps.contains(source.as_str()) {
                 // String (ptr) SSA copy via inttoptr/ptrtoint round-trip
-                writeln!(out, "  %{dest}.ptr.int = ptrtoint ptr %{source} to i64")
-                    .unwrap();
-                writeln!(out, "  %{dest} = inttoptr i64 %{dest}.ptr.int to ptr")
-                    .unwrap();
+                writeln!(out, "  %{dest}.ptr.int = ptrtoint ptr %{source} to i64").unwrap();
+                writeln!(out, "  %{dest} = inttoptr i64 %{dest}.ptr.int to ptr").unwrap();
             } else if ctx.float_temps.contains(source.as_str()) {
                 writeln!(out, "  %{dest} = fadd double %{source}, 0.0").unwrap();
             } else if ctx.bool_temps.contains(source.as_str()) {
@@ -413,12 +434,20 @@ pub(crate) fn emit_instruction(
                 // Follows the same GC_malloc+null-check pattern as StringFormat.
                 // Note: Boehm GC_malloc never returns NULL (calls GC_oom_func on OOM,
                 // default aborts). The null check is defensive/documentary only.
-                writeln!(out, "  %{dest}.size.gep = getelementptr {llvm_ty}, ptr null, i32 1").unwrap();
+                writeln!(
+                    out,
+                    "  %{dest}.size.gep = getelementptr {llvm_ty}, ptr null, i32 1"
+                )
+                .unwrap();
                 writeln!(out, "  %{dest}.size = ptrtoint ptr %{dest}.size.gep to i64").unwrap();
                 writeln!(out, "  %{dest} = call ptr @GC_malloc(i64 %{dest}.size)").unwrap();
                 // Abort on OOM (consistent with StringFormat)
                 writeln!(out, "  %{dest}.null = icmp eq ptr %{dest}, null").unwrap();
-                writeln!(out, "  br i1 %{dest}.null, label %{dest}.oom, label %{dest}.ok").unwrap();
+                writeln!(
+                    out,
+                    "  br i1 %{dest}.null, label %{dest}.oom, label %{dest}.ok"
+                )
+                .unwrap();
                 writeln!(out, "{dest}.oom:").unwrap();
                 writeln!(out, "  call void @abort()").unwrap();
                 writeln!(out, "  unreachable").unwrap();
@@ -426,13 +455,16 @@ pub(crate) fn emit_instruction(
                 for (i, field_op) in fields.iter().enumerate() {
                     let val = operand_ref(field_op, func);
                     let field_ty = llvm_type_str(&info.field_types[i], ctx.struct_map);
-                    writeln!(out, "  %{dest}.f{i}.gep = getelementptr {llvm_ty}, ptr %{dest}, i32 0, i32 {i}").unwrap();
+                    writeln!(
+                        out,
+                        "  %{dest}.f{i}.gep = getelementptr {llvm_ty}, ptr %{dest}, i32 0, i32 {i}"
+                    )
+                    .unwrap();
                     writeln!(out, "  store {field_ty} {val}, ptr %{dest}.f{i}.gep").unwrap();
                 }
             } else if fields.is_empty() {
                 // Zero-field struct: just produce undef
-                writeln!(out, "  ; %{dest} = {llvm_ty} undef (zero-field struct)")
-                    .unwrap();
+                writeln!(out, "  ; %{dest} = {llvm_ty} undef (zero-field struct)").unwrap();
             } else {
                 // Value type: build struct value via insertvalue chain starting from undef
                 let mut current = "undef".to_string();
@@ -465,8 +497,13 @@ pub(crate) fn emit_instruction(
             if info.is_data {
                 // Data type: GEP + load the field from the heap struct
                 let llvm_ty = &info.llvm_name;
-                let field_llvm_ty = llvm_type_str(&info.field_types[*field_index as usize], ctx.struct_map);
-                writeln!(out, "  %{dest}.gep = getelementptr {llvm_ty}, ptr {val}, i32 0, i32 {field_index}").unwrap();
+                let field_llvm_ty =
+                    llvm_type_str(&info.field_types[*field_index as usize], ctx.struct_map);
+                writeln!(
+                    out,
+                    "  %{dest}.gep = getelementptr {llvm_ty}, ptr {val}, i32 0, i32 {field_index}"
+                )
+                .unwrap();
                 writeln!(out, "  %{dest} = load {field_llvm_ty}, ptr %{dest}.gep").unwrap();
             } else {
                 // Value type: extractvalue from struct
@@ -487,7 +524,8 @@ pub(crate) fn emit_instruction(
         } => {
             let info = &ctx.struct_map[type_name.as_str()];
             let llvm_ty = &info.llvm_name;
-            let field_llvm_ty = llvm_type_str(&info.field_types[*field_index as usize], ctx.struct_map);
+            let field_llvm_ty =
+                llvm_type_str(&info.field_types[*field_index as usize], ctx.struct_map);
             let ptr_val = operand_ref(obj, func);
             let store_val = operand_ref(value, func);
             let obj_name = match obj {
@@ -495,7 +533,11 @@ pub(crate) fn emit_instruction(
                 _ => "fset",
             };
             writeln!(out, "  %{obj_name}.f{field_index}.gep = getelementptr {llvm_ty}, ptr {ptr_val}, i32 0, i32 {field_index}").unwrap();
-            writeln!(out, "  store {field_llvm_ty} {store_val}, ptr %{obj_name}.f{field_index}.gep").unwrap();
+            writeln!(
+                out,
+                "  store {field_llvm_ty} {store_val}, ptr %{obj_name}.f{field_index}.gep"
+            )
+            .unwrap();
         }
 
         Instruction::StringFormat {
@@ -507,17 +549,9 @@ pub(crate) fn emit_instruction(
             // Strings longer than 1024 bytes are truncated by snprintf.
             // TODO(M8+): use GC_malloc_atomic once atomic/non-atomic classification
             // is implemented — string buffers contain no pointers.
-            writeln!(
-                out,
-                "  %{dest} = call ptr @GC_malloc(i64 1024)"
-            )
-            .unwrap();
+            writeln!(out, "  %{dest} = call ptr @GC_malloc(i64 1024)").unwrap();
             // Abort if malloc returns null (out of memory)
-            writeln!(
-                out,
-                "  %{dest}.null = icmp eq ptr %{dest}, null"
-            )
-            .unwrap();
+            writeln!(out, "  %{dest}.null = icmp eq ptr %{dest}, null").unwrap();
             writeln!(
                 out,
                 "  br i1 %{dest}.null, label %{dest}.oom, label %{dest}.ok"
@@ -530,9 +564,8 @@ pub(crate) fn emit_instruction(
 
             // Build format string reference
             let fmt_len = strings[*format_ref].len() + 1;
-            let fmt_ref = format!(
-                "getelementptr ([{fmt_len} x i8], ptr @.str.{format_ref}, i64 0, i64 0)"
-            );
+            let fmt_ref =
+                format!("getelementptr ([{fmt_len} x i8], ptr @.str.{format_ref}, i64 0, i64 0)");
 
             // Build snprintf argument list
             let mut snprintf_args = vec![
@@ -587,11 +620,7 @@ pub(crate) fn emit_instruction(
             // Fill remaining fields from the fields vector, zero-filling extras
             for fi in 1..num_fields {
                 let raw_ty = llvm_type_str(&info.field_types[fi], ctx.struct_map);
-                let is_recursive = info
-                    .recursive_fields
-                    .get(fi)
-                    .copied()
-                    .unwrap_or(false);
+                let is_recursive = info.recursive_fields.get(fi).copied().unwrap_or(false);
                 // Unit (void) is stored as i64 in struct fields.
                 // Recursive self-reference is boxed as GC-heap ptr.
                 let field_ty_str = if is_recursive {
@@ -635,21 +664,10 @@ pub(crate) fn emit_instruction(
                                 "  {size_gep} = getelementptr {llvm_ty}, ptr null, i32 1"
                             )
                             .unwrap();
-                            writeln!(
-                                out,
-                                "  {size_int} = ptrtoint ptr {size_gep} to i64"
-                            )
-                            .unwrap();
-                            writeln!(
-                                out,
-                                "  {box_ptr} = call ptr @GC_malloc(i64 {size_int})"
-                            )
-                            .unwrap();
-                            writeln!(
-                                out,
-                                "  store {llvm_ty} {v}, ptr {box_ptr}"
-                            )
-                            .unwrap();
+                            writeln!(out, "  {size_int} = ptrtoint ptr {size_gep} to i64").unwrap();
+                            writeln!(out, "  {box_ptr} = call ptr @GC_malloc(i64 {size_int})")
+                                .unwrap();
+                            writeln!(out, "  store {llvm_ty} {v}, ptr {box_ptr}").unwrap();
                             writeln!(
                                 out,
                                 "  {step_dest} = insertvalue {llvm_ty} {current}, ptr {box_ptr}, {fi}"
@@ -712,16 +730,8 @@ pub(crate) fn emit_instruction(
             let llvm_ty = &info.llvm_name;
             let val = operand_ref(obj, func);
             // Extract tag (field 0, i8) and extend to i64 for comparison
-            writeln!(
-                out,
-                "  %{dest}.i8 = extractvalue {llvm_ty} {val}, 0"
-            )
-            .unwrap();
-            writeln!(
-                out,
-                "  %{dest} = zext i8 %{dest}.i8 to i64"
-            )
-            .unwrap();
+            writeln!(out, "  %{dest}.i8 = extractvalue {llvm_ty} {val}, 0").unwrap();
+            writeln!(out, "  %{dest} = zext i8 %{dest}.i8 to i64").unwrap();
         }
 
         Instruction::AdtPayload {
@@ -734,11 +744,7 @@ pub(crate) fn emit_instruction(
             let llvm_ty = &info.llvm_name;
             let val = operand_ref(obj, func);
             let idx = *field_index as usize;
-            let is_recursive = info
-                .recursive_fields
-                .get(idx)
-                .copied()
-                .unwrap_or(false);
+            let is_recursive = info.recursive_fields.get(idx).copied().unwrap_or(false);
             if is_recursive {
                 // Extract the boxed `ptr` and load the referenced ADT
                 // struct back into an SSA value the rest of codegen treats
@@ -748,11 +754,7 @@ pub(crate) fn emit_instruction(
                     "  %{dest}.box = extractvalue {llvm_ty} {val}, {field_index}"
                 )
                 .unwrap();
-                writeln!(
-                    out,
-                    "  %{dest} = load {llvm_ty}, ptr %{dest}.box"
-                )
-                .unwrap();
+                writeln!(out, "  %{dest} = load {llvm_ty}, ptr %{dest}.box").unwrap();
             } else {
                 writeln!(
                     out,
@@ -798,11 +800,7 @@ pub(crate) fn emit_instruction(
             )
             .unwrap();
             // tag = present ? 0 (Some) : 1 (None) — Option layout is {i8, i64}.
-            writeln!(
-                out,
-                "  %{dest}.tag = select i1 %{dest}.present, i8 0, i8 1"
-            )
-            .unwrap();
+            writeln!(out, "  %{dest}.tag = select i1 %{dest}.present, i8 0, i8 1").unwrap();
             // value = present ? raw : 0  (zero out the unused payload for None
             // so Hash/Eq derivations behave deterministically)
             writeln!(
@@ -830,7 +828,16 @@ pub(crate) fn emit_instruction(
             arg_types,
             result_type,
         } => {
-            emit_spawn(out, dest, target_fn, args, arg_types, result_type, func, ctx);
+            emit_spawn(
+                out,
+                dest,
+                target_fn,
+                args,
+                arg_types,
+                result_type,
+                func,
+                ctx,
+            );
         }
 
         Instruction::Await {
@@ -870,13 +877,7 @@ pub(crate) fn emit_instruction(
 /// The incoming list carries task handles as i64; we hand its raw `ptr`
 /// straight to the runtime (the layout `{ ptr data, i64 len }` matches
 /// `*const *const Task + i64` on LP64).
-fn emit_select(
-    out: &mut String,
-    dest: &str,
-    list: &Operand,
-    func: &Function,
-    ctx: &EmitCtx,
-) {
+fn emit_select(out: &mut String, dest: &str, list: &Operand, func: &Function, ctx: &EmitCtx) {
     let list_ref = operand_ref(list, func);
     let in_list_ty = if let Operand::Var(name) = list {
         ctx.struct_temps
@@ -891,11 +892,7 @@ fn emit_select(
         "  %{dest}.in_data = extractvalue {in_list_ty} {list_ref}, 0"
     )
     .unwrap();
-    writeln!(
-        out,
-        "  %{dest}.n = extractvalue {in_list_ty} {list_ref}, 1"
-    )
-    .unwrap();
+    writeln!(out, "  %{dest}.n = extractvalue {in_list_ty} {list_ref}, 1").unwrap();
     // tyra_task_select returns *const Task; cast to i64 so it flows as a
     // plain task handle through the MIR (same convention as Spawn).
     writeln!(
@@ -938,11 +935,7 @@ fn emit_join_all(
         "  %{dest}.in_data = extractvalue {in_list_ty} {list_ref}, 0"
     )
     .unwrap();
-    writeln!(
-        out,
-        "  %{dest}.n = extractvalue {in_list_ty} {list_ref}, 1"
-    )
-    .unwrap();
+    writeln!(out, "  %{dest}.n = extractvalue {in_list_ty} {list_ref}, 1").unwrap();
     let list_ty = format!("%struct.List__{}", elem_type.monomorphized_name());
 
     // Allocate result array.
@@ -952,11 +945,7 @@ fn emit_join_all(
     )
     .unwrap();
     writeln!(out, "  %{dest}.esz = ptrtoint ptr %{dest}.esz_ptr to i64").unwrap();
-    writeln!(
-        out,
-        "  %{dest}.tsz = mul i64 %{dest}.n, %{dest}.esz"
-    )
-    .unwrap();
+    writeln!(out, "  %{dest}.tsz = mul i64 %{dest}.n, %{dest}.esz").unwrap();
     writeln!(
         out,
         "  %{dest}.out_data = call ptr @GC_malloc(i64 %{dest}.tsz)"
@@ -969,11 +958,7 @@ fn emit_join_all(
     writeln!(out, "  br label %{dest}.loop").unwrap();
     writeln!(out, "{dest}.loop:").unwrap();
     writeln!(out, "  %{dest}.i = load i64, ptr %{dest}.ctr").unwrap();
-    writeln!(
-        out,
-        "  %{dest}.done = icmp sge i64 %{dest}.i, %{dest}.n"
-    )
-    .unwrap();
+    writeln!(out, "  %{dest}.done = icmp sge i64 %{dest}.i, %{dest}.n").unwrap();
     writeln!(
         out,
         "  br i1 %{dest}.done, label %{dest}.end, label %{dest}.body"
@@ -985,36 +970,20 @@ fn emit_join_all(
         "  %{dest}.hgep = getelementptr i64, ptr %{dest}.in_data, i64 %{dest}.i"
     )
     .unwrap();
-    writeln!(
-        out,
-        "  %{dest}.handle = load i64, ptr %{dest}.hgep"
-    )
-    .unwrap();
-    writeln!(
-        out,
-        "  %{dest}.tptr = inttoptr i64 %{dest}.handle to ptr"
-    )
-    .unwrap();
+    writeln!(out, "  %{dest}.handle = load i64, ptr %{dest}.hgep").unwrap();
+    writeln!(out, "  %{dest}.tptr = inttoptr i64 %{dest}.handle to ptr").unwrap();
     writeln!(
         out,
         "  %{dest}.box = call ptr @tyra_task_await(ptr %{dest}.tptr)"
     )
     .unwrap();
-    writeln!(
-        out,
-        "  %{dest}.val = load {elem_llvm}, ptr %{dest}.box"
-    )
-    .unwrap();
+    writeln!(out, "  %{dest}.val = load {elem_llvm}, ptr %{dest}.box").unwrap();
     writeln!(
         out,
         "  %{dest}.ogep = getelementptr {elem_llvm}, ptr %{dest}.out_data, i64 %{dest}.i"
     )
     .unwrap();
-    writeln!(
-        out,
-        "  store {elem_llvm} %{dest}.val, ptr %{dest}.ogep"
-    )
-    .unwrap();
+    writeln!(out, "  store {elem_llvm} %{dest}.val, ptr %{dest}.ogep").unwrap();
     writeln!(out, "  %{dest}.next = add i64 %{dest}.i, 1").unwrap();
     writeln!(out, "  store i64 %{dest}.next, ptr %{dest}.ctr").unwrap();
     writeln!(out, "  br label %{dest}.loop").unwrap();
@@ -1070,16 +1039,8 @@ fn emit_spawn(
             "  %{dest}.asz_ptr = getelementptr {args_ty}, ptr null, i32 1"
         )
         .unwrap();
-        writeln!(
-            out,
-            "  %{dest}.asz = ptrtoint ptr %{dest}.asz_ptr to i64"
-        )
-        .unwrap();
-        writeln!(
-            out,
-            "  %{dest}.args = call ptr @GC_malloc(i64 %{dest}.asz)"
-        )
-        .unwrap();
+        writeln!(out, "  %{dest}.asz = ptrtoint ptr %{dest}.asz_ptr to i64").unwrap();
+        writeln!(out, "  %{dest}.args = call ptr @GC_malloc(i64 %{dest}.asz)").unwrap();
 
         // Store each arg into its slot via GEP.
         for (i, (arg, ty)) in args.iter().zip(arg_types.iter()).enumerate() {
@@ -1120,11 +1081,7 @@ fn emit_await(
 ) {
     let task_ref = operand_ref(task, func);
     // Task handle travels as i64 through the MIR; convert back to ptr.
-    writeln!(
-        out,
-        "  %{dest}.tptr = inttoptr i64 {task_ref} to ptr"
-    )
-    .unwrap();
+    writeln!(out, "  %{dest}.tptr = inttoptr i64 {task_ref} to ptr").unwrap();
     writeln!(
         out,
         "  %{dest}.box = call ptr @tyra_task_await(ptr %{dest}.tptr)"

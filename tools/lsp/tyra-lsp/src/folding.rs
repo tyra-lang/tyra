@@ -116,7 +116,10 @@ fn visit_expr(expr: &Expr, sources: &SourceMap, out: &mut Vec<FoldingRange>) {
                 Some(ElseBranch::ElseIf(nested)) => {
                     // Delegate entirely to visit_expr — it handles push + body + further chains.
                     visit_expr(
-                        &Expr { kind: ExprKind::If(nested.clone()), span: nested.span },
+                        &Expr {
+                            kind: ExprKind::If(nested.clone()),
+                            span: nested.span,
+                        },
                         sources,
                         out,
                     );
@@ -269,7 +272,10 @@ mod tests {
         );
         let ranges = compile_ranges(src);
         // fn + match + at least 1 arm
-        assert!(ranges.len() >= 2, "expected fn + match ranges, got: {ranges:?}");
+        assert!(
+            ranges.len() >= 2,
+            "expected fn + match ranges, got: {ranges:?}"
+        );
         let starts: Vec<u32> = ranges.iter().map(|r| r.start_line).collect();
         assert!(starts.contains(&0), "fn range missing: {ranges:?}");
         assert!(starts.contains(&1), "match range missing: {ranges:?}");
@@ -290,9 +296,16 @@ mod tests {
             .iter()
             .filter(|r| r.kind == Some(FoldingRangeKind::Imports))
             .collect();
-        assert_eq!(import_ranges.len(), 1, "expected exactly 1 Imports range, got: {ranges:?}");
+        assert_eq!(
+            import_ranges.len(),
+            1,
+            "expected exactly 1 Imports range, got: {ranges:?}"
+        );
         assert_eq!(import_ranges[0].start_line, 0);
-        assert_eq!(import_ranges[0].end_line, 2, "end_line should be last import line (line 2)");
+        assert_eq!(
+            import_ranges[0].end_line, 2,
+            "end_line should be last import line (line 2)"
+        );
     }
 
     #[test]
@@ -311,7 +324,10 @@ mod tests {
         );
         let ranges = compile_ranges(src);
         // trait + trait method + data + impl + impl method
-        assert!(ranges.len() >= 4, "expected multiple ranges for trait/data/impl, got: {ranges:?}");
+        assert!(
+            ranges.len() >= 4,
+            "expected multiple ranges for trait/data/impl, got: {ranges:?}"
+        );
     }
 
     #[test]
@@ -347,17 +363,29 @@ mod tests {
         );
         let ranges = compile_ranges(src);
         let starts: Vec<u32> = ranges.iter().map(|r| r.start_line).collect();
-        assert!(starts.contains(&1), "while range (line 1) missing: {starts:?}");
-        assert!(starts.contains(&4), "for range (line 4) missing: {starts:?}");
+        assert!(
+            starts.contains(&1),
+            "while range (line 1) missing: {starts:?}"
+        );
+        assert!(
+            starts.contains(&4),
+            "for range (line 4) missing: {starts:?}"
+        );
     }
 
     #[test]
     fn no_trailing_newline_still_emits_range() {
         // Source without a trailing newline; span ends on the `end` line itself.
         let ranges = compile_ranges("fn main()\n  let x = 1\nend");
-        assert!(!ranges.is_empty(), "expected at least one range even without trailing newline");
+        assert!(
+            !ranges.is_empty(),
+            "expected at least one range even without trailing newline"
+        );
         assert_eq!(ranges[0].start_line, 0);
-        assert_eq!(ranges[0].end_line, 1, "end_line should be body line when no trailing newline");
+        assert_eq!(
+            ranges[0].end_line, 1,
+            "end_line should be body line when no trailing newline"
+        );
     }
 
     #[test]
@@ -374,9 +402,14 @@ mod tests {
         );
         let ranges = compile_ranges(src);
         // Collect (start_line, end_line) pairs and check no duplicates.
-        let mut pairs: Vec<(u32, u32)> = ranges.iter().map(|r| (r.start_line, r.end_line)).collect();
+        let mut pairs: Vec<(u32, u32)> =
+            ranges.iter().map(|r| (r.start_line, r.end_line)).collect();
         let original_len = pairs.len();
         pairs.dedup();
-        assert_eq!(pairs.len(), original_len, "duplicate folding ranges detected: {ranges:?}");
+        assert_eq!(
+            pairs.len(),
+            original_len,
+            "duplicate folding ranges detected: {ranges:?}"
+        );
     }
 }

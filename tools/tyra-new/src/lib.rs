@@ -101,9 +101,7 @@ pub fn create_project(
 // ---------------------------------------------------------------------------
 
 fn render_manifest(name: &str) -> String {
-    format!(
-        "[package]\nname    = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2026\"\n"
-    )
+    format!("[package]\nname    = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2026\"\n")
 }
 
 fn render_source(kind: ProjectKind) -> &'static str {
@@ -136,15 +134,21 @@ const GITIGNORE: &str = "/target\n";
 // ---------------------------------------------------------------------------
 
 const RESERVED_WORDS: &[&str] = &[
-    "fn", "data", "value", "type", "trait", "impl", "let", "mut", "if", "else", "match",
-    "when", "for", "in", "while", "return", "defer", "async", "await", "spawn", "import",
-    "export", "and", "or", "not", "true", "false", "end",
+    "fn", "data", "value", "type", "trait", "impl", "let", "mut", "if", "else", "match", "when",
+    "for", "in", "while", "return", "defer", "async", "await", "spawn", "import", "export", "and",
+    "or", "not", "true", "false", "end",
 ];
 
 fn validate_name(name: &str) -> Result<(), NewError> {
     let ok = !name.is_empty()
-        && name.chars().next().map(|c| c.is_ascii_lowercase()).unwrap_or(false)
-        && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        && name
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_lowercase())
+            .unwrap_or(false)
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
         && !RESERVED_WORDS.contains(&name);
     if ok {
         Ok(())
@@ -304,7 +308,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         create_project("myapp", ProjectKind::Bin, VcsMode::None, dir.path()).unwrap();
         let proj = dir.path().join("myapp");
-        assert!(!proj.join(".gitignore").exists(), ".gitignore must not be created");
+        assert!(
+            !proj.join(".gitignore").exists(),
+            ".gitignore must not be created"
+        );
         assert!(proj.join("Tyra.toml").is_file());
         assert!(proj.join("README.md").is_file());
     }

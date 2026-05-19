@@ -295,7 +295,10 @@ mod tests {
 
     #[test]
     fn is_result() {
-        let res = Ty::Generic("Result".into(), vec![Ty::String, Ty::Named("AppError".into())]);
+        let res = Ty::Generic(
+            "Result".into(),
+            vec![Ty::String, Ty::Named("AppError".into())],
+        );
         assert!(res.is_result());
         assert!(!res.is_option());
     }

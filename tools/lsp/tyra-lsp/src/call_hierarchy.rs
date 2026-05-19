@@ -7,7 +7,7 @@ use tyra_ast::{ElseBranch, Expr, ExprKind, FnDef, Item, SourceFile, Stmt, String
 use tyra_diagnostics::{SourceId, Span};
 use tyra_driver::DefIndex;
 
-use crate::{span_to_lsp_range, DocState};
+use crate::{DocState, span_to_lsp_range};
 use crate::{references, rename};
 
 // ── Public entry points ───────────────────────────────────────────────────────
@@ -42,7 +42,9 @@ pub(crate) fn incoming(
     uri: &Url,
     item: &CallHierarchyItem,
 ) -> Vec<CallHierarchyIncomingCall> {
-    let Some(def_span) = resolve_item_span(state, item) else { return vec![] };
+    let Some(def_span) = resolve_item_span(state, item) else {
+        return vec![];
+    };
 
     // All use-sites that resolve to this fn's def span.
     let use_spans = references::find_uses_for_def(&state.def_index, def_span, state.source_id);
@@ -64,7 +66,10 @@ pub(crate) fn incoming(
                 .iter()
                 .map(|&s| span_to_lsp_range(s, &state.sources))
                 .collect();
-            Some(CallHierarchyIncomingCall { from: fn_to_item(state, uri, caller), from_ranges })
+            Some(CallHierarchyIncomingCall {
+                from: fn_to_item(state, uri, caller),
+                from_ranges,
+            })
         })
         .collect()
 }
@@ -76,15 +81,22 @@ pub(crate) fn outgoing(
     uri: &Url,
     item: &CallHierarchyItem,
 ) -> Vec<CallHierarchyOutgoingCall> {
-    let Some(def_span) = resolve_item_span(state, item) else { return vec![] };
-    let Some(f) = find_fn_by_span(&state.ast, def_span) else { return vec![] };
+    let Some(def_span) = resolve_item_span(state, item) else {
+        return vec![];
+    };
+    let Some(f) = find_fn_by_span(&state.ast, def_span) else {
+        return vec![];
+    };
 
     let calls = collect_outgoing_calls(&f.body, &state.def_index, &state.ast, state.source_id);
 
     // Group call-site spans by the target fn's def span.
     let mut by_target: HashMap<Span, Vec<Span>> = HashMap::new();
     for (callee_span, target_def_span) in calls {
-        by_target.entry(target_def_span).or_default().push(callee_span);
+        by_target
+            .entry(target_def_span)
+            .or_default()
+            .push(callee_span);
     }
 
     by_target
@@ -95,7 +107,10 @@ pub(crate) fn outgoing(
                 .iter()
                 .map(|&s| span_to_lsp_range(s, &state.sources))
                 .collect();
-            Some(CallHierarchyOutgoingCall { to: fn_to_item(state, uri, target), from_ranges })
+            Some(CallHierarchyOutgoingCall {
+                to: fn_to_item(state, uri, target),
+                from_ranges,
+            })
         })
         .collect()
 }
@@ -106,7 +121,9 @@ pub(crate) fn outgoing(
 /// definition from `item.selection_range.start`.
 fn resolve_item_span(state: &DocState, item: &CallHierarchyItem) -> Option<Span> {
     let sel = &item.selection_range.start;
-    let offset = state.sources.offset_at_utf16(state.source_id, sel.line, sel.character)?;
+    let offset = state
+        .sources
+        .offset_at_utf16(state.source_id, sel.line, sel.character)?;
     // Try def_index first.
     if let Some(s) = references::find_def_span_at_cursor(state, offset) {
         if find_fn_by_span(&state.ast, s).is_some() {
@@ -189,7 +206,8 @@ pub(crate) fn enclosing_fn<'a>(
     source_id: SourceId,
     offset: u32,
 ) -> Option<&'a FnDef> {
-    let in_span = |span: Span| span.source == source_id && span.start <= offset && offset < span.end;
+    let in_span =
+        |span: Span| span.source == source_id && span.start <= offset && offset < span.end;
 
     let mut best: Option<&'a FnDef> = None;
     let mut best_size = u32::MAX;
@@ -322,7 +340,10 @@ fn collect_in_expr(
             collect_in_expr(lhs, def_index, ast, source_id, out);
             collect_in_expr(rhs, def_index, ast, source_id, out);
         }
-        ExprKind::UnaryOp(_, e) | ExprKind::Propagate(e) | ExprKind::Await(e) | ExprKind::Spawn(e) => {
+        ExprKind::UnaryOp(_, e)
+        | ExprKind::Propagate(e)
+        | ExprKind::Await(e)
+        | ExprKind::Spawn(e) => {
             collect_in_expr(e, def_index, ast, source_id, out);
         }
         ExprKind::Assign(lhs, rhs) => {
@@ -362,8 +383,10 @@ fn collect_in_expr(
                     collect_in_stmts(stmts, def_index, ast, source_id, out);
                 }
                 Some(ElseBranch::ElseIf(nested)) => {
-                    let nested_expr =
-                        Expr { kind: ExprKind::If(nested.clone()), span: nested.span };
+                    let nested_expr = Expr {
+                        kind: ExprKind::If(nested.clone()),
+                        span: nested.span,
+                    };
                     collect_in_expr(&nested_expr, def_index, ast, source_id, out);
                 }
                 None => {}
@@ -429,9 +452,15 @@ mod tests {
         // Top-level import — not a fn name or fn use-site.
         let src = "import math\n";
         let state = make_state(src);
-        let offset = state.sources.offset_at_utf16(state.source_id, 0, 0).unwrap();
+        let offset = state
+            .sources
+            .offset_at_utf16(state.source_id, 0, 0)
+            .unwrap();
         let result = prepare(&state, &uri(), offset);
-        assert!(result.is_none(), "expected None for import statement, got: {result:?}");
+        assert!(
+            result.is_none(),
+            "expected None for import statement, got: {result:?}"
+        );
     }
 
     #[test]
@@ -440,9 +469,15 @@ mod tests {
         let src = "fn foo()\n  1\nend\n";
         let state = make_state(src);
         // '1' is at line 1, col 2.
-        let offset = state.sources.offset_at_utf16(state.source_id, 1, 2).unwrap();
+        let offset = state
+            .sources
+            .offset_at_utf16(state.source_id, 1, 2)
+            .unwrap();
         let result = prepare(&state, &uri(), offset);
-        assert!(result.is_none(), "expected None for literal inside fn body, got: {result:?}");
+        assert!(
+            result.is_none(),
+            "expected None for literal inside fn body, got: {result:?}"
+        );
     }
 
     #[test]
@@ -450,9 +485,15 @@ mod tests {
         let src = "fn foo()\n  1\nend\n";
         let state = make_state(src);
         // 'f' in 'fn foo()' is at line 0, col 0. 'foo' starts at col 3.
-        let offset = state.sources.offset_at_utf16(state.source_id, 0, 3).unwrap();
+        let offset = state
+            .sources
+            .offset_at_utf16(state.source_id, 0, 3)
+            .unwrap();
         let result = prepare(&state, &uri(), offset);
-        assert!(result.is_some(), "expected Some for cursor on fn name 'foo'");
+        assert!(
+            result.is_some(),
+            "expected Some for cursor on fn name 'foo'"
+        );
         assert_eq!(result.unwrap().name, "foo");
     }
 
@@ -470,13 +511,26 @@ mod tests {
         let uri = uri();
 
         // Build a CallHierarchyItem for 'callee' (fn name at line 0, col 3).
-        let offset = state.sources.offset_at_utf16(state.source_id, 0, 3).unwrap();
+        let offset = state
+            .sources
+            .offset_at_utf16(state.source_id, 0, 3)
+            .unwrap();
         let item = prepare(&state, &uri, offset).expect("expected item for 'callee'");
 
         let calls = incoming(&state, &uri, &item);
-        assert_eq!(calls.len(), 1, "expected exactly 1 incoming caller, got: {calls:?}");
-        assert_eq!(calls[0].from.name, "caller", "caller should be named 'caller'");
-        assert!(!calls[0].from_ranges.is_empty(), "from_ranges should not be empty");
+        assert_eq!(
+            calls.len(),
+            1,
+            "expected exactly 1 incoming caller, got: {calls:?}"
+        );
+        assert_eq!(
+            calls[0].from.name, "caller",
+            "caller should be named 'caller'"
+        );
+        assert!(
+            !calls[0].from_ranges.is_empty(),
+            "from_ranges should not be empty"
+        );
     }
 
     #[test]
@@ -493,12 +547,25 @@ mod tests {
         let uri = uri();
 
         // Build a CallHierarchyItem for 'caller' (fn name at line 3, col 3).
-        let offset = state.sources.offset_at_utf16(state.source_id, 3, 3).unwrap();
+        let offset = state
+            .sources
+            .offset_at_utf16(state.source_id, 3, 3)
+            .unwrap();
         let item = prepare(&state, &uri, offset).expect("expected item for 'caller'");
 
         let calls = outgoing(&state, &uri, &item);
-        assert_eq!(calls.len(), 1, "expected exactly 1 outgoing call, got: {calls:?}");
-        assert_eq!(calls[0].to.name, "callee", "callee should be named 'callee'");
-        assert!(!calls[0].from_ranges.is_empty(), "from_ranges should not be empty");
+        assert_eq!(
+            calls.len(),
+            1,
+            "expected exactly 1 outgoing call, got: {calls:?}"
+        );
+        assert_eq!(
+            calls[0].to.name, "callee",
+            "callee should be named 'callee'"
+        );
+        assert!(
+            !calls[0].from_ranges.is_empty(),
+            "from_ranges should not be empty"
+        );
     }
 }

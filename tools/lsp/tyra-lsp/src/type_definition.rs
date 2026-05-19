@@ -16,12 +16,14 @@ pub(crate) fn find_type_def_span(
     find_def_by_name(ast, &name)
 }
 
-fn smallest_ty_at<'a>(type_index: &'a TypeIndex, source_id: SourceId, offset: u32) -> Option<&'a Ty> {
+fn smallest_ty_at<'a>(
+    type_index: &'a TypeIndex,
+    source_id: SourceId,
+    offset: u32,
+) -> Option<&'a Ty> {
     type_index
         .iter()
-        .filter(|(span, _)| {
-            span.source == source_id && span.start <= offset && offset < span.end
-        })
+        .filter(|(span, _)| span.source == source_id && span.start <= offset && offset < span.end)
         .min_by_key(|(span, _)| span.end - span.start)
         .map(|(_, ty)| ty)
 }
@@ -53,7 +55,9 @@ mod tests {
 
     fn run(src: &str, line: u32, col: u32) -> Option<Span> {
         let result = tyra_driver::check_in_memory("test.tyra".to_string(), src.to_string(), None);
-        let offset = result.sources.offset_at_utf16(result.source_id, line, col)?;
+        let offset = result
+            .sources
+            .offset_at_utf16(result.source_id, line, col)?;
         find_type_def_span(&result.ast, &result.type_index, result.source_id, offset)
     }
 
@@ -61,8 +65,8 @@ mod tests {
     fn find_type_def_span_finds_value_def() {
         // fn f(u: User) — cursor on 'u' (param) → type User → value User span
         let src = concat!(
-            "value User\n", // line 0
-            "end\n",         // line 1
+            "value User\n",    // line 0
+            "end\n",           // line 1
             "fn f(u: User)\n", // line 2
             "end\n",           // line 3
         );
@@ -77,7 +81,10 @@ mod tests {
         // 'n' has type Int → primitive, no def
         let src = "fn f(n: Int)\nend\n";
         let result = run(src, 0, 5);
-        assert!(result.is_none(), "expected None for primitive type, got: {result:?}");
+        assert!(
+            result.is_none(),
+            "expected None for primitive type, got: {result:?}"
+        );
     }
 
     #[test]
@@ -85,6 +92,9 @@ mod tests {
         // 'xs' has type List<Int> → prelude generic, not in AST
         let src = "fn f(xs: List<Int>)\nend\n";
         let result = run(src, 0, 5);
-        assert!(result.is_none(), "expected None for prelude generic, got: {result:?}");
+        assert!(
+            result.is_none(),
+            "expected None for prelude generic, got: {result:?}"
+        );
     }
 }

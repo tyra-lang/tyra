@@ -2,7 +2,7 @@ use std::path::Path;
 
 use tower_lsp::lsp_types::{DocumentLink, Url};
 use tyra_ast::{Item, SourceFile};
-use tyra_diagnostics::{Span, SourceMap};
+use tyra_diagnostics::{SourceMap, Span};
 
 use crate::span_to_lsp_range;
 
@@ -31,9 +31,12 @@ pub(crate) fn collect(
             // auto_import_stdlib injects synthetic ImportDecls that reuse
             // another item's span; those would produce links over unrelated
             // source tokens, so we skip them here.
-            let Some(path_span) = path_token_span(text, imp.span) else { continue };
+            let Some(path_span) = path_token_span(text, imp.span) else {
+                continue;
+            };
             let expected = imp.path.join(".");
-            let span_text = text.get(path_span.start as usize..path_span.end as usize)
+            let span_text = text
+                .get(path_span.start as usize..path_span.end as usize)
                 .unwrap_or("");
             if span_text != expected {
                 continue;
@@ -82,7 +85,11 @@ pub(crate) fn path_token_span(text: &str, span: Span) -> Option<Span> {
     if len == 0 {
         return None;
     }
-    Some(Span::new(span.source, path_start as u32, (path_start + len) as u32))
+    Some(Span::new(
+        span.source,
+        path_start as u32,
+        (path_start + len) as u32,
+    ))
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -92,8 +99,7 @@ mod tests {
     use super::*;
 
     fn run_collect(src: &str, main_dir: Option<&Path>) -> Vec<DocumentLink> {
-        let result =
-            tyra_driver::check_in_memory("test.tyra".to_string(), src.to_string(), None);
+        let result = tyra_driver::check_in_memory("test.tyra".to_string(), src.to_string(), None);
         collect(&result.ast, src, &result.sources, main_dir)
     }
 
@@ -125,7 +131,10 @@ mod tests {
         let dir = make_tmpdir("tyra_dl_test_builtin");
         let src = "import core.sys\n";
         let links = run_collect(src, Some(&dir));
-        assert!(links.is_empty(), "core.sys is builtin, expected no links: {links:?}");
+        assert!(
+            links.is_empty(),
+            "core.sys is builtin, expected no links: {links:?}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -134,7 +143,10 @@ mod tests {
         let dir = make_tmpdir("tyra_dl_test_noresolve");
         let src = "import nonexistent\n";
         let links = run_collect(src, Some(&dir));
-        assert!(links.is_empty(), "expected no links for missing module: {links:?}");
+        assert!(
+            links.is_empty(),
+            "expected no links for missing module: {links:?}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -18,12 +18,12 @@ fn corpus_dir() -> &'static Path {
 fn assert_idempotent(path: &Path) {
     let src = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
-    let first = fmt_source(&src)
-        .unwrap_or_else(|e| panic!("{}: fmt failed: {e}", path.display()));
-    let second = fmt_source(&first)
-        .unwrap_or_else(|e| panic!("{}: re-fmt failed: {e}", path.display()));
+    let first = fmt_source(&src).unwrap_or_else(|e| panic!("{}: fmt failed: {e}", path.display()));
+    let second =
+        fmt_source(&first).unwrap_or_else(|e| panic!("{}: re-fmt failed: {e}", path.display()));
     assert_eq!(
-        first, second,
+        first,
+        second,
         "{}: output is not idempotent",
         path.display()
     );
@@ -44,4 +44,3 @@ fn golden_static_corpus() {
     }
     assert!(count > 0, "no .tyra files found in static-corpus");
 }
-

@@ -5,7 +5,7 @@ use tower_lsp::lsp_types::{FileRename, TextEdit, Url, WorkspaceEdit};
 use tyra_ast::Item;
 
 use crate::document_link::path_token_span;
-use crate::{span_to_lsp_range, DocState};
+use crate::{DocState, span_to_lsp_range};
 
 /// Convert `<base>/a/b/c.tyra` to `["a", "b", "c"]`.
 /// Returns `None` if the path is not under `base` or the extension is not `tyra`.
@@ -72,8 +72,12 @@ pub(crate) fn compute_edits(
                     None
                 }
             });
-            let Some(new_dotted) = new_dotted else { continue };
-            let Some(span) = path_token_span(&state.text, imp.span) else { continue };
+            let Some(new_dotted) = new_dotted else {
+                continue;
+            };
+            let Some(span) = path_token_span(&state.text, imp.span) else {
+                continue;
+            };
             // Skip synthetic auto-imports: their spans point to non-import tokens.
             let actual = state
                 .text
@@ -109,8 +113,7 @@ mod tests {
     }
 
     fn make_doc(src: &str) -> (Url, DocState) {
-        let result =
-            tyra_driver::check_in_memory("main.tyra".to_string(), src.to_string(), None);
+        let result = tyra_driver::check_in_memory("main.tyra".to_string(), src.to_string(), None);
         let uri = Url::from_file_path("/workspace/main.tyra").unwrap();
         let state = DocState {
             text: src.to_string(),

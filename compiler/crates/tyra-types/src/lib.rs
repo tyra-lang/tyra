@@ -235,7 +235,11 @@ when true
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0400(&report), "expected E0400 for non-exhaustive Bool match; got: {:?}", report.diagnostics());
+        assert!(
+            has_e0400(&report),
+            "expected E0400 for non-exhaustive Bool match; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -250,7 +254,10 @@ when false
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0400(&report), "exhaustive Bool match should not report E0400");
+        assert!(
+            !has_e0400(&report),
+            "exhaustive Bool match should not report E0400"
+        );
     }
 
     #[test]
@@ -265,7 +272,10 @@ when _
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0400(&report), "wildcard arm should satisfy exhaustiveness");
+        assert!(
+            !has_e0400(&report),
+            "wildcard arm should satisfy exhaustiveness"
+        );
     }
 
     #[test]
@@ -302,7 +312,11 @@ fn describe(_ c: Color) -> Unit
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0400(&report), "exhaustive ADT match should not report E0400; got: {:?}", report.diagnostics());
+        assert!(
+            !has_e0400(&report),
+            "exhaustive ADT match should not report E0400; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -322,7 +336,11 @@ fn describe(_ c: Color) -> Unit
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0400(&report), "expected E0400 for missing Blue; got: {:?}", report.diagnostics());
+        assert!(
+            has_e0400(&report),
+            "expected E0400 for missing Blue; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -337,7 +355,11 @@ fn f(_ x: Option<Int>) -> Int
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0400(&report), "expected E0400 for missing None arm; got: {:?}", report.diagnostics());
+        assert!(
+            has_e0400(&report),
+            "expected E0400 for missing None arm; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -353,7 +375,11 @@ fn f(_ x: Option<Int>) -> Int
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0400(&report), "exhaustive Option match should not report E0400; got: {:?}", report.diagnostics());
+        assert!(
+            !has_e0400(&report),
+            "exhaustive Option match should not report E0400; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -368,7 +394,11 @@ fn f(_ x: Result<Int, String>) -> Int
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0400(&report), "expected E0400 for missing Err arm; got: {:?}", report.diagnostics());
+        assert!(
+            has_e0400(&report),
+            "expected E0400 for missing Err arm; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -384,7 +414,11 @@ fn f(_ x: Result<Int, String>) -> Int
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0400(&report), "exhaustive Result match should not report E0400; got: {:?}", report.diagnostics());
+        assert!(
+            !has_e0400(&report),
+            "exhaustive Result match should not report E0400; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -405,7 +439,11 @@ fn describe(_ c: Color) -> Unit
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0400(&report), "ident binding should catch-all for user ADT; got: {:?}", report.diagnostics());
+        assert!(
+            !has_e0400(&report),
+            "ident binding should catch-all for user ADT; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     // ========================================================================
@@ -440,7 +478,11 @@ fn f(_ c: Color) -> Unit
 end
 "#;
         let report = check_str(source);
-        assert!(has_w0401(&report), "expected W0401 for duplicate Red arm; got: {:?}", report.diagnostics());
+        assert!(
+            has_w0401(&report),
+            "expected W0401 for duplicate Red arm; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -455,7 +497,11 @@ when true
 end
 "#;
         let report = check_str(source);
-        assert!(has_w0401(&report), "expected W0401 for arm after wildcard; got: {:?}", report.diagnostics());
+        assert!(
+            has_w0401(&report),
+            "expected W0401 for arm after wildcard; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -542,7 +588,11 @@ fn f(_ r: Result<Int, MyErr>) -> Unit
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0401(&report), "expected E0401 for missing Err(Forbidden); got: {:?}", report.diagnostics());
+        assert!(
+            has_e0401(&report),
+            "expected E0401 for missing Err(Forbidden); got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -563,7 +613,11 @@ fn f(_ r: Result<Int, MyErr>) -> Unit
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0401(&report), "all nested Err variants present; got: {:?}", report.diagnostics());
+        assert!(
+            !has_e0401(&report),
+            "all nested Err variants present; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -582,7 +636,10 @@ fn f(_ r: Result<Int, MyErr>) -> Unit
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0401(&report), "ident binding in Err should act as nested catch-all");
+        assert!(
+            !has_e0401(&report),
+            "ident binding in Err should act as nested catch-all"
+        );
     }
 
     #[test]
@@ -601,7 +658,11 @@ fn f(_ o: Option<Color>) -> Unit
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0401(&report), "expected E0401 for missing Some(Green); got: {:?}", report.diagnostics());
+        assert!(
+            has_e0401(&report),
+            "expected E0401 for missing Some(Green); got: {:?}",
+            report.diagnostics()
+        );
     }
 
     // ========================================================================
@@ -654,7 +715,10 @@ fn f(_ r: Result<Int, MyErr>) -> Unit
 end
 "#;
         let report = check_str(source);
-        assert!(has_w0401(&report), "expected W0401 for two Ok arms with catch-all fields");
+        assert!(
+            has_w0401(&report),
+            "expected W0401 for two Ok arms with catch-all fields"
+        );
     }
 
     // ========================================================================
@@ -679,7 +743,11 @@ fn f(_ o: Option<Color>) -> Unit
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0401(&report), "exhaustive Option<ADT> should not report E0401; got: {:?}", report.diagnostics());
+        assert!(
+            !has_e0401(&report),
+            "exhaustive Option<ADT> should not report E0401; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -701,8 +769,14 @@ fn f(_ r: Result<Int, MyErr>) -> Unit
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0401(&report), "outer catch-all should skip nested check");
-        assert!(!has_e0400(&report), "outer catch-all should skip E0400 as well");
+        assert!(
+            !has_e0401(&report),
+            "outer catch-all should skip nested check"
+        );
+        assert!(
+            !has_e0400(&report),
+            "outer catch-all should skip E0400 as well"
+        );
     }
 
     #[test]
@@ -722,7 +796,11 @@ fn f(_ o: Option<Color>) -> Unit
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0401(&report), "Some(x) should be nested catch-all; got: {:?}", report.diagnostics());
+        assert!(
+            !has_e0401(&report),
+            "Some(x) should be nested catch-all; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -740,7 +818,10 @@ fn f(_ s: String) -> Unit
 end
 "#;
         let report = check_str(source);
-        assert!(has_w0401(&report), "expected W0401 for duplicate string literal");
+        assert!(
+            has_w0401(&report),
+            "expected W0401 for duplicate string literal"
+        );
     }
 
     // ========================================================================
@@ -765,7 +846,11 @@ fn f(_ x: Int) -> Int
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0309(&report), "expected E0309 for return String from Int fn; got: {:?}", report.diagnostics());
+        assert!(
+            has_e0309(&report),
+            "expected E0309 for return String from Int fn; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -779,7 +864,10 @@ fn f(_ x: Int) -> Int
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0309(&report), "correct return type should not report E0309");
+        assert!(
+            !has_e0309(&report),
+            "correct return type should not report E0309"
+        );
     }
 
     #[test]
@@ -817,7 +905,11 @@ fn f(_ x: Result<Int, String>) -> Int
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0310(&report), "expected E0310 for ? in Int fn; got: {:?}", report.diagnostics());
+        assert!(
+            has_e0310(&report),
+            "expected E0310 for ? in Int fn; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -829,7 +921,10 @@ fn f(_ x: Result<Int, String>) -> Result<Int, String>
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0310(&report), "? with matching Result fn should not report E0310");
+        assert!(
+            !has_e0310(&report),
+            "? with matching Result fn should not report E0310"
+        );
     }
 
     #[test]
@@ -841,7 +936,10 @@ fn f(_ x: Option<Int>) -> Option<Int>
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0310(&report), "? Option in Option fn should not report E0310");
+        assert!(
+            !has_e0310(&report),
+            "? Option in Option fn should not report E0310"
+        );
     }
 
     #[test]
@@ -854,7 +952,10 @@ fn f(_ x: Option<Int>) -> Result<Int, String>
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0310(&report), "Option? in Result fn should report E0310");
+        assert!(
+            has_e0310(&report),
+            "Option? in Result fn should report E0310"
+        );
     }
 
     // Top-level `?` is caught earlier by the resolver (E0211) — ADR-0006 Rule 3.
@@ -990,7 +1091,11 @@ impl Greeter for Person
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0500(&report), "expected E0500 for missing farewell method; got: {:?}", report.diagnostics());
+        assert!(
+            has_e0500(&report),
+            "expected E0500 for missing farewell method; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1023,7 +1128,11 @@ impl Stringable for Point
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0500(&report), "expected E0500 for Stringable without to_string; got: {:?}", report.diagnostics());
+        assert!(
+            has_e0500(&report),
+            "expected E0500 for Stringable without to_string; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     // ========================================================================
@@ -1048,7 +1157,11 @@ fn show(_ p: Point) -> String
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0501(&report), "expected E0501 for .to_string() without impl; got: {:?}", report.diagnostics());
+        assert!(
+            has_e0501(&report),
+            "expected E0501 for .to_string() without impl; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     // ========================================================================
@@ -1082,7 +1195,11 @@ fn f(_ a: Point, _ b: Point) -> Bool
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0306(&report), "expected E0306 for Point==Point (Float blocks Eq); got: {:?}", report.diagnostics());
+        assert!(
+            has_e0306(&report),
+            "expected E0306 for Point==Point (Float blocks Eq); got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1097,7 +1214,11 @@ fn f(_ x: Pair, _ y: Pair) -> Bool
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0306(&report), "Int-field value should auto-derive Eq; got: {:?}", report.diagnostics());
+        assert!(
+            !has_e0306(&report),
+            "Int-field value should auto-derive Eq; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1111,7 +1232,11 @@ fn f(_ a: Id, _ b: Id) -> Bool
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0307(&report), "single-field Int value should auto-derive Ord; got: {:?}", report.diagnostics());
+        assert!(
+            !has_e0307(&report),
+            "single-field Int value should auto-derive Ord; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1126,7 +1251,11 @@ fn f(_ x: Pair, _ y: Pair) -> Bool
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0307(&report), "two-field value should not have Ord; got: {:?}", report.diagnostics());
+        assert!(
+            has_e0307(&report),
+            "two-field value should not have Ord; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1141,7 +1270,11 @@ fn f(_ a: User, _ b: User) -> Bool
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0307(&report), "data type should not have Ord; got: {:?}", report.diagnostics());
+        assert!(
+            has_e0307(&report),
+            "data type should not have Ord; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1160,7 +1293,11 @@ fn eq_outer(_ a: Outer, _ b: Outer) -> Bool
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0306(&report), "forward-ref value should auto-derive Eq; got: {:?}", report.diagnostics());
+        assert!(
+            !has_e0306(&report),
+            "forward-ref value should auto-derive Eq; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1177,7 +1314,11 @@ end
 "#;
         let report = check_str(source);
         // Eq is retained (Int/String both have Eq; mut only blocks Hash).
-        assert!(!has_e0306(&report), "data with mut field should still have Eq; got: {:?}", report.diagnostics());
+        assert!(
+            !has_e0306(&report),
+            "data with mut field should still have Eq; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1193,7 +1334,11 @@ fn eq(_ a: Color, _ b: Color) -> Bool
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0306(&report), "zero-field ADT variants should keep Eq; got: {:?}", report.diagnostics());
+        assert!(
+            !has_e0306(&report),
+            "zero-field ADT variants should keep Eq; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1205,7 +1350,11 @@ fn f(_ a: Option<Int>, _ b: Option<Int>) -> Bool
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0306(&report), "Option<Int> should auto-derive Eq; got: {:?}", report.diagnostics());
+        assert!(
+            !has_e0306(&report),
+            "Option<Int> should auto-derive Eq; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1217,7 +1366,11 @@ fn f(_ a: Option<Float>, _ b: Option<Float>) -> Bool
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0306(&report), "Option<Float> must not have Eq (Float blocks it); got: {:?}", report.diagnostics());
+        assert!(
+            has_e0306(&report),
+            "Option<Float> must not have Eq (Float blocks it); got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1229,7 +1382,11 @@ fn f(_ a: Result<Int, String>, _ b: Result<Int, String>) -> Bool
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0306(&report), "Result<Int, String> should auto-derive Eq; got: {:?}", report.diagnostics());
+        assert!(
+            !has_e0306(&report),
+            "Result<Int, String> should auto-derive Eq; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1241,7 +1398,11 @@ fn f(_ a: Result<Float, Int>, _ b: Result<Float, Int>) -> Bool
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0306(&report), "Result<Float, Int> must not have Eq (Float arg blocks it); got: {:?}", report.diagnostics());
+        assert!(
+            has_e0306(&report),
+            "Result<Float, Int> must not have Eq (Float arg blocks it); got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1253,7 +1414,11 @@ fn f(_ a: Option<Option<Int>>, _ b: Option<Option<Int>>) -> Bool
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0306(&report), "Option<Option<Int>> should auto-derive Eq; got: {:?}", report.diagnostics());
+        assert!(
+            !has_e0306(&report),
+            "Option<Option<Int>> should auto-derive Eq; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1265,7 +1430,11 @@ fn f(_ a: Option<Int>, _ b: Option<Int>) -> Bool
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0307(&report), "Option<Int> must not have Ord (ADTs never derive Ord); got: {:?}", report.diagnostics());
+        assert!(
+            has_e0307(&report),
+            "Option<Int> must not have Ord (ADTs never derive Ord); got: {:?}",
+            report.diagnostics()
+        );
     }
 
     // ========================================================================
@@ -1284,7 +1453,11 @@ fn f(_ x: Int) -> Int
 end
 "#;
         let report = check_str(source);
-        assert!(has_e0309(&report), "bare return in non-Unit fn should report E0309; got: {:?}", report.diagnostics());
+        assert!(
+            has_e0309(&report),
+            "bare return in non-Unit fn should report E0309; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]
@@ -1303,7 +1476,11 @@ fn show(_ p: Point) -> String
 end
 "#;
         let report = check_str(source);
-        assert!(!has_e0501(&report), "impl'd Stringable should not error; got: {:?}", report.diagnostics());
+        assert!(
+            !has_e0501(&report),
+            "impl'd Stringable should not error; got: {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]

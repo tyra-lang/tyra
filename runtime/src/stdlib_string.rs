@@ -76,7 +76,13 @@ pub unsafe extern "C" fn tyra_string_trim(s: *const c_char) -> *const c_char {
 pub unsafe extern "C" fn tyra_string_to_upper(s: *const c_char) -> *const c_char {
     let out: String = borrow_utf8(s)
         .chars()
-        .map(|c| if c.is_ascii() { c.to_ascii_uppercase() } else { c })
+        .map(|c| {
+            if c.is_ascii() {
+                c.to_ascii_uppercase()
+            } else {
+                c
+            }
+        })
         .collect();
     alloc_gc_cstring(&out)
 }
@@ -86,7 +92,13 @@ pub unsafe extern "C" fn tyra_string_to_upper(s: *const c_char) -> *const c_char
 pub unsafe extern "C" fn tyra_string_to_lower(s: *const c_char) -> *const c_char {
     let out: String = borrow_utf8(s)
         .chars()
-        .map(|c| if c.is_ascii() { c.to_ascii_lowercase() } else { c })
+        .map(|c| {
+            if c.is_ascii() {
+                c.to_ascii_lowercase()
+            } else {
+                c
+            }
+        })
         .collect();
     alloc_gc_cstring(&out)
 }
@@ -94,19 +106,31 @@ pub unsafe extern "C" fn tyra_string_to_lower(s: *const c_char) -> *const c_char
 /// `__string_contains(s, needle) -> Bool`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_string_contains(s: *const c_char, needle: *const c_char) -> c_int {
-    if borrow_utf8(s).contains(borrow_utf8(needle)) { 1 } else { 0 }
+    if borrow_utf8(s).contains(borrow_utf8(needle)) {
+        1
+    } else {
+        0
+    }
 }
 
 /// `__string_starts_with(s, prefix) -> Bool`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_string_starts_with(s: *const c_char, prefix: *const c_char) -> c_int {
-    if borrow_utf8(s).starts_with(borrow_utf8(prefix)) { 1 } else { 0 }
+    if borrow_utf8(s).starts_with(borrow_utf8(prefix)) {
+        1
+    } else {
+        0
+    }
 }
 
 /// `__string_ends_with(s, suffix) -> Bool`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_string_ends_with(s: *const c_char, suffix: *const c_char) -> c_int {
-    if borrow_utf8(s).ends_with(borrow_utf8(suffix)) { 1 } else { 0 }
+    if borrow_utf8(s).ends_with(borrow_utf8(suffix)) {
+        1
+    } else {
+        0
+    }
 }
 
 /// `__string_parse_int(s) -> Int` — decimal parse, with a thread-local
@@ -243,8 +267,8 @@ unsafe fn fill_list_string_ret(out: *mut ListStringRet, parts: Vec<*const c_char
     let (data, final_len) = if len == 0 {
         (std::ptr::null_mut(), 0i64)
     } else {
-        let buf = crate::gc::malloc(len * std::mem::size_of::<*const c_char>())
-            as *mut *const c_char;
+        let buf =
+            crate::gc::malloc(len * std::mem::size_of::<*const c_char>()) as *mut *const c_char;
         if buf.is_null() {
             // Allocation failure: return empty list to avoid null-data/len>0
             // inconsistency that would cause callers to dereference null.
@@ -269,15 +293,9 @@ unsafe fn fill_list_string_ret(out: *mut ListStringRet, parts: Vec<*const c_char
 /// `s` must be null-terminated UTF-8 (or null). `out` must point at a
 /// valid 16-byte (List<String>) slot.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn tyra_string_split_whitespace(
-    s: *const c_char,
-    out: *mut ListStringRet,
-) {
+pub unsafe extern "C" fn tyra_string_split_whitespace(s: *const c_char, out: *mut ListStringRet) {
     let input = borrow_utf8(s);
-    let parts: Vec<*const c_char> = input
-        .split_whitespace()
-        .map(alloc_gc_cstring)
-        .collect();
+    let parts: Vec<*const c_char> = input.split_whitespace().map(alloc_gc_cstring).collect();
     unsafe { fill_list_string_ret(out, parts) };
 }
 
@@ -301,10 +319,7 @@ pub unsafe extern "C" fn tyra_string_split(
     let parts: Vec<*const c_char> = if separator.is_empty() {
         vec![alloc_gc_cstring(input)]
     } else {
-        input
-            .split(separator)
-            .map(alloc_gc_cstring)
-            .collect()
+        input.split(separator).map(alloc_gc_cstring).collect()
     };
     unsafe { fill_list_string_ret(out, parts) };
 }
@@ -361,9 +376,15 @@ mod tests {
         assert_eq!(unsafe { tyra_string_contains(s.as_ptr(), ok.as_ptr()) }, 1);
         assert_eq!(unsafe { tyra_string_contains(s.as_ptr(), no.as_ptr()) }, 0);
         let hello = cs("hello");
-        assert_eq!(unsafe { tyra_string_starts_with(s.as_ptr(), hello.as_ptr()) }, 1);
+        assert_eq!(
+            unsafe { tyra_string_starts_with(s.as_ptr(), hello.as_ptr()) },
+            1
+        );
         let worl = cs("worl");
-        assert_eq!(unsafe { tyra_string_starts_with(s.as_ptr(), worl.as_ptr()) }, 0);
+        assert_eq!(
+            unsafe { tyra_string_starts_with(s.as_ptr(), worl.as_ptr()) },
+            0
+        );
         assert_eq!(unsafe { tyra_string_ends_with(s.as_ptr(), ok.as_ptr()) }, 1);
     }
 
@@ -392,8 +413,14 @@ mod tests {
     #[test]
     fn byte_at_ascii_utf8_and_out_of_range() {
         let ascii = cs("abc");
-        assert_eq!(unsafe { tyra_string_byte_at(ascii.as_ptr(), 0) }, b'a' as i64);
-        assert_eq!(unsafe { tyra_string_byte_at(ascii.as_ptr(), 2) }, b'c' as i64);
+        assert_eq!(
+            unsafe { tyra_string_byte_at(ascii.as_ptr(), 0) },
+            b'a' as i64
+        );
+        assert_eq!(
+            unsafe { tyra_string_byte_at(ascii.as_ptr(), 2) },
+            b'c' as i64
+        );
         // Out-of-range (>= len) and negative both return -1.
         assert_eq!(unsafe { tyra_string_byte_at(ascii.as_ptr(), 3) }, -1);
         assert_eq!(unsafe { tyra_string_byte_at(ascii.as_ptr(), -1) }, -1);
@@ -481,13 +508,19 @@ mod tests {
 
     #[test]
     fn split_whitespace_collapses_runs() {
-        let mut out = ListStringRet { data: std::ptr::null_mut(), len: 0 };
+        let mut out = ListStringRet {
+            data: std::ptr::null_mut(),
+            len: 0,
+        };
         unsafe {
             tyra_string_split_whitespace(cs("  hello  world\t\n").as_ptr(), &mut out);
         }
         assert_eq!(read_list(&out), vec!["hello", "world"]);
         // Empty input → empty list.
-        let mut out = ListStringRet { data: std::ptr::null_mut(), len: 0 };
+        let mut out = ListStringRet {
+            data: std::ptr::null_mut(),
+            len: 0,
+        };
         unsafe {
             tyra_string_split_whitespace(cs("").as_ptr(), &mut out);
         }
@@ -496,13 +529,19 @@ mod tests {
 
     #[test]
     fn split_separator_keeps_empties() {
-        let mut out = ListStringRet { data: std::ptr::null_mut(), len: 0 };
+        let mut out = ListStringRet {
+            data: std::ptr::null_mut(),
+            len: 0,
+        };
         unsafe {
             tyra_string_split(cs("a,b,,c").as_ptr(), cs(",").as_ptr(), &mut out);
         }
         assert_eq!(read_list(&out), vec!["a", "b", "", "c"]);
         // Empty separator → single-element list of the original input.
-        let mut out = ListStringRet { data: std::ptr::null_mut(), len: 0 };
+        let mut out = ListStringRet {
+            data: std::ptr::null_mut(),
+            len: 0,
+        };
         unsafe {
             tyra_string_split(cs("hi").as_ptr(), cs("").as_ptr(), &mut out);
         }

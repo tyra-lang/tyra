@@ -25,24 +25,56 @@ pub(crate) fn build_document_symbols(
 
 fn item_to_symbol(item: &Item, sources: &SourceMap) -> Option<DocumentSymbol> {
     match item {
-        Item::FnDef(f) => {
-            Some(make_symbol(f.name.clone(), SymbolKind::FUNCTION, f.span, sources, vec![]))
-        }
+        Item::FnDef(f) => Some(make_symbol(
+            f.name.clone(),
+            SymbolKind::FUNCTION,
+            f.span,
+            sources,
+            vec![],
+        )),
         Item::DataDef(d) => {
             let children: Vec<DocumentSymbol> = d
                 .fields
                 .iter()
-                .map(|field| make_symbol(field.name.clone(), SymbolKind::FIELD, field.span, sources, vec![]))
+                .map(|field| {
+                    make_symbol(
+                        field.name.clone(),
+                        SymbolKind::FIELD,
+                        field.span,
+                        sources,
+                        vec![],
+                    )
+                })
                 .collect();
-            Some(make_symbol(d.name.clone(), SymbolKind::STRUCT, d.span, sources, children))
+            Some(make_symbol(
+                d.name.clone(),
+                SymbolKind::STRUCT,
+                d.span,
+                sources,
+                children,
+            ))
         }
         Item::ValueDef(v) => {
             let children: Vec<DocumentSymbol> = v
                 .fields
                 .iter()
-                .map(|field| make_symbol(field.name.clone(), SymbolKind::FIELD, field.span, sources, vec![]))
+                .map(|field| {
+                    make_symbol(
+                        field.name.clone(),
+                        SymbolKind::FIELD,
+                        field.span,
+                        sources,
+                        vec![],
+                    )
+                })
                 .collect();
-            Some(make_symbol(v.name.clone(), SymbolKind::CLASS, v.span, sources, children))
+            Some(make_symbol(
+                v.name.clone(),
+                SymbolKind::CLASS,
+                v.span,
+                sources,
+                children,
+            ))
         }
         Item::TypeDef(t) => {
             let (kind, children) = match &t.kind {
@@ -50,7 +82,15 @@ fn item_to_symbol(item: &Item, sources: &SourceMap) -> Option<DocumentSymbol> {
                 TypeDefKind::Adt(variants) => {
                     let children: Vec<DocumentSymbol> = variants
                         .iter()
-                        .map(|v| make_symbol(v.name.clone(), SymbolKind::ENUM_MEMBER, v.span, sources, vec![]))
+                        .map(|v| {
+                            make_symbol(
+                                v.name.clone(),
+                                SymbolKind::ENUM_MEMBER,
+                                v.span,
+                                sources,
+                                vec![],
+                            )
+                        })
                         .collect();
                     (SymbolKind::ENUM, children)
                 }
@@ -63,7 +103,13 @@ fn item_to_symbol(item: &Item, sources: &SourceMap) -> Option<DocumentSymbol> {
                 .iter()
                 .map(|m| make_symbol(m.name.clone(), SymbolKind::METHOD, m.span, sources, vec![]))
                 .collect();
-            Some(make_symbol(tr.name.clone(), SymbolKind::INTERFACE, tr.span, sources, children))
+            Some(make_symbol(
+                tr.name.clone(),
+                SymbolKind::INTERFACE,
+                tr.span,
+                sources,
+                children,
+            ))
         }
         Item::ImplDef(im) => {
             let name = impl_display_name(im);
@@ -72,14 +118,28 @@ fn item_to_symbol(item: &Item, sources: &SourceMap) -> Option<DocumentSymbol> {
                 .iter()
                 .map(|m| make_symbol(m.name.clone(), SymbolKind::METHOD, m.span, sources, vec![]))
                 .collect();
-            Some(make_symbol(name, SymbolKind::CLASS, im.span, sources, children))
+            Some(make_symbol(
+                name,
+                SymbolKind::CLASS,
+                im.span,
+                sources,
+                children,
+            ))
         }
-        Item::Stmt(Stmt::Let(l)) => {
-            Some(make_symbol(l.name.clone(), SymbolKind::VARIABLE, l.span, sources, vec![]))
-        }
-        Item::Stmt(Stmt::Mut(m)) => {
-            Some(make_symbol(m.name.clone(), SymbolKind::VARIABLE, m.span, sources, vec![]))
-        }
+        Item::Stmt(Stmt::Let(l)) => Some(make_symbol(
+            l.name.clone(),
+            SymbolKind::VARIABLE,
+            l.span,
+            sources,
+            vec![],
+        )),
+        Item::Stmt(Stmt::Mut(m)) => Some(make_symbol(
+            m.name.clone(),
+            SymbolKind::VARIABLE,
+            m.span,
+            sources,
+            vec![],
+        )),
         // Import and other stmts (return, defer, break, expr) are not outline-relevant.
         Item::Import(_) | Item::Stmt(_) => None,
     }
@@ -118,7 +178,11 @@ fn make_symbol(
     children: Vec<DocumentSymbol>,
 ) -> DocumentSymbol {
     let range = span_to_lsp_range(span, sources);
-    let children = if children.is_empty() { None } else { Some(children) };
+    let children = if children.is_empty() {
+        None
+    } else {
+        Some(children)
+    };
     DocumentSymbol {
         name,
         detail: None,
@@ -166,7 +230,10 @@ mod tests {
 
         assert_eq!(syms[2].name, "Color");
         assert_eq!(syms[2].kind, SymbolKind::ENUM);
-        let color_children = syms[2].children.as_ref().expect("Color should have variants");
+        let color_children = syms[2]
+            .children
+            .as_ref()
+            .expect("Color should have variants");
         assert_eq!(color_children.len(), 3);
         assert_eq!(color_children[0].name, "Red");
         assert_eq!(color_children[1].name, "Green");
@@ -185,10 +252,15 @@ mod tests {
             "end\n",
         );
         let syms = run(src);
-        let impl_sym = syms.iter().find(|s| s.name.contains("Greet") && s.name.contains("Foo"))
+        let impl_sym = syms
+            .iter()
+            .find(|s| s.name.contains("Greet") && s.name.contains("Foo"))
             .expect("impl symbol not found");
         assert_eq!(impl_sym.kind, SymbolKind::CLASS);
-        let methods = impl_sym.children.as_ref().expect("impl should have method children");
+        let methods = impl_sym
+            .children
+            .as_ref()
+            .expect("impl should have method children");
         assert_eq!(methods.len(), 1);
         assert_eq!(methods[0].name, "greet");
         assert_eq!(methods[0].kind, SymbolKind::METHOD);
@@ -197,12 +269,7 @@ mod tests {
     #[test]
     fn outline_skips_imports_and_locals() {
         // `z` inside fn body should not appear as top-level.
-        let src = concat!(
-            "fn foo() -> Int\n",
-            "  let z = 1\n",
-            "  z\n",
-            "end\n",
-        );
+        let src = concat!("fn foo() -> Int\n", "  let z = 1\n", "  z\n", "end\n",);
         let syms = run(src);
         assert_eq!(syms.len(), 1, "only `foo` should appear");
         assert_eq!(syms[0].name, "foo");

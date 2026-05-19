@@ -154,10 +154,9 @@ impl super::LowerCtx {
                                 {
                                     // Fall through to scalar fallback below.
                                     let fallback = match variant_name.as_str() {
-                                        "Ok" | "Err" => Ty::Generic(
-                                            "Result".into(),
-                                            vec![Ty::Int, Ty::String],
-                                        ),
+                                        "Ok" | "Err" => {
+                                            Ty::Generic("Result".into(), vec![Ty::Int, Ty::String])
+                                        }
                                         _ => Ty::Generic("Option".into(), vec![Ty::Int]),
                                     };
                                     self.register_adt_type(&fallback);
@@ -197,10 +196,9 @@ impl super::LowerCtx {
                                 // lowering and emit an E0XXX diagnostic
                                 // here instead of silently continuing.
                                 let fallback = match variant_name.as_str() {
-                                    "Ok" | "Err" => Ty::Generic(
-                                        "Result".into(),
-                                        vec![Ty::Int, Ty::String],
-                                    ),
+                                    "Ok" | "Err" => {
+                                        Ty::Generic("Result".into(), vec![Ty::Int, Ty::String])
+                                    }
                                     _ => Ty::Generic("Option".into(), vec![Ty::Int]),
                                 };
                                 self.register_adt_type(&fallback);
@@ -273,13 +271,11 @@ impl super::LowerCtx {
                                         _ => None,
                                     });
 
-                                let inner_tag = inner_type_name
-                                    .as_ref()
-                                    .and_then(|tn| {
-                                        self.variant_tags
-                                            .get(&(tn.clone(), inner_variant.clone()))
-                                            .copied()
-                                    });
+                                let inner_tag = inner_type_name.as_ref().and_then(|tn| {
+                                    self.variant_tags
+                                        .get(&(tn.clone(), inner_variant.clone()))
+                                        .copied()
+                                });
 
                                 if let Some(expected_tag) = inner_tag {
                                     let itn = inner_type_name.as_ref().unwrap().clone();
@@ -313,8 +309,18 @@ impl super::LowerCtx {
 
                                     // Check if inner pattern has extractable payload fields.
                                     // Only meaningful when the inner ADT is struct-based.
-                                    let inner_fields_ref = if let PatternKind::Constructor(_, ref ifields) = pat_fields[0].pattern.kind { ifields } else { unreachable!() };
-                                    let has_deeper = is_inner_struct && inner_fields_ref.iter().any(|pf| !matches!(pf.pattern.kind, PatternKind::Wildcard));
+                                    let inner_fields_ref =
+                                        if let PatternKind::Constructor(_, ref ifields) =
+                                            pat_fields[0].pattern.kind
+                                        {
+                                            ifields
+                                        } else {
+                                            unreachable!()
+                                        };
+                                    let has_deeper = is_inner_struct
+                                        && inner_fields_ref.iter().any(|pf| {
+                                            !matches!(pf.pattern.kind, PatternKind::Wildcard)
+                                        });
 
                                     if has_deeper {
                                         let inner_ok = self.fresh_label("inner_ok");
@@ -335,7 +341,9 @@ impl super::LowerCtx {
                                             &next_label_clone,
                                             body,
                                         );
-                                        body.push(Instruction::Jump { label: arm_label.clone() });
+                                        body.push(Instruction::Jump {
+                                            label: arm_label.clone(),
+                                        });
                                     } else {
                                         body.push(Instruction::BranchIf {
                                             cond: Operand::Var(inner_cond),
@@ -508,19 +516,23 @@ impl super::LowerCtx {
                 let is_prelude = matches!(variant_name.as_str(), "Some" | "Ok" | "Err");
                 // Skip payload binding when inner pattern is a nested Constructor
                 // (e.g., Err(NotFound)) — the inner tag was already checked in pattern test.
-                let inner_is_constructor = fields.iter().any(|pf| {
-                    matches!(pf.pattern.kind, PatternKind::Constructor(_, _))
-                });
+                let inner_is_constructor = fields
+                    .iter()
+                    .any(|pf| matches!(pf.pattern.kind, PatternKind::Constructor(_, _)));
                 // Skip payload binding when inner pattern is a literal or wildcard
                 // (e.g., `when Some(10)`) — there is no named variable to bind into,
                 // and emitting `Store { dest: "" }` generates malformed LLVM IR.
-                let inner_is_literal = !fields.is_empty() && matches!(
-                    fields[0].pattern.kind,
-                    PatternKind::IntLit(_) | PatternKind::FloatLit(_)
-                        | PatternKind::StringLit(_) | PatternKind::BoolLit(_)
-                        | PatternKind::Wildcard
-                );
-                if is_prelude && !fields.is_empty()
+                let inner_is_literal = !fields.is_empty()
+                    && matches!(
+                        fields[0].pattern.kind,
+                        PatternKind::IntLit(_)
+                            | PatternKind::FloatLit(_)
+                            | PatternKind::StringLit(_)
+                            | PatternKind::BoolLit(_)
+                            | PatternKind::Wildcard
+                    );
+                if is_prelude
+                    && !fields.is_empty()
                     && fields[0].field_name != "_"
                     && !inner_is_constructor
                     && !inner_is_literal
@@ -541,10 +553,9 @@ impl super::LowerCtx {
                             // Same fallback as the tag-extraction site
                             // above. Keep in sync.
                             let fallback = match variant_name.as_str() {
-                                "Ok" | "Err" => Ty::Generic(
-                                    "Result".into(),
-                                    vec![Ty::Int, Ty::String],
-                                ),
+                                "Ok" | "Err" => {
+                                    Ty::Generic("Result".into(), vec![Ty::Int, Ty::String])
+                                }
                                 _ => Ty::Generic("Option".into(), vec![Ty::Int]),
                             };
                             self.register_adt_type(&fallback);
@@ -585,18 +596,20 @@ impl super::LowerCtx {
                         };
                         if let Some(inner) = inner_ty {
                             match &inner {
-                                Ty::String => { self.string_vars.insert(bind_name.clone()); }
-                                Ty::Float => { self.float_vars.insert(bind_name.clone()); }
+                                Ty::String => {
+                                    self.string_vars.insert(bind_name.clone());
+                                }
+                                Ty::Float => {
+                                    self.float_vars.insert(bind_name.clone());
+                                }
                                 Ty::Named(n) => {
                                     self.var_types.insert(bind_name.clone(), n.clone());
                                 }
                                 Ty::Generic(_, _) => {
                                     self.generic_var_types
                                         .insert(bind_name.clone(), inner.clone());
-                                    self.var_types.insert(
-                                        bind_name.clone(),
-                                        inner.monomorphized_name(),
-                                    );
+                                    self.var_types
+                                        .insert(bind_name.clone(), inner.monomorphized_name());
                                 }
                                 _ => {}
                             }
@@ -614,7 +627,8 @@ impl super::LowerCtx {
 
                         if let Some(vfields) = vfields {
                             // Use per-variant slot offset for correct field extraction.
-                            let variant_offset = self.variant_field_offsets
+                            let variant_offset = self
+                                .variant_field_offsets
                                 .get(&(stn.clone(), variant_name.clone()))
                                 .copied()
                                 .unwrap_or(1); // fallback: first payload slot
@@ -700,9 +714,7 @@ impl super::LowerCtx {
                     let last = match tail {
                         super::BlockTail::Value(v) => Some(v),
                         super::BlockTail::Unit => None,
-                        super::BlockTail::Fallback => {
-                            self.last_temp_in_range(body, arm_body_start)
-                        }
+                        super::BlockTail::Fallback => self.last_temp_in_range(body, arm_body_start),
                     };
                     if let Some(last) = last {
                         if self.string_vars.contains(&last) {
@@ -900,8 +912,12 @@ impl super::LowerCtx {
                     });
                     if let Some(ty) = field_ty {
                         match ty {
-                            Ty::String => { self.string_vars.insert(var_name.clone()); }
-                            Ty::Float => { self.float_vars.insert(var_name.clone()); }
+                            Ty::String => {
+                                self.string_vars.insert(var_name.clone());
+                            }
+                            Ty::Float => {
+                                self.float_vars.insert(var_name.clone());
+                            }
                             _ => {}
                         }
                     }

@@ -257,7 +257,8 @@ print("done")
 
     #[test]
     fn multi_field_value_type_constructor() {
-        let source = "value Pair\n  first: Int\n  second: Int\nend\nlet p = Pair(first: 10, second: 20)\n";
+        let source =
+            "value Pair\n  first: Int\n  second: Int\nend\nlet p = Pair(first: 10, second: 20)\n";
         let prog = lower_str(source);
         let main = &prog.functions[0];
         let has_struct_init = main
@@ -326,17 +327,18 @@ print("done")
         let source = "value Pair\n  first: Int\n  second: Int\nend\nimpl Summable for Pair\n  fn sum(self) -> Int\n    self.first + self.second\n  end\nend\n";
         let prog = lower_str(source);
         // Should have a function named Pair__sum
-        let has_mangled = prog
-            .functions
-            .iter()
-            .any(|f| f.name == "Pair__sum");
+        let has_mangled = prog.functions.iter().any(|f| f.name == "Pair__sum");
         assert!(
             has_mangled,
             "expected mangled function Pair__sum, got: {:?}",
             prog.functions.iter().map(|f| &f.name).collect::<Vec<_>>()
         );
         // The mangled function should have self as first param
-        let pair_sum = prog.functions.iter().find(|f| f.name == "Pair__sum").unwrap();
+        let pair_sum = prog
+            .functions
+            .iter()
+            .find(|f| f.name == "Pair__sum")
+            .unwrap();
         assert_eq!(pair_sum.params[0].0, "self");
         assert_eq!(pair_sum.params[0].1, tyra_types::Ty::Named("Pair".into()));
     }
@@ -347,14 +349,11 @@ print("done")
         let prog = lower_str(source);
         let main = &prog.functions.iter().find(|f| f.name == "main").unwrap();
         // Should have a Call to Pair__sum
-        let has_call = main.body.iter().any(|i| {
-            matches!(i, Instruction::Call { func, .. } if func == "Pair__sum")
-        });
-        assert!(
-            has_call,
-            "expected Call to Pair__sum, got: {:?}",
-            main.body
-        );
+        let has_call = main
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::Call { func, .. } if func == "Pair__sum"));
+        assert!(has_call, "expected Call to Pair__sum, got: {:?}", main.body);
     }
 
     #[test]
@@ -376,7 +375,10 @@ print("done")
             .iter()
             .any(|i| matches!(i, Instruction::Load { source, .. } if source == "x"));
         assert!(has_alloca, "expected Alloca for mut x");
-        assert!(store_count >= 2, "expected at least 2 Stores to x (init + reassign), got {store_count}");
+        assert!(
+            store_count >= 2,
+            "expected at least 2 Stores to x (init + reassign), got {store_count}"
+        );
         assert!(has_load, "expected Load from x for println");
     }
 
@@ -474,20 +476,29 @@ end\n";
         let prog = lower_str(source);
         let get_fn = prog.functions.iter().find(|f| f.name == "get").unwrap();
         // Should have AdtTag (for ok_or tag check)
-        let has_adt_tag = get_fn.body.iter().any(|i| {
-            matches!(i, Instruction::AdtTag { .. })
-        });
+        let has_adt_tag = get_fn
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::AdtTag { .. }));
         assert!(has_adt_tag, "expected AdtTag for ok_or() Option tag check");
         // Should have branching for Some/None paths
-        let has_branch = get_fn.body.iter().any(|i| {
-            matches!(i, Instruction::BranchIf { .. })
-        });
-        assert!(has_branch, "expected BranchIf for ok_or() Some/None dispatch");
+        let has_branch = get_fn
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::BranchIf { .. }));
+        assert!(
+            has_branch,
+            "expected BranchIf for ok_or() Some/None dispatch"
+        );
         // Should construct Result ADT (AdtInit with Result type)
-        let result_inits = get_fn.body.iter().filter(|i| {
-            matches!(i, Instruction::AdtInit { type_name, .. }
+        let result_inits = get_fn
+            .body
+            .iter()
+            .filter(|i| {
+                matches!(i, Instruction::AdtInit { type_name, .. }
                 if type_name.starts_with("Result__"))
-        }).count();
+            })
+            .count();
         assert!(
             result_inits >= 2,
             "expected at least 2 Result AdtInit (Ok + Err paths), got {result_inits}"
@@ -508,13 +519,17 @@ fn get() -> Result<Int, MyErr>\n\
 end\n";
         let prog = lower_str(source);
         // The program should have a Result__Int__MyErr struct def
-        let has_result_struct = prog.struct_defs.iter().any(|sd| {
-            sd.name == "Result__Int__MyErr"
-        });
+        let has_result_struct = prog
+            .struct_defs
+            .iter()
+            .any(|sd| sd.name == "Result__Int__MyErr");
         assert!(
             has_result_struct,
             "expected Result__Int__MyErr struct def, got: {:?}",
-            prog.struct_defs.iter().map(|sd| &sd.name).collect::<Vec<_>>()
+            prog.struct_defs
+                .iter()
+                .map(|sd| &sd.name)
+                .collect::<Vec<_>>()
         );
     }
 
@@ -532,12 +547,14 @@ end\n";
         let prog = lower_str(source);
         let work_fn = prog.functions.iter().find(|f| f.name == "work").unwrap();
         // Find positions of print("working") and cleanup() calls
-        let working_pos = work_fn.body.iter().position(|i| {
-            matches!(i, Instruction::Call { func, .. } if func == "print")
-        });
-        let cleanup_pos = work_fn.body.iter().rposition(|i| {
-            matches!(i, Instruction::Call { func, .. } if func == "cleanup")
-        });
+        let working_pos = work_fn
+            .body
+            .iter()
+            .position(|i| matches!(i, Instruction::Call { func, .. } if func == "print"));
+        let cleanup_pos = work_fn
+            .body
+            .iter()
+            .rposition(|i| matches!(i, Instruction::Call { func, .. } if func == "cleanup"));
         assert!(
             working_pos.is_some() && cleanup_pos.is_some(),
             "expected both print and cleanup calls"
@@ -547,9 +564,11 @@ end\n";
             "deferred cleanup() should come after print(\"working\")"
         );
         // cleanup should be before the Return
-        let return_pos = work_fn.body.iter().rposition(|i| {
-            matches!(i, Instruction::Return { .. })
-        }).unwrap();
+        let return_pos = work_fn
+            .body
+            .iter()
+            .rposition(|i| matches!(i, Instruction::Return { .. }))
+            .unwrap();
         assert!(
             cleanup_pos.unwrap() < return_pos,
             "deferred cleanup() should come before Return"
@@ -615,17 +634,18 @@ end\n";
         let work_fn = prog.functions.iter().find(|f| f.name == "work").unwrap();
         // In the ? failure path, cleanup should be called before Return
         // Find the propagate_fail label and check that cleanup comes before Return
-        let fail_label_pos = work_fn.body.iter().position(|i| {
-            matches!(i, Instruction::Label(l) if l.starts_with("propagate_fail"))
-        });
+        let fail_label_pos = work_fn
+            .body
+            .iter()
+            .position(|i| matches!(i, Instruction::Label(l) if l.starts_with("propagate_fail")));
         assert!(fail_label_pos.is_some(), "expected propagate_fail label");
         let after_fail: Vec<_> = work_fn.body[fail_label_pos.unwrap()..].to_vec();
-        let cleanup_pos = after_fail.iter().position(|i| {
-            matches!(i, Instruction::Call { func, .. } if func == "cleanup")
-        });
-        let return_pos = after_fail.iter().position(|i| {
-            matches!(i, Instruction::Return { .. })
-        });
+        let cleanup_pos = after_fail
+            .iter()
+            .position(|i| matches!(i, Instruction::Call { func, .. } if func == "cleanup"));
+        let return_pos = after_fail
+            .iter()
+            .position(|i| matches!(i, Instruction::Return { .. }));
         assert!(
             cleanup_pos.is_some() && return_pos.is_some(),
             "expected cleanup and return after propagate_fail label"
@@ -657,10 +677,9 @@ end\n";
         let prog = lower_str(source);
         let work_fn = prog.functions.iter().find(|f| f.name == "work").unwrap();
         // Pre-allocated activation flag alloca at function start.
-        let has_flag_alloca = work_fn
-            .body
-            .iter()
-            .any(|i| matches!(i, Instruction::Alloca { dest } if dest.starts_with(".defer_active_")));
+        let has_flag_alloca = work_fn.body.iter().any(
+            |i| matches!(i, Instruction::Alloca { dest } if dest.starts_with(".defer_active_")),
+        );
         assert!(
             has_flag_alloca,
             "expected .defer_active_N alloca at function entry"
@@ -676,7 +695,10 @@ end\n";
             matches!(i, Instruction::Store { dest, value: Operand::Const(Constant::Int(1)) }
                 if dest.starts_with(".defer_active_"))
         });
-        assert!(has_flag_set, "expected store 1 to .defer_active_N inside if-body");
+        assert!(
+            has_flag_set,
+            "expected store 1 to .defer_active_N inside if-body"
+        );
         // Runtime guard at emit_deferred: the flag load must feed into a
         // BranchIf whose cond is a neq-zero compare against that load.
         // Without this wiring the old broken flat-Vec impl could satisfy
@@ -710,9 +732,9 @@ end\n";
             "expected NeqInt compare against the flag load"
         );
         let cmp_dest = cmp.unwrap();
-        let branched_on_flag = work_fn.body.iter().any(|i| {
-            matches!(i, Instruction::BranchIf { cond: Operand::Var(c), .. } if c == &cmp_dest)
-        });
+        let branched_on_flag = work_fn.body.iter().any(
+            |i| matches!(i, Instruction::BranchIf { cond: Operand::Var(c), .. } if c == &cmp_dest),
+        );
         assert!(
             branched_on_flag,
             "expected BranchIf using the flag's compare result as cond"
@@ -741,9 +763,10 @@ end\n";
         let prog = lower_str(source);
         let outer_fn = prog.functions.iter().find(|f| f.name == "outer").unwrap();
         // The ? operator failure path should call InnerErr__into
-        let has_into_call = outer_fn.body.iter().any(|i| {
-            matches!(i, Instruction::Call { func, .. } if func == "InnerErr__into")
-        });
+        let has_into_call = outer_fn
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::Call { func, .. } if func == "InnerErr__into"));
         assert!(
             has_into_call,
             "expected Call to InnerErr__into in ? failure path, got: {:?}",
@@ -766,9 +789,10 @@ end\n";
         let prog = lower_str(source);
         let outer_fn = prog.functions.iter().find(|f| f.name == "outer").unwrap();
         // No Into conversion call when error types are the same
-        let has_into_call = outer_fn.body.iter().any(|i| {
-            matches!(i, Instruction::Call { func, .. } if func.contains("__into"))
-        });
+        let has_into_call = outer_fn
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::Call { func, .. } if func.contains("__into")));
         assert!(
             !has_into_call,
             "should NOT call __into when error types match"
@@ -800,12 +824,14 @@ let b = identity::<String>(\"hello\")\n";
         );
         // Main should call both monomorphized functions
         let main = prog.functions.iter().find(|f| f.name == "main").unwrap();
-        let calls_int = main.body.iter().any(|i| {
-            matches!(i, Instruction::Call { func, .. } if func == "identity__Int")
-        });
-        let calls_str = main.body.iter().any(|i| {
-            matches!(i, Instruction::Call { func, .. } if func == "identity__String")
-        });
+        let calls_int = main
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::Call { func, .. } if func == "identity__Int"));
+        let calls_str = main
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::Call { func, .. } if func == "identity__String"));
         assert!(calls_int, "expected call to identity__Int");
         assert!(calls_str, "expected call to identity__String");
     }
@@ -819,7 +845,11 @@ fn wrap<T>(_ x: T) -> T\n\
 end\n\
 let a = wrap::<Int>(42)\n";
         let prog = lower_str(source);
-        let wrap_int = prog.functions.iter().find(|f| f.name == "wrap__Int").unwrap();
+        let wrap_int = prog
+            .functions
+            .iter()
+            .find(|f| f.name == "wrap__Int")
+            .unwrap();
         // Parameter should be Int, not a type variable
         assert_eq!(wrap_int.params.len(), 1);
         assert_eq!(wrap_int.params[0].1, tyra_types::Ty::Int);
@@ -837,7 +867,11 @@ end\n\
 let a = id::<Int>(1)\n\
 let b = id::<Int>(2)\n";
         let prog = lower_str(source);
-        let count = prog.functions.iter().filter(|f| f.name == "id__Int").count();
+        let count = prog
+            .functions
+            .iter()
+            .filter(|f| f.name == "id__Int")
+            .count();
         assert_eq!(count, 1, "expected exactly 1 id__Int function, got {count}");
     }
 
@@ -849,9 +883,9 @@ let b = id::<Int>(2)\n";
         let source = "let xs = [1, 2, 3]\n";
         let prog = lower_str(source);
         let main = prog.functions.iter().find(|f| f.is_main).unwrap();
-        let has_list_init = main.body.iter().any(|inst| {
-            matches!(inst, Instruction::ListInit { elements, .. } if elements.len() == 3)
-        });
+        let has_list_init = main.body.iter().any(
+            |inst| matches!(inst, Instruction::ListInit { elements, .. } if elements.len() == 3),
+        );
         assert!(has_list_init, "expected ListInit with 3 elements");
     }
 
@@ -872,9 +906,10 @@ let xs = [10, 20, 30]\n\
 let x = xs[1]\n";
         let prog = lower_str(source);
         let main = prog.functions.iter().find(|f| f.is_main).unwrap();
-        let has_list_get = main.body.iter().any(|inst| {
-            matches!(inst, Instruction::ListGet { .. })
-        });
+        let has_list_get = main
+            .body
+            .iter()
+            .any(|inst| matches!(inst, Instruction::ListGet { .. }));
         assert!(has_list_get, "expected ListGet instruction");
     }
 
@@ -886,9 +921,10 @@ let xs = [10, 20, 30]\n\
 let y = xs.get(0)\n";
         let prog = lower_str(source);
         let main = prog.functions.iter().find(|f| f.is_main).unwrap();
-        let has_list_get_safe = main.body.iter().any(|inst| {
-            matches!(inst, Instruction::ListGetSafe { .. })
-        });
+        let has_list_get_safe = main
+            .body
+            .iter()
+            .any(|inst| matches!(inst, Instruction::ListGetSafe { .. }));
         assert!(has_list_get_safe, "expected ListGetSafe instruction");
     }
 
@@ -900,9 +936,10 @@ let xs = [1, 2, 3]\n\
 let n = xs.len()\n";
         let prog = lower_str(source);
         let main = prog.functions.iter().find(|f| f.is_main).unwrap();
-        let has_list_len = main.body.iter().any(|inst| {
-            matches!(inst, Instruction::ListLen { .. })
-        });
+        let has_list_len = main
+            .body
+            .iter()
+            .any(|inst| matches!(inst, Instruction::ListLen { .. }));
         assert!(has_list_len, "expected ListLen instruction");
     }
 
@@ -978,12 +1015,14 @@ for x in xs\n\
 end\n";
         let prog = lower_str(source);
         let main = prog.functions.iter().find(|f| f.is_main).unwrap();
-        let has_branch = main.body.iter().any(|inst| {
-            matches!(inst, Instruction::BranchIf { .. })
-        });
-        let has_list_get = main.body.iter().any(|inst| {
-            matches!(inst, Instruction::ListGet { .. })
-        });
+        let has_branch = main
+            .body
+            .iter()
+            .any(|inst| matches!(inst, Instruction::BranchIf { .. }));
+        let has_list_get = main
+            .body
+            .iter()
+            .any(|inst| matches!(inst, Instruction::ListGet { .. }));
         assert!(has_branch, "expected BranchIf in for-loop");
         assert!(has_list_get, "expected ListGet in for-loop body");
     }
@@ -1000,7 +1039,13 @@ let eq = a == b\n";
         let prog = lower_str(source);
         let main = prog.functions.iter().find(|f| f.is_main).unwrap();
         let has_eq_string = main.body.iter().any(|inst| {
-            matches!(inst, Instruction::BinOp { op: MirBinOp::EqString, .. })
+            matches!(
+                inst,
+                Instruction::BinOp {
+                    op: MirBinOp::EqString,
+                    ..
+                }
+            )
         });
         assert!(has_eq_string, "expected EqString for string equality");
     }
@@ -1017,13 +1062,22 @@ let id2 = UserId(id: 2)\n\
 let cmp = id1 < id2\n";
         let prog = lower_str(source);
         let main = prog.functions.iter().find(|f| f.is_main).unwrap();
-        let has_field_get = main.body.iter().any(|inst| {
-            matches!(inst, Instruction::FieldGet { type_name, .. } if type_name == "UserId")
-        });
+        let has_field_get = main.body.iter().any(
+            |inst| matches!(inst, Instruction::FieldGet { type_name, .. } if type_name == "UserId"),
+        );
         let has_lt_int = main.body.iter().any(|inst| {
-            matches!(inst, Instruction::BinOp { op: MirBinOp::LtInt, .. })
+            matches!(
+                inst,
+                Instruction::BinOp {
+                    op: MirBinOp::LtInt,
+                    ..
+                }
+            )
         });
-        assert!(has_field_get, "expected FieldGet for UserId field extraction");
+        assert!(
+            has_field_get,
+            "expected FieldGet for UserId field extraction"
+        );
         assert!(has_lt_int, "expected LtInt for field comparison");
     }
 
@@ -1044,9 +1098,18 @@ let eq = a == b\n";
             matches!(inst, Instruction::FieldGet { type_name, .. } if type_name == "Pair")
         }).count();
         let has_and = main.body.iter().any(|inst| {
-            matches!(inst, Instruction::BinOp { op: MirBinOp::And, .. })
+            matches!(
+                inst,
+                Instruction::BinOp {
+                    op: MirBinOp::And,
+                    ..
+                }
+            )
         });
-        assert!(field_gets >= 4, "expected at least 4 FieldGets (2 fields x 2 operands)");
+        assert!(
+            field_gets >= 4,
+            "expected at least 4 FieldGets (2 fields x 2 operands)"
+        );
         assert!(has_and, "expected And to combine field comparisons");
     }
 
@@ -1064,9 +1127,18 @@ end\n";
         let prog = lower_str(source);
         let main = prog.functions.iter().find(|f| f.is_main).unwrap();
         let has_eq_string = main.body.iter().any(|inst| {
-            matches!(inst, Instruction::BinOp { op: MirBinOp::EqString, .. })
+            matches!(
+                inst,
+                Instruction::BinOp {
+                    op: MirBinOp::EqString,
+                    ..
+                }
+            )
         });
-        assert!(has_eq_string, "expected EqString for string pattern matching");
+        assert!(
+            has_eq_string,
+            "expected EqString for string pattern matching"
+        );
     }
 
     #[test]
@@ -1090,9 +1162,11 @@ end\n";
         let prog = lower_str(source);
         let f = prog.functions.iter().find(|f| f.name == "f").unwrap();
         // Should have at least 2 AdtPayload extractions (outer Ok/Err + inner variant checks)
-        let payload_count = f.body.iter().filter(|inst| {
-            matches!(inst, Instruction::AdtPayload { .. })
-        }).count();
+        let payload_count = f
+            .body
+            .iter()
+            .filter(|inst| matches!(inst, Instruction::AdtPayload { .. }))
+            .count();
         assert!(
             payload_count >= 2,
             "expected at least 2 AdtPayload extractions for nested ADT match, got {payload_count}"
@@ -1117,11 +1191,7 @@ fn compute(_ n: Int) -> Int\n\
   sum\n\
 end\n";
         let prog = lower_str(source);
-        let f = prog
-            .functions
-            .iter()
-            .find(|f| f.name == "compute")
-            .unwrap();
+        let f = prog.functions.iter().find(|f| f.name == "compute").unwrap();
 
         // Find index of the first loop-header Label.
         let header_idx = f
@@ -1130,7 +1200,10 @@ end\n";
             .position(|i| matches!(i, Instruction::Label(name) if name.starts_with("while_")))
             .expect("expected a while_* label");
 
-        assert!(header_idx > 0, "header label cannot be the first instruction");
+        assert!(
+            header_idx > 0,
+            "header label cannot be the first instruction"
+        );
         match &f.body[header_idx - 1] {
             Instruction::Jump { label } => {
                 let Instruction::Label(header) = &f.body[header_idx] else {
@@ -1163,7 +1236,10 @@ end
 ";
         let prog = lower_str(source);
         let run = prog.functions.iter().find(|f| f.name == "run").unwrap();
-        let has_await = run.body.iter().any(|i| matches!(i, Instruction::Await { .. }));
+        let has_await = run
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::Await { .. }));
         assert!(
             has_await,
             "expected an Instruction::Await in run() body — task_result_types\n\
@@ -1405,8 +1481,8 @@ end
         // update this test, which forces synchronous review of the
         // runtime-side TyraRequest/TyraResponse layout.
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let stdlib_path = std::path::Path::new(manifest_dir)
-            .join("../../../stdlib/http/server.tyra");
+        let stdlib_path =
+            std::path::Path::new(manifest_dir).join("../../../stdlib/http/server.tyra");
         let src = std::fs::read_to_string(&stdlib_path).unwrap_or_else(|e| {
             panic!(
                 "cannot read {}: {e} — layout test requires the real stdlib file",
@@ -1626,7 +1702,10 @@ end
 ";
         let prog = lower_str(source);
         let run = prog.functions.iter().find(|f| f.name == "run").unwrap();
-        let has_await = run.body.iter().any(|i| matches!(i, Instruction::Await { .. }));
+        let has_await = run
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::Await { .. }));
         assert!(
             has_await,
             "expected Await after reassign; body = {:#?}",
@@ -1653,9 +1732,18 @@ end
         let f = prog.functions.iter().find(|f| f.name == "check").unwrap();
         // Must emit at least one AdtPayload (extract payload for comparison)
         // and at least one Const { value: Int(42) } for the literal check.
-        let has_payload = f.body.iter().any(|i| matches!(i, Instruction::AdtPayload { .. }));
+        let has_payload = f
+            .body
+            .iter()
+            .any(|i| matches!(i, Instruction::AdtPayload { .. }));
         let has_lit_42 = f.body.iter().any(|i| {
-            matches!(i, Instruction::Const { value: crate::ir::Constant::Int(42), .. })
+            matches!(
+                i,
+                Instruction::Const {
+                    value: crate::ir::Constant::Int(42),
+                    ..
+                }
+            )
         });
         assert!(
             has_payload,
@@ -1702,8 +1790,7 @@ end
         let spurious_wildcard_store = f.body.iter().any(|i| {
             if let Instruction::Store { dest, .. } = i {
                 dest == "_"
-                    || (dest.starts_with("___p")
-                        && dest[4..].chars().all(|c| c.is_ascii_digit()))
+                    || (dest.starts_with("___p") && dest[4..].chars().all(|c| c.is_ascii_digit()))
             } else {
                 false
             }
@@ -1714,9 +1801,9 @@ end
             f.body
         );
         // After Fix B the arm-result Store for `fallback` must be emitted.
-        let fallback_stored = f.body.iter().any(|i| {
-            matches!(i, Instruction::Store { value: Operand::Var(v), .. } if v == "fallback")
-        });
+        let fallback_stored = f.body.iter().any(
+            |i| matches!(i, Instruction::Store { value: Operand::Var(v), .. } if v == "fallback"),
+        );
         assert!(
             fallback_stored,
             "`fallback` must be stored into the match result slot; body = {:#?}",
@@ -1752,9 +1839,9 @@ end
         let prog = lower_str(source);
         let f = prog.functions.iter().find(|f| f.name == "f").unwrap();
         // `fallback` must be stored into the match result slot.
-        let fallback_stored = f.body.iter().any(|i| {
-            matches!(i, Instruction::Store { value: Operand::Var(v), .. } if v == "fallback")
-        });
+        let fallback_stored = f.body.iter().any(
+            |i| matches!(i, Instruction::Store { value: Operand::Var(v), .. } if v == "fallback"),
+        );
         assert!(
             fallback_stored,
             "`fallback` must be stored into match result (named payload arm); body = {:#?}",

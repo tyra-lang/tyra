@@ -131,8 +131,11 @@ fn parse_postfix(ts: &mut TokenStream, report: &mut Report, mut expr: Expr) -> E
                     // expression-position relaxation above so a record
                     // declared with `value Foo ... value: Int ... end`
                     // can be read back as `r.value`.
-                    TokenKind::Value | TokenKind::Data | TokenKind::Type
-                    | TokenKind::Trait | TokenKind::Impl => {
+                    TokenKind::Value
+                    | TokenKind::Data
+                    | TokenKind::Type
+                    | TokenKind::Trait
+                    | TokenKind::Impl => {
                         let name = crate::token_stream::keyword_as_ident(ts.peek())
                             .map(str::to_string)
                             .unwrap_or_default();
@@ -301,8 +304,11 @@ fn parse_prefix(ts: &mut TokenStream, report: &mut Report) -> Expr {
         // parse. `async` / `await` / `spawn` / `mut` / `import` / `export`
         // / `defer` are NOT included — they have statement/expression
         // syntactic roles (e.g. `t.await`, `spawn f()`).
-        TokenKind::Value | TokenKind::Data | TokenKind::Type
-        | TokenKind::Trait | TokenKind::Impl => {
+        TokenKind::Value
+        | TokenKind::Data
+        | TokenKind::Type
+        | TokenKind::Trait
+        | TokenKind::Impl => {
             let name = crate::token_stream::keyword_as_ident(ts.peek())
                 .map(str::to_string)
                 .unwrap_or_default();

@@ -1,7 +1,7 @@
 use serde_json::json;
 use tower_lsp::lsp_types::{SymbolKind, TypeHierarchyItem, Url};
 use tyra_ast::{Item, SourceFile, TypeExprKind};
-use tyra_diagnostics::{Span, SourceMap};
+use tyra_diagnostics::{SourceMap, Span};
 
 use crate::{rename, span_to_lsp_range};
 
@@ -16,34 +16,62 @@ pub(crate) fn prepare(
         match item {
             Item::TraitDef(tr) => {
                 if name_token_at(text, tr.span, &tr.name, offset) {
-                    let name_span = rename::find_binding_name_span(text, tr.span, &tr.name)
-                        .unwrap_or(tr.span);
-                    return vec![make_item(uri, tr.name.clone(), SymbolKind::INTERFACE,
-                        tr.span, name_span, sources, "trait")];
+                    let name_span =
+                        rename::find_binding_name_span(text, tr.span, &tr.name).unwrap_or(tr.span);
+                    return vec![make_item(
+                        uri,
+                        tr.name.clone(),
+                        SymbolKind::INTERFACE,
+                        tr.span,
+                        name_span,
+                        sources,
+                        "trait",
+                    )];
                 }
             }
             Item::ValueDef(v) => {
                 if name_token_at(text, v.span, &v.name, offset) {
-                    let name_span = rename::find_binding_name_span(text, v.span, &v.name)
-                        .unwrap_or(v.span);
-                    return vec![make_item(uri, v.name.clone(), SymbolKind::CLASS,
-                        v.span, name_span, sources, "concrete")];
+                    let name_span =
+                        rename::find_binding_name_span(text, v.span, &v.name).unwrap_or(v.span);
+                    return vec![make_item(
+                        uri,
+                        v.name.clone(),
+                        SymbolKind::CLASS,
+                        v.span,
+                        name_span,
+                        sources,
+                        "concrete",
+                    )];
                 }
             }
             Item::DataDef(d) => {
                 if name_token_at(text, d.span, &d.name, offset) {
-                    let name_span = rename::find_binding_name_span(text, d.span, &d.name)
-                        .unwrap_or(d.span);
-                    return vec![make_item(uri, d.name.clone(), SymbolKind::STRUCT,
-                        d.span, name_span, sources, "concrete")];
+                    let name_span =
+                        rename::find_binding_name_span(text, d.span, &d.name).unwrap_or(d.span);
+                    return vec![make_item(
+                        uri,
+                        d.name.clone(),
+                        SymbolKind::STRUCT,
+                        d.span,
+                        name_span,
+                        sources,
+                        "concrete",
+                    )];
                 }
             }
             Item::TypeDef(t) => {
                 if name_token_at(text, t.span, &t.name, offset) {
-                    let name_span = rename::find_binding_name_span(text, t.span, &t.name)
-                        .unwrap_or(t.span);
-                    return vec![make_item(uri, t.name.clone(), SymbolKind::TYPE_PARAMETER,
-                        t.span, name_span, sources, "concrete")];
+                    let name_span =
+                        rename::find_binding_name_span(text, t.span, &t.name).unwrap_or(t.span);
+                    return vec![make_item(
+                        uri,
+                        t.name.clone(),
+                        SymbolKind::TYPE_PARAMETER,
+                        t.span,
+                        name_span,
+                        sources,
+                        "concrete",
+                    )];
                 }
             }
             Item::ImplDef(im) => {
@@ -52,8 +80,15 @@ pub(crate) fn prepare(
                     if let Some(tr) = find_trait_def(ast, &im.trait_name) {
                         let name_span = rename::find_binding_name_span(text, tr.span, &tr.name)
                             .unwrap_or(tr.span);
-                        return vec![make_item(uri, tr.name.clone(), SymbolKind::INTERFACE,
-                            tr.span, name_span, sources, "trait")];
+                        return vec![make_item(
+                            uri,
+                            tr.name.clone(),
+                            SymbolKind::INTERFACE,
+                            tr.span,
+                            name_span,
+                            sources,
+                            "trait",
+                        )];
                     }
                 }
                 // Cursor on the target type token of `impl Foo for X`.
@@ -95,8 +130,15 @@ pub(crate) fn supertypes(
                     if let Some(tr) = find_trait_def(ast, &im.trait_name) {
                         let name_span = rename::find_binding_name_span(text, tr.span, &tr.name)
                             .unwrap_or(tr.span);
-                        out.push(make_item(uri, tr.name.clone(), SymbolKind::INTERFACE,
-                            tr.span, name_span, sources, "trait"));
+                        out.push(make_item(
+                            uri,
+                            tr.name.clone(),
+                            SymbolKind::INTERFACE,
+                            tr.span,
+                            name_span,
+                            sources,
+                            "trait",
+                        ));
                     }
                 }
             }
@@ -165,18 +207,39 @@ fn find_concrete_def(
         match it {
             Item::ValueDef(v) if v.name == name => {
                 let ns = rename::find_binding_name_span(text, v.span, &v.name).unwrap_or(v.span);
-                return Some(make_item(uri, v.name.clone(), SymbolKind::CLASS,
-                    v.span, ns, sources, "concrete"));
+                return Some(make_item(
+                    uri,
+                    v.name.clone(),
+                    SymbolKind::CLASS,
+                    v.span,
+                    ns,
+                    sources,
+                    "concrete",
+                ));
             }
             Item::DataDef(d) if d.name == name => {
                 let ns = rename::find_binding_name_span(text, d.span, &d.name).unwrap_or(d.span);
-                return Some(make_item(uri, d.name.clone(), SymbolKind::STRUCT,
-                    d.span, ns, sources, "concrete"));
+                return Some(make_item(
+                    uri,
+                    d.name.clone(),
+                    SymbolKind::STRUCT,
+                    d.span,
+                    ns,
+                    sources,
+                    "concrete",
+                ));
             }
             Item::TypeDef(t) if t.name == name => {
                 let ns = rename::find_binding_name_span(text, t.span, &t.name).unwrap_or(t.span);
-                return Some(make_item(uri, t.name.clone(), SymbolKind::TYPE_PARAMETER,
-                    t.span, ns, sources, "concrete"));
+                return Some(make_item(
+                    uri,
+                    t.name.clone(),
+                    SymbolKind::TYPE_PARAMETER,
+                    t.span,
+                    ns,
+                    sources,
+                    "concrete",
+                ));
             }
             _ => {}
         }
@@ -216,7 +279,10 @@ mod tests {
 
     fn run_prepare(src: &str, line: u32, col: u32) -> Vec<TypeHierarchyItem> {
         let result = tyra_driver::check_in_memory("test.tyra".to_string(), src.to_string(), None);
-        let offset = result.sources.offset_at_utf16(result.source_id, line, col).unwrap_or(0);
+        let offset = result
+            .sources
+            .offset_at_utf16(result.source_id, line, col)
+            .unwrap_or(0);
         let uri = Url::parse(URI).unwrap();
         prepare(&result.ast, src, &result.sources, &uri, offset)
     }
@@ -240,7 +306,14 @@ mod tests {
         let items = run_prepare(src, 0, 6);
         assert_eq!(items.len(), 1, "expected 1 item, got: {items:?}");
         assert_eq!(items[0].kind, SymbolKind::INTERFACE);
-        assert_eq!(items[0].data.as_ref().and_then(|d| d.get("kind")).and_then(|v| v.as_str()), Some("trait"));
+        assert_eq!(
+            items[0]
+                .data
+                .as_ref()
+                .and_then(|d| d.get("kind"))
+                .and_then(|v| v.as_str()),
+            Some("trait")
+        );
     }
 
     #[test]
@@ -250,7 +323,14 @@ mod tests {
         let items = run_prepare(src, 0, 6);
         assert_eq!(items.len(), 1, "expected 1 item, got: {items:?}");
         assert_eq!(items[0].kind, SymbolKind::CLASS);
-        assert_eq!(items[0].data.as_ref().and_then(|d| d.get("kind")).and_then(|v| v.as_str()), Some("concrete"));
+        assert_eq!(
+            items[0]
+                .data
+                .as_ref()
+                .and_then(|d| d.get("kind"))
+                .and_then(|v| v.as_str()),
+            Some("concrete")
+        );
     }
 
     #[test]
@@ -259,9 +339,20 @@ mod tests {
         let src = "trait Foo\nend\nvalue User\nend\nimpl Foo for User\nend\n";
         // 'impl Foo for User' is on line 4, 'User' starts at col 13
         let items = run_prepare(src, 4, 13);
-        assert_eq!(items.len(), 1, "expected 1 item for impl target, got: {items:?}");
+        assert_eq!(
+            items.len(),
+            1,
+            "expected 1 item for impl target, got: {items:?}"
+        );
         assert_eq!(items[0].name, "User");
-        assert_eq!(items[0].data.as_ref().and_then(|d| d.get("kind")).and_then(|v| v.as_str()), Some("concrete"));
+        assert_eq!(
+            items[0]
+                .data
+                .as_ref()
+                .and_then(|d| d.get("kind"))
+                .and_then(|v| v.as_str()),
+            Some("concrete")
+        );
     }
 
     #[test]
@@ -278,7 +369,10 @@ mod tests {
         let sub = run_subtypes(src, items.into_iter().next().unwrap());
         assert_eq!(sub.len(), 2, "expected 2 subtypes (A, B), got: {sub:?}");
         let names: Vec<&str> = sub.iter().map(|i| i.name.as_str()).collect();
-        assert!(names.contains(&"A") && names.contains(&"B"), "got: {names:?}");
+        assert!(
+            names.contains(&"A") && names.contains(&"B"),
+            "got: {names:?}"
+        );
     }
 
     #[test]
@@ -293,8 +387,15 @@ mod tests {
         let items = run_prepare(src, 4, 6); // prepare on 'X' in 'value X'
         assert_eq!(items.len(), 1);
         let sup = run_supertypes(src, items.into_iter().next().unwrap());
-        assert_eq!(sup.len(), 2, "expected 2 supertypes (Foo, Bar), got: {sup:?}");
+        assert_eq!(
+            sup.len(),
+            2,
+            "expected 2 supertypes (Foo, Bar), got: {sup:?}"
+        );
         let names: Vec<&str> = sup.iter().map(|i| i.name.as_str()).collect();
-        assert!(names.contains(&"Foo") && names.contains(&"Bar"), "got: {names:?}");
+        assert!(
+            names.contains(&"Foo") && names.contains(&"Bar"),
+            "got: {names:?}"
+        );
     }
 }

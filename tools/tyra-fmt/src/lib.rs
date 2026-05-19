@@ -50,7 +50,10 @@ mod tests {
     fn comment_header_preserved() {
         let src = "# header comment\n\nfn main() -> Unit\n  ()\nend\n";
         let out = fmt_source(src).unwrap();
-        assert!(out.starts_with("# header comment"), "comment must be first: {out:?}");
+        assert!(
+            out.starts_with("# header comment"),
+            "comment must be first: {out:?}"
+        );
     }
 
     #[test]
@@ -64,14 +67,20 @@ mod tests {
     fn trailing_comment_preserved() {
         let src = "fn main() -> Unit\n  ()\nend\n\n# trailing note\n";
         let out = fmt_source(src).unwrap();
-        assert!(out.contains("# trailing note"), "trailing comment must survive: {out:?}");
+        assert!(
+            out.contains("# trailing note"),
+            "trailing comment must survive: {out:?}"
+        );
     }
 
     #[test]
     fn inline_comment_preserved() {
         let src = "fn main() -> Unit\n  let x = 1 # inline note\nend\n";
         let out = fmt_source(src).unwrap();
-        assert!(out.contains("# inline note"), "inline comment must survive: {out:?}");
+        assert!(
+            out.contains("# inline note"),
+            "inline comment must survive: {out:?}"
+        );
     }
 
     #[test]
@@ -135,7 +144,8 @@ mod tests {
     #[test]
     fn constructor_pattern_explicit_form_preserved() {
         // `Card(last4: binding)` where field_name != binding must stay explicit
-        let src = "fn f(c: Card) -> Unit\n  match c\n  when Card(last4: digits)\n    ()\n  end\nend\n";
+        let src =
+            "fn f(c: Card) -> Unit\n  match c\n  when Card(last4: digits)\n    ()\n  end\nend\n";
         let out = fmt_source(src).unwrap();
         assert!(
             out.contains("when Card(last4: digits)"),

@@ -26,9 +26,9 @@ use tyra_manifest::{Dependency, find_project_root, load_manifest};
 
 // Spec §5.2 reserved words — dep names must not collide with these.
 const RESERVED_WORDS: &[&str] = &[
-    "fn", "data", "value", "type", "trait", "impl", "let", "mut", "if", "else", "match",
-    "when", "for", "in", "while", "return", "defer", "async", "await", "spawn", "import",
-    "export", "and", "or", "not", "true", "false", "end",
+    "fn", "data", "value", "type", "trait", "impl", "let", "mut", "if", "else", "match", "when",
+    "for", "in", "while", "return", "defer", "async", "await", "spawn", "import", "export", "and",
+    "or", "not", "true", "false", "end",
 ];
 
 // ---------------------------------------------------------------------------
@@ -52,11 +52,17 @@ pub enum PkgError {
     /// `git` binary not found in PATH.
     GitNotAvailable,
     /// Git clone or checkout failed for a dependency.
-    SyncFailed { dep: String, message: String },
+    SyncFailed {
+        dep: String,
+        message: String,
+    },
     /// Dependency root is a bin package (ADR 0009 E_DEP_NOT_IMPORTABLE).
     BinDepNotImportable(String),
     /// Dependency key does not match the package name declared in `Tyra.toml`.
-    NameMismatch { key: String, package_name: String },
+    NameMismatch {
+        key: String,
+        package_name: String,
+    },
     /// Root module `src/<name>.tyra` is absent (ADR 0009 requires it).
     MissingRootModule(String),
 }
@@ -155,9 +161,8 @@ pub fn run_init(dest: &Path, name: Option<&str>) -> Result<(), PkgError> {
             .to_string(),
     };
     validate_name(&pkg_name)?;
-    let content = format!(
-        "[package]\nname    = \"{pkg_name}\"\nversion = \"0.1.0\"\nedition = \"2026\"\n"
-    );
+    let content =
+        format!("[package]\nname    = \"{pkg_name}\"\nversion = \"0.1.0\"\nedition = \"2026\"\n");
     std::fs::write(&manifest_path, content)?;
     Ok(())
 }
@@ -206,11 +211,15 @@ pub fn run_add(project_root: &Path, dep_name: &str, source: DepSource) -> Result
 pub fn run_tree(project_root: &Path) -> Result<String, PkgError> {
     let manifest = load_manifest(project_root)?;
     let mut out = String::new();
-    out.push_str(&format!("{} {}\n", manifest.package.name, manifest.package.version));
+    out.push_str(&format!(
+        "{} {}\n",
+        manifest.package.name, manifest.package.version
+    ));
 
     let mut visited = HashSet::new();
-    let canonical =
-        project_root.canonicalize().unwrap_or_else(|_| project_root.to_path_buf());
+    let canonical = project_root
+        .canonicalize()
+        .unwrap_or_else(|_| project_root.to_path_buf());
     visited.insert(canonical);
 
     let mut deps: Vec<(&String, &Dependency)> = manifest.dependencies.iter().collect();
@@ -218,7 +227,15 @@ pub fn run_tree(project_root: &Path) -> Result<String, PkgError> {
 
     let count = deps.len();
     for (i, (name, dep)) in deps.iter().enumerate() {
-        print_dep(&mut out, name, dep, project_root, "", i == count - 1, &mut visited);
+        print_dep(
+            &mut out,
+            name,
+            dep,
+            project_root,
+            "",
+            i == count - 1,
+            &mut visited,
+        );
     }
     Ok(out)
 }
@@ -238,7 +255,9 @@ pub fn run_tree_from(start: &Path) -> Result<String, PkgError> {
 pub fn run_tree_json(project_root: &Path) -> Result<String, PkgError> {
     let manifest = load_manifest(project_root)?;
     let mut visited = HashSet::new();
-    let canonical = project_root.canonicalize().unwrap_or_else(|_| project_root.to_path_buf());
+    let canonical = project_root
+        .canonicalize()
+        .unwrap_or_else(|_| project_root.to_path_buf());
     visited.insert(canonical);
 
     let mut deps_json: Vec<String> = Vec::new();
@@ -263,11 +282,7 @@ pub fn run_tree_json_from(start: &Path) -> Result<String, PkgError> {
 }
 
 /// Locate the project root walking up from `start`, then call `run_add`.
-pub fn run_add_from(
-    start: &Path,
-    dep_name: &str,
-    source: DepSource,
-) -> Result<(), PkgError> {
+pub fn run_add_from(start: &Path, dep_name: &str, source: DepSource) -> Result<(), PkgError> {
     let root = find_project_root(start).ok_or(PkgError::NoProject)?;
     run_add(&root, dep_name, source)
 }
@@ -298,11 +313,7 @@ pub fn run_remove_from(start: &Path, dep_name: &str) -> Result<(), PkgError> {
 /// Replaces an existing `[dependencies]` entry in-place. The entry must
 /// already exist (`DepNotFound` otherwise). For path deps the key/name
 /// invariant is validated, same as `run_add`.
-pub fn run_update(
-    project_root: &Path,
-    dep_name: &str,
-    source: DepSource,
-) -> Result<(), PkgError> {
+pub fn run_update(project_root: &Path, dep_name: &str, source: DepSource) -> Result<(), PkgError> {
     validate_name(dep_name)?;
     let manifest = load_manifest(project_root)?;
     if !manifest.dependencies.contains_key(dep_name) {
@@ -333,11 +344,7 @@ pub fn run_update(
 }
 
 /// Locate the project root walking up from `start`, then call `run_update`.
-pub fn run_update_from(
-    start: &Path,
-    dep_name: &str,
-    source: DepSource,
-) -> Result<(), PkgError> {
+pub fn run_update_from(start: &Path, dep_name: &str, source: DepSource) -> Result<(), PkgError> {
     let root = find_project_root(start).ok_or(PkgError::NoProject)?;
     run_update(&root, dep_name, source)
 }
@@ -358,12 +365,10 @@ pub fn run_sync(project_root: &Path) -> Result<SyncReport, PkgError> {
             (Some(_), _, _) => {
                 report.skipped.push(dep_name.to_string());
             }
-            (None, Some(url), Some(rev)) => {
-                match sync_git_dep(dep_name, url, rev)? {
-                    SyncStatus::Fresh => report.synced.push(dep_name.to_string()),
-                    SyncStatus::Cached => report.cached.push(dep_name.to_string()),
-                }
-            }
+            (None, Some(url), Some(rev)) => match sync_git_dep(dep_name, url, rev)? {
+                SyncStatus::Fresh => report.synced.push(dep_name.to_string()),
+                SyncStatus::Cached => report.cached.push(dep_name.to_string()),
+            },
             _ => {} // load_manifest already validated
         }
     }
@@ -408,7 +413,10 @@ pub fn run_show(project_root: &Path, dep_name: &str) -> Result<String, PkgError>
         let cache = cache_dir_for(dep_name, url, rev);
         let synced = cache.join("Tyra.toml").is_file();
         out.push_str(&format!("  cache:   {}\n", cache.display()));
-        out.push_str(&format!("  synced:  {}\n", if synced { "yes" } else { "no" }));
+        out.push_str(&format!(
+            "  synced:  {}\n",
+            if synced { "yes" } else { "no" }
+        ));
     }
 
     Ok(out)
@@ -542,7 +550,11 @@ pub fn cache_dir_for(dep_name: &str, url: &str, rev: &str) -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("."));
     let dir_name = format!("{dep_name}-{}", url_hash(url));
-    home.join(".tyra").join("cache").join("git").join(dir_name).join(rev)
+    home.join(".tyra")
+        .join("cache")
+        .join("git")
+        .join(dir_name)
+        .join(rev)
 }
 
 /// 12-character lowercase hex of FNV-1a(url). No extra crate needed.
@@ -705,8 +717,14 @@ fn sync_git_dep(dep_name: &str, url: &str, rev: &str) -> Result<SyncStatus, PkgE
 
 fn validate_name(name: &str) -> Result<(), PkgError> {
     let ok = !name.is_empty()
-        && name.chars().next().map(|c| c.is_ascii_lowercase()).unwrap_or(false)
-        && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        && name
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_lowercase())
+            .unwrap_or(false)
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
         && !RESERVED_WORDS.contains(&name);
     if ok {
         Ok(())
@@ -789,8 +807,7 @@ fn remove_dependency_line(content: &str, dep_name: &str) -> String {
         .filter(|l| {
             let t = l.trim_start();
             // Drop lines that start with `dep_name` followed by `=` or whitespace+`=`.
-            !(t.starts_with(dep_name)
-                && t[dep_name.len()..].trim_start().starts_with('='))
+            !(t.starts_with(dep_name) && t[dep_name.len()..].trim_start().starts_with('='))
         })
         .collect();
     let mut s = result.join("\n");
@@ -894,8 +911,7 @@ fn print_dep(
                 // Push onto the DFS stack; pop after children so shared deps
                 // (diamond DAG) are not incorrectly flagged as cycles.
                 visited.insert(canonical.clone());
-                let mut sub_deps: Vec<(&String, &Dependency)> =
-                    m.dependencies.iter().collect();
+                let mut sub_deps: Vec<(&String, &Dependency)> = m.dependencies.iter().collect();
                 sub_deps.sort_by_key(|(k, _)| k.as_str());
                 let sub_count = sub_deps.len();
                 for (i, (sub_name, sub_dep)) in sub_deps.iter().enumerate() {
@@ -937,9 +953,7 @@ mod tests {
     fn make_manifest(dir: &Path, name: &str) {
         fs::write(
             dir.join("Tyra.toml"),
-            format!(
-                "[package]\nname    = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2026\"\n"
-            ),
+            format!("[package]\nname    = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2026\"\n"),
         )
         .unwrap();
     }
@@ -1207,8 +1221,15 @@ mod tests {
         .unwrap();
 
         let tree = run_tree(dir_app.path()).unwrap();
-        assert!(!tree.contains("[cycle]"), "diamond DAG must not be flagged as cycle:\n{tree}");
-        assert_eq!(tree.matches("common").count(), 2, "common should appear twice:\n{tree}");
+        assert!(
+            !tree.contains("[cycle]"),
+            "diamond DAG must not be flagged as cycle:\n{tree}"
+        );
+        assert_eq!(
+            tree.matches("common").count(),
+            2,
+            "common should appear twice:\n{tree}"
+        );
     }
 
     // --- validate_dep_root (cache-hit path regression tests) ---
@@ -1223,7 +1244,11 @@ mod tests {
     fn cached_dep_valid_passes() {
         let dir = tempfile::tempdir().unwrap();
         make_manifest(dir.path(), "mylib");
-        make_src_file(dir.path(), "mylib", "export fn greet(name: String) -> String\n  name\nend\n");
+        make_src_file(
+            dir.path(),
+            "mylib",
+            "export fn greet(name: String) -> String\n  name\nend\n",
+        );
         validate_dep_root("mylib", dir.path()).unwrap();
     }
 
@@ -1244,7 +1269,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         make_manifest(dir.path(), "myapp");
         // Root source contains `fn main` — bin package.
-        make_src_file(dir.path(), "myapp", "fn main() -> Unit\n  print(\"hi\")\nend\n");
+        make_src_file(
+            dir.path(),
+            "myapp",
+            "fn main() -> Unit\n  print(\"hi\")\nend\n",
+        );
         let result = validate_dep_root("myapp", dir.path());
         assert!(
             matches!(result, Err(PkgError::BinDepNotImportable(_))),
@@ -1268,8 +1297,7 @@ mod tests {
 
     #[test]
     fn insert_creates_section_when_absent() {
-        let content =
-            "[package]\nname    = \"x\"\nversion = \"0.1.0\"\nedition = \"2026\"\n";
+        let content = "[package]\nname    = \"x\"\nversion = \"0.1.0\"\nedition = \"2026\"\n";
         let result = insert_dependency_line(content, "foo = { path = \"../foo\" }");
         assert!(result.contains("[dependencies]"));
         assert!(result.contains("foo = { path = \"../foo\" }"));
@@ -1277,8 +1305,7 @@ mod tests {
 
     #[test]
     fn insert_appends_within_existing_section() {
-        let content =
-            "[package]\nname    = \"x\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+        let content = "[package]\nname    = \"x\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
              \n[dependencies]\nalpha = { path = \"../alpha\" }\n";
         let result = insert_dependency_line(content, "beta = { path = \"../beta\" }");
         let alpha_pos = result.find("alpha").unwrap();
@@ -1331,8 +1358,14 @@ mod tests {
         .unwrap();
         run_update(dir.path(), "mylib", DepSource::Path("../newlib".into())).unwrap();
         let content = fs::read_to_string(dir.path().join("Tyra.toml")).unwrap();
-        assert!(content.contains("mylib = { path = \"../newlib\" }"), "path must be updated");
-        assert!(content.contains("utils = { path = \"../utils\" }"), "utils must be unchanged");
+        assert!(
+            content.contains("mylib = { path = \"../newlib\" }"),
+            "path must be updated"
+        );
+        assert!(
+            content.contains("utils = { path = \"../utils\" }"),
+            "utils must be unchanged"
+        );
     }
 
     #[test]
@@ -1363,8 +1396,7 @@ mod tests {
 
     #[test]
     fn replace_line_updates_the_matching_entry() {
-        let content =
-            "[package]\nname    = \"x\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+        let content = "[package]\nname    = \"x\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
              \n[dependencies]\nfoo = { path = \"../foo\" }\nbar = { path = \"../bar\" }\n";
         let result = replace_dependency_line(content, "foo", "foo = { path = \"../newfoo\" }");
         assert!(result.contains("foo = { path = \"../newfoo\" }"));
@@ -1376,8 +1408,7 @@ mod tests {
 
     #[test]
     fn remove_line_leaves_section_header() {
-        let content =
-            "[package]\nname    = \"x\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+        let content = "[package]\nname    = \"x\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
              \n[dependencies]\nalpha = { path = \"../alpha\" }\n";
         let result = remove_dependency_line(content, "alpha");
         assert!(result.contains("[dependencies]"), "header must remain");
@@ -1386,8 +1417,7 @@ mod tests {
 
     #[test]
     fn remove_line_preserves_others() {
-        let content =
-            "[package]\nname    = \"x\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+        let content = "[package]\nname    = \"x\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
              \n[dependencies]\nalpha = { path = \"../alpha\" }\nbeta = { path = \"../beta\" }\n";
         let result = remove_dependency_line(content, "alpha");
         assert!(!result.contains("alpha = "));
@@ -1404,7 +1434,11 @@ mod tests {
         // Add root module
         let src = lib_dir.path().join("src");
         fs::create_dir_all(&src).unwrap();
-        fs::write(src.join("mylib.tyra"), "export fn greet() -> String\n  \"hi\"\nend\n").unwrap();
+        fs::write(
+            src.join("mylib.tyra"),
+            "export fn greet() -> String\n  \"hi\"\nend\n",
+        )
+        .unwrap();
         fs::write(
             root.path().join("Tyra.toml"),
             format!(
@@ -1440,9 +1474,18 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         make_manifest(dir.path(), "myapp");
         let json = run_tree_json(dir.path()).unwrap();
-        assert!(json.contains("\"name\":\"myapp\""), "missing name field: {json}");
-        assert!(json.contains("\"version\":\"0.1.0\""), "missing version field: {json}");
-        assert!(json.contains("\"deps\":[]"), "empty deps array missing: {json}");
+        assert!(
+            json.contains("\"name\":\"myapp\""),
+            "missing name field: {json}"
+        );
+        assert!(
+            json.contains("\"version\":\"0.1.0\""),
+            "missing version field: {json}"
+        );
+        assert!(
+            json.contains("\"deps\":[]"),
+            "empty deps array missing: {json}"
+        );
     }
 
     #[test]
@@ -1517,7 +1560,9 @@ mod tests {
                 '[' | '{' => depth += 1,
                 ']' | '}' => {
                     depth = depth.saturating_sub(1);
-                    if depth == 0 { break; }
+                    if depth == 0 {
+                        break;
+                    }
                 }
                 '"' if depth == 2 => {
                     // Check for "key": pattern at depth 2 (inside root.deps[x])
@@ -1530,7 +1575,10 @@ mod tests {
             }
             i += 1;
         }
-        assert_eq!(top_level_keys, 1, "root.deps must have exactly 1 direct element: {json}");
+        assert_eq!(
+            top_level_keys, 1,
+            "root.deps must have exactly 1 direct element: {json}"
+        );
     }
 
     #[test]
@@ -1556,7 +1604,10 @@ mod tests {
         )
         .unwrap();
         let json = run_tree_json(dir_a.path()).unwrap();
-        assert!(json.contains("\"cycle\":true"), "cycle node missing: {json}");
+        assert!(
+            json.contains("\"cycle\":true"),
+            "cycle node missing: {json}"
+        );
     }
 
     #[test]
@@ -1570,8 +1621,14 @@ mod tests {
         )
         .unwrap();
         let json = run_tree_json(dir.path()).unwrap();
-        assert!(json.contains("\"synced\":false"), "git dep must report synced:false: {json}");
-        assert!(json.contains("\"key\":\"utils\""), "utils key missing: {json}");
+        assert!(
+            json.contains("\"synced\":false"),
+            "git dep must report synced:false: {json}"
+        );
+        assert!(
+            json.contains("\"key\":\"utils\""),
+            "utils key missing: {json}"
+        );
         assert!(json.contains("\"rev\":\"abc1234\""), "rev missing: {json}");
     }
 
@@ -1614,7 +1671,14 @@ mod tests {
         )
         .unwrap();
         let json = run_tree_json(dir_app.path()).unwrap();
-        assert!(!json.contains("\"cycle\":true"), "diamond must not be flagged as cycle: {json}");
-        assert_eq!(json.matches("\"key\":\"common\"").count(), 2, "common must appear twice: {json}");
+        assert!(
+            !json.contains("\"cycle\":true"),
+            "diamond must not be flagged as cycle: {json}"
+        );
+        assert_eq!(
+            json.matches("\"key\":\"common\"").count(),
+            2,
+            "common must appear twice: {json}"
+        );
     }
 }

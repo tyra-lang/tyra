@@ -173,8 +173,7 @@ fn leak_response(status: i64, body: String) -> i64 {
             body[..pos].to_string()
         }
     };
-    let body_cs =
-        CString::new(cleaned).unwrap_or_else(|_| CString::new("").unwrap());
+    let body_cs = CString::new(cleaned).unwrap_or_else(|_| CString::new("").unwrap());
     let boxed = Box::new(HttpResponse {
         status,
         body: body_cs,
@@ -267,7 +266,12 @@ mod tests {
         }
         let url = cstr("https://example.com/");
         let h = unsafe { tyra_http_get(url.as_ptr()) };
-        assert_ne!(h, 0, "live GET to example.com failed: errno={}", tyra_http_errno());
+        assert_ne!(
+            h,
+            0,
+            "live GET to example.com failed: errno={}",
+            tyra_http_errno()
+        );
         assert_eq!(unsafe { tyra_http_status(h) }, 200);
         let body_ptr = unsafe { tyra_http_body(h) };
         let body = unsafe { CStr::from_ptr(body_ptr) }.to_str().unwrap();

@@ -100,8 +100,11 @@ fn emit_list_init(
         // GEP without inbounds on a null pointer: well-defined in LLVM IR as pure
         // pointer arithmetic (no inbounds = no UB). Gives sizeof(elem_llvm_ty) as i64.
         if elem_llvm_ty.starts_with("%struct.") {
-            writeln!(out, "  %{dest}.esz_ptr = getelementptr {elem_llvm_ty}, ptr null, i64 1")
-                .unwrap();
+            writeln!(
+                out,
+                "  %{dest}.esz_ptr = getelementptr {elem_llvm_ty}, ptr null, i64 1"
+            )
+            .unwrap();
             writeln!(out, "  %{dest}.esz = ptrtoint ptr %{dest}.esz_ptr to i64").unwrap();
             writeln!(out, "  %{dest}.tsz = mul i64 {count}, %{dest}.esz").unwrap();
             writeln!(out, "  %{dest}.ptr = call ptr @GC_malloc(i64 %{dest}.tsz)").unwrap();
@@ -149,13 +152,7 @@ fn emit_list_init(
 
 // ── ListLen ────────────────────────────────────────────────────────────
 
-fn emit_list_len(
-    out: &mut String,
-    dest: &str,
-    list: &Operand,
-    func: &Function,
-    ctx: &EmitCtx,
-) {
+fn emit_list_len(out: &mut String, dest: &str, list: &Operand, func: &Function, ctx: &EmitCtx) {
     let list_val = operand_ref(list, func);
     // ListLen doesn't carry elem_type, so we must rely on struct_temps.
     // All List<T> have the same physical layout {ptr, i64}, so fallback is safe.
@@ -196,11 +193,7 @@ fn emit_list_get(
     .unwrap();
 
     // Bounds check: index < len (unsigned)
-    writeln!(
-        out,
-        "  %{dest}.inb = icmp ult i64 {idx_val}, %{dest}.len"
-    )
-    .unwrap();
+    writeln!(out, "  %{dest}.inb = icmp ult i64 {idx_val}, %{dest}.len").unwrap();
     writeln!(
         out,
         "  br i1 %{dest}.inb, label %{dest}.ok, label %{dest}.oob"
@@ -219,11 +212,7 @@ fn emit_list_get(
         "  %{dest}.gep = getelementptr {elem_llvm_ty}, ptr %{dest}.data, i64 {idx_val}"
     )
     .unwrap();
-    writeln!(
-        out,
-        "  %{dest} = load {elem_llvm_ty}, ptr %{dest}.gep"
-    )
-    .unwrap();
+    writeln!(out, "  %{dest} = load {elem_llvm_ty}, ptr %{dest}.gep").unwrap();
 }
 
 // ── ListGetSafe ────────────────────────────────────────────────────────
@@ -260,11 +249,7 @@ fn emit_list_get_safe(
     .unwrap();
 
     // Bounds check
-    writeln!(
-        out,
-        "  %{dest}.inb = icmp ult i64 {idx_val}, %{dest}.len"
-    )
-    .unwrap();
+    writeln!(out, "  %{dest}.inb = icmp ult i64 {idx_val}, %{dest}.len").unwrap();
 
     // Alloca for result
     writeln!(out, "  %{dest}.slot = alloca {opt_llvm_ty}").unwrap();
@@ -281,11 +266,7 @@ fn emit_list_get_safe(
         "  %{dest}.gep = getelementptr {elem_llvm_ty}, ptr %{dest}.data, i64 {idx_val}"
     )
     .unwrap();
-    writeln!(
-        out,
-        "  %{dest}.elem = load {elem_llvm_ty}, ptr %{dest}.gep"
-    )
-    .unwrap();
+    writeln!(out, "  %{dest}.elem = load {elem_llvm_ty}, ptr %{dest}.gep").unwrap();
     writeln!(
         out,
         "  %{dest}.some.s0 = insertvalue {opt_llvm_ty} undef, i8 0, 0"
@@ -325,11 +306,7 @@ fn emit_list_get_safe(
 
     // Merge
     writeln!(out, "{dest}.end:").unwrap();
-    writeln!(
-        out,
-        "  %{dest} = load {opt_llvm_ty}, ptr %{dest}.slot"
-    )
-    .unwrap();
+    writeln!(out, "  %{dest} = load {opt_llvm_ty}, ptr %{dest}.slot").unwrap();
 }
 
 // ── ListPush ───────────────────────────────────────────────────────────
@@ -410,21 +387,13 @@ fn emit_list_push(
         "  %{dest}.srcp = getelementptr {elem_llvm_ty}, ptr %{dest}.olddata, i64 %{dest}.i"
     )
     .unwrap();
-    writeln!(
-        out,
-        "  %{dest}.v = load {elem_llvm_ty}, ptr %{dest}.srcp"
-    )
-    .unwrap();
+    writeln!(out, "  %{dest}.v = load {elem_llvm_ty}, ptr %{dest}.srcp").unwrap();
     writeln!(
         out,
         "  %{dest}.dstp = getelementptr {elem_llvm_ty}, ptr %{dest}.newdata, i64 %{dest}.i"
     )
     .unwrap();
-    writeln!(
-        out,
-        "  store {elem_llvm_ty} %{dest}.v, ptr %{dest}.dstp"
-    )
-    .unwrap();
+    writeln!(out, "  store {elem_llvm_ty} %{dest}.v, ptr %{dest}.dstp").unwrap();
     writeln!(out, "  %{dest}.next = add i64 %{dest}.i, 1").unwrap();
     writeln!(out, "  store i64 %{dest}.next, ptr %{dest}.ctr").unwrap();
     writeln!(out, "  br label %{dest}.loop").unwrap();
@@ -434,11 +403,7 @@ fn emit_list_push(
         "  %{dest}.tailp = getelementptr {elem_llvm_ty}, ptr %{dest}.newdata, i64 %{dest}.oldlen"
     )
     .unwrap();
-    writeln!(
-        out,
-        "  store {elem_llvm_ty} {elem_val}, ptr %{dest}.tailp"
-    )
-    .unwrap();
+    writeln!(out, "  store {elem_llvm_ty} {elem_val}, ptr %{dest}.tailp").unwrap();
     writeln!(
         out,
         "  %{dest}.s0 = insertvalue {llvm_struct_ty} undef, ptr %{dest}.newdata, 0"
@@ -473,11 +438,7 @@ fn llvm_zero_val(ty: &Ty, llvm_ty_str: &str) -> &'static str {
 
 /// Resolve the LLVM struct type name for a List operand.
 /// Prefers struct_temps lookup; falls back to deriving from elem_type.
-fn list_struct_type_from_elem(
-    elem_type: &Ty,
-    list: &Operand,
-    ctx: &EmitCtx,
-) -> String {
+fn list_struct_type_from_elem(elem_type: &Ty, list: &Operand, ctx: &EmitCtx) -> String {
     if let Operand::Var(name) = list {
         if let Some(stype) = ctx.struct_temps.get(name.as_str()) {
             return ctx.struct_map[stype.as_str()].llvm_name.clone();

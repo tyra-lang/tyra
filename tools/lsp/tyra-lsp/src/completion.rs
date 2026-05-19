@@ -1,13 +1,23 @@
 use tower_lsp::lsp_types::*;
-use tyra_driver::{CompletionKind, Ty, PRELUDE_CONSTRUCTORS, PRELUDE_FUNCTIONS, PRELUDE_TYPES};
+use tyra_driver::{CompletionKind, PRELUDE_CONSTRUCTORS, PRELUDE_FUNCTIONS, PRELUDE_TYPES, Ty};
 
-use crate::keywords::TYRA_KEYWORDS;
 use crate::DocState;
+use crate::keywords::TYRA_KEYWORDS;
 
 /// Builtin method names for the `String` type, sourced from the stdlib.
 static STRING_METHODS: &[&str] = &[
-    "byte_at", "substring", "from_byte", "parse_int", "parse_errno",
-    "starts_with", "ends_with", "to_upper", "to_lower", "is_empty", "trim", "len",
+    "byte_at",
+    "substring",
+    "from_byte",
+    "parse_int",
+    "parse_errno",
+    "starts_with",
+    "ends_with",
+    "to_upper",
+    "to_lower",
+    "is_empty",
+    "trim",
+    "len",
 ];
 
 /// Builtin method names for the `List<T>` type.
@@ -127,8 +137,7 @@ pub(crate) fn lookup_receiver_ty(receiver: &str, state: &DocState) -> Option<Ty>
         .filter(|(span, _)| span.source == state.source_id)
         .find(|(span, _)| {
             let (s, e) = (span.start as usize, span.end as usize);
-            e <= text.len()
-                && std::str::from_utf8(&text[s..e]).ok() == Some(receiver)
+            e <= text.len() && std::str::from_utf8(&text[s..e]).ok() == Some(receiver)
         })
         .map(|(_, ty)| ty.clone())
 }

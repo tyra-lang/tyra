@@ -138,7 +138,10 @@ mod tests {
     #[test]
     fn is_valid_identifier_rejects_keywords() {
         for kw in TYRA_KEYWORDS {
-            assert!(!is_valid_identifier(kw), "keyword `{kw}` should be rejected");
+            assert!(
+                !is_valid_identifier(kw),
+                "keyword `{kw}` should be rejected"
+            );
         }
     }
 
