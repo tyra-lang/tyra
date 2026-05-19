@@ -184,7 +184,7 @@ Tyra is **not** designed for:
 - Embedded systems with extreme resource constraints
 - Replacing Rust where its borrow checker is needed
 
-## Non-goals (v0.1)
+## Non-goals
 
 To keep the language small and predictable:
 

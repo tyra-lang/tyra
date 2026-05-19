@@ -1545,7 +1545,7 @@ tyra test math_test.tyra  # run a single file
 - Reduce learning cost
 - Reduce in-team option proliferation
 
-### 18.2 Build artifacts
+### 18.3 Build artifacts
 
 - The default output is a single native binary
 - Both release and debug builds are supported
