@@ -113,12 +113,16 @@ fn main() {
                 match arg.as_str() {
                     "--release" => release = true,
                     "-o" => {
-                        output_arg = Some(
-                            rest_iter.next().cloned().unwrap_or_else(|| {
-                                eprintln!("error: `-o` requires an output path");
-                                process::exit(1);
-                            }),
-                        );
+                        let val = rest_iter.next().cloned().unwrap_or_else(|| {
+                            eprintln!("error: `-o` requires an output path");
+                            process::exit(1);
+                        });
+                        if val.starts_with("--") {
+                            eprintln!("error: `-o` requires an output path, got flag `{val}`");
+                            eprintln!("usage: tyra build [--release] [<file.tyra>] [-o <out>]");
+                            process::exit(1);
+                        }
+                        output_arg = Some(val);
                     }
                     a if a.starts_with("--") => {
                         eprintln!("error: unknown flag `{a}`");
@@ -1077,7 +1081,7 @@ fn run_test_file_inner(test_file: &Path, filter: Option<&str>) -> (usize, usize)
     // least one failure is recorded regardless of how many TAP lines appeared.
     let stdout = result.stdout.unwrap_or_default();
     let (tap_pass, tap_fail) = parse_tap_output(&stdout);
-    eprintln!("# time: {:.3}s", elapsed.as_secs_f64());
+    println!("# time: {:.3}s", elapsed.as_secs_f64());
     if result.exit_code != Some(0) {
         let accounted = tap_pass + tap_fail;
         let unaccounted = test_fns.len().saturating_sub(accounted);
