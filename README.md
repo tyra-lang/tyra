@@ -39,7 +39,7 @@ The answer is a language that:
 - **Distinguishes value types and reference types** at the language level — so memory semantics are visible, not inferred
 - **Separates traits (replaceable behaviors) from abilities (structural properties)** — a novel design that prevents the trait/derive boilerplate of Rust
 - **Uses `end` blocks, not braces** — so block boundaries are unambiguous in any visual context
-- **Has one official toolchain**: `check`, `run`, `build`, `fmt`, and `test` today; `deploy` and `mod` planned — all in a single CLI
+- **Has one official toolchain**: `check`, `run`, `build`, `fmt`, `test`, `new`, and `mod` — all in a single CLI; no separate package manager to install
 
 ## Design influences
 
@@ -129,7 +129,7 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 
 | Component | Notes |
 | --- | --- |
-| Language specification v0.2 | ✅ Complete |
+| Language specification v0.3 | ✅ Complete |
 | Lexer, Parser, Type checker | ✅ Complete |
 | LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 |
 | Standard library: string, list, fs, io, float, json, assert | ✅ Complete |

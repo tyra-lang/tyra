@@ -50,6 +50,13 @@ tyra new mylib --lib
 A library's entry point uses `export fn` instead of `fn main`, making its
 declarations importable from other packages.
 
+If you don't want a `.gitignore` generated (e.g., the project lives inside an
+existing repo), pass `--vcs none`:
+
+```bash
+tyra new greeter --vcs none
+```
+
 ---
 
 ## Running the project
@@ -155,6 +162,39 @@ To validate that all dependencies are consistent without mutating anything:
 tyra mod sync --check
 ```
 
+`sync` and `sync --check` also accept flags for CI use:
+
+```bash
+tyra mod sync --quiet           # run sync, suppress output; rely on exit code only
+tyra mod sync --json            # emit a JSON report: {"synced":[], "cached":[], "skipped":[]}
+tyra mod sync --check --json    # validate and emit {"ok": true, "issues": []}
+```
+
+To inspect a single dependency's resolved details:
+
+```bash
+tyra mod show greet_lib         # human-readable: source, version, cache path, synced status
+tyra mod show greet_lib --json  # same info as a JSON object
+```
+
+---
+
+## Updating a dependency
+
+To change the source or pinned revision of an existing dependency in-place:
+
+```bash
+# Switch to a different local path
+tyra mod update greet_lib --path ../greet_lib_v2
+
+# Update the pinned git revision
+tyra mod update utils --git https://github.com/example/utils --rev def5678
+```
+
+This replaces the entry in `[dependencies]` while preserving the surrounding
+manifest content and the order of other entries. After updating a git dep, run
+`tyra mod sync` to fetch the new revision.
+
 ---
 
 ## Removing a dependency
@@ -234,16 +274,18 @@ tyra mod init --name my_package
 
 | Command | What it does |
 |---|---|
-| `tyra new <name>` | Create a new project |
-| `tyra run` | Run the project entry point |
-| `tyra build [--release]` | Compile to a native binary |
+| `tyra new <name> [--lib] [--vcs none]` | Create a new project |
+| `tyra run [--release]` | Run the project entry point |
+| `tyra build [--release] [-o <out>]` | Compile to a native binary |
 | `tyra check` | Type-check without compiling |
-| `tyra mod init` | Add a manifest to an existing directory |
+| `tyra mod init [--name <n>]` | Add a manifest to an existing directory |
 | `tyra mod add <name> --path <p>` | Add a path dependency |
 | `tyra mod add <name> --git <url> --rev <sha>` | Add a git dependency |
+| `tyra mod update <name> --path <p>` | Update an existing path dependency |
+| `tyra mod update <name> --git <url> --rev <sha>` | Update an existing git dependency |
 | `tyra mod remove <name>` | Remove a dependency |
-| `tyra mod sync` | Fetch git dependencies |
-| `tyra mod sync --check` | Validate without mutating |
+| `tyra mod show <name> [--json]` | Show details of one dependency |
+| `tyra mod sync [--check] [--json] [--quiet]` | Fetch git deps; `--check` validates only |
 | `tyra mod tree [--json]` | Show the dependency tree |
 | `tyra mod clean` | Remove the local git dep cache |
 

@@ -32,7 +32,7 @@ The convergence of three trends creates an opening for Tyra:
 
 Tyra's bet is that **a language designed from scratch for AI auditability and strict semantics, with operational standards matching Go and surface readability matching Ruby, can capture users dissatisfied with Crystal, V, and parts of the Go and Ruby ecosystems.**
 
-**Current status**: v0.3.0 released (2026-05-19). v0.1.0 shipped the compiler, runtime, and Tier 1 stdlib for macOS arm64 and Linux x86_64. v0.2.0 added `tyra fmt`, `tyra test`, `stdlib/assert`, the `continue` statement, and runtime fixes. v0.3.0 adds the project lifecycle (`Tyra.toml`, `tyra new`, `tyra mod init/add/tree/sync`), three-layer import resolution (ADR 0010), `tyra bench ai-gen`, `tyra test --filter`, and `tyra fmt` line-length wrapping. Remaining Phase 1 deliverables (debugger, CI matrix, broader Tier 2) are in progress; the package manager MVP shipped in v0.3.0.
+**Current status**: v0.3.0 released (2026-05-19). v0.1.0 shipped the compiler, runtime, and Tier 1 stdlib for macOS arm64 and Linux x86_64. v0.2.0 added `tyra fmt`, `tyra test`, `stdlib/assert`, the `continue` statement, and runtime fixes. v0.3.0 delivers the full project lifecycle: `Tyra.toml` manifest, `tyra new [--lib]`, `tyra mod init/add/update/remove/show/tree/sync/clean`, three-layer import resolution with `E0217`/`E0218` (ADR 0010), zero-arg `run`/`build`/`check` inside a project directory, `--release` builds, `tyra test --filter/--list/--format junit`, `tyra fmt --stdin`, and `tyra bench ai-gen`. Remaining Phase 1 deliverables (debugger, CI matrix, broader Tier 2) are in progress.
 
 ---
 
