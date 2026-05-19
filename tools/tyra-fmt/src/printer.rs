@@ -110,6 +110,15 @@ impl<'src> Printer<'src> {
         "  ".repeat(self.indent)
     }
 
+    /// Length of the current (last) line in `self.out` (characters after the
+    /// last `\n`).  Used to decide whether a parameter list needs wrapping.
+    fn current_col(&self) -> usize {
+        match self.out.rfind('\n') {
+            Some(pos) => self.out.len() - pos - 1,
+            None => self.out.len(),
+        }
+    }
+
     fn line_of(&self, offset: u32) -> u32 {
         self.sources.line_col(self.sid, offset).0
     }
@@ -231,33 +240,7 @@ impl<'src> Printer<'src> {
         let indent = self.indent_str();
         let fn_line = self.line_of(f.span.start);
         self.out.push_str(&indent);
-        if f.is_export {
-            self.out.push_str("export ");
-        }
-        if f.is_async {
-            self.out.push_str("async ");
-        }
-        self.out.push_str("fn ");
-        self.out.push_str(&f.name);
-        self.print_type_params(&f.type_params);
-        self.out.push('(');
-        let mut first = true;
-        if f.self_param.is_some() {
-            self.out.push_str("self");
-            first = false;
-        }
-        for param in &f.params {
-            if !first {
-                self.out.push_str(", ");
-            }
-            self.print_param(param);
-            first = false;
-        }
-        self.out.push(')');
-        if let Some(ret) = &f.return_type {
-            self.out.push_str(" -> ");
-            self.print_type_expr(ret);
-        }
+        self.print_fn_header(f);
         self.emit_inline_comment_if_any(fn_line);
         self.out.push('\n');
 
@@ -459,32 +442,76 @@ impl<'src> Printer<'src> {
     // ── Helpers shared between fn, trait, impl ────────────────────────────────
 
     fn print_fn_header(&mut self, f: &FnDef) {
-        if f.is_export {
-            self.out.push_str("export ");
-        }
-        if f.is_async {
-            self.out.push_str("async ");
-        }
-        self.out.push_str("fn ");
-        self.out.push_str(&f.name);
-        self.print_type_params(&f.type_params);
-        self.out.push('(');
-        let mut first = true;
+        // Build prefix up to the opening paren.
+        let mut prefix = String::new();
+        if f.is_export { prefix.push_str("export "); }
+        if f.is_async  { prefix.push_str("async "); }
+        prefix.push_str("fn ");
+        prefix.push_str(&f.name);
+
+        // Collect type-param text (rarely long; reuse existing method via a scratch printer).
+        let tp_text = {
+            let saved = std::mem::take(&mut self.out);
+            self.print_type_params(&f.type_params);
+            let tp = std::mem::replace(&mut self.out, saved);
+            tp
+        };
+        prefix.push_str(&tp_text);
+
+        // Render each parameter to a string.
+        let render_param = |printer: &mut Self, p: &Param| -> String {
+            let saved = std::mem::take(&mut printer.out);
+            printer.print_param(p);
+            std::mem::replace(&mut printer.out, saved)
+        };
+        let mut param_strs: Vec<String> = Vec::new();
         if f.self_param.is_some() {
-            self.out.push_str("self");
-            first = false;
+            param_strs.push("self".to_string());
         }
         for param in &f.params {
-            if !first {
-                self.out.push_str(", ");
-            }
-            self.print_param(param);
-            first = false;
+            param_strs.push(render_param(self, param));
         }
-        self.out.push(')');
-        if let Some(ret) = &f.return_type {
-            self.out.push_str(" -> ");
+
+        // Render return type.
+        let ret_text: Option<String> = f.return_type.as_ref().map(|ret| {
+            let saved = std::mem::take(&mut self.out);
             self.print_type_expr(ret);
+            std::mem::replace(&mut self.out, saved)
+        });
+
+        // Try single-line form first.
+        let inline_params = param_strs.join(", ");
+        let mut single = format!("{prefix}({inline_params})");
+        if let Some(r) = &ret_text {
+            single.push_str(" -> ");
+            single.push_str(r);
+        }
+
+        const LINE_LIMIT: usize = 100;
+        let col_before = self.current_col();
+        if col_before + single.len() <= LINE_LIMIT || param_strs.is_empty() {
+            self.out.push_str(&single);
+        } else {
+            // Multi-line form: one parameter per line, indented by 4 spaces relative
+            // to the current indent level (aligns with the opening paren position).
+            let cont_indent = format!("{}    ", self.indent_str());
+            self.out.push_str(&prefix);
+            self.out.push('(');
+            for (i, ps) in param_strs.iter().enumerate() {
+                self.out.push('\n');
+                self.out.push_str(&cont_indent);
+                self.out.push_str(ps);
+                if i + 1 < param_strs.len() {
+                    self.out.push(',');
+                }
+            }
+            self.out.push('\n');
+            self.out.push_str(&self.indent_str());
+            self.out.push(')');
+            if let Some(r) = &ret_text {
+                self.out.push_str(" -> ");
+                self.out.push_str(r);
+            }
         }
     }
 

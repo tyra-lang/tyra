@@ -202,9 +202,38 @@ fn main() {
             }
         }
         "test" => {
-            let path = args
-                .get(2)
-                .map(|s| PathBuf::from(s))
+            // Parse: tyra test [--filter <pattern>] [path]
+            let mut filter: Option<String> = None;
+            let mut path_arg: Option<&str> = None;
+            let mut rest = args[2..].iter().peekable();
+            while let Some(arg) = rest.next() {
+                match arg.as_str() {
+                    "--filter" => {
+                        filter = Some(
+                            rest.next()
+                                .cloned()
+                                .unwrap_or_else(|| {
+                                    eprintln!("error: --filter requires a pattern");
+                                    process::exit(1);
+                                }),
+                        );
+                    }
+                    other if other.starts_with("--") => {
+                        eprintln!("error: unknown flag `{other}` for `tyra test`");
+                        eprintln!("usage: tyra test [--filter <pattern>] [path]");
+                        process::exit(1);
+                    }
+                    other => {
+                        if path_arg.is_some() {
+                            eprintln!("error: unexpected argument `{other}`");
+                            process::exit(1);
+                        }
+                        path_arg = Some(other);
+                    }
+                }
+            }
+            let path = path_arg
+                .map(PathBuf::from)
                 .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
             let test_files: Vec<PathBuf> = if path.is_file() {
@@ -235,7 +264,7 @@ fn main() {
             let mut total_pass: usize = 0;
             let mut total_fail: usize = 0;
             for test_file in &test_files {
-                let (p, f) = run_test_file(test_file);
+                let (p, f) = run_test_file_filtered(test_file, filter.as_deref());
                 total_pass += p;
                 total_fail += f;
             }
@@ -671,7 +700,11 @@ fn parse_tap_output(output: &str) -> (usize, usize) {
 }
 
 /// Compile and run a single `*_test.tyra` file; return (pass, fail) counts.
-fn run_test_file(test_file: &Path) -> (usize, usize) {
+fn run_test_file_filtered(test_file: &Path, filter: Option<&str>) -> (usize, usize) {
+    run_test_file_inner(test_file, filter)
+}
+
+fn run_test_file_inner(test_file: &Path, filter: Option<&str>) -> (usize, usize) {
     let source = match std::fs::read_to_string(test_file) {
         Ok(s) => s,
         Err(e) => {
@@ -698,12 +731,24 @@ fn run_test_file(test_file: &Path) -> (usize, usize) {
         return (0, 1);
     }
 
-    let test_fns = find_test_fns(&check.ast);
+    let all_test_fns = find_test_fns(&check.ast);
+    let test_fns: Vec<String> = if let Some(pat) = filter {
+        all_test_fns.into_iter().filter(|n| n.contains(pat)).collect()
+    } else {
+        all_test_fns
+    };
     if test_fns.is_empty() {
-        eprintln!(
-            "warning: no test_* functions found in {}",
-            test_file.display()
-        );
+        if filter.is_some() {
+            eprintln!(
+                "warning: no test_* functions match filter in {}",
+                test_file.display()
+            );
+        } else {
+            eprintln!(
+                "warning: no test_* functions found in {}",
+                test_file.display()
+            );
+        }
         return (0, 0);
     }
 
