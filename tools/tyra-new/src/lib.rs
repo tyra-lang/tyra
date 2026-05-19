@@ -33,8 +33,9 @@ impl std::fmt::Display for NewError {
             NewError::Io(e) => write!(f, "I/O error: {e}"),
             NewError::InvalidName(n) => write!(
                 f,
-                "invalid package name `{n}`: must start with a letter and contain only \
-                 letters, digits, and underscores"
+                "invalid package name `{n}`: must start with a lowercase letter and \
+                 contain only lowercase letters, digits, and underscores, \
+                 and must not be a reserved word"
             ),
         }
     }
@@ -119,10 +120,17 @@ const GITIGNORE: &str = "/target\n";
 // Helpers
 // ---------------------------------------------------------------------------
 
+const RESERVED_WORDS: &[&str] = &[
+    "fn", "data", "value", "type", "trait", "impl", "let", "mut", "if", "else", "match",
+    "when", "for", "in", "while", "return", "defer", "async", "await", "spawn", "import",
+    "export", "and", "or", "not", "true", "false", "end",
+];
+
 fn validate_name(name: &str) -> Result<(), NewError> {
     let ok = !name.is_empty()
-        && name.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false)
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        && name.chars().next().map(|c| c.is_ascii_lowercase()).unwrap_or(false)
+        && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        && !RESERVED_WORDS.contains(&name);
     if ok {
         Ok(())
     } else {
@@ -232,5 +240,47 @@ mod tests {
         // Per ADR 0009: root module filename = package name
         assert!(proj.join("src/mylib.tyra").is_file());
         assert!(!proj.join("src/lib.tyra").exists());
+    }
+
+    #[test]
+    fn invalid_name_uppercase() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = create_project("MyApp", ProjectKind::Bin, dir.path());
+        assert!(matches!(result, Err(NewError::InvalidName(_))));
+    }
+
+    #[test]
+    fn invalid_name_mixed_case() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = create_project("myApp", ProjectKind::Bin, dir.path());
+        assert!(matches!(result, Err(NewError::InvalidName(_))));
+    }
+
+    #[test]
+    fn invalid_name_reserved_word_fn() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = create_project("fn", ProjectKind::Bin, dir.path());
+        assert!(matches!(result, Err(NewError::InvalidName(_))));
+    }
+
+    #[test]
+    fn invalid_name_reserved_word_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = create_project("match", ProjectKind::Bin, dir.path());
+        assert!(matches!(result, Err(NewError::InvalidName(_))));
+    }
+
+    #[test]
+    fn invalid_name_reserved_word_import() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = create_project("import", ProjectKind::Bin, dir.path());
+        assert!(matches!(result, Err(NewError::InvalidName(_))));
+    }
+
+    #[test]
+    fn invalid_name_reserved_word_end() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = create_project("end", ProjectKind::Bin, dir.path());
+        assert!(matches!(result, Err(NewError::InvalidName(_))));
     }
 }

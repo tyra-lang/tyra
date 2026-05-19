@@ -240,10 +240,26 @@ fn main() {
         }
         "new" => {
             let rest = &args[2..];
-            let lib_flag = rest.iter().any(|a| a == "--lib");
-            let name_arg = rest.iter().find(|a| !a.starts_with("--"));
-            let name = match name_arg {
-                Some(n) => n.as_str(),
+            let mut lib_flag = false;
+            let mut positional: Vec<&str> = Vec::new();
+            for arg in rest {
+                if arg.as_str() == "--lib" {
+                    lib_flag = true;
+                } else if arg.starts_with("--") {
+                    eprintln!("error: unknown flag `{arg}`");
+                    eprintln!("usage: tyra new [--lib] <name>");
+                    process::exit(1);
+                } else {
+                    positional.push(arg.as_str());
+                }
+            }
+            if positional.len() > 1 {
+                eprintln!("error: unexpected argument `{}`", positional[1]);
+                eprintln!("usage: tyra new [--lib] <name>");
+                process::exit(1);
+            }
+            let name = match positional.first() {
+                Some(n) => *n,
                 None => {
                     eprintln!("error: `tyra new` requires a project name");
                     eprintln!("usage: tyra new [--lib] <name>");
@@ -271,8 +287,9 @@ fn main() {
                 }
                 Err(tyra_new::NewError::InvalidName(n)) => {
                     eprintln!(
-                        "error: invalid package name `{n}`: must start with a letter \
-                         and contain only letters, digits, and underscores"
+                        "error: invalid package name `{n}`: must start with a lowercase \
+                         letter, contain only lowercase letters, digits, and underscores, \
+                         and must not be a reserved word"
                     );
                     process::exit(1);
                 }
