@@ -7,7 +7,6 @@
 #
 # Backed by `__fs_*` intrinsics (see runtime/src/stdlib_fs.rs).
 # Errno codes: 0=Ok, 1=NotFound, 2=PermissionDenied, 3=IoError.
-
 export type FsError =
   | NotFound(path: String)
   | PermissionDenied(path: String)
@@ -19,10 +18,13 @@ export fn read_to_string(_ path: String) -> Result<String, FsError>
   match code
   when 0
     Ok(content)
+
   when 1
     Err(FsError.NotFound(path: path))
+
   when 2
     Err(FsError.PermissionDenied(path: path))
+
   when _
     Err(FsError.IoError(message: __fs_errmsg()))
   end
@@ -34,10 +36,13 @@ export fn write_string(_ path: String, _ contents: String) -> Result<Unit, FsErr
   match code
   when 0
     Ok(())
+
   when 1
     Err(FsError.NotFound(path: path))
+
   when 2
     Err(FsError.PermissionDenied(path: path))
+
   when _
     Err(FsError.IoError(message: __fs_errmsg()))
   end

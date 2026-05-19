@@ -11,7 +11,6 @@
 #
 # Backed by `__json_*` intrinsics (see runtime/src/stdlib_json.rs).
 # Value carries an opaque runtime handle (Int); handle 0 means "absent".
-
 export data Value
   _handle: Int
 end
@@ -24,11 +23,7 @@ export type JsonError =
 export fn parse(_ text: String) -> Result<Value, JsonError>
   let h = __json_parse(text)
   if h == 0
-    Err(JsonError.ParseFailed(
-      message: __json_err_msg(),
-      line: __json_err_line(),
-      col: __json_err_col(),
-    ))
+    Err(JsonError.ParseFailed(message: __json_err_msg(), line: __json_err_line(), col: __json_err_col()))
   else
     Ok(Value(_handle: h))
   end
@@ -38,7 +33,6 @@ impl ValueOps for Value
   fn kind(self) -> String
     __json_kind(self._handle)
   end
-
   fn as_string(self) -> Option<String>
     if __json_is_string(self._handle)
       Some(__json_str(self._handle))
@@ -46,7 +40,6 @@ impl ValueOps for Value
       None
     end
   end
-
   fn as_int(self) -> Option<Int>
     if __json_is_int(self._handle)
       Some(__json_int(self._handle))
@@ -54,7 +47,6 @@ impl ValueOps for Value
       None
     end
   end
-
   fn as_bool(self) -> Option<Bool>
     if __json_is_bool(self._handle)
       Some(__json_bool(self._handle))
@@ -62,7 +54,6 @@ impl ValueOps for Value
       None
     end
   end
-
   fn get(self, key: String) -> Option<Value>
     let child = __json_get(self._handle, key)
     if child == 0
@@ -71,7 +62,6 @@ impl ValueOps for Value
       Some(Value(_handle: child))
     end
   end
-
   fn at(self, _ index: Int) -> Option<Value>
     let child = __json_at(self._handle, index)
     if child == 0

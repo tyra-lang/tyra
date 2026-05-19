@@ -27,7 +27,6 @@
 #   Leading / trailing whitespace is rejected — trim first if needed.
 # - split / split_whitespace are intentionally deferred to a later phase
 #   (requires intrinsic → List<String> construction plumbing); §22.
-
 export fn len(_ s: String) -> Int
   __string_len(s)
 end

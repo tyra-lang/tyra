@@ -2,7 +2,6 @@
 # expected: error[E0302]: `?` requires Option or Result, found Int
 # Exercises: type checker — `?` applied to a value that is not Option or Result.
 # SPEC_REF: §12.2 — error propagation with `?`
-
 fn try_one() -> Option<Int>
   let x: Int = 1
   let y = x?

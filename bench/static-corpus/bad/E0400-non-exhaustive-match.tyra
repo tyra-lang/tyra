@@ -3,10 +3,9 @@
 # Exercises: type checker — match on Option<Int> missing the None arm.
 # note: compiler currently emits E0400 twice for this pattern (known duplicate); check.sh uses grep -q so only the first occurrence is required.
 # SPEC_REF: §11 — match expressions
-
 fn unwrap_only_some(_ v: Option<Int>) -> Int
   match v
-  when Some(n)
+  when Some(n: n)
     n
   end
 end

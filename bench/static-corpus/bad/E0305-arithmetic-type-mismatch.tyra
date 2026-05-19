@@ -2,7 +2,8 @@
 # expected: error[E0305]: arithmetic operator requires matching Int or Float operands
 # Exercises: type checker — arithmetic operator applied to incompatible types.
 # SPEC_REF: §10.1 — arithmetic expressions
-
 let x: Int = 1
+
 let y: String = "hello"
+
 let z = x + y

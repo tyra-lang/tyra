@@ -15,7 +15,6 @@
 #   float.to_int(x)             -> Int           (truncate toward zero)
 #
 # Backed by `__float_*` intrinsics (see runtime/src/stdlib_float.rs).
-
 export fn eq(_ a: Float, _ b: Float) -> Bool
   __float_eq(a, b)
 end

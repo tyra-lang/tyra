@@ -20,7 +20,6 @@
 #   Boehm GC never reclaims it. Fine for CLI / one-shot programs;
 #   long-lived processes that poll stdin in a loop leak heap memory
 #   unboundedly until GC_malloc integration lands.
-
 export fn read_line() -> Option<String>
   let line = __io_read_line()
   if __io_eof()

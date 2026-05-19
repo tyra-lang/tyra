@@ -2,5 +2,4 @@
 # expected: error[E0200]: undefined name `nonexistent_name`
 # Exercises: resolve — reference to a name that was never defined.
 # SPEC_REF: §7 — name resolution
-
 let x = nonexistent_name

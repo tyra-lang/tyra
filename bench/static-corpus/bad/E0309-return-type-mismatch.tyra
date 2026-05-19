@@ -2,7 +2,6 @@
 # expected: error[E0309]: return type mismatch: expected Int, found String
 # Exercises: type checker — function body type does not match declared return type.
 # SPEC_REF: §8 — function definitions
-
 fn greet() -> Int
   "hello"
 end

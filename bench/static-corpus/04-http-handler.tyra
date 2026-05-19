@@ -2,7 +2,6 @@
 # HTTP server with multiple route handlers.
 # Validates: import, data types, impl methods, function identifiers as
 #            values (first-class fn refs for handler registration)
-
 # SPEC_REF: §21.3 — HTTP server entry point pattern
 # SPEC_REF: §17.3.3 — http.server frozen in M11 phase 2
 #
@@ -14,7 +13,6 @@
 #   type-checks and compiles.
 # - `async fn` + `.await?` HTTP semantics are exercised by example 08
 #   (http.client) — no coverage gap from this file's synchronous shape.
-
 import http.server
 
 fn health_handler(_ req: Request) -> Response

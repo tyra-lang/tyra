@@ -2,6 +2,6 @@
 # expected: error[E0206]: cannot assign to `x` because it is not declared `mut`
 # Exercises: type checker — assignment to an immutable `let` binding.
 # SPEC_REF: §7.1 — let / mut bindings
-
 let x = 1
+
 x = 2

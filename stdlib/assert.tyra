@@ -10,7 +10,6 @@
 #     assert.eq_str("hi", "hi")?
 #     Ok(())
 #   end
-
 export fn eq(actual: Int, expected: Int) -> Result<Unit, String>
   if actual == expected
     Ok(())
@@ -53,18 +52,20 @@ end
 
 export fn is_ok(result: Result<Unit, String>) -> Result<Unit, String>
   match result
-  when Ok(_)
+  when Ok(_: _)
     Ok(())
-  when Err(msg)
+
+  when Err(msg: msg)
     Err("expected Ok, got Err: #{msg}")
   end
 end
 
 export fn is_err(result: Result<Unit, String>) -> Result<Unit, String>
   match result
-  when Ok(_)
+  when Ok(_: _)
     Err("expected Err, got Ok")
-  when Err(_)
+
+  when Err(_: _)
     Ok(())
   end
 end

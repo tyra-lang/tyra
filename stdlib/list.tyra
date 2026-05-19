@@ -21,7 +21,6 @@
 #   are intentionally out of scope for v0.1 (§22).
 # - `push` is O(n) because it copies the underlying data; the semantics
 #   stay immutable even once a true persistent structure is added later.
-
 export fn len(_ xs: List<Int>) -> Int
   xs.len()
 end

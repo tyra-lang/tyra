@@ -52,7 +52,7 @@ fn main() {
     match args[1].as_str() {
         "--version" | "-V" => {
             println!("tyra {}", env!("CARGO_PKG_VERSION"));
-            println!("implementing language spec 0.1");
+            println!("implementing language spec 0.2");
         }
         "--help" | "-h" => {
             print_usage();
@@ -246,7 +246,7 @@ fn main() {
 }
 
 fn print_usage() {
-    eprintln!("tyra 0.1.0 — the Tyra language compiler");
+    eprintln!("tyra {} — the Tyra language compiler", env!("CARGO_PKG_VERSION"));
     eprintln!();
     eprintln!("usage: tyra <command> [options]");
     eprintln!();

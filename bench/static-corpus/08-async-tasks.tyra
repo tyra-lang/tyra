@@ -2,7 +2,6 @@
 # Concurrent task spawning and coordination with join_all.
 # Validates: spawn, Task<T>, .await?, core.tasks.join_all,
 #            multi-line list literal, for loop, stdlib http.client
-
 # SPEC_REF: §14.4 — spawn accepts function calls only, returns Task<T>
 # SPEC_REF: §14.3 — .await? parses as (expr.await)?
 # SPEC_REF: §17.1 — core.tasks.join_all and core.tasks.select
@@ -17,8 +16,8 @@
 #
 # Requires network access to reach the fetched URLs. Running with
 # `TYRA_HTTP_OFFLINE=1` skips the actual HTTP calls (future work).
-
 import http.client
+
 import core.tasks
 
 async fn fetch(_ url: String) -> Result<String, FetchError>
@@ -31,10 +30,8 @@ async fn fetch_all(_ urls: List<String>) -> Result<List<String>, FetchError>
   let task_a = spawn fetch(urls[0])
   let task_b = spawn fetch(urls[1])
   let task_c = spawn fetch(urls[2])
-
   # join_all waits for all tasks to complete
   let results = tasks.join_all([task_a, task_b, task_c]).await
-
   # Each result is Result<String, FetchError>; propagate errors with ?
   let a = results[0]?
   let b = results[1]?
@@ -48,12 +45,7 @@ async fn main() -> Result<Unit, FetchError>
   # used here so the example runs offline-adjacent (single DNS / TLS
   # handshake via the pooled agent) and still exercises the parallel
   # spawn + join_all path.
-  let urls = [
-    "https://example.com/",
-    "https://example.com/",
-    "https://example.com/",
-  ]
-
+  let urls = ["https://example.com/", "https://example.com/", "https://example.com/"]
   let results = fetch_all(urls).await?
   for item in results
     print(item)

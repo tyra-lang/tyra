@@ -20,7 +20,6 @@
 # - One response is leaked per successful request (opaque handle). Safe
 #   for CLI / one-shot tools; avoid tight polling loops in long-running
 #   programs until GC_malloc integration lands.
-
 export data Response
   status: Int
   body: String
@@ -42,13 +41,11 @@ export fn get(_ url: String) -> Result<Response, FetchError>
     match code
     when 1
       Err(FetchError.Timeout(message: msg))
+
     when _
       Err(FetchError.NetworkError(message: msg))
     end
   else
-    Ok(Response(
-      status: __http_status(h),
-      body: __http_body(h),
-    ))
+    Ok(Response(status: __http_status(h), body: __http_body(h)))
   end
 end

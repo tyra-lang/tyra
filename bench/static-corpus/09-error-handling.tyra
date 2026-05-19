@@ -2,13 +2,11 @@
 # Error handling patterns: defer, multiple error types, Into chain, panic,
 # compound boolean conditions with and/or/not.
 # Validates: defer LIFO, ? with Into, panic() as function, and/or keywords
-
 # SPEC_REF: §12.3 — defer executes LIFO on scope exit
 # SPEC_REF: §12.2 — ? requires E: Into<F>; Into<T> for T auto-provided
 # SPEC_REF: §12.1 — panic(_ message: String) -> Never; function, not macro
 # SPEC_REF: §10.1 — and, or, not keywords; both operands must be Bool
 # SPEC_REF: §17.3.1 — fs.read_to_string frozen in M10 phase 1
-
 import fs
 
 type ConfigError =
@@ -30,18 +28,16 @@ end
 # We map the error manually since we don't control FsError.
 fn read_config(_ path: String) -> Result<String, ConfigError>
   match fs.read_to_string(path)
-  when Ok(content)
+  when Ok(content: content)
     Ok(content)
-  when Err(_)
+
+  when Err(_: _)
     Err(ConfigError.FileNotFound(path: path))
   end
 end
 
 fn parse_port(_ config: String) -> Result<Int, ConfigError>
-  let port = parse::<Int>(config).ok_or(
-    ConfigError.ParseError(message: "port must be an integer")
-  )?
-
+  let port = parse::<Int>(config).ok_or(ConfigError.ParseError(message: "port must be an integer"))?
   # and/or keywords allow compound conditions (§10.1)
   if port < 1 or port > 65535
     Err(ConfigError.InvalidValue(key: "port", value: "#{port}"))

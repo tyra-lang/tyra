@@ -33,7 +33,6 @@
 #   unreachable in v0.1: the accept loop only exits on bind failure.
 #   Pattern-match `Err(msg)` for bind diagnostics; the `Ok(_)` case is
 #   there for future shutdown support.
-
 export data Request
   method: String
   path: String
@@ -54,18 +53,12 @@ export fn new() -> AppServer
 end
 
 impl AppServerOps for AppServer
-  # handler is typed String (= ptr in codegen). Tyra function identifiers
-  # resolve to their LLVM symbol, so `app.get("/path", my_handler)` passes
-  # the function pointer. The runtime casts it to
-  # `fn(*const Request) -> *const Response` and invokes it.
   fn get(self, _ path: String, _ handler: String) -> Unit
     __http_server_route(self._handle, "GET", path, handler)
   end
-
   fn post(self, _ path: String, _ handler: String) -> Unit
     __http_server_route(self._handle, "POST", path, handler)
   end
-
   fn listen(self, _ port: Int) -> Result<Unit, String>
     let code = __http_server_listen(self._handle, port)
     if code == 0
