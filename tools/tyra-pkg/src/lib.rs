@@ -266,7 +266,9 @@ fn print_dep(
                     "{prefix}{connector}{name} {} (path: {path_str})\n",
                     m.package.version
                 ));
-                visited.insert(canonical);
+                // Push onto the DFS stack; pop after children so shared deps
+                // (diamond DAG) are not incorrectly flagged as cycles.
+                visited.insert(canonical.clone());
                 let mut sub_deps: Vec<(&String, &Dependency)> =
                     m.dependencies.iter().collect();
                 sub_deps.sort_by_key(|(k, _)| k.as_str());
@@ -282,6 +284,7 @@ fn print_dep(
                         visited,
                     );
                 }
+                visited.remove(&canonical);
             }
             Err(e) => {
                 out.push_str(&format!(
@@ -501,6 +504,51 @@ mod tests {
 
         let tree = run_tree(dir_a.path()).unwrap();
         assert!(tree.contains("[cycle]"));
+    }
+
+    #[test]
+    fn tree_shared_dep_diamond_not_flagged_as_cycle() {
+        // app -> a -> common
+        // app -> b -> common
+        // `common` is shared (diamond DAG), not a cycle.
+        let dir_app = tempfile::tempdir().unwrap();
+        let dir_a = tempfile::tempdir().unwrap();
+        let dir_b = tempfile::tempdir().unwrap();
+        let dir_common = tempfile::tempdir().unwrap();
+
+        make_manifest(dir_common.path(), "common");
+        fs::write(
+            dir_a.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"pkg_a\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\ncommon = {{ path = \"{}\" }}\n",
+                dir_common.path().display()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir_b.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"pkg_b\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\ncommon = {{ path = \"{}\" }}\n",
+                dir_common.path().display()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir_app.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"app\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\npkg_a = {{ path = \"{}\" }}\npkg_b = {{ path = \"{}\" }}\n",
+                dir_a.path().display(),
+                dir_b.path().display()
+            ),
+        )
+        .unwrap();
+
+        let tree = run_tree(dir_app.path()).unwrap();
+        assert!(!tree.contains("[cycle]"), "diamond DAG must not be flagged as cycle:\n{tree}");
+        assert_eq!(tree.matches("common").count(), 2, "common should appear twice:\n{tree}");
     }
 
     // --- insert_dependency_line (unit) ---

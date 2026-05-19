@@ -313,7 +313,21 @@ fn main() {
                     while i < rest.len() {
                         if rest[i] == "--name" {
                             i += 1;
-                            name_arg = rest.get(i).map(|s| s.as_str());
+                            match rest.get(i) {
+                                Some(v) if !v.starts_with("--") => {
+                                    name_arg = Some(v.as_str());
+                                }
+                                Some(v) => {
+                                    eprintln!("error: `--name` requires a value, got `{v}`");
+                                    eprintln!("usage: tyra mod init [--name <name>]");
+                                    process::exit(1);
+                                }
+                                None => {
+                                    eprintln!("error: `--name` requires a value");
+                                    eprintln!("usage: tyra mod init [--name <name>]");
+                                    process::exit(1);
+                                }
+                            }
                         } else if rest[i].starts_with("--") {
                             eprintln!("error: unknown flag `{}`", rest[i]);
                             eprintln!("usage: tyra mod init [--name <name>]");
