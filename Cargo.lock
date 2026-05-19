@@ -1028,6 +1028,7 @@ dependencies = [
  "tyra-diagnostics",
  "tyra-driver",
  "tyra-fmt",
+ "tyra-new",
  "tyra-runtime",
 ]
 
@@ -1107,6 +1108,13 @@ dependencies = [
  "tyra-parser",
  "tyra-resolve",
  "tyra-types",
+]
+
+[[package]]
+name = "tyra-new"
+version = "0.2.0"
+dependencies = [
+ "tempfile",
 ]
 
 [[package]]

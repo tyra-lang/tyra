@@ -7,6 +7,7 @@
 //   tyra emit-ir <file.tyra>             Emit LLVM IR to stdout
 //   tyra fmt [--check] <file.tyra|dir>   Format source (--check: exit 1 if changed)
 //   tyra test [path]                     Run *_test.tyra files (default: .)
+//   tyra new [--lib] <name>              Scaffold a new project
 //   tyra --version                       Show version info
 //
 // spec reference: §18 (toolchain)
@@ -237,6 +238,50 @@ fn main() {
                 process::exit(1);
             }
         }
+        "new" => {
+            let rest = &args[2..];
+            let lib_flag = rest.iter().any(|a| a == "--lib");
+            let name_arg = rest.iter().find(|a| !a.starts_with("--"));
+            let name = match name_arg {
+                Some(n) => n.as_str(),
+                None => {
+                    eprintln!("error: `tyra new` requires a project name");
+                    eprintln!("usage: tyra new [--lib] <name>");
+                    process::exit(1);
+                }
+            };
+            let kind = if lib_flag {
+                tyra_new::ProjectKind::Lib
+            } else {
+                tyra_new::ProjectKind::Bin
+            };
+            let dest = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            match tyra_new::create_project(name, kind, &dest) {
+                Ok(()) => {
+                    let type_label = if lib_flag { "lib" } else { "bin" };
+                    println!("created {type_label} project `{name}`");
+                    println!("  {name}/Tyra.toml");
+                    println!("  {name}/src/{name}.tyra");
+                    println!("  {name}/.gitignore");
+                    println!("  {name}/README.md");
+                }
+                Err(tyra_new::NewError::AlreadyExists(p)) => {
+                    eprintln!("error: directory already exists: {}", p.display());
+                    process::exit(1);
+                }
+                Err(tyra_new::NewError::InvalidName(n)) => {
+                    eprintln!(
+                        "error: invalid package name `{n}`: must start with a letter \
+                         and contain only letters, digits, and underscores"
+                    );
+                    process::exit(1);
+                }
+                Err(tyra_new::NewError::Io(e)) => {
+                    eprintln!("error: {e}");
+                    process::exit(1);
+                }
+            }
+        }
         cmd => {
             eprintln!("error: unknown command `{cmd}`");
             print_usage();
@@ -257,6 +302,7 @@ fn print_usage() {
     eprintln!("  emit-ir <file.tyra>              emit LLVM IR to stdout");
     eprintln!("  fmt [--check] <file.tyra|dir>    format source in-place; accepts a directory");
     eprintln!("  test [path]                      run *_test.tyra files (default: current dir)");
+    eprintln!("  new [--lib] <name>               scaffold a new project in the current directory");
     eprintln!("  --version                        show version info");
     eprintln!("  --help                           show this help");
 }
