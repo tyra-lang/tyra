@@ -45,6 +45,10 @@ pub enum PkgError {
     SyncFailed { dep: String, message: String },
     /// Dependency root is a bin package (ADR 0009 E_DEP_NOT_IMPORTABLE).
     BinDepNotImportable(String),
+    /// Dependency key does not match the package name declared in `Tyra.toml`.
+    NameMismatch { key: String, package_name: String },
+    /// Root module `src/<name>.tyra` is absent (ADR 0009 requires it).
+    MissingRootModule(String),
 }
 
 impl std::fmt::Display for PkgError {
@@ -79,6 +83,15 @@ impl std::fmt::Display for PkgError {
                 f,
                 "dependency `{dep}` is a bin package and cannot be imported \
                  (ADR 0009 E_DEP_NOT_IMPORTABLE)"
+            ),
+            PkgError::NameMismatch { key, package_name } => write!(
+                f,
+                "dependency key `{key}` does not match the package name `{package_name}`; \
+                 the dependency key must equal the package name"
+            ),
+            PkgError::MissingRootModule(dep) => write!(
+                f,
+                "dependency `{dep}` has no root module `src/{dep}.tyra` (ADR 0009 requires it)"
             ),
         }
     }
@@ -145,6 +158,20 @@ pub fn run_add(project_root: &Path, dep_name: &str, source: DepSource) -> Result
     if manifest.dependencies.contains_key(dep_name) {
         return Err(PkgError::DuplicateDep(dep_name.to_string()));
     }
+    // For path deps: validate that the dep key matches the package name
+    // declared in the dependency's own Tyra.toml (if accessible).
+    if let DepSource::Path(rel) = &source {
+        let dep_root = project_root.join(rel);
+        if let Ok(dep_manifest) = load_manifest(&dep_root) {
+            if dep_manifest.package.name != dep_name {
+                return Err(PkgError::NameMismatch {
+                    key: dep_name.to_string(),
+                    package_name: dep_manifest.package.name.clone(),
+                });
+            }
+        }
+    }
+
     let new_line = match &source {
         DepSource::Path(p) => format!("{dep_name} = {{ path = \"{p}\" }}"),
         DepSource::Git { url, rev } => {
@@ -289,11 +316,46 @@ enum SyncStatus {
     Cached,
 }
 
+/// Validate ADR 0009/0010 invariants for an already-populated dependency root:
+/// - `Tyra.toml` must be loadable
+/// - `package.name` must equal `dep_name` (no aliasing)
+/// - root module must not be a bin package
+///
+/// Used by both the fresh-clone path and the cache-hit path so that stale or
+/// manually-populated caches cannot bypass the checks.
+pub(crate) fn validate_dep_root(dep_name: &str, dep_root: &Path) -> Result<(), PkgError> {
+    let dep_manifest = load_manifest(dep_root).map_err(|e| PkgError::SyncFailed {
+        dep: dep_name.to_string(),
+        message: format!("invalid Tyra.toml in dependency: {e}"),
+    })?;
+    if dep_manifest.package.name != dep_name {
+        return Err(PkgError::NameMismatch {
+            key: dep_name.to_string(),
+            package_name: dep_manifest.package.name.clone(),
+        });
+    }
+    // ADR 0009: root module src/<name>.tyra must exist; its absence means the
+    // dependency is unusable (import would fail with E0200) and is caught here.
+    let root_src = dep_root
+        .join("src")
+        .join(format!("{}.tyra", dep_manifest.package.name));
+    if !root_src.is_file() {
+        return Err(PkgError::MissingRootModule(dep_name.to_string()));
+    }
+    let src = std::fs::read_to_string(&root_src).unwrap_or_default();
+    if tyra_manifest::is_bin_source(&src) {
+        return Err(PkgError::BinDepNotImportable(dep_name.to_string()));
+    }
+    Ok(())
+}
+
 fn sync_git_dep(dep_name: &str, url: &str, rev: &str) -> Result<SyncStatus, PkgError> {
     let cache_dir = cache_dir_for(dep_name, url, rev);
 
-    // Already in cache and has a valid manifest?
+    // Already in cache? Re-validate ADR 0009/0010 invariants even for cached
+    // entries — stale or manually-populated caches must still satisfy them.
     if cache_dir.join("Tyra.toml").is_file() {
+        validate_dep_root(dep_name, &cache_dir)?;
         return Ok(SyncStatus::Cached);
     }
 
@@ -341,26 +403,11 @@ fn sync_git_dep(dep_name: &str, url: &str, rev: &str) -> Result<SyncStatus, PkgE
         });
     }
 
-    // Validate manifest before committing to cache.
-    let dep_manifest = load_manifest(&tmp_dir).map_err(|e| {
+    // Validate ADR 0009/0010 invariants before committing to cache.
+    validate_dep_root(dep_name, &tmp_dir).map_err(|e| {
         let _ = std::fs::remove_dir_all(&tmp_dir);
-        PkgError::SyncFailed {
-            dep: dep_name.to_string(),
-            message: format!("invalid Tyra.toml in cloned dependency: {e}"),
-        }
+        e
     })?;
-
-    // Reject bin packages (ADR 0009 E_DEP_NOT_IMPORTABLE).
-    let root_src = tmp_dir
-        .join("src")
-        .join(format!("{}.tyra", dep_manifest.package.name));
-    if root_src.is_file() {
-        let src = std::fs::read_to_string(&root_src).unwrap_or_default();
-        if tyra_manifest::is_bin_source(&src) {
-            let _ = std::fs::remove_dir_all(&tmp_dir);
-            return Err(PkgError::BinDepNotImportable(dep_name.to_string()));
-        }
-    }
 
     // Atomic rename into the cache.
     std::fs::rename(&tmp_dir, &cache_dir).map_err(|e| {
@@ -620,6 +667,41 @@ mod tests {
         assert!(matches!(result, Err(PkgError::InvalidName(_))));
     }
 
+    #[test]
+    fn add_path_dep_name_mismatch_is_error() {
+        let root = tempfile::tempdir().unwrap();
+        let lib_dir = tempfile::tempdir().unwrap();
+        // Dep key "utils" but the dep's package.name is "mylib"
+        make_manifest(lib_dir.path(), "mylib");
+        make_manifest(root.path(), "myapp");
+        let result = run_add(
+            root.path(),
+            "utils",
+            DepSource::Path(lib_dir.path().to_str().unwrap().to_string()),
+        );
+        assert!(
+            matches!(result, Err(PkgError::NameMismatch { .. })),
+            "expected NameMismatch, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn add_path_dep_name_match_succeeds() {
+        let root = tempfile::tempdir().unwrap();
+        let lib_dir = tempfile::tempdir().unwrap();
+        // Dep key matches package.name — should succeed.
+        make_manifest(lib_dir.path(), "mylib");
+        make_manifest(root.path(), "myapp");
+        run_add(
+            root.path(),
+            "mylib",
+            DepSource::Path(lib_dir.path().to_str().unwrap().to_string()),
+        )
+        .unwrap();
+        let content = std::fs::read_to_string(root.path().join("Tyra.toml")).unwrap();
+        assert!(content.contains("mylib = { path ="));
+    }
+
     // --- run_tree ---
 
     #[test]
@@ -738,6 +820,59 @@ mod tests {
         let tree = run_tree(dir_app.path()).unwrap();
         assert!(!tree.contains("[cycle]"), "diamond DAG must not be flagged as cycle:\n{tree}");
         assert_eq!(tree.matches("common").count(), 2, "common should appear twice:\n{tree}");
+    }
+
+    // --- validate_dep_root (cache-hit path regression tests) ---
+
+    fn make_src_file(dir: &Path, name: &str, content: &str) {
+        let src = dir.join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join(format!("{name}.tyra")), content).unwrap();
+    }
+
+    #[test]
+    fn cached_dep_valid_passes() {
+        let dir = tempfile::tempdir().unwrap();
+        make_manifest(dir.path(), "mylib");
+        make_src_file(dir.path(), "mylib", "export fn greet(name: String) -> String\n  name\nend\n");
+        validate_dep_root("mylib", dir.path()).unwrap();
+    }
+
+    #[test]
+    fn cached_dep_name_mismatch_is_error() {
+        let dir = tempfile::tempdir().unwrap();
+        // package.name = "mylib" but dep key = "utils"
+        make_manifest(dir.path(), "mylib");
+        let result = validate_dep_root("utils", dir.path());
+        assert!(
+            matches!(result, Err(PkgError::NameMismatch { .. })),
+            "expected NameMismatch, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn cached_dep_bin_package_is_error() {
+        let dir = tempfile::tempdir().unwrap();
+        make_manifest(dir.path(), "myapp");
+        // Root source contains `fn main` — bin package.
+        make_src_file(dir.path(), "myapp", "fn main() -> Unit\n  print(\"hi\")\nend\n");
+        let result = validate_dep_root("myapp", dir.path());
+        assert!(
+            matches!(result, Err(PkgError::BinDepNotImportable(_))),
+            "expected BinDepNotImportable, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn cached_dep_no_src_file_is_error() {
+        // ADR 0009: root module src/<name>.tyra must exist; absence is an error.
+        let dir = tempfile::tempdir().unwrap();
+        make_manifest(dir.path(), "mylib");
+        let result = validate_dep_root("mylib", dir.path());
+        assert!(
+            matches!(result, Err(PkgError::MissingRootModule(_))),
+            "expected MissingRootModule, got: {result:?}"
+        );
     }
 
     // --- insert_dependency_line (unit) ---

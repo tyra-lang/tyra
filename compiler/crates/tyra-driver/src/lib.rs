@@ -305,26 +305,33 @@ fn resolve_imports(
             continue;
         }
 
-        let mut bin_errors: Vec<String> = Vec::new();
+        // dep_errors: (dep_name, kind) where kind is "bin" or "name-mismatch".
+        let mut dep_errors: Vec<(String, &'static str)> = Vec::new();
         let candidates = collect_import_candidates(
             &imp.path,
             &local_base,
             manifest.as_ref(),
             project_root.as_deref(),
             main_dir,
-            &mut bin_errors,
+            &mut dep_errors,
         );
-        for dep in &bin_errors {
-            report.add(
-                tyra_diagnostics::Diagnostic::error(format!(
+        for (dep, kind) in &dep_errors {
+            let msg = if *kind == "bin" {
+                format!(
                     "cannot import `{}`: dependency `{dep}` is a bin package \
                      and cannot be imported",
                     imp.path.join(".")
-                ))
-                .with_code("E0218"),
-            );
+                )
+            } else {
+                format!(
+                    "cannot import `{}`: cached dependency `{dep}` has a name mismatch \
+                     (package.name does not equal the dependency key); run `tyra mod sync`",
+                    imp.path.join(".")
+                )
+            };
+            report.add(tyra_diagnostics::Diagnostic::error(msg).with_code("E0218"));
         }
-        if !bin_errors.is_empty() {
+        if !dep_errors.is_empty() {
             continue;
         }
 
@@ -443,16 +450,16 @@ pub fn resolve_import_file(main_dir: &Path, path: &[String]) -> Option<std::path
             if src.is_dir() { src } else { r.to_path_buf() }
         })
         .unwrap_or_else(|| main_dir.to_path_buf());
-    let mut bin_errors: Vec<String> = Vec::new();
+    let mut dep_errors: Vec<(String, &'static str)> = Vec::new();
     let candidates = collect_import_candidates(
         path,
         &local_base,
         manifest.as_ref(),
         project_root.as_deref(),
         main_dir,
-        &mut bin_errors,
+        &mut dep_errors,
     );
-    if !bin_errors.is_empty() {
+    if !dep_errors.is_empty() {
         return None;
     }
     match candidates.len() {
@@ -464,16 +471,17 @@ pub fn resolve_import_file(main_dir: &Path, path: &[String]) -> Option<std::path
 /// Collect all file-system candidates for an import path across three layers
 /// (ADR 0010 uniqueness rule).
 ///
-/// `bin_path_dep_errors` is populated with dependency names whose root module
-/// is a bin package (ADR 0009 E_DEP_NOT_IMPORTABLE). Callers must emit E0218
-/// diagnostics for each such name and skip the import.
+/// `dep_errors` receives `(dep_name, kind)` pairs for dependencies that must be
+/// rejected at compile time. `kind` is `"bin"` (ADR 0009 E_DEP_NOT_IMPORTABLE)
+/// or `"name-mismatch"` (ADR 0010 no-alias rule). Callers emit E0218 for each
+/// entry and skip the import. Both path deps and cached git deps are checked.
 fn collect_import_candidates(
     path_segs: &[String],
     local_base: &Path,
     manifest: Option<&tyra_manifest::Manifest>,
     project_root: Option<&Path>,
     main_dir: &Path,
-    bin_path_dep_errors: &mut Vec<String>,
+    dep_errors: &mut Vec<(String, &'static str)>,
 ) -> Vec<std::path::PathBuf> {
     let mut candidates = Vec::new();
 
@@ -501,13 +509,23 @@ fn collect_import_candidates(
                     let dep_root = root.join(rel);
                     // Reject bin packages at compile time (ADR 0009 E_DEP_NOT_IMPORTABLE).
                     if is_bin_dep(&dep_root) {
-                        bin_path_dep_errors.push(dep_name.clone());
+                        dep_errors.push((dep_name.clone(), "bin"));
                         continue;
                     }
                     dep_root.join("src")
                 }
                 (None, Some(url), Some(rev)) => {
-                    git_dep_cache_root(dep_name, url, rev).join("src")
+                    let dep_root = git_dep_cache_root(dep_name, url, rev);
+                    // Compile-time guards for cached git deps (stale/manual caches):
+                    // check both the no-alias rule (ADR 0010) and bin rejection (ADR 0009).
+                    match check_git_dep_root(dep_name, &dep_root) {
+                        Err(kind) => {
+                            dep_errors.push((dep_name.clone(), kind));
+                            continue;
+                        }
+                        Ok(()) => {}
+                    }
+                    dep_root.join("src")
                 }
                 _ => continue,
             };
@@ -550,6 +568,33 @@ fn is_bin_dep(dep_root: &Path) -> bool {
         return false;
     };
     tyra_manifest::is_bin_source(&src)
+}
+
+/// Compile-time validation for a cached git dependency root.
+///
+/// Returns `Err` when:
+/// - the manifest's `package.name` does not match `dep_name` (no-alias rule, ADR 0010), or
+/// - the root module is a bin package (ADR 0009 E_DEP_NOT_IMPORTABLE).
+///
+/// Returns `Ok(())` when the cache entry is absent (not yet synced — caller
+/// falls through to produce E0200) or when the manifest cannot be loaded.
+fn check_git_dep_root(dep_name: &str, dep_root: &std::path::Path) -> Result<(), &'static str> {
+    let Ok(manifest) = tyra_manifest::load_manifest(dep_root) else {
+        return Ok(());
+    };
+    if manifest.package.name != dep_name {
+        return Err("name-mismatch");
+    }
+    let root_src = dep_root
+        .join("src")
+        .join(format!("{}.tyra", manifest.package.name));
+    let Ok(src) = std::fs::read_to_string(&root_src) else {
+        return Ok(());
+    };
+    if tyra_manifest::is_bin_source(&src) {
+        return Err("bin");
+    }
+    Ok(())
 }
 
 /// Canonical cache root for a git dependency (mirrors `tyra_pkg::cache_dir_for`).
