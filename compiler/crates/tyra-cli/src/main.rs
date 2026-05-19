@@ -13,6 +13,7 @@
 //   tyra mod add <name> --git <url> --rev <rev>  Add a git dependency
 //   tyra mod tree                        Show the dependency tree
 //   tyra mod sync                        Clone git deps into ~/.tyra/cache/git/
+//   tyra bench ai-gen [options]          Run the AI-generation benchmark
 //   tyra --version                       Show version info
 //
 // spec reference: §18 (toolchain)
@@ -482,6 +483,48 @@ fn main() {
                 }
             }
         }
+        "bench" => {
+            // tyra bench ai-gen [<harness-args>...]
+            // All remaining args are forwarded verbatim to bench/ai-gen/harness.py.
+            let sub = args.get(2).map(String::as_str);
+            if sub != Some("ai-gen") {
+                if sub.is_none() {
+                    eprintln!("usage: tyra bench ai-gen [--languages <list>] [--generators <list>]");
+                    eprintln!("       [--prompts <glob>] [--seed N | --seeds N,M,...] [--dry-run]");
+                    eprintln!("       [--inject-tyra-spec] [--results-dir <path>]");
+                } else {
+                    eprintln!("error: unknown bench subcommand `{}`", args[2]);
+                    eprintln!("usage: tyra bench ai-gen [options]");
+                }
+                process::exit(1);
+            }
+
+            // Locate bench/ai-gen/harness.py by walking up from the executable's
+            // directory (installed binary) or from cwd (dev/source checkout).
+            let harness = find_bench_harness();
+            let harness = match harness {
+                Some(p) => p,
+                None => {
+                    eprintln!(
+                        "error: could not find bench/ai-gen/harness.py; \
+                         run from the tyra repository root or install the full toolchain"
+                    );
+                    process::exit(1);
+                }
+            };
+
+            // Forward all args after "ai-gen" to harness.py verbatim.
+            let forward: Vec<&str> = args[3..].iter().map(String::as_str).collect();
+            let status = std::process::Command::new("python3")
+                .arg(&harness)
+                .args(&forward)
+                .status()
+                .unwrap_or_else(|e| {
+                    eprintln!("error: failed to launch python3: {e}");
+                    process::exit(1);
+                });
+            process::exit(status.code().unwrap_or(1));
+        }
         cmd => {
             eprintln!("error: unknown command `{cmd}`");
             print_usage();
@@ -508,8 +551,42 @@ fn print_usage() {
     eprintln!("  mod add <name> --git <url> --rev <rev>   add a git dependency");
     eprintln!("  mod tree                                 show the dependency tree");
     eprintln!("  mod sync                                 clone git deps into ~/.tyra/cache/git/");
+    eprintln!("  bench ai-gen [options]                   run the AI-generation benchmark (wraps bench/ai-gen/harness.py)");
     eprintln!("  --version                                show version info");
     eprintln!("  --help                                   show this help");
+}
+
+/// Walk up from cwd (and from the executable's dir) to find bench/ai-gen/harness.py.
+fn find_bench_harness() -> Option<std::path::PathBuf> {
+    let relative = std::path::Path::new("bench").join("ai-gen").join("harness.py");
+
+    // Try cwd walk-up first (source checkout / dev use).
+    let mut dir = std::env::current_dir().ok()?;
+    loop {
+        let candidate = dir.join(&relative);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+
+    // Try walk-up from the directory containing the tyra binary (installed).
+    if let Ok(exe) = std::env::current_exe() {
+        let mut dir = exe.parent()?.to_path_buf();
+        loop {
+            let candidate = dir.join(&relative);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+            if !dir.pop() {
+                break;
+            }
+        }
+    }
+
+    None
 }
 
 // ─── Test runner helpers ──────────────────────────────────────────────────────
