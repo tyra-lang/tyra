@@ -1,8 +1,8 @@
 # Tyra Language Specification
 
-- **Version**: 0.1 (under development)
-- **Status**: Draft
-- **Last updated**: 2026-04-15
+- **Version**: 0.3
+- **Status**: Stable
+- **Last updated**: 2026-05-19
 
 ## 1. 目的
 
@@ -1514,23 +1514,84 @@ table.contains_key("two")  # Bool
 
 ## 18. ツールチェーン
 
-Tyra は公式 CLI を一つに統一する。
+Tyra はすべての開発操作を単一の公式 CLI に統合する。別ツールのインストールは不要である。
 
 ```bash
-tyra new app
-tyra run
-tyra build
-tyra test
-tyra fmt
-tyra mod
+tyra check   tyra run    tyra build  tyra fmt
+tyra test    tyra new    tyra mod    tyra bench
 ```
 
-### 18.1 tyra test
+### 18.1 tyra check
 
-- `*_test.tyra` という名前のファイルを対象ディレクトリから再帰的に探索する
-- `fn test_*() -> Result<Unit, String>`（引数なし）の関数をテスト関数として自動発見する
-- TAP version 14 形式で結果を出力し、1 件以上失敗すれば exit 1 を返す
-- **E0216**: `*_test.tyra` ファイルに `fn main` またはトップレベル実行文を置くことはできない
+ソースファイルをコンパイルせずに型検査のみ行う。
+
+```bash
+tyra check                    # Tyra.toml があればエントリポイントを自動検出（プロジェクトモード）
+tyra check src/myapp.tyra    # ファイルを直接指定
+```
+
+- 型エラーなし → exit 0、エラーあり → exit 1
+- プロジェクトモード: カレントディレクトリから上位を walk-up して `Tyra.toml` を発見し、`src/<name>.tyra` を対象とする
+
+### 18.2 tyra run
+
+コンパイルと実行を一度に行う。バイナリはディスクに残らない。
+
+```bash
+tyra run                           # プロジェクトモード
+tyra run src/myapp.tyra            # ファイルを直接指定
+tyra run --release src/myapp.tyra  # 最適化ビルドで実行（-O2）
+```
+
+### 18.3 tyra build
+
+ネイティブバイナリにコンパイルする。
+
+```bash
+tyra build                         # プロジェクトモード：<project_root>/<name> に出力
+tyra build --release               # 最適化ビルド（-O2）
+tyra build -o dist/myapp           # 出力先を明示指定
+tyra build src/myapp.tyra -o out   # ファイルと出力先を直接指定
+```
+
+- デバッグビルド（デフォルト）は `-O0`、`--release` は `-O2`
+- プロジェクトモードの出力先はプロジェクトルート直下（`src/` 以下ではない）
+
+### 18.4 tyra fmt
+
+Tyra ソースを標準形式にフォーマットする。
+
+```bash
+tyra fmt src/myapp.tyra           # ファイルをインプレースでフォーマット
+tyra fmt src/                     # ディレクトリを再帰的にフォーマット
+tyra fmt --check src/             # 変更が必要なファイルを表示して exit 1（CI 向け）
+tyra fmt --stdin                  # stdin から読んで stdout に整形済みソースを出力
+```
+
+- インデント: 2 スペース
+- 行長上限: 100 列。引数リストが超過する場合は 1 引数/行に折り返す（idempotent）
+- コメント（スタンドアロン・インライン）を元の位置に保持
+
+### 18.5 tyra test
+
+テストを自動発見・実行する。
+
+```bash
+tyra test                          # カレントディレクトリ以下の *_test.tyra を全件実行
+tyra test src/                     # ディレクトリを指定
+tyra test math_test.tyra           # 単一ファイルを指定
+tyra test --filter <pattern>       # 関数名に部分文字列マッチで絞り込み
+tyra test --list                   # 実行せず関数名を列挙
+tyra test --format tap             # TAP version 14（デフォルト）
+tyra test --format junit           # JUnit 互換 XML（CI の test summary 向け）
+```
+
+- 対象ファイル名は `*_test.tyra`
+- テスト関数: `fn test_*() -> Result<Unit, String>`（引数なし）
+- TAP 出力は各ファイルの末尾に `# time: <s>s` を含む
+- JUnit 出力でコンパイル失敗が発生した場合、synthetic な単一テストスイートを生成する（サイレントグリーンを防ぐ）
+- 各 `<testsuite>` は `time=` 属性を持つ
+- **E0216**: `*_test.tyra` に `fn main` またはトップレベル実行文を置くことはできない
 
 ```tyra
 # example_test.tyra
@@ -1542,22 +1603,67 @@ fn test_add() -> Result<Unit, String>
 end
 ```
 
+### 18.6 tyra new
+
+新規プロジェクトをスキャフォールドする。
+
 ```bash
-tyra test              # カレントディレクトリ以下の *_test.tyra を全件実行
-tyra test src/         # 指定ディレクトリ以下を実行
-tyra test math_test.tyra  # 単一ファイルを実行
+tyra new myapp              # bin プロジェクト（src/myapp.tyra, Tyra.toml, .gitignore, README.md）
+tyra new mylib --lib        # lib プロジェクト（src/mylib.tyra に export fn）
+tyra new myapp --vcs none   # .gitignore を生成しない（既存 repo 内サブプロジェクト向け）
 ```
 
-### 18.2 目的
+- `src/<name>.tyra` のファイル名はパッケージ名と一致する（§13.1 の不変条件）
+- bin パッケージ（`fn main` またはトップレベル実行文を含む）は外部から import 不可（E0218）
+- lib パッケージは宣言のみ、`export fn` で公開する
 
-- Go 的な運用性を再現する
-- 学習コストを減らす
-- チーム内の選択肢を減らす
+### 18.7 tyra mod
 
-### 18.3 ビルド成果物
+依存パッケージを管理する。`Tyra.toml` を持つ任意のディレクトリで動作する。
 
-- デフォルトは単一ネイティブバイナリ
-- リリースビルドとデバッグビルドを持つ
+```bash
+tyra mod init [--name <n>]                      # 既存ディレクトリに Tyra.toml を作成
+tyra mod add <name> --path <path>               # path 依存を追加
+tyra mod add <name> --git <url> --rev <sha>     # git 依存を追加（rev で再現性を保証）
+tyra mod update <name> --path <path>            # 既存エントリを in-place で更新
+tyra mod update <name> --git <url> --rev <sha>  # git 依存の rev を更新
+tyra mod remove <name>                          # 依存を削除
+tyra mod show <name> [--json]                   # 依存の詳細を表示
+tyra mod tree [--json]                          # 依存ツリーを表示（サイクル検出、DAG 安全）
+tyra mod sync [--check] [--json] [--quiet]      # git 依存をクローン；--check は変更なしで検証
+tyra mod clean                                  # ~/.tyra/cache/ を削除
+```
+
+**import 解決順（ADR 0010）**: ローカル `src/` → `[dependencies]` → stdlib の uniqueness rule。同名モジュールが 2 レイヤ以上に存在する場合は E0217（曖昧性エラー）。サイレントシャドウは行わない。
+
+**依存の不変条件（ADR 0009）**:
+- dep キーは対象 `Tyra.toml` の `package.name` と一致しなければならない（エイリアス禁止）
+- bin パッケージは依存として import 不可（E0218）
+- `src/<name>.tyra` がない依存は `tyra mod sync` 時にエラー
+
+### 18.8 tyra bench
+
+ベンチマークを実行する。
+
+```bash
+tyra bench ai-gen [options]   # AI 生成コード品質ベンチマーク（bench/ai-gen/harness.py に委譲）
+```
+
+- `--languages`、`--generators`、`--prompts`、`--seed`、`--dry-run`、`--inject-tyra-spec`、`--results-dir` を harness.py と 1:1 で中継する
+- 汎用マイクロベンチマーク（`tyra bench <dir>`）は v0.4.0 以降
+
+### 18.9 目的
+
+- Go 的な運用性を再現する: 言語ごとに別ツールを入れる必要がない
+- 学習コストを最小化する: `tyra` 一コマンドですべての開発操作が完結する
+- チーム内の選択肢を減らす: フォーマッタ・テストランナー・パッケージマネージャが公式一択
+
+### 18.10 ビルド成果物
+
+- デフォルト（デバッグ）ビルドは最適化なし（`-O0`）
+- `--release` は `-O2` 最適化を有効化する
+- プロジェクトモードの出力先はプロジェクトルート直下（`-o` で上書き可能）
+- ターゲット: macOS arm64 / Linux x86_64（クロスコンパイルは未対応）
 
 ---
 

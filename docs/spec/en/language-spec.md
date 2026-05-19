@@ -1,8 +1,8 @@
 # Tyra Language Specification
 
-- **Version**: 0.1 (under development)
-- **Status**: Draft
-- **Last updated**: 2026-04-15
+- **Version**: 0.3
+- **Status**: Stable
+- **Last updated**: 2026-05-19
 
 > This is the English translation of the Tyra Language Specification.
 > The Japanese version (`docs/spec/ja/language-spec.md`) is the **authoritative source**.
@@ -1505,22 +1505,83 @@ export fn index_of(_ list: List<Int>, _ x: Int) -> Option<Int>
 
 ## 18. Toolchain
 
-Tyra unifies the official CLI into a single binary.
+Tyra integrates all development operations into a single official CLI. No separate tool installation is required.
 
 ```bash
-tyra new app
-tyra run
-tyra build
-tyra test
-tyra fmt
-tyra mod
+tyra check   tyra run    tyra build  tyra fmt
+tyra test    tyra new    tyra mod    tyra bench
 ```
 
-### 18.1 tyra test
+### 18.1 tyra check
 
-- Recursively discovers `*_test.tyra` files from the given path
-- Automatically finds functions matching `fn test_*() -> Result<Unit, String>` (no parameters)
-- Outputs TAP version 14 results; exits 1 if any test fails
+Type-checks a source file without compiling.
+
+```bash
+tyra check                    # project mode: auto-discovers entry point via Tyra.toml
+tyra check src/myapp.tyra    # specify file directly
+```
+
+- No errors → exit 0; errors → exit 1
+- Project mode: walks up from the current directory to find `Tyra.toml`, then checks `src/<name>.tyra`
+
+### 18.2 tyra run
+
+Compiles and runs in one step. No binary is written to disk.
+
+```bash
+tyra run                           # project mode
+tyra run src/myapp.tyra            # specify file directly
+tyra run --release src/myapp.tyra  # run with optimized build (-O2)
+```
+
+### 18.3 tyra build
+
+Compiles to a native binary.
+
+```bash
+tyra build                         # project mode: output to <project_root>/<name>
+tyra build --release               # optimized build (-O2)
+tyra build -o dist/myapp           # explicit output path
+tyra build src/myapp.tyra -o out   # specify file and output path directly
+```
+
+- Debug build (default): `-O0`; `--release`: `-O2`
+- In project mode the output is placed at the project root, not inside `src/`
+
+### 18.4 tyra fmt
+
+Formats Tyra source to the canonical style.
+
+```bash
+tyra fmt src/myapp.tyra           # format a file in-place
+tyra fmt src/                     # recursively format a directory
+tyra fmt --check src/             # list files that would change and exit 1 (CI-friendly)
+tyra fmt --stdin                  # read from stdin, write formatted source to stdout
+```
+
+- Indentation: 2 spaces
+- Line limit: 100 columns; argument lists that exceed this wrap one-param-per-line (idempotent)
+- Comments (standalone and inline) are preserved in their original positions
+
+### 18.5 tyra test
+
+Discovers and runs tests automatically.
+
+```bash
+tyra test                          # run all *_test.tyra files under the current directory
+tyra test src/                     # specify a directory
+tyra test math_test.tyra           # specify a single file
+tyra test --filter <pattern>       # substring match on test function names
+tyra test --list                   # list matched functions without running
+tyra test --format tap             # TAP version 14 (default)
+tyra test --format junit           # JUnit-compatible XML (for CI test summaries)
+```
+
+- Target files: `*_test.tyra`
+- Test functions: `fn test_*() -> Result<Unit, String>` (no parameters)
+- TAP output includes `# time: <s>s` at the end of each file's run
+- JUnit: if a file fails to compile, a synthetic single-test suite is emitted to prevent silent green in CI
+- Each `<testsuite>` carries a `time=` attribute
 - **E0216**: `*_test.tyra` files must not contain `fn main` or top-level executable statements
 
 ```tyra
@@ -1533,22 +1594,67 @@ fn test_add() -> Result<Unit, String>
 end
 ```
 
+### 18.6 tyra new
+
+Scaffolds a new project.
+
 ```bash
-tyra test              # run all *_test.tyra files under the current directory
-tyra test src/         # run files under a given directory
-tyra test math_test.tyra  # run a single file
+tyra new myapp              # bin project (src/myapp.tyra, Tyra.toml, .gitignore, README.md)
+tyra new mylib --lib        # lib project (src/mylib.tyra with export fn)
+tyra new myapp --vcs none   # suppress .gitignore (for sub-projects inside an existing repo)
 ```
 
-### 18.2 Goals
+- `src/<name>.tyra` filename must match the package name (§13.1 invariant)
+- Bin packages (containing `fn main` or top-level statements) cannot be imported (E0218)
+- Lib packages consist of declarations only; symbols are published with `export fn`
 
-- Reproduce Go-style operational simplicity
-- Reduce learning cost
-- Reduce in-team option proliferation
+### 18.7 tyra mod
 
-### 18.3 Build artifacts
+Manages package dependencies. Operates from any directory containing a `Tyra.toml`.
 
-- The default output is a single native binary
-- Both release and debug builds are supported
+```bash
+tyra mod init [--name <n>]                      # create Tyra.toml in an existing directory
+tyra mod add <name> --path <path>               # add a path dependency
+tyra mod add <name> --git <url> --rev <sha>     # add a git dependency (rev guarantees reproducibility)
+tyra mod update <name> --path <path>            # update an existing entry in-place
+tyra mod update <name> --git <url> --rev <sha>  # update a git dependency's rev
+tyra mod remove <name>                          # delete a dependency entry
+tyra mod show <name> [--json]                   # print dependency details
+tyra mod tree [--json]                          # print the dependency tree (cycle detection, DAG-safe)
+tyra mod sync [--check] [--json] [--quiet]      # clone git deps; --check validates without mutating
+tyra mod clean                                  # remove ~/.tyra/cache/
+```
+
+**Import resolution order (ADR 0010)**: local `src/` → `[dependencies]` → stdlib, uniqueness rule. If the same module name appears in two or more layers, E0217 is emitted (ambiguity error). Silent shadowing is never performed.
+
+**Dependency invariants (ADR 0009)**:
+- The dep key must equal the `package.name` declared in the target `Tyra.toml` (no aliasing)
+- Bin packages cannot be imported as dependencies (E0218)
+- A dependency with no `src/<name>.tyra` is rejected at `tyra mod sync` time
+
+### 18.8 tyra bench
+
+Runs benchmarks.
+
+```bash
+tyra bench ai-gen [options]   # AI-generation quality benchmark (delegates to bench/ai-gen/harness.py)
+```
+
+- Forwards `--languages`, `--generators`, `--prompts`, `--seed`, `--dry-run`, `--inject-tyra-spec`, `--results-dir` verbatim to harness.py
+- General-purpose microbenchmark runner (`tyra bench <dir>`) is planned for v0.4.0
+
+### 18.9 Goals
+
+- Reproduce Go-style operational simplicity: no per-language tool installation required
+- Minimize learning cost: all development operations complete with a single `tyra` command
+- Reduce in-team option proliferation: formatter, test runner, and package manager are all official
+
+### 18.10 Build artifacts
+
+- Default (debug) build: no optimization (`-O0`)
+- `--release` enables `-O2` optimization
+- In project mode, output is placed at the project root (`-o` overrides)
+- Targets: macOS arm64 / Linux x86_64 (cross-compilation not yet supported)
 
 ---
 
