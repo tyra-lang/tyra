@@ -1,6 +1,7 @@
 //! List<T> instruction codegen — ListInit, ListLen, ListGet, ListGetSafe.
 //!
 //! Extracted from codegen.rs to isolate the List-specific emission logic.
+#![allow(clippy::collapsible_if)]
 
 use std::fmt::Write;
 

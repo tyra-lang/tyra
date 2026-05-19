@@ -3,6 +3,9 @@
 // Walks the AST and produces a flat sequence of MIR instructions.
 // Expressions are flattened into named temporaries.
 // Control flow is desugared into labels and branches.
+#![allow(clippy::collapsible_if, clippy::collapsible_else_if)]
+#![allow(clippy::doc_lazy_continuation)]
+#![allow(clippy::unnecessary_map_or)]
 
 mod adt;
 mod call;

@@ -2,6 +2,8 @@
 //
 // Contains the `lower_call` method which handles all ExprKind::Call
 // variants: constructors, method calls, module-qualified calls, etc.
+#![allow(clippy::collapsible_if, clippy::collapsible_else_if)]
+#![allow(clippy::unnecessary_map_or)]
 
 use tyra_ast::*;
 use tyra_types::Ty;

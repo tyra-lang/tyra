@@ -3,6 +3,7 @@
 // - Which SSA temps hold struct values (for insertvalue/extractvalue)
 // - Which alloca slots hold which LLVM type
 //
+#![allow(clippy::collapsible_if, clippy::collapsible_match)]
 // Extracted from codegen.rs to keep the main module focused on orchestration.
 
 use std::collections::{HashMap, HashSet};

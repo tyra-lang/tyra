@@ -3,6 +3,8 @@
 // Extracted from mod.rs to keep file sizes manageable.
 // These methods inspect AST expressions to determine their types,
 // resolve struct/impl information, and lower value-type operations.
+#![allow(clippy::collapsible_if, clippy::collapsible_else_if)]
+#![allow(clippy::unnecessary_map_or, clippy::manual_map)]
 
 use tyra_ast::*;
 use tyra_types::Ty;

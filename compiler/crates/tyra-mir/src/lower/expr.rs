@@ -2,6 +2,7 @@
 //
 // Contains the `lower_expr` method which flattens AST expressions
 // into named temporaries and MIR instructions.
+#![allow(clippy::collapsible_if, clippy::collapsible_else_if)]
 
 use tyra_ast::*;
 use tyra_types::Ty;

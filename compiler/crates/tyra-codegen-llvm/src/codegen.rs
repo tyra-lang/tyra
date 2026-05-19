@@ -3,6 +3,7 @@
 // Generates valid LLVM IR text that can be compiled with:
 //   clang output.ll -o output
 //
+#![allow(clippy::collapsible_if)]
 // For Milestone 1a, we use C library functions (puts, printf) for I/O.
 // The Tyra runtime will replace these in later milestones.
 

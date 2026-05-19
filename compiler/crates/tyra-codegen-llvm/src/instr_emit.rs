@@ -3,6 +3,7 @@
 // Extracted from codegen.rs. The main `emit_instruction` function is a big
 // match on MIR instructions that writes the corresponding LLVM IR. Keeping
 // this in its own module keeps codegen.rs focused on orchestration.
+#![allow(clippy::too_many_arguments)]
 
 use std::fmt::Write;
 

@@ -2,6 +2,8 @@
 //
 // Extracted from mod.rs — lowers `match` expressions into a chain of
 // conditional branches with alloca/store/load for the result.
+#![allow(clippy::collapsible_if, clippy::collapsible_else_if)]
+#![allow(clippy::single_match)]
 
 use tyra_ast::*;
 use tyra_types::Ty;

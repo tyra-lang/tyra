@@ -225,6 +225,12 @@ pub fn compile_to_ir(source_path: &Path) -> CompileResult {
     }
 }
 
+/// Confirm that `dir` is a real Tyra stdlib tree, not a user directory named "stdlib".
+/// Uses `assert.tyra` as a stable sentinel — it is part of the Tyra stdlib by spec.
+fn is_tyra_stdlib(dir: &Path) -> bool {
+    dir.is_dir() && dir.join("assert.tyra").is_file()
+}
+
 /// Find the stdlib directory. Resolution order:
 ///
 /// 1. `TYRA_STDLIB` environment variable (highest priority; useful in CI and custom installs)
@@ -232,11 +238,13 @@ pub fn compile_to_ir(source_path: &Path) -> CompileResult {
 /// 3. `<exe_dir>/../lib/tyra/stdlib/` — FHS install: `/usr/local/bin/tyra` + `/usr/local/lib/tyra/stdlib/`
 /// 4. Walk up from `<exe_dir>` — dev checkout (`target/debug/tyra` → repo root → `stdlib/`)
 /// 5. Walk up from `main_dir` — script mode without a known binary location
+///
+/// Each candidate is validated with [`is_tyra_stdlib`] to avoid false positives.
 fn find_stdlib_dir(main_dir: &Path) -> Option<std::path::PathBuf> {
     // 1. Explicit env override.
     if let Ok(p) = std::env::var("TYRA_STDLIB") {
         let pb = std::path::PathBuf::from(p);
-        if pb.is_dir() {
+        if is_tyra_stdlib(&pb) {
             return Some(pb);
         }
     }
@@ -247,12 +255,12 @@ fn find_stdlib_dir(main_dir: &Path) -> Option<std::path::PathBuf> {
     {
         // 2. Portable: stdlib/ next to the binary.
         let beside = exe_dir.join("stdlib");
-        if beside.is_dir() {
+        if is_tyra_stdlib(&beside) {
             return Some(beside);
         }
         // 3. FHS: ../lib/tyra/stdlib/ relative to the binary directory.
         let fhs = exe_dir.join("..").join("lib").join("tyra").join("stdlib");
-        if fhs.is_dir() {
+        if is_tyra_stdlib(&fhs) {
             return Some(fhs);
         }
         // 4. Walk up from the binary's directory.
@@ -261,7 +269,7 @@ fn find_stdlib_dir(main_dir: &Path) -> Option<std::path::PathBuf> {
         let mut dir = exe_dir.to_path_buf();
         loop {
             let candidate = dir.join("stdlib");
-            if candidate.is_dir() {
+            if is_tyra_stdlib(&candidate) {
                 return Some(candidate);
             }
             if !dir.pop() {
@@ -274,7 +282,7 @@ fn find_stdlib_dir(main_dir: &Path) -> Option<std::path::PathBuf> {
     let mut dir = main_dir.to_path_buf();
     loop {
         let candidate = dir.join("stdlib");
-        if candidate.is_dir() {
+        if is_tyra_stdlib(&candidate) {
             return Some(candidate);
         }
         if !dir.pop() {
@@ -1813,24 +1821,40 @@ mod tests {
         // stdlib/mymod.tyra  (layer c, pinned via TYRA_STDLIB)
         // → 2 candidates → None
         use std::fs;
+
+        // Drop-guard restores TYRA_STDLIB even if the test panics.
+        struct EnvGuard {
+            prev: Option<String>,
+        }
+        impl Drop for EnvGuard {
+            fn drop(&mut self) {
+                // SAFETY: test binary runs tests in parallel threads, but this
+                // particular variable is only written by this test (unique "mymod"
+                // name ensures no other test in this binary touches TYRA_STDLIB for
+                // the same import path). The guard guarantees restore on panic.
+                // Add `#[serial]` (serial_test crate) if this assumption changes.
+                unsafe {
+                    match self.prev.take() {
+                        Some(v) => std::env::set_var("TYRA_STDLIB", v),
+                        None => std::env::remove_var("TYRA_STDLIB"),
+                    }
+                }
+            }
+        }
+
         let dir = tempfile::tempdir().unwrap();
         let main_dir = dir.path();
         fs::write(main_dir.join("mymod.tyra"), "export fn f() -> Unit\nend\n").unwrap();
+        // The fake stdlib must pass is_tyra_stdlib (needs assert.tyra sentinel).
         let stdlib_dir = dir.path().join("stdlib");
         fs::create_dir(&stdlib_dir).unwrap();
+        fs::write(stdlib_dir.join("assert.tyra"), "").unwrap();
         fs::write(stdlib_dir.join("mymod.tyra"), "export fn f() -> Unit\nend\n").unwrap();
 
-        // Pin stdlib so exe-relative discovery doesn't find the real stdlib first.
-        let prev = std::env::var("TYRA_STDLIB").ok();
-        // SAFETY: single-threaded test; no other thread reads TYRA_STDLIB concurrently.
+        let _guard = EnvGuard { prev: std::env::var("TYRA_STDLIB").ok() };
+        // SAFETY: see EnvGuard::drop.
         unsafe { std::env::set_var("TYRA_STDLIB", &stdlib_dir); }
         let result = resolve_import_file(main_dir, &["mymod".to_string()]);
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var("TYRA_STDLIB", v),
-                None => std::env::remove_var("TYRA_STDLIB"),
-            }
-        }
 
         assert!(
             result.is_none(),
