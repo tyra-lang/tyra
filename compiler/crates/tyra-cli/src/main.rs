@@ -12,6 +12,7 @@
 //   tyra mod add <name> --path <path>            Add a path dependency
 //   tyra mod add <name> --git <url> --rev <rev>  Add a git dependency
 //   tyra mod remove <name>                       Remove a dependency
+//   tyra mod show <name>                         Show details of a dependency
 //   tyra mod tree [--json]                       Show the dependency tree
 //   tyra mod sync [--check]                      Clone git deps; --check validates without mutating
 //   tyra mod clean                               Remove ~/.tyra/cache/
@@ -133,16 +134,21 @@ fn main() {
                     }
                 }
             }
-            let source_path = match file_arg {
-                Some(ref f) => PathBuf::from(f),
-                None => match project_entry_point() {
-                    Ok(p) => p,
+            // When auto-resolving from project root, default output goes to
+            // <project_root>/<name>, not <src_dir>/<name>.
+            let (source_path, auto_output): (PathBuf, Option<PathBuf>) = match file_arg {
+                Some(ref f) => (PathBuf::from(f), None),
+                None => match project_root_and_entry() {
+                    Ok((root, entry)) => {
+                        let name = entry.file_stem().unwrap_or_default().to_os_string();
+                        (entry, Some(root.join(name)))
+                    }
                     Err(e) => { eprintln!("error: {e}"); process::exit(1); }
                 },
             };
             let output_path = match output_arg {
                 Some(ref o) => PathBuf::from(o),
-                None => source_path.with_extension(""),
+                None => auto_output.unwrap_or_else(|| source_path.with_extension("")),
             };
             let result = if release {
                 tyra_driver::compile_to_binary_release(&source_path, &output_path)
@@ -361,13 +367,14 @@ fn main() {
                     list_test_fns(test_file, filter.as_deref());
                 }
             } else if junit {
-                let mut suites: Vec<(String, Vec<TestRecord>)> = Vec::new();
+                let mut suites: Vec<(String, Vec<TestRecord>, f64)> = Vec::new();
                 let mut total_fail: usize = 0;
                 for test_file in &test_files {
-                    let (_, f, tap) = run_test_file_capture(test_file, filter.as_deref());
+                    let (_, f, tap, elapsed) =
+                        run_test_file_capture(test_file, filter.as_deref());
                     total_fail += f;
                     let records = parse_tap_to_records(&tap);
-                    suites.push((test_file.display().to_string(), records));
+                    suites.push((test_file.display().to_string(), records, elapsed));
                 }
                 print!("{}", render_junit_xml(&suites));
                 if total_fail > 0 {
@@ -699,6 +706,29 @@ fn main() {
                         }
                     }
                 }
+                "show" => {
+                    let dep_name = match args.get(3).map(String::as_str) {
+                        Some(n) if !n.starts_with("--") => n,
+                        _ => {
+                            eprintln!("error: `tyra mod show` requires a dependency name");
+                            eprintln!("usage: tyra mod show <name>");
+                            process::exit(1);
+                        }
+                    };
+                    if args.len() > 4 {
+                        eprintln!("error: unexpected argument `{}`", args[4]);
+                        eprintln!("usage: tyra mod show <name>");
+                        process::exit(1);
+                    }
+                    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                    match tyra_pkg::run_show_from(&cwd, dep_name) {
+                        Ok(info) => print!("{info}"),
+                        Err(e) => {
+                            eprintln!("error: {e}");
+                            process::exit(1);
+                        }
+                    }
+                }
                 "clean" => {
                     if args.len() > 3 {
                         eprintln!("error: unexpected argument `{}`", args[3]);
@@ -716,12 +746,12 @@ fn main() {
                     }
                 }
                 "" => {
-                    eprintln!("usage: tyra mod <init|add|remove|tree|sync|clean>");
+                    eprintln!("usage: tyra mod <init|add|remove|show|tree|sync|clean>");
                     process::exit(1);
                 }
                 cmd => {
                     eprintln!("error: unknown mod subcommand `{cmd}`");
-                    eprintln!("usage: tyra mod <init|add|remove|tree|sync|clean>");
+                    eprintln!("usage: tyra mod <init|add|remove|show|tree|sync|clean>");
                     process::exit(1);
                 }
             }
@@ -794,6 +824,7 @@ fn print_usage() {
     eprintln!("  mod add <name> --path <path>             add a path dependency");
     eprintln!("  mod add <name> --git <url> --rev <rev>   add a git dependency");
     eprintln!("  mod remove <name>                        remove a dependency");
+    eprintln!("  mod show <name>                          show details of a dependency");
     eprintln!("  mod tree [--json]                        show the dependency tree");
     eprintln!("  mod sync [--check]                       clone git deps; --check validates without mutating");
     eprintln!("  mod clean                                remove ~/.tyra/cache/");
@@ -1031,7 +1062,9 @@ fn run_test_file_inner(test_file: &Path, filter: Option<&str>) -> (usize, usize)
         return (0, 1);
     }
 
+    let t0 = std::time::Instant::now();
     let result = tyra_driver::run_and_capture(&runner_path);
+    let elapsed = t0.elapsed();
     let _ = std::fs::remove_file(&runner_path);
 
     if result.report.has_errors() {
@@ -1044,6 +1077,7 @@ fn run_test_file_inner(test_file: &Path, filter: Option<&str>) -> (usize, usize)
     // least one failure is recorded regardless of how many TAP lines appeared.
     let stdout = result.stdout.unwrap_or_default();
     let (tap_pass, tap_fail) = parse_tap_output(&stdout);
+    eprintln!("# time: {:.3}s", elapsed.as_secs_f64());
     if result.exit_code != Some(0) {
         let accounted = tap_pass + tap_fail;
         let unaccounted = test_fns.len().saturating_sub(accounted);
@@ -1076,9 +1110,9 @@ fn collect_tyra_files(
 
 // ─── Project root helpers ─────────────────────────────────────────────────────
 
-/// Resolve the entry-point source file from the nearest `Tyra.toml`.
-/// Used by `run`/`build`/`check` when no source file is specified.
-fn project_entry_point() -> Result<PathBuf, String> {
+/// Resolve the entry-point source file and project root from the nearest `Tyra.toml`.
+/// Returns `(project_root, entry_path)`.
+fn project_root_and_entry() -> Result<(PathBuf, PathBuf), String> {
     let cwd = std::env::current_dir()
         .map_err(|e| format!("cannot determine working directory: {e}"))?;
     let root = tyra_manifest::find_project_root(&cwd).ok_or_else(|| {
@@ -1095,7 +1129,13 @@ fn project_entry_point() -> Result<PathBuf, String> {
             manifest.package.name
         ));
     }
-    Ok(entry)
+    Ok((root, entry))
+}
+
+/// Resolve the entry-point source file from the nearest `Tyra.toml`.
+/// Used by `run`/`check` when no source file is specified.
+fn project_entry_point() -> Result<PathBuf, String> {
+    project_root_and_entry().map(|(_, entry)| entry)
 }
 
 // ─── JUnit output helpers ─────────────────────────────────────────────────────
@@ -1106,19 +1146,22 @@ struct TestRecord {
     failure_msg: String,
 }
 
-/// Run a test file and return `(pass, fail, raw_tap_output)`.
+/// Run a test file and return `(pass, fail, raw_tap_output, elapsed_secs)`.
 /// The TAP output is captured (not printed) so the caller can render it.
-fn run_test_file_capture(test_file: &Path, filter: Option<&str>) -> (usize, usize, String) {
+fn run_test_file_capture(test_file: &Path, filter: Option<&str>) -> (usize, usize, String, f64) {
     run_test_file_inner_captured(test_file, filter)
 }
 
-fn run_test_file_inner_captured(test_file: &Path, filter: Option<&str>) -> (usize, usize, String) {
+fn run_test_file_inner_captured(
+    test_file: &Path,
+    filter: Option<&str>,
+) -> (usize, usize, String, f64) {
     let source = match std::fs::read_to_string(test_file) {
         Ok(s) => s,
         Err(e) => {
             let msg = format!("cannot read {}: {e}", test_file.display());
             eprintln!("error: {msg}");
-            return (0, 1, infra_failure_tap(&msg));
+            return (0, 1, infra_failure_tap(&msg), 0.0);
         }
     };
     let dir = test_file.parent().unwrap_or(Path::new("."));
@@ -1132,7 +1175,7 @@ fn run_test_file_inner_captured(test_file: &Path, filter: Option<&str>) -> (usiz
     if check.report.has_errors() {
         let rendered = check.report.render(&check.sources);
         eprint!("{rendered}");
-        return (0, 1, infra_failure_tap("compile error (see stderr)"));
+        return (0, 1, infra_failure_tap("compile error (see stderr)"), 0.0);
     }
     let all_fns = find_test_fns(&check.ast);
     let test_fns: Vec<String> = if let Some(pat) = filter {
@@ -1141,7 +1184,7 @@ fn run_test_file_inner_captured(test_file: &Path, filter: Option<&str>) -> (usiz
         all_fns
     };
     if test_fns.is_empty() {
-        return (0, 0, String::new());
+        return (0, 0, String::new(), 0.0);
     }
     let runner_name = format!("__tyra_junit_runner_{}.tyra", std::process::id());
     let runner_path = dir.join(&runner_name);
@@ -1149,19 +1192,21 @@ fn run_test_file_inner_captured(test_file: &Path, filter: Option<&str>) -> (usiz
     if let Err(e) = std::fs::write(&runner_path, &runner_source) {
         let msg = format!("cannot write runner: {e}");
         eprintln!("error: {msg}");
-        return (0, 1, infra_failure_tap(&msg));
+        return (0, 1, infra_failure_tap(&msg), 0.0);
     }
+    let t0 = std::time::Instant::now();
     let result = tyra_driver::run_and_capture(&runner_path);
+    let elapsed = t0.elapsed().as_secs_f64();
     let _ = std::fs::remove_file(&runner_path);
     if result.report.has_errors() {
         let rendered = result.report.render(&result.sources);
         eprint!("{rendered}");
         let n = test_fns.len();
-        return (0, n, infra_failure_tap("compile error (see stderr)"));
+        return (0, n, infra_failure_tap("compile error (see stderr)"), elapsed);
     }
     let tap = result.stdout.unwrap_or_default();
     let (pass, fail) = count_tap_lines(&tap);
-    (pass, fail, tap)
+    (pass, fail, tap, elapsed)
 }
 
 /// Produce a minimal TAP string representing one infrastructure failure.
@@ -1205,9 +1250,9 @@ fn parse_tap_to_records(tap: &str) -> Vec<TestRecord> {
     records
 }
 
-fn render_junit_xml(suites: &[(String, Vec<TestRecord>)]) -> String {
+fn render_junit_xml(suites: &[(String, Vec<TestRecord>, f64)]) -> String {
     let mut xml = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites>\n");
-    for (file, records) in suites {
+    for (file, records, elapsed) in suites {
         let tests = records.len();
         let failures = records.iter().filter(|r| !r.passed).count();
         let classname = std::path::Path::new(file.as_str())
@@ -1215,7 +1260,7 @@ fn render_junit_xml(suites: &[(String, Vec<TestRecord>)]) -> String {
             .and_then(|s| s.to_str())
             .unwrap_or(file.as_str());
         xml.push_str(&format!(
-            "  <testsuite name=\"{}\" tests=\"{tests}\" failures=\"{failures}\">\n",
+            "  <testsuite name=\"{}\" tests=\"{tests}\" failures=\"{failures}\" time=\"{elapsed:.3}\">\n",
             xml_escape(file)
         ));
         for r in records {

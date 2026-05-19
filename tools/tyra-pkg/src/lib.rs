@@ -321,6 +321,50 @@ pub fn run_sync_from(start: &Path) -> Result<SyncReport, PkgError> {
     run_sync(&root)
 }
 
+/// `tyra mod show <dep_name>`
+///
+/// Returns a human-readable summary of a single dependency entry.
+pub fn run_show(project_root: &Path, dep_name: &str) -> Result<String, PkgError> {
+    let manifest = load_manifest(project_root)?;
+    let dep = manifest
+        .dependencies
+        .get(dep_name)
+        .ok_or_else(|| PkgError::DepNotFound(dep_name.to_string()))?;
+
+    let mut out = format!("{dep_name}\n");
+
+    if let Some(path_str) = &dep.path {
+        let abs = project_root.join(path_str);
+        out.push_str(&format!("  source:  path {path_str}\n"));
+        out.push_str(&format!("  root:    {}\n", abs.display()));
+        match load_manifest(&abs) {
+            Ok(m) => {
+                out.push_str(&format!("  name:    {}\n", m.package.name));
+                out.push_str(&format!("  version: {}\n", m.package.version));
+            }
+            Err(_) => {
+                out.push_str("  (manifest not readable)\n");
+            }
+        }
+    } else if let Some(url) = &dep.git {
+        let rev = dep.rev.as_deref().unwrap_or("?");
+        out.push_str(&format!("  source:  git {url}\n"));
+        out.push_str(&format!("  rev:     {rev}\n"));
+        let cache = cache_dir_for(dep_name, url, rev);
+        let synced = cache.join("Tyra.toml").is_file();
+        out.push_str(&format!("  cache:   {}\n", cache.display()));
+        out.push_str(&format!("  synced:  {}\n", if synced { "yes" } else { "no" }));
+    }
+
+    Ok(out)
+}
+
+/// Locate the project root walking up from `start`, then call `run_show`.
+pub fn run_show_from(start: &Path, dep_name: &str) -> Result<String, PkgError> {
+    let root = find_project_root(start).ok_or(PkgError::NoProject)?;
+    run_show(&root, dep_name)
+}
+
 /// Returns the root of the Tyra local cache: `~/.tyra/cache/`.
 pub fn tyra_cache_root() -> PathBuf {
     let home = std::env::var("HOME")

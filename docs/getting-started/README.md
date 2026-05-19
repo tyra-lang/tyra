@@ -2,7 +2,7 @@
 
 Welcome to Tyra — a statically-typed language designed for backend services, CLI tools, and business applications. Tyra compiles to native binaries via LLVM and emphasizes explicitness, predictability, and practical error handling.
 
-> **v0.1.0 — initial release.** Suitable for small CLI tools, learning, and language evaluation. Breaking changes may occur before v1.0.
+> **v0.3.0** — project lifecycle, `tyra new`, `tyra mod`, `tyra bench ai-gen`, `tyra test --filter`, `tyra fmt` line wrapping. Breaking changes may occur before v1.0.
 
 ## Table of Contents
 
@@ -13,7 +13,8 @@ Welcome to Tyra — a statically-typed language designed for backend services, C
 5. [Error Handling](05-error-handling.md) — `Option<T>`, `Result<T, E>`, and the `?` operator
 6. [Types and ADTs](06-types-and-adt.md) — Algebraic data types, `value`, `data`, and `impl`
 7. [A Real Program](07-real-program.md) — A complete working example from stdin to output
-8. [Testing your code](08-testing.md)
+8. [Testing your code](08-testing.md) — `tyra test`, assertions, TAP output
+9. [Project Lifecycle](09-project-lifecycle.md) — `tyra new`, `tyra mod`, dependencies, builds
 
 ## Quick Reference
 
@@ -47,4 +48,4 @@ end
 - **`end` blocks, not braces** — unambiguous block boundaries
 - **Explicit argument labels** — call sites are self-documenting
 - **Value vs. data distinction** — memory semantics are visible in the type
-- **Single toolchain** — `tyra check`, `tyra run`, `tyra build` today; `fmt` and `test` planned
+- **Single toolchain** — `tyra check`, `tyra run`, `tyra build`, `tyra fmt`, `tyra test`, `tyra new`, `tyra mod`
