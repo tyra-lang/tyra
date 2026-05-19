@@ -14,3 +14,4 @@ tyra-resolve.workspace = true
 tyra-types.workspace = true
 tyra-mir.workspace = true
 tyra-codegen-llvm.workspace = true
+tyra-manifest.workspace = true

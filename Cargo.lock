@@ -1052,6 +1052,7 @@ dependencies = [
  "tyra-ast",
  "tyra-codegen-llvm",
  "tyra-diagnostics",
+ "tyra-manifest",
  "tyra-mir",
  "tyra-parser",
  "tyra-resolve",

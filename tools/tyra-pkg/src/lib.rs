@@ -4,9 +4,12 @@
 //! - `run_init(dest, name)` — create Tyra.toml in an existing directory
 //! - `run_add(project_root, dep_name, source)` — append a dependency entry
 //! - `run_tree(project_root)` — render the dependency tree as a string
+//! - `run_sync(project_root)` — clone git deps into `~/.tyra/cache/git/`
+//! - `cache_dir_for(dep_name, rev)` — canonical cache path for a git dep
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use tyra_manifest::{Dependency, find_project_root, load_manifest};
 
 // ---------------------------------------------------------------------------
@@ -36,6 +39,12 @@ pub enum PkgError {
     DuplicateDep(String),
     /// Package or dep name violates naming rules.
     InvalidName(String),
+    /// `git` binary not found in PATH.
+    GitNotAvailable,
+    /// Git clone or checkout failed for a dependency.
+    SyncFailed { dep: String, message: String },
+    /// Dependency root is a bin package (ADR 0009 E_DEP_NOT_IMPORTABLE).
+    BinDepNotImportable(String),
 }
 
 impl std::fmt::Display for PkgError {
@@ -58,6 +67,18 @@ impl std::fmt::Display for PkgError {
                 "invalid name `{n}`: must start with a lowercase letter, \
                  contain only lowercase letters, digits, and underscores, \
                  and must not be a reserved word"
+            ),
+            PkgError::GitNotAvailable => write!(
+                f,
+                "`git` not found in PATH; install Git to sync git dependencies"
+            ),
+            PkgError::SyncFailed { dep, message } => {
+                write!(f, "sync failed for dependency `{dep}`: {message}")
+            }
+            PkgError::BinDepNotImportable(dep) => write!(
+                f,
+                "dependency `{dep}` is a bin package and cannot be imported \
+                 (ADR 0009 E_DEP_NOT_IMPORTABLE)"
             ),
         }
     }
@@ -178,9 +199,163 @@ pub fn run_add_from(
     run_add(&root, dep_name, source)
 }
 
+/// `tyra mod sync`
+///
+/// Clones all git dependencies declared in `project_root/Tyra.toml` into
+/// `~/.tyra/cache/git/<dep_name>/<rev>/`.  Path dependencies are skipped.
+pub fn run_sync(project_root: &Path) -> Result<SyncReport, PkgError> {
+    let manifest = load_manifest(project_root)?;
+    let mut report = SyncReport::default();
+
+    let mut deps: Vec<(&String, &Dependency)> = manifest.dependencies.iter().collect();
+    deps.sort_by_key(|(k, _)| k.as_str());
+
+    for (dep_name, dep) in &deps {
+        match (&dep.path, &dep.git, &dep.rev) {
+            (Some(_), _, _) => {
+                report.skipped.push(dep_name.to_string());
+            }
+            (None, Some(url), Some(rev)) => {
+                match sync_git_dep(dep_name, url, rev)? {
+                    SyncStatus::Fresh => report.synced.push(dep_name.to_string()),
+                    SyncStatus::Cached => report.cached.push(dep_name.to_string()),
+                }
+            }
+            _ => {} // load_manifest already validated
+        }
+    }
+    Ok(report)
+}
+
+/// Locate the project root walking up from `start`, then call `run_sync`.
+pub fn run_sync_from(start: &Path) -> Result<SyncReport, PkgError> {
+    let root = find_project_root(start).ok_or(PkgError::NoProject)?;
+    run_sync(&root)
+}
+
+/// Canonical cache directory for a git dependency.
+///
+/// `~/.tyra/cache/git/<dep_name>/<rev>/`
+pub fn cache_dir_for(dep_name: &str, rev: &str) -> PathBuf {
+    let home = std::env::var("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."));
+    home.join(".tyra").join("cache").join("git").join(dep_name).join(rev)
+}
+
+/// Report returned by `run_sync`.
+#[derive(Debug, Default)]
+pub struct SyncReport {
+    pub synced: Vec<String>,
+    pub cached: Vec<String>,
+    pub skipped: Vec<String>,
+}
+
+impl std::fmt::Display for SyncReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for name in &self.synced {
+            writeln!(f, "  synced  {name}")?;
+        }
+        for name in &self.cached {
+            writeln!(f, "  cached  {name}")?;
+        }
+        for name in &self.skipped {
+            writeln!(f, "  skipped {name} (path)")?;
+        }
+        Ok(())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+enum SyncStatus {
+    Fresh,
+    Cached,
+}
+
+fn sync_git_dep(dep_name: &str, url: &str, rev: &str) -> Result<SyncStatus, PkgError> {
+    let cache_dir = cache_dir_for(dep_name, rev);
+
+    // Already in cache and has a valid manifest?
+    if cache_dir.join("Tyra.toml").is_file() {
+        return Ok(SyncStatus::Cached);
+    }
+
+    // Ensure the parent directory exists.
+    let cache_parent = cache_dir.parent().unwrap_or(&cache_dir);
+    std::fs::create_dir_all(cache_parent)?;
+
+    // Use a tmp directory adjacent to the final cache dir so that rename is
+    // within the same filesystem (atomic on POSIX).
+    let safe_rev = rev.replace(['/', '\\', ':'], "-");
+    let tmp_dir = cache_parent.join(format!("_tmp_{dep_name}_{safe_rev}"));
+    if tmp_dir.exists() {
+        std::fs::remove_dir_all(&tmp_dir)?;
+    }
+
+    // git clone <url> <tmp_dir>
+    let clone_status = Command::new("git")
+        .args(["clone", url, tmp_dir.to_str().unwrap_or(".")])
+        .status()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                PkgError::GitNotAvailable
+            } else {
+                PkgError::Io(e)
+            }
+        })?;
+    if !clone_status.success() {
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        return Err(PkgError::SyncFailed {
+            dep: dep_name.to_string(),
+            message: format!("git clone failed for `{url}`"),
+        });
+    }
+
+    // git -C <tmp_dir> checkout <rev>
+    let checkout_status = Command::new("git")
+        .args(["-C", tmp_dir.to_str().unwrap_or("."), "checkout", rev])
+        .status()
+        .map_err(|e| PkgError::Io(e))?;
+    if !checkout_status.success() {
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        return Err(PkgError::SyncFailed {
+            dep: dep_name.to_string(),
+            message: format!("git checkout `{rev}` failed"),
+        });
+    }
+
+    // Validate manifest before committing to cache.
+    let dep_manifest = load_manifest(&tmp_dir).map_err(|e| {
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        PkgError::SyncFailed {
+            dep: dep_name.to_string(),
+            message: format!("invalid Tyra.toml in cloned dependency: {e}"),
+        }
+    })?;
+
+    // Reject bin packages (ADR 0009 E_DEP_NOT_IMPORTABLE).
+    let root_src = tmp_dir
+        .join("src")
+        .join(format!("{}.tyra", dep_manifest.package.name));
+    if root_src.is_file() {
+        let src = std::fs::read_to_string(&root_src).unwrap_or_default();
+        if tyra_manifest::is_bin_source(&src) {
+            let _ = std::fs::remove_dir_all(&tmp_dir);
+            return Err(PkgError::BinDepNotImportable(dep_name.to_string()));
+        }
+    }
+
+    // Atomic rename into the cache.
+    std::fs::rename(&tmp_dir, &cache_dir).map_err(|e| {
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        PkgError::Io(e)
+    })?;
+
+    Ok(SyncStatus::Fresh)
+}
 
 fn validate_name(name: &str) -> Result<(), PkgError> {
     let ok = !name.is_empty()

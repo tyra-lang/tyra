@@ -12,6 +12,7 @@
 //   tyra mod add <name> --path <path>    Add a path dependency
 //   tyra mod add <name> --git <url> --rev <rev>  Add a git dependency
 //   tyra mod tree                        Show the dependency tree
+//   tyra mod sync                        Clone git deps into ~/.tyra/cache/git/
 //   tyra --version                       Show version info
 //
 // spec reference: §18 (toolchain)
@@ -447,13 +448,36 @@ fn main() {
                         }
                     }
                 }
+                "sync" => {
+                    if args.len() > 3 {
+                        eprintln!("error: `tyra mod sync` takes no arguments");
+                        process::exit(1);
+                    }
+                    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                    match tyra_pkg::run_sync_from(&cwd) {
+                        Ok(report) => {
+                            if report.synced.is_empty()
+                                && report.cached.is_empty()
+                                && report.skipped.is_empty()
+                            {
+                                println!("nothing to sync (no dependencies declared)");
+                            } else {
+                                print!("{report}");
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("error: {e}");
+                            process::exit(1);
+                        }
+                    }
+                }
                 "" => {
-                    eprintln!("usage: tyra mod <init|add|tree>");
+                    eprintln!("usage: tyra mod <init|add|tree|sync>");
                     process::exit(1);
                 }
                 cmd => {
                     eprintln!("error: unknown mod subcommand `{cmd}`");
-                    eprintln!("usage: tyra mod <init|add|tree>");
+                    eprintln!("usage: tyra mod <init|add|tree|sync>");
                     process::exit(1);
                 }
             }
@@ -483,6 +507,7 @@ fn print_usage() {
     eprintln!("  mod add <name> --path <path>             add a path dependency");
     eprintln!("  mod add <name> --git <url> --rev <rev>   add a git dependency");
     eprintln!("  mod tree                                 show the dependency tree");
+    eprintln!("  mod sync                                 clone git deps into ~/.tyra/cache/git/");
     eprintln!("  --version                                show version info");
     eprintln!("  --help                                   show this help");
 }

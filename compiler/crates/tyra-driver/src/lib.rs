@@ -248,7 +248,13 @@ fn find_stdlib_dir(main_dir: &Path) -> Option<std::path::PathBuf> {
 }
 
 /// Resolve import declarations by parsing module files and merging exported items.
-/// `import math` → parse `<main_dir>/math.tyra`, merge exported fns as `math__fn_name`.
+///
+/// Uses the ADR 0010 three-layer uniqueness rule:
+///   (a) `<project_root>/src/` or `<main_dir>/` for script-mode files
+///   (b) path / git dependencies from `Tyra.toml` (first import segment = dep name)
+///   (c) stdlib (`TYRA_STDLIB` env or walk-up for `stdlib/`)
+///
+/// 0 candidates → E0200; 2+ candidates → E0217 E_IMPORT_AMBIGUOUS; 1 → use it.
 fn resolve_imports(
     ast: &mut tyra_ast::SourceFile,
     main_dir: &Path,
@@ -272,6 +278,21 @@ fn resolve_imports(
 
     let mut merged_items = Vec::new();
 
+    // Find project root and manifest (best-effort; None = script-mode)
+    let project_root = tyra_manifest::find_project_root(main_dir);
+    let manifest = project_root
+        .as_deref()
+        .and_then(|r| tyra_manifest::load_manifest(r).ok());
+
+    // Layer (a) base: project_root/src if it exists, else main_dir (script-mode compat)
+    let local_base: std::path::PathBuf = project_root
+        .as_deref()
+        .map(|r| {
+            let src = r.join("src");
+            if src.is_dir() { src } else { r.to_path_buf() }
+        })
+        .unwrap_or_else(|| main_dir.to_path_buf());
+
     for imp in &imports {
         let local_name = imp
             .alias
@@ -279,55 +300,62 @@ fn resolve_imports(
             .or_else(|| imp.path.last().map(String::as_str))
             .unwrap_or("_unknown");
 
-        // Check for built-in modules (core.sys, etc.)
-        let module_key = imp.path.join(".");
-        if is_builtin_module(&module_key) {
-            // Built-in modules don't need file resolution.
-            // The lowering and codegen layers handle their functions as builtins.
+        // Built-in modules (core.sys, etc.) require no file resolution.
+        if is_builtin_module(&imp.path.join(".")) {
             continue;
         }
 
-        // Resolve file path: import a.b.c → <main_dir>/a/b/c.tyra
-        // Fallback: search stdlib directory (found by walking up from main_dir).
-        let mut module_path = main_dir.to_path_buf();
-        for segment in &imp.path {
-            module_path.push(segment);
-        }
-        module_path.set_extension("tyra");
+        let candidates = collect_import_candidates(
+            &imp.path,
+            &local_base,
+            manifest.as_ref(),
+            project_root.as_deref(),
+            main_dir,
+        );
 
-        let module_source = if let Ok(s) = std::fs::read_to_string(&module_path) {
-            s
-        } else if let Some(stdlib_dir) = find_stdlib_dir(main_dir) {
-            let mut stdlib_path = stdlib_dir;
-            for segment in &imp.path {
-                stdlib_path.push(segment);
+        let module_path = match candidates.len() {
+            0 => {
+                report.add(
+                    tyra_diagnostics::Diagnostic::error(format!(
+                        "cannot import `{}`: module not found",
+                        imp.path.join(".")
+                    ))
+                    .with_code("E0200"),
+                );
+                continue;
             }
-            stdlib_path.set_extension("tyra");
-            match std::fs::read_to_string(&stdlib_path) {
-                Ok(s) => {
-                    module_path = stdlib_path;
-                    s
-                }
-                Err(_) => {
-                    report.add(
-                        tyra_diagnostics::Diagnostic::error(format!(
-                            "cannot import `{}`: module not found",
-                            imp.path.join(".")
-                        ))
-                        .with_code("E0200"),
-                    );
-                    continue;
-                }
+            1 => candidates.into_iter().next().unwrap(),
+            _ => {
+                let locations = candidates
+                    .iter()
+                    .map(|p| format!("`{}`", p.display()))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                report.add(
+                    tyra_diagnostics::Diagnostic::error(format!(
+                        "import `{}` is ambiguous: found in {} locations: {}",
+                        imp.path.join("."),
+                        candidates.len(),
+                        locations,
+                    ))
+                    .with_code("E0217"),
+                );
+                continue;
             }
-        } else {
-            report.add(
-                tyra_diagnostics::Diagnostic::error(format!(
-                    "cannot import `{}`: module not found",
-                    imp.path.join(".")
-                ))
-                .with_code("E0200"),
-            );
-            continue;
+        };
+
+        let module_source = match std::fs::read_to_string(&module_path) {
+            Ok(s) => s,
+            Err(e) => {
+                report.add(
+                    tyra_diagnostics::Diagnostic::error(format!(
+                        "cannot read `{}`: {e}",
+                        module_path.display()
+                    ))
+                    .with_code("E0200"),
+                );
+                continue;
+            }
         };
 
         let module_id = sources.add(
@@ -380,32 +408,108 @@ fn is_builtin_module(module_path: &str) -> bool {
     matches!(module_path, "core.sys" | "core.tasks")
 }
 
-/// Resolve `import a.b.c` to the `.tyra` file path the compiler would read,
-/// using the same lookup order as `resolve_imports`:
-///   1. `<main_dir>/a/b/c.tyra`
-///   2. `<stdlib_dir>/a/b/c.tyra`  (via `TYRA_STDLIB` env or walk-up for `stdlib/`)
+/// Resolve `import a.b.c` to the `.tyra` file path using the ADR 0010 rule.
 ///
-/// Returns `None` for built-in modules (`core.sys`, `core.tasks`) and paths
-/// that do not exist on disk.
+/// Returns `None` for built-in modules, ambiguous imports (E0217), or
+/// paths that do not exist on disk. Returns `Some` only when exactly one
+/// candidate is found across all three layers.
 pub fn resolve_import_file(main_dir: &Path, path: &[String]) -> Option<std::path::PathBuf> {
     if is_builtin_module(&path.join(".")) {
         return None;
     }
-    let mut p = main_dir.to_path_buf();
-    for seg in path {
-        p.push(seg);
+    let project_root = tyra_manifest::find_project_root(main_dir);
+    let manifest = project_root
+        .as_deref()
+        .and_then(|r| tyra_manifest::load_manifest(r).ok());
+    let local_base: std::path::PathBuf = project_root
+        .as_deref()
+        .map(|r| {
+            let src = r.join("src");
+            if src.is_dir() { src } else { r.to_path_buf() }
+        })
+        .unwrap_or_else(|| main_dir.to_path_buf());
+    let candidates = collect_import_candidates(
+        path,
+        &local_base,
+        manifest.as_ref(),
+        project_root.as_deref(),
+        main_dir,
+    );
+    match candidates.len() {
+        1 => Some(candidates.into_iter().next().unwrap()),
+        _ => None,
     }
-    p.set_extension("tyra");
-    if p.is_file() {
-        return Some(p);
+}
+
+/// Collect all file-system candidates for an import path across three layers
+/// (ADR 0010 uniqueness rule).
+fn collect_import_candidates(
+    path_segs: &[String],
+    local_base: &Path,
+    manifest: Option<&tyra_manifest::Manifest>,
+    project_root: Option<&Path>,
+    main_dir: &Path,
+) -> Vec<std::path::PathBuf> {
+    let mut candidates = Vec::new();
+
+    // Layer (a): local_base / a / b / c.tyra
+    {
+        let mut p = local_base.to_path_buf();
+        for seg in path_segs {
+            p.push(seg);
+        }
+        p.set_extension("tyra");
+        if p.is_file() {
+            candidates.push(p);
+        }
     }
-    let stdlib = find_stdlib_dir(main_dir)?;
-    let mut sp = stdlib;
-    for seg in path {
-        sp.push(seg);
+
+    // Layer (b): dependency whose name matches the first import segment
+    if let (Some(m), Some(root)) = (manifest, project_root) {
+        let first_seg = path_segs.first().map(String::as_str).unwrap_or("");
+        for (dep_name, dep) in &m.dependencies {
+            if dep_name.as_str() != first_seg {
+                continue;
+            }
+            let dep_src = match (&dep.path, &dep.git, &dep.rev) {
+                (Some(rel), _, _) => root.join(rel).join("src"),
+                (None, Some(_), Some(rev)) => {
+                    git_dep_cache_root(dep_name, rev).join("src")
+                }
+                _ => continue,
+            };
+            let mut dp = dep_src;
+            for seg in path_segs {
+                dp.push(seg);
+            }
+            dp.set_extension("tyra");
+            if dp.is_file() {
+                candidates.push(dp);
+            }
+        }
     }
-    sp.set_extension("tyra");
-    sp.is_file().then_some(sp)
+
+    // Layer (c): stdlib
+    if let Some(stdlib) = find_stdlib_dir(main_dir) {
+        let mut sp = stdlib;
+        for seg in path_segs {
+            sp.push(seg);
+        }
+        sp.set_extension("tyra");
+        if sp.is_file() {
+            candidates.push(sp);
+        }
+    }
+
+    candidates
+}
+
+/// Canonical cache root for a git dependency (mirrors `tyra_pkg::cache_dir_for`).
+fn git_dep_cache_root(dep_name: &str, rev: &str) -> std::path::PathBuf {
+    let home = std::env::var("HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    home.join(".tyra").join("cache").join("git").join(dep_name).join(rev)
 }
 
 /// Add `import string` / `import list` / `import io` automatically when the
