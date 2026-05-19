@@ -230,7 +230,8 @@ pub fn compile_to_ir(source_path: &Path) -> CompileResult {
 /// 1. `TYRA_STDLIB` environment variable (highest priority; useful in CI and custom installs)
 /// 2. `<exe_dir>/stdlib/` — portable distribution: stdlib shipped next to the binary
 /// 3. `<exe_dir>/../lib/tyra/stdlib/` — FHS install: `/usr/local/bin/tyra` + `/usr/local/lib/tyra/stdlib/`
-/// 4. Walk up from `main_dir` — source checkout / dev use (finds `<repo_root>/stdlib/`)
+/// 4. Walk up from `<exe_dir>` — dev checkout (`target/debug/tyra` → repo root → `stdlib/`)
+/// 5. Walk up from `main_dir` — script mode without a known binary location
 fn find_stdlib_dir(main_dir: &Path) -> Option<std::path::PathBuf> {
     // 1. Explicit env override.
     if let Ok(p) = std::env::var("TYRA_STDLIB") {
@@ -240,23 +241,36 @@ fn find_stdlib_dir(main_dir: &Path) -> Option<std::path::PathBuf> {
         }
     }
 
-    // 2 & 3. Look relative to the running executable.
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            // 2. Portable: stdlib/ next to the binary.
-            let beside = exe_dir.join("stdlib");
-            if beside.is_dir() {
-                return Some(beside);
+    // 2–4. Look relative to the running executable.
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(exe_dir) = exe.parent()
+    {
+        // 2. Portable: stdlib/ next to the binary.
+        let beside = exe_dir.join("stdlib");
+        if beside.is_dir() {
+            return Some(beside);
+        }
+        // 3. FHS: ../lib/tyra/stdlib/ relative to the binary directory.
+        let fhs = exe_dir.join("..").join("lib").join("tyra").join("stdlib");
+        if fhs.is_dir() {
+            return Some(fhs);
+        }
+        // 4. Walk up from the binary's directory.
+        // Catches `target/debug/tyra` in a source checkout: the walk reaches
+        // `<repo>/stdlib/` before leaving the filesystem root.
+        let mut dir = exe_dir.to_path_buf();
+        loop {
+            let candidate = dir.join("stdlib");
+            if candidate.is_dir() {
+                return Some(candidate);
             }
-            // 3. FHS: ../lib/tyra/stdlib/ relative to the binary directory.
-            let fhs = exe_dir.join("..").join("lib").join("tyra").join("stdlib");
-            if fhs.is_dir() {
-                return Some(fhs);
+            if !dir.pop() {
+                break;
             }
         }
     }
 
-    // 4. Walk up from the source file's directory (source checkout / script mode).
+    // 5. Walk up from the source file's directory (script mode / no binary context).
     let mut dir = main_dir.to_path_buf();
     loop {
         let candidate = dir.join("stdlib");
@@ -541,12 +555,9 @@ fn collect_import_candidates(
                     let dep_root = git_dep_cache_root(dep_name, url, rev);
                     // Compile-time guards for cached git deps (stale/manual caches):
                     // check both the no-alias rule (ADR 0010) and bin rejection (ADR 0009).
-                    match check_git_dep_root(dep_name, &dep_root) {
-                        Err(kind) => {
-                            dep_errors.push((dep_name.clone(), kind));
-                            continue;
-                        }
-                        Ok(()) => {}
+                    if let Err(kind) = check_git_dep_root(dep_name, &dep_root) {
+                        dep_errors.push((dep_name.clone(), kind));
+                        continue;
                     }
                     dep_root.join("src")
                 }
@@ -655,14 +666,11 @@ fn auto_import_stdlib(ast: &mut tyra_ast::SourceFile) {
     let mut already: std::collections::HashSet<String> =
         std::collections::HashSet::new();
     for item in &ast.items {
-        if let Item::Import(imp) = item {
-            if imp.path.len() == 1 {
-                let local = imp
-                    .alias
-                    .as_deref()
-                    .unwrap_or(&imp.path[0]);
-                already.insert(local.to_string());
-            }
+        if let Item::Import(imp) = item
+            && imp.path.len() == 1
+        {
+            let local = imp.alias.as_deref().unwrap_or(&imp.path[0]);
+            already.insert(local.to_string());
         }
     }
 
@@ -687,10 +695,10 @@ fn auto_import_stdlib(ast: &mut tyra_ast::SourceFile) {
         match &e.kind {
             ExprKind::Call(callee, args) => {
                 if let ExprKind::FieldAccess(obj, method) = &callee.kind {
-                    if let ExprKind::Ident(name) = &obj.kind {
-                        if matches!(name.as_str(), "string" | "list" | "io") {
-                            needed.insert(name.clone());
-                        }
+                    if let ExprKind::Ident(name) = &obj.kind
+                        && matches!(name.as_str(), "string" | "list" | "io")
+                    {
+                        needed.insert(name.clone());
                     }
                     if STRING_METHOD_HINTS.contains(&method.as_str()) {
                         needed.insert("string".to_string());
@@ -831,19 +839,19 @@ fn auto_import_stdlib(ast: &mut tyra_ast::SourceFile) {
             .items
             .iter()
             .find_map(|it| match it {
-                Item::Import(i) => Some(i.span.clone()),
-                Item::FnDef(f) => Some(f.span.clone()),
+                Item::Import(i) => Some(i.span),
+                Item::FnDef(f) => Some(f.span),
                 Item::Stmt(s) => Some(stmt_span(s)),
                 _ => None,
             })
-            .unwrap_or_else(|| ast.span.clone());
+            .unwrap_or(ast.span);
         let mut prefix: Vec<Item> = to_add
             .into_iter()
             .map(|m| {
                 Item::Import(ImportDecl {
                     path: vec![m.to_string()],
                     alias: None,
-                    span: span.clone(),
+                    span,
                 })
             })
             .collect();
@@ -904,10 +912,11 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
                     // and Load both reference the same renamed slot.
                     let old_field = f.field_name.clone();
                     collect_idents(&mut f.pattern.kind, renames, counter);
-                    if let PatternKind::Ident(new_name) = &f.pattern.kind {
-                        if f.field_name == old_field && old_field != *new_name {
-                            f.field_name = new_name.clone();
-                        }
+                    if let PatternKind::Ident(new_name) = &f.pattern.kind
+                        && f.field_name == old_field
+                        && old_field != *new_name
+                    {
+                        f.field_name = new_name.clone();
                     }
                 }
             }
@@ -1163,10 +1172,10 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
         }
     }
 
-    let _ = (Pattern { kind: PatternKind::Wildcard, span: ast.span.clone() },
+    let _ = (Pattern { kind: PatternKind::Wildcard, span: ast.span },
              PatternField { field_name: String::new(),
-                             pattern: Pattern { kind: PatternKind::Wildcard, span: ast.span.clone() },
-                             span: ast.span.clone() });
+                             pattern: Pattern { kind: PatternKind::Wildcard, span: ast.span },
+                             span: ast.span });
 
     for item in &mut ast.items {
         match item {
@@ -1451,13 +1460,13 @@ fn rename_let_shadows(ast: &mut tyra_ast::SourceFile) {
 fn stmt_span(s: &tyra_ast::Stmt) -> tyra_ast::Span {
     use tyra_ast::Stmt;
     match s {
-        Stmt::Let(l) => l.span.clone(),
-        Stmt::Mut(m) => m.span.clone(),
-        Stmt::Return(r) => r.span.clone(),
-        Stmt::Expr(e) => e.span.clone(),
-        Stmt::Defer(d) => d.span.clone(),
-        Stmt::Break(b) => b.span.clone(),
-        Stmt::Continue(c) => c.span.clone(),
+        Stmt::Let(l) => l.span,
+        Stmt::Mut(m) => m.span,
+        Stmt::Return(r) => r.span,
+        Stmt::Expr(e) => e.span,
+        Stmt::Defer(d) => d.span,
+        Stmt::Break(b) => b.span,
+        Stmt::Continue(c) => c.span,
     }
 }
 
@@ -1801,17 +1810,28 @@ mod tests {
     #[test]
     fn resolve_import_file_ambiguous_local_and_stdlib_returns_none() {
         // local/mymod.tyra  (layer a)
-        // local/stdlib/mymod.tyra  (layer c, found via walk-up)
+        // stdlib/mymod.tyra  (layer c, pinned via TYRA_STDLIB)
         // → 2 candidates → None
         use std::fs;
         let dir = tempfile::tempdir().unwrap();
         let main_dir = dir.path();
         fs::write(main_dir.join("mymod.tyra"), "export fn f() -> Unit\nend\n").unwrap();
-        let stdlib_dir = main_dir.join("stdlib");
+        let stdlib_dir = dir.path().join("stdlib");
         fs::create_dir(&stdlib_dir).unwrap();
         fs::write(stdlib_dir.join("mymod.tyra"), "export fn f() -> Unit\nend\n").unwrap();
 
+        // Pin stdlib so exe-relative discovery doesn't find the real stdlib first.
+        let prev = std::env::var("TYRA_STDLIB").ok();
+        // SAFETY: single-threaded test; no other thread reads TYRA_STDLIB concurrently.
+        unsafe { std::env::set_var("TYRA_STDLIB", &stdlib_dir); }
         let result = resolve_import_file(main_dir, &["mymod".to_string()]);
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("TYRA_STDLIB", v),
+                None => std::env::remove_var("TYRA_STDLIB"),
+            }
+        }
+
         assert!(
             result.is_none(),
             "ambiguous local+stdlib import must return None, got {result:?}"

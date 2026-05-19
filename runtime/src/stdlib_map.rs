@@ -45,7 +45,7 @@ fn key_eq(node_key: *const c_char, query: &str) -> bool {
     if node_key.is_null() {
         return false;
     }
-    unsafe { CStr::from_ptr(node_key) }.to_str().map_or(false, |k| k == query)
+    unsafe { CStr::from_ptr(node_key) }.to_str().is_ok_and(|k| k == query)
 }
 
 /// `__map_new_string_int() -> ptr` — allocate an empty map.

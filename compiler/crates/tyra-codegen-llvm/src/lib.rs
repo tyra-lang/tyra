@@ -1,4 +1,6 @@
 // tyra-codegen-llvm: Generate LLVM IR text from MIR.
+#![allow(clippy::collapsible_if, clippy::collapsible_match)]
+#![allow(clippy::too_many_arguments)]
 //
 // Milestone 1a approach: generate LLVM IR as text (.ll file),
 // then compile with clang. No LLVM library dependency needed.

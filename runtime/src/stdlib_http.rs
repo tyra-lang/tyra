@@ -199,7 +199,7 @@ pub unsafe extern "C" fn tyra_http_status(h: i64) -> i64 {
 pub unsafe extern "C" fn tyra_http_body(h: i64) -> *const c_char {
     unsafe { resp_ref(h) }
         .map(|r| r.body.as_ptr())
-        .unwrap_or(b"\0".as_ptr() as *const c_char)
+        .unwrap_or(c"".as_ptr())
 }
 
 #[unsafe(no_mangle)]

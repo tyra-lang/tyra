@@ -276,7 +276,7 @@ pub unsafe extern "C" fn tyra_string_split_whitespace(
     let input = borrow_utf8(s);
     let parts: Vec<*const c_char> = input
         .split_whitespace()
-        .map(|p| alloc_gc_cstring(p))
+        .map(alloc_gc_cstring)
         .collect();
     unsafe { fill_list_string_ret(out, parts) };
 }
@@ -303,7 +303,7 @@ pub unsafe extern "C" fn tyra_string_split(
     } else {
         input
             .split(separator)
-            .map(|p| alloc_gc_cstring(p))
+            .map(alloc_gc_cstring)
             .collect()
     };
     unsafe { fill_list_string_ret(out, parts) };

@@ -41,13 +41,13 @@ fn main() {
             .map(|s| s.to_string())
             .or_else(|| info.payload().downcast_ref::<String>().cloned())
             .unwrap_or_else(|| "internal compiler error".to_string());
-        if let Some(rest) = msg.strip_prefix("[E") {
-            if let Some(close) = rest.find(']') {
-                let code = &rest[..close];
-                let body = rest[close + 1..].trim_start_matches([':', ' ']);
-                eprintln!("error[E{code}]: {body}");
-                return;
-            }
+        if let Some(rest) = msg.strip_prefix("[E")
+            && let Some(close) = rest.find(']')
+        {
+            let code = &rest[..close];
+            let body = rest[close + 1..].trim_start_matches([':', ' ']);
+            eprintln!("error[E{code}]: {body}");
+            return;
         }
         eprintln!("error: {msg}");
     }));
@@ -323,11 +323,11 @@ fn main() {
                             eprintln!("{}: would reformat", file.display());
                             any_would_change = true;
                         }
-                    } else if src != formatted {
-                        if let Err(e) = std::fs::write(file, &formatted) {
-                            eprintln!("error: cannot write {}: {e}", file.display());
-                            process::exit(1);
-                        }
+                    } else if src != formatted
+                        && let Err(e) = std::fs::write(file, &formatted)
+                    {
+                        eprintln!("error: cannot write {}: {e}", file.display());
+                        process::exit(1);
                     }
                 }
                 if check_only && any_would_change {
@@ -585,15 +585,15 @@ fn main() {
                         match rest[i].as_str() {
                             "--path" => {
                                 i += 1;
-                                path_val = rest.get(i).map(|s| s.clone());
+                                path_val = rest.get(i).cloned();
                             }
                             "--git" => {
                                 i += 1;
-                                git_val = rest.get(i).map(|s| s.clone());
+                                git_val = rest.get(i).cloned();
                             }
                             "--rev" => {
                                 i += 1;
-                                rev_val = rest.get(i).map(|s| s.clone());
+                                rev_val = rest.get(i).cloned();
                             }
                             a if a.starts_with("--") => {
                                 eprintln!("error: unknown flag `{a}`");
@@ -792,15 +792,15 @@ fn main() {
                         match rest[i].as_str() {
                             "--path" => {
                                 i += 1;
-                                path_val = rest.get(i).map(|s| s.clone());
+                                path_val = rest.get(i).cloned();
                             }
                             "--git" => {
                                 i += 1;
-                                git_val = rest.get(i).map(|s| s.clone());
+                                git_val = rest.get(i).cloned();
                             }
                             "--rev" => {
                                 i += 1;
-                                rev_val = rest.get(i).map(|s| s.clone());
+                                rev_val = rest.get(i).cloned();
                             }
                             a if a.starts_with("--") => {
                                 eprintln!("error: unknown flag `{a}`");
@@ -1076,13 +1076,12 @@ fn find_test_fns(ast: &tyra_ast::SourceFile) -> Vec<String> {
     ast.items
         .iter()
         .filter_map(|item| {
-            if let tyra_ast::Item::FnDef(f) = item {
-                if f.name.starts_with("test_")
-                    && f.params.is_empty()
-                    && f.self_param.is_none()
-                {
-                    return Some(f.name.clone());
-                }
+            if let tyra_ast::Item::FnDef(f) = item
+                && f.name.starts_with("test_")
+                && f.params.is_empty()
+                && f.self_param.is_none()
+            {
+                return Some(f.name.clone());
             }
             None
         })
@@ -1132,11 +1131,11 @@ fn synthesize_runner(test_source: &str, test_fns: &[String]) -> String {
     for (i, name) in test_fns.iter().enumerate() {
         let seq = i + 1;
         out.push_str(&format!("  match {name}()\n"));
-        out.push_str(&format!("  when Ok(_)\n"));
+        out.push_str("  when Ok(_)\n");
         out.push_str(&format!("    println(\"ok {seq} - {name}\")\n"));
-        out.push_str(&format!("  when Err(msg)\n"));
+        out.push_str("  when Err(msg)\n");
         out.push_str(&format!("    println(\"not ok {seq} - {name}\")\n"));
-        out.push_str(&format!("    println(\"# #{{msg}}\")\n"));
+        out.push_str("    println(\"# #{msg}\")\n");
         out.push_str("  end\n");
     }
     out.push_str("end\n");
@@ -1412,20 +1411,20 @@ fn parse_tap_to_records(tap: &str) -> Vec<TestRecord> {
     let mut last_failed: Option<usize> = None;
     for line in tap.lines() {
         if let Some(rest) = line.strip_prefix("not ok ") {
-            let name = rest.splitn(2, " - ").nth(1).unwrap_or(rest).to_string();
+            let name = rest.split_once(" - ").map(|(_, b)| b).unwrap_or(rest).to_string();
             records.push(TestRecord { name, passed: false, failure_msg: String::new() });
             last_failed = Some(records.len() - 1);
         } else if let Some(rest) = line.strip_prefix("ok ") {
-            let name = rest.splitn(2, " - ").nth(1).unwrap_or(rest).to_string();
+            let name = rest.split_once(" - ").map(|(_, b)| b).unwrap_or(rest).to_string();
             records.push(TestRecord { name, passed: true, failure_msg: String::new() });
             last_failed = None;
-        } else if let Some(msg) = line.strip_prefix("# ") {
-            if let Some(idx) = last_failed {
-                if !records[idx].failure_msg.is_empty() {
-                    records[idx].failure_msg.push('\n');
-                }
-                records[idx].failure_msg.push_str(msg);
+        } else if let Some(msg) = line.strip_prefix("# ")
+            && let Some(idx) = last_failed
+        {
+            if !records[idx].failure_msg.is_empty() {
+                records[idx].failure_msg.push('\n');
             }
+            records[idx].failure_msg.push_str(msg);
         }
     }
     records

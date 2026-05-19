@@ -891,11 +891,11 @@ fn check_fn(f: &FnDef, env: &mut TypeEnv, self_ty: Option<&Ty>, report: &mut Rep
     for (i, stmt) in f.body.iter().enumerate() {
         check_stmt(stmt, env, report);
         // Cache the last expression statement's type (avoids double inference)
-        if i + 1 == f.body.len() {
-            if let Stmt::Expr(expr_stmt) = stmt {
-                last_expr_ty = Some(infer_expr(&expr_stmt.expr, env, report));
-                last_expr_span = Some(expr_stmt.expr.span);
-            }
+        if i + 1 == f.body.len()
+            && let Stmt::Expr(expr_stmt) = stmt
+        {
+            last_expr_ty = Some(infer_expr(&expr_stmt.expr, env, report));
+            last_expr_span = Some(expr_stmt.expr.span);
         }
     }
 
@@ -903,20 +903,20 @@ fn check_fn(f: &FnDef, env: &mut TypeEnv, self_ty: Option<&Ty>, report: &mut Rep
     // the declared return type (if any). Explicit `return` stmts are checked in
     // check_stmt via the return_type_stack.
 
-    if declared_ret != Ty::Unit {
-        if let (Some(actual_ty), Some(span)) = (last_expr_ty, last_expr_span) {
-            if !return_check_skip(&declared_ret, &actual_ty) && actual_ty != declared_ret {
-                report.add(
-                    Diagnostic::error(format!(
-                        "return type mismatch: expected {}, found {}",
-                        declared_ret.display_name(),
-                        actual_ty.display_name()
-                    ))
-                    .with_code("E0309")
-                    .with_label(Label::new(span, "this expression has the wrong type")),
-                );
-            }
-        }
+    if declared_ret != Ty::Unit
+        && let (Some(actual_ty), Some(span)) = (last_expr_ty, last_expr_span)
+        && !return_check_skip(&declared_ret, &actual_ty)
+        && actual_ty != declared_ret
+    {
+        report.add(
+            Diagnostic::error(format!(
+                "return type mismatch: expected {}, found {}",
+                declared_ret.display_name(),
+                actual_ty.display_name()
+            ))
+            .with_code("E0309")
+            .with_label(Label::new(span, "this expression has the wrong type")),
+        );
     }
 
     env.pop_return_type();
@@ -1122,16 +1122,16 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
         // Assignment
         ExprKind::Assign(lhs, rhs) => {
             // Reject assignment to `let`-bound (immutable) variables (E0206).
-            if let ExprKind::Ident(name) = &lhs.kind {
-                if env.is_let_bound(name) {
-                    report.add(
-                        Diagnostic::error(format!(
-                            "cannot assign to `{name}` because it is not declared `mut`"
-                        ))
-                        .with_code("E0206")
-                        .with_label(Label::new(expr.span, "assignment to immutable variable")),
-                    );
-                }
+            if let ExprKind::Ident(name) = &lhs.kind
+                && env.is_let_bound(name)
+            {
+                report.add(
+                    Diagnostic::error(format!(
+                        "cannot assign to `{name}` because it is not declared `mut`"
+                    ))
+                    .with_code("E0206")
+                    .with_label(Label::new(expr.span, "assignment to immutable variable")),
+                );
             }
             infer_expr(lhs, env, report);
             infer_expr(rhs, env, report);
@@ -1155,27 +1155,20 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 // × wrong-type-element mismatches that would otherwise reach
                 // LLVM and produce an opaque E0500.  We handle this case here
                 // before falling through to the Ty::Error return.
-                if let ExprKind::Ident(module_name) = &obj.kind {
-                    if module_name == "list"
-                        && matches!(method.as_str(), "push" | "push_str")
-                        && args.len() == 2
+                if let ExprKind::Ident(module_name) = &obj.kind
+                    && module_name == "list"
+                    && matches!(method.as_str(), "push" | "push_str")
+                    && args.len() == 2
+                {
+                    let list_ty = infer_expr(&args[0].value, env, report);
+                    let elem_ty = infer_expr(&args[1].value, env, report);
+                    if let Ty::Generic(name, params) = &list_ty
+                        && name == "List"
+                        && let Some(expected) = params.first()
                     {
-                        let list_ty = infer_expr(&args[0].value, env, report);
-                        let elem_ty = infer_expr(&args[1].value, env, report);
-                        if let Ty::Generic(name, params) = &list_ty {
-                            if name == "List" {
-                                if let Some(expected) = params.first() {
-                                    check_type_match(
-                                        expected,
-                                        &elem_ty,
-                                        args[1].span,
-                                        report,
-                                    );
-                                }
-                            }
-                        }
-                        return list_ty;
+                        check_type_match(expected, &elem_ty, args[1].span, report);
                     }
+                    return list_ty;
                 }
 
                 // Still infer arg types so argument errors surface.
@@ -1792,6 +1785,7 @@ fn bind_pattern_types(pat: &Pattern, env: &mut TypeEnv) {
 /// - Nested Constructor exhaustiveness (e.g. Err(NotFound) only) not checked
 /// - Unknown Named types and generics other than Option/Result are skipped
 /// - Literal exhaustiveness (Int/String) not checked
+///
 /// Check that match arm Constructor patterns are compatible with the subject type.
 /// Catches the common case where `?` strips a Result to `T` but the arms still
 /// use `Some(s)` / `None` or `Ok` / `Err` patterns against the plain value.

@@ -6,8 +6,11 @@
 //! - Handler ABI: `fn(*const TyraRequest) -> *const TyraResponse` — plain
 //!   Tyra data-struct pointers allocated via GC_malloc, matching the
 //!   LLVM layout the codegen emits:
-//!     TyraRequest  = { *const c_char method, *const c_char path, *const c_char body }
-//!     TyraResponse = { i64 status, *const c_char body }
+//!
+//! ```text
+//!   TyraRequest  = { *const c_char method, *const c_char path, *const c_char body }
+//!   TyraResponse = { i64 status, *const c_char body }
+//! ```
 //! - Single-threaded: handlers run on the listener thread. OK for v0.1
 //!   demo / dev-tool scope; upgrade to thread-per-connection or M9 spawn
 //!   dispatch when performance matters.

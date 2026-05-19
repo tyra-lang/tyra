@@ -44,8 +44,8 @@ pub(crate) enum JsonValue {
     Bool(bool),
     Int(i64),
     Str(CString),
-    Array(Vec<Box<JsonValue>>),
-    Object(Vec<(CString, Box<JsonValue>)>),
+    Array(Vec<JsonValue>),
+    Object(Vec<(CString, JsonValue)>),
 }
 
 // `JsonValue` is Send + Sync automatically because every field is Send + Sync
@@ -235,7 +235,7 @@ impl<'a> Parser<'a> {
                         None => return Err(self.err("unterminated string escape")),
                     }
                 }
-                Some(b) if b == 0 => return Err(self.err("NUL byte in string")),
+                Some(0) => return Err(self.err("NUL byte in string")),
                 Some(b) => buf.push(b),
                 None => return Err(self.err("unterminated string")),
             }
@@ -245,12 +245,12 @@ impl<'a> Parser<'a> {
 
     fn parse_array(&mut self) -> Result<JsonValue, ParseErr> {
         self.expect(b'[')?;
-        let mut items: Vec<Box<JsonValue>> = Vec::new();
+        let mut items: Vec<JsonValue> = Vec::new();
         self.skip_ws();
         if self.peek() == Some(b']') { self.bump(); return Ok(JsonValue::Array(items)); }
         loop {
             let v = self.parse_value()?;
-            items.push(Box::new(v));
+            items.push(v);
             self.skip_ws();
             match self.peek() {
                 Some(b',') => { self.bump(); }
@@ -264,7 +264,7 @@ impl<'a> Parser<'a> {
 
     fn parse_object(&mut self) -> Result<JsonValue, ParseErr> {
         self.expect(b'{')?;
-        let mut items: Vec<(CString, Box<JsonValue>)> = Vec::new();
+        let mut items: Vec<(CString, JsonValue)> = Vec::new();
         self.skip_ws();
         if self.peek() == Some(b'}') { self.bump(); return Ok(JsonValue::Object(items)); }
         loop {
@@ -273,7 +273,7 @@ impl<'a> Parser<'a> {
             self.skip_ws();
             self.expect(b':')?;
             let v = self.parse_value()?;
-            items.push((key, Box::new(v)));
+            items.push((key, v));
             self.skip_ws();
             match self.peek() {
                 Some(b',') => { self.bump(); }
@@ -408,7 +408,7 @@ pub unsafe extern "C" fn tyra_json_is_bool(h: i64) -> c_int {
 pub unsafe extern "C" fn tyra_json_str(h: i64) -> *const c_char {
     match unsafe { node_ref(h) } {
         Some(JsonValue::Str(s)) => s.as_ptr(),
-        _ => b"\0".as_ptr() as *const c_char,
+        _ => c"".as_ptr(),
     }
 }
 
@@ -440,7 +440,7 @@ pub unsafe extern "C" fn tyra_json_get(h: i64, key: *const c_char) -> i64 {
         Some(JsonValue::Object(entries)) => {
             for (k, v) in entries {
                 if k.as_bytes() == key_bytes {
-                    return (&**v) as *const JsonValue as i64;
+                    return v as *const JsonValue as i64;
                 }
             }
             0
@@ -458,7 +458,7 @@ pub unsafe extern "C" fn tyra_json_at(h: i64, index: i64) -> i64 {
             let i = index as usize;
             items
                 .get(i)
-                .map(|b| (&**b) as *const JsonValue as i64)
+                .map(|b| b as *const JsonValue as i64)
                 .unwrap_or(0)
         }
         _ => 0,

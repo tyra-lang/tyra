@@ -3,6 +3,10 @@
 //
 // Current scope (Milestone 1a): basic expressions, function calls, if/while.
 // Full match lowering, closures, and async are deferred.
+#![allow(clippy::collapsible_if, clippy::collapsible_else_if)]
+#![allow(clippy::unnecessary_map_or, clippy::manual_map)]
+#![allow(clippy::single_match)]
+#![allow(clippy::doc_lazy_continuation)]
 
 pub mod ir;
 pub mod lower;
