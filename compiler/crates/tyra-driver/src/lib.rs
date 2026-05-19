@@ -305,13 +305,28 @@ fn resolve_imports(
             continue;
         }
 
+        let mut bin_errors: Vec<String> = Vec::new();
         let candidates = collect_import_candidates(
             &imp.path,
             &local_base,
             manifest.as_ref(),
             project_root.as_deref(),
             main_dir,
+            &mut bin_errors,
         );
+        for dep in &bin_errors {
+            report.add(
+                tyra_diagnostics::Diagnostic::error(format!(
+                    "cannot import `{}`: dependency `{dep}` is a bin package \
+                     and cannot be imported",
+                    imp.path.join(".")
+                ))
+                .with_code("E0218"),
+            );
+        }
+        if !bin_errors.is_empty() {
+            continue;
+        }
 
         let module_path = match candidates.len() {
             0 => {
@@ -428,13 +443,18 @@ pub fn resolve_import_file(main_dir: &Path, path: &[String]) -> Option<std::path
             if src.is_dir() { src } else { r.to_path_buf() }
         })
         .unwrap_or_else(|| main_dir.to_path_buf());
+    let mut bin_errors: Vec<String> = Vec::new();
     let candidates = collect_import_candidates(
         path,
         &local_base,
         manifest.as_ref(),
         project_root.as_deref(),
         main_dir,
+        &mut bin_errors,
     );
+    if !bin_errors.is_empty() {
+        return None;
+    }
     match candidates.len() {
         1 => Some(candidates.into_iter().next().unwrap()),
         _ => None,
@@ -443,12 +463,17 @@ pub fn resolve_import_file(main_dir: &Path, path: &[String]) -> Option<std::path
 
 /// Collect all file-system candidates for an import path across three layers
 /// (ADR 0010 uniqueness rule).
+///
+/// `bin_path_dep_errors` is populated with dependency names whose root module
+/// is a bin package (ADR 0009 E_DEP_NOT_IMPORTABLE). Callers must emit E0218
+/// diagnostics for each such name and skip the import.
 fn collect_import_candidates(
     path_segs: &[String],
     local_base: &Path,
     manifest: Option<&tyra_manifest::Manifest>,
     project_root: Option<&Path>,
     main_dir: &Path,
+    bin_path_dep_errors: &mut Vec<String>,
 ) -> Vec<std::path::PathBuf> {
     let mut candidates = Vec::new();
 
@@ -472,9 +497,17 @@ fn collect_import_candidates(
                 continue;
             }
             let dep_src = match (&dep.path, &dep.git, &dep.rev) {
-                (Some(rel), _, _) => root.join(rel).join("src"),
-                (None, Some(_), Some(rev)) => {
-                    git_dep_cache_root(dep_name, rev).join("src")
+                (Some(rel), _, _) => {
+                    let dep_root = root.join(rel);
+                    // Reject bin packages at compile time (ADR 0009 E_DEP_NOT_IMPORTABLE).
+                    if is_bin_dep(&dep_root) {
+                        bin_path_dep_errors.push(dep_name.clone());
+                        continue;
+                    }
+                    dep_root.join("src")
+                }
+                (None, Some(url), Some(rev)) => {
+                    git_dep_cache_root(dep_name, url, rev).join("src")
                 }
                 _ => continue,
             };
@@ -504,12 +537,40 @@ fn collect_import_candidates(
     candidates
 }
 
+/// Returns `true` when the dependency at `dep_root` is a bin package
+/// (its root module contains `fn main` or top-level executable statements).
+fn is_bin_dep(dep_root: &Path) -> bool {
+    let Ok(manifest) = tyra_manifest::load_manifest(dep_root) else {
+        return false;
+    };
+    let root_src = dep_root
+        .join("src")
+        .join(format!("{}.tyra", manifest.package.name));
+    let Ok(src) = std::fs::read_to_string(&root_src) else {
+        return false;
+    };
+    tyra_manifest::is_bin_source(&src)
+}
+
 /// Canonical cache root for a git dependency (mirrors `tyra_pkg::cache_dir_for`).
-fn git_dep_cache_root(dep_name: &str, rev: &str) -> std::path::PathBuf {
+///
+/// `~/.tyra/cache/git/<dep_name>-<url_hash12>/<rev>/`
+fn git_dep_cache_root(dep_name: &str, url: &str, rev: &str) -> std::path::PathBuf {
     let home = std::env::var("HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::path::PathBuf::from("."));
-    home.join(".tyra").join("cache").join("git").join(dep_name).join(rev)
+    let dir_name = format!("{dep_name}-{}", url_hash_12(url));
+    home.join(".tyra").join("cache").join("git").join(dir_name).join(rev)
+}
+
+/// 12-character lowercase hex of FNV-1a(url). Mirrors `tyra_pkg::url_hash`.
+fn url_hash_12(url: &str) -> String {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in url.bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    format!("{:012x}", h & 0x0000_ffff_ffff_ffff)
 }
 
 /// Add `import string` / `import list` / `import io` automatically when the
@@ -1649,6 +1710,106 @@ mod tests {
         assert!(got.is_none(), "core.sys is builtin, should return None");
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn resolve_import_file_ambiguous_local_and_stdlib_returns_none() {
+        // local/mymod.tyra  (layer a)
+        // local/stdlib/mymod.tyra  (layer c, found via walk-up)
+        // → 2 candidates → None
+        use std::fs;
+        let dir = tempfile::tempdir().unwrap();
+        let main_dir = dir.path();
+        fs::write(main_dir.join("mymod.tyra"), "export fn f() -> Unit\nend\n").unwrap();
+        let stdlib_dir = main_dir.join("stdlib");
+        fs::create_dir(&stdlib_dir).unwrap();
+        fs::write(stdlib_dir.join("mymod.tyra"), "export fn f() -> Unit\nend\n").unwrap();
+
+        let result = resolve_import_file(main_dir, &["mymod".to_string()]);
+        assert!(
+            result.is_none(),
+            "ambiguous local+stdlib import must return None, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn resolve_import_file_path_dep_returns_some() {
+        // project/Tyra.toml  (dep mylib = { path = <lib_dir> })
+        // project/src/main.tyra
+        // <lib_dir>/Tyra.toml
+        // <lib_dir>/src/mylib.tyra  (lib source)
+        // resolve_import_file(project/src/, ["mylib"]) → Some(<lib_dir>/src/mylib.tyra)
+        use std::fs;
+        let project = tempfile::tempdir().unwrap();
+        let lib = tempfile::tempdir().unwrap();
+
+        fs::write(
+            lib.path().join("Tyra.toml"),
+            "[package]\nname    = \"mylib\"\nversion = \"0.1.0\"\nedition = \"2026\"\n",
+        )
+        .unwrap();
+        fs::create_dir(lib.path().join("src")).unwrap();
+        let lib_src = lib.path().join("src/mylib.tyra");
+        fs::write(&lib_src, "export fn greet(n: String) -> String\n  n\nend\n").unwrap();
+
+        fs::write(
+            project.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\nmylib = {{ path = \"{}\" }}\n",
+                lib.path().display()
+            ),
+        )
+        .unwrap();
+        let src_dir = project.path().join("src");
+        fs::create_dir(&src_dir).unwrap();
+        fs::write(src_dir.join("myapp.tyra"), "import mylib\n").unwrap();
+
+        let result = resolve_import_file(&src_dir, &["mylib".to_string()]);
+        assert!(result.is_some(), "path dep resolution must return Some");
+        assert_eq!(
+            result.unwrap().canonicalize().unwrap(),
+            lib_src.canonicalize().unwrap()
+        );
+    }
+
+    #[test]
+    fn resolve_import_file_bin_path_dep_returns_none() {
+        // A path dep whose root source has `fn main` must return None (E0218).
+        use std::fs;
+        let project = tempfile::tempdir().unwrap();
+        let bin_dep = tempfile::tempdir().unwrap();
+
+        fs::write(
+            bin_dep.path().join("Tyra.toml"),
+            "[package]\nname    = \"mybin\"\nversion = \"0.1.0\"\nedition = \"2026\"\n",
+        )
+        .unwrap();
+        fs::create_dir(bin_dep.path().join("src")).unwrap();
+        fs::write(
+            bin_dep.path().join("src/mybin.tyra"),
+            "fn main() -> Unit\n  print(\"hi\")\nend\n",
+        )
+        .unwrap();
+
+        fs::write(
+            project.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"app\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\nmybin = {{ path = \"{}\" }}\n",
+                bin_dep.path().display()
+            ),
+        )
+        .unwrap();
+        let src_dir = project.path().join("src");
+        fs::create_dir(&src_dir).unwrap();
+        fs::write(src_dir.join("app.tyra"), "import mybin\n").unwrap();
+
+        let result = resolve_import_file(&src_dir, &["mybin".to_string()]);
+        assert!(
+            result.is_none(),
+            "bin path dep must return None, got {result:?}"
+        );
     }
 
     #[test]

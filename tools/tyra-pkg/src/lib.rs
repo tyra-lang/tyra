@@ -5,7 +5,7 @@
 //! - `run_add(project_root, dep_name, source)` — append a dependency entry
 //! - `run_tree(project_root)` — render the dependency tree as a string
 //! - `run_sync(project_root)` — clone git deps into `~/.tyra/cache/git/`
-//! - `cache_dir_for(dep_name, rev)` — canonical cache path for a git dep
+//! - `cache_dir_for(dep_name, url, rev)` — canonical cache path for a git dep
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -235,12 +235,26 @@ pub fn run_sync_from(start: &Path) -> Result<SyncReport, PkgError> {
 
 /// Canonical cache directory for a git dependency.
 ///
-/// `~/.tyra/cache/git/<dep_name>/<rev>/`
-pub fn cache_dir_for(dep_name: &str, rev: &str) -> PathBuf {
+/// `~/.tyra/cache/git/<dep_name>-<url_hash12>/<rev>/`
+///
+/// The URL hash prevents cache collisions when two manifests declare the same
+/// dependency name pointing to different repositories.
+pub fn cache_dir_for(dep_name: &str, url: &str, rev: &str) -> PathBuf {
     let home = std::env::var("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("."));
-    home.join(".tyra").join("cache").join("git").join(dep_name).join(rev)
+    let dir_name = format!("{dep_name}-{}", url_hash(url));
+    home.join(".tyra").join("cache").join("git").join(dir_name).join(rev)
+}
+
+/// 12-character lowercase hex of FNV-1a(url). No extra crate needed.
+fn url_hash(url: &str) -> String {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in url.bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    format!("{:012x}", h & 0x0000_ffff_ffff_ffff)
 }
 
 /// Report returned by `run_sync`.
@@ -276,7 +290,7 @@ enum SyncStatus {
 }
 
 fn sync_git_dep(dep_name: &str, url: &str, rev: &str) -> Result<SyncStatus, PkgError> {
-    let cache_dir = cache_dir_for(dep_name, rev);
+    let cache_dir = cache_dir_for(dep_name, url, rev);
 
     // Already in cache and has a valid manifest?
     if cache_dir.join("Tyra.toml").is_file() {
