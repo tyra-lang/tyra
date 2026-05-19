@@ -493,23 +493,33 @@ fn main() {
                 }
                 "tree" => {
                     let json_flag = args.get(3).map(String::as_str) == Some("--json");
+                    let max_args = if json_flag { 4 } else { 3 };
+                    if args.len() > max_args + 1 {
+                        eprintln!("error: unexpected argument `{}`", args[max_args + 1]);
+                        eprintln!("usage: tyra mod tree [--json]");
+                        process::exit(1);
+                    }
                     if args.len() > 3 && !json_flag {
                         eprintln!("error: unknown argument `{}`", args[3]);
                         eprintln!("usage: tyra mod tree [--json]");
                         process::exit(1);
                     }
                     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-                    match tyra_pkg::run_tree_from(&cwd) {
-                        Ok(tree) => {
-                            if json_flag {
-                                print!("{}", tree_to_json(&tree));
-                            } else {
-                                print!("{tree}");
+                    if json_flag {
+                        match tyra_pkg::run_tree_json_from(&cwd) {
+                            Ok(json) => print!("{json}"),
+                            Err(e) => {
+                                eprintln!("error: {e}");
+                                process::exit(1);
                             }
                         }
-                        Err(e) => {
-                            eprintln!("error: {e}");
-                            process::exit(1);
+                    } else {
+                        match tyra_pkg::run_tree_from(&cwd) {
+                            Ok(tree) => print!("{tree}"),
+                            Err(e) => {
+                                eprintln!("error: {e}");
+                                process::exit(1);
+                            }
                         }
                     }
                 }
@@ -517,6 +527,11 @@ fn main() {
                     let check_flag = args.get(3).map(String::as_str) == Some("--check");
                     if args.len() > 3 && !check_flag {
                         eprintln!("error: unknown argument `{}`", args[3]);
+                        eprintln!("usage: tyra mod sync [--check]");
+                        process::exit(1);
+                    }
+                    if check_flag && args.len() > 4 {
+                        eprintln!("error: unexpected argument `{}`", args[4]);
                         eprintln!("usage: tyra mod sync [--check]");
                         process::exit(1);
                     }
@@ -566,6 +581,11 @@ fn main() {
                             process::exit(1);
                         }
                     };
+                    if args.len() > 4 {
+                        eprintln!("error: unexpected argument `{}`", args[4]);
+                        eprintln!("usage: tyra mod remove <name>");
+                        process::exit(1);
+                    }
                     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
                     match tyra_pkg::run_remove_from(&cwd, dep_name) {
                         Ok(()) => println!("removed dependency `{dep_name}`"),
@@ -660,62 +680,6 @@ fn print_usage() {
     eprintln!("  --help                                   show this help");
 }
 
-/// Convert the human-readable tree output of `run_tree` into a minimal JSON
-/// structure: `{"name":"...","version":"...","deps":[...]}`.  Parses the
-/// indented tree text so no extra crate is needed.
-fn tree_to_json(tree: &str) -> String {
-    fn escape(s: &str) -> String {
-        s.replace('\\', "\\\\").replace('"', "\\\"")
-    }
-    fn node_json(name: &str, version: &str, source: &str, note: &str) -> String {
-        let src = escape(source);
-        let note_field = if note.is_empty() {
-            String::new()
-        } else {
-            format!(",\"note\":\"{}\"", escape(note))
-        };
-        format!(
-            "{{\"name\":\"{}\",\"version\":\"{}\",\"source\":\"{}\"{}}}",
-            escape(name),
-            escape(version),
-            src,
-            note_field
-        )
-    }
-
-    let mut lines = tree.lines();
-    // First line: "<name> <version>"
-    let first = lines.next().unwrap_or("");
-    let mut parts = first.splitn(2, ' ');
-    let root_name = parts.next().unwrap_or("");
-    let root_ver = parts.next().unwrap_or("");
-
-    // Remaining lines are dep nodes; collect them as flat JSON objects.
-    let mut deps_json: Vec<String> = Vec::new();
-    for line in lines {
-        let trimmed = line.trim_start_matches(|c| matches!(c, '│' | ' ' | '├' | '└' | '─'));
-        if trimmed.is_empty() { continue; }
-        // Format: "<name> <version> (source: ...) [note]"  or similar
-        let (before_note, note): (&str, &str) =
-            if let Some(s) = trimmed.strip_suffix(']') {
-                if let Some(p) = s.rfind('[') {
-                    (s[..p].trim_end(), &s[p + 1..])
-                } else { (trimmed, "") }
-            } else { (trimmed, "") };
-        let mut toks = before_note.splitn(3, ' ');
-        let dep_name = toks.next().unwrap_or("");
-        let dep_ver = toks.next().unwrap_or("");
-        let source = toks.next().unwrap_or("").trim_matches(|c| c == '(' || c == ')');
-        deps_json.push(node_json(dep_name, dep_ver, source, note));
-    }
-
-    format!(
-        "{{\"name\":\"{}\",\"version\":\"{}\",\"deps\":[{}]}}\n",
-        escape(root_name),
-        escape(root_ver),
-        deps_json.join(",")
-    )
-}
 
 /// Walk up from cwd (and from the executable's dir) to find bench/ai-gen/harness.py.
 fn find_bench_harness() -> Option<std::path::PathBuf> {

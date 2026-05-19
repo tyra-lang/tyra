@@ -221,6 +221,39 @@ pub fn run_tree_from(start: &Path) -> Result<String, PkgError> {
     run_tree(&root)
 }
 
+/// `tyra mod tree --json`
+///
+/// Returns the dependency tree as a JSON string preserving the full recursive
+/// structure. Each node is:
+/// `{"key":"<dep-key>","name":"<pkg>","version":"<v>","source":"<path|git>","deps":[...]}`
+/// Root node omits `key` and `source`.
+pub fn run_tree_json(project_root: &Path) -> Result<String, PkgError> {
+    let manifest = load_manifest(project_root)?;
+    let mut visited = HashSet::new();
+    let canonical = project_root.canonicalize().unwrap_or_else(|_| project_root.to_path_buf());
+    visited.insert(canonical);
+
+    let mut deps_json: Vec<String> = Vec::new();
+    let mut deps: Vec<(&String, &Dependency)> = manifest.dependencies.iter().collect();
+    deps.sort_by_key(|(k, _)| k.as_str());
+    for (name, dep) in &deps {
+        deps_json.push(dep_node_json(name, dep, project_root, &mut visited));
+    }
+
+    Ok(format!(
+        "{{\"name\":{},\"version\":{},\"deps\":[{}]}}\n",
+        json_str(&manifest.package.name),
+        json_str(&manifest.package.version),
+        deps_json.join(",")
+    ))
+}
+
+/// Locate the project root walking up from `start`, then call `run_tree_json`.
+pub fn run_tree_json_from(start: &Path) -> Result<String, PkgError> {
+    let root = find_project_root(start).ok_or(PkgError::NoProject)?;
+    run_tree_json(&root)
+}
+
 /// Locate the project root walking up from `start`, then call `run_add`.
 pub fn run_add_from(
     start: &Path,
@@ -559,6 +592,67 @@ fn remove_dependency_line(content: &str, dep_name: &str) -> String {
         s.push('\n');
     }
     s
+}
+
+/// Escape a string for JSON output.
+fn json_str(s: &str) -> String {
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// Recursively build a JSON object for one dependency node.
+fn dep_node_json(
+    key: &str,
+    dep: &Dependency,
+    parent_root: &Path,
+    visited: &mut HashSet<PathBuf>,
+) -> String {
+    if let Some(path_str) = &dep.path {
+        let dep_root = parent_root.join(path_str);
+        let canonical = dep_root.canonicalize().unwrap_or_else(|_| dep_root.clone());
+        if visited.contains(&canonical) {
+            return format!(
+                "{{\"key\":{},\"source\":{},\"cycle\":true}}",
+                json_str(key),
+                json_str(&format!("path:{path_str}"))
+            );
+        }
+        match load_manifest(&dep_root) {
+            Ok(m) => {
+                visited.insert(canonical.clone());
+                let mut child_deps: Vec<(&String, &Dependency)> = m.dependencies.iter().collect();
+                child_deps.sort_by_key(|(k, _)| k.as_str());
+                let children: Vec<String> = child_deps
+                    .iter()
+                    .map(|(k, d)| dep_node_json(k, d, &dep_root, visited))
+                    .collect();
+                visited.remove(&canonical);
+                format!(
+                    "{{\"key\":{},\"name\":{},\"version\":{},\"source\":{},\"deps\":[{}]}}",
+                    json_str(key),
+                    json_str(&m.package.name),
+                    json_str(&m.package.version),
+                    json_str(&format!("path:{path_str}")),
+                    children.join(",")
+                )
+            }
+            Err(e) => format!(
+                "{{\"key\":{},\"source\":{},\"error\":{}}}",
+                json_str(key),
+                json_str(&format!("path:{path_str}")),
+                json_str(&e.to_string())
+            ),
+        }
+    } else if let Some(url) = &dep.git {
+        let rev = dep.rev.as_deref().unwrap_or("?");
+        format!(
+            "{{\"key\":{},\"source\":{},\"rev\":{},\"synced\":false}}",
+            json_str(key),
+            json_str(&format!("git:{url}")),
+            json_str(rev)
+        )
+    } else {
+        format!("{{\"key\":{}}}", json_str(key))
+    }
 }
 
 /// Recursively render one dependency node into `out`.
