@@ -15,6 +15,7 @@ members = [
     "tools/tyra-fmt",
     "tools/tyra-manifest",
     "tools/tyra-new",
+    "tools/tyra-pkg",
 ]
 resolver = "2"
 
@@ -39,3 +40,4 @@ tyra-runtime = { path = "runtime" }
 tyra-fmt      = { path = "tools/tyra-fmt" }
 tyra-manifest = { path = "tools/tyra-manifest" }
 tyra-new      = { path = "tools/tyra-new" }
+tyra-pkg      = { path = "tools/tyra-pkg" }

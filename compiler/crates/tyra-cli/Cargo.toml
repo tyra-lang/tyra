@@ -16,6 +16,7 @@ tyra-diagnostics.workspace = true
 tyra-driver.workspace = true
 tyra-fmt.workspace = true
 tyra-new.workspace = true
+tyra-pkg.workspace = true
 # Pulled in to force `cargo build -p tyra-cli` to also build the runtime
 # staticlib that the driver links into Tyra binaries. The rlib itself is
 # unused from Rust-side code (see tyra_runtime as _ below).

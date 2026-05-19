@@ -1,0 +1,17 @@
+[package]
+name = "tyra-pkg"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Dependency management commands for the Tyra language"
+
+[lib]
+name = "tyra_pkg"
+path = "src/lib.rs"
+
+[dependencies]
+tyra-manifest.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

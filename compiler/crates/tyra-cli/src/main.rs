@@ -8,6 +8,10 @@
 //   tyra fmt [--check] <file.tyra|dir>   Format source (--check: exit 1 if changed)
 //   tyra test [path]                     Run *_test.tyra files (default: .)
 //   tyra new [--lib] <name>              Scaffold a new project
+//   tyra mod init [--name <name>]        Create Tyra.toml for an existing directory
+//   tyra mod add <name> --path <path>    Add a path dependency
+//   tyra mod add <name> --git <url> --rev <rev>  Add a git dependency
+//   tyra mod tree                        Show the dependency tree
 //   tyra --version                       Show version info
 //
 // spec reference: §18 (toolchain)
@@ -299,6 +303,147 @@ fn main() {
                 }
             }
         }
+        "mod" => {
+            let sub = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            match sub {
+                "init" => {
+                    let rest = &args[3..];
+                    let mut name_arg: Option<&str> = None;
+                    let mut i = 0;
+                    while i < rest.len() {
+                        if rest[i] == "--name" {
+                            i += 1;
+                            name_arg = rest.get(i).map(|s| s.as_str());
+                        } else if rest[i].starts_with("--") {
+                            eprintln!("error: unknown flag `{}`", rest[i]);
+                            eprintln!("usage: tyra mod init [--name <name>]");
+                            process::exit(1);
+                        } else {
+                            eprintln!("error: unexpected argument `{}`", rest[i]);
+                            eprintln!("usage: tyra mod init [--name <name>]");
+                            process::exit(1);
+                        }
+                        i += 1;
+                    }
+                    let dest = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                    match tyra_pkg::run_init(&dest, name_arg) {
+                        Ok(()) => {
+                            let displayed_name = name_arg.unwrap_or(
+                                dest.file_name().and_then(|s| s.to_str()).unwrap_or("unnamed"),
+                            );
+                            println!("initialized package `{displayed_name}`");
+                            println!("  Tyra.toml");
+                        }
+                        Err(e) => {
+                            eprintln!("error: {e}");
+                            process::exit(1);
+                        }
+                    }
+                }
+                "add" => {
+                    let rest = &args[3..];
+                    let mut dep_name: Option<&str> = None;
+                    let mut path_val: Option<String> = None;
+                    let mut git_val: Option<String> = None;
+                    let mut rev_val: Option<String> = None;
+                    let mut i = 0;
+                    while i < rest.len() {
+                        match rest[i].as_str() {
+                            "--path" => {
+                                i += 1;
+                                path_val = rest.get(i).map(|s| s.clone());
+                            }
+                            "--git" => {
+                                i += 1;
+                                git_val = rest.get(i).map(|s| s.clone());
+                            }
+                            "--rev" => {
+                                i += 1;
+                                rev_val = rest.get(i).map(|s| s.clone());
+                            }
+                            a if a.starts_with("--") => {
+                                eprintln!("error: unknown flag `{a}`");
+                                eprintln!(
+                                    "usage: tyra mod add <name> --path <path>\n\
+                                     usage: tyra mod add <name> --git <url> --rev <rev>"
+                                );
+                                process::exit(1);
+                            }
+                            a => {
+                                if dep_name.is_some() {
+                                    eprintln!("error: unexpected argument `{a}`");
+                                    process::exit(1);
+                                }
+                                dep_name = Some(a);
+                            }
+                        }
+                        i += 1;
+                    }
+                    let dep_name = match dep_name {
+                        Some(n) => n,
+                        None => {
+                            eprintln!("error: `tyra mod add` requires a dependency name");
+                            eprintln!(
+                                "usage: tyra mod add <name> --path <path>\n\
+                                 usage: tyra mod add <name> --git <url> --rev <rev>"
+                            );
+                            process::exit(1);
+                        }
+                    };
+                    let source = match (path_val, git_val, rev_val) {
+                        (Some(p), None, _) => tyra_pkg::DepSource::Path(p),
+                        (None, Some(url), Some(rev)) => {
+                            tyra_pkg::DepSource::Git { url, rev }
+                        }
+                        (None, Some(_), None) => {
+                            eprintln!("error: `--git` requires `--rev <commit-sha-or-tag>`");
+                            process::exit(1);
+                        }
+                        (Some(_), Some(_), _) => {
+                            eprintln!("error: specify either `--path` or `--git`, not both");
+                            process::exit(1);
+                        }
+                        (None, None, _) => {
+                            eprintln!(
+                                "error: specify `--path <path>` or `--git <url> --rev <rev>`"
+                            );
+                            process::exit(1);
+                        }
+                    };
+                    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                    match tyra_pkg::run_add_from(&cwd, dep_name, source) {
+                        Ok(()) => println!("added dependency `{dep_name}`"),
+                        Err(e) => {
+                            eprintln!("error: {e}");
+                            process::exit(1);
+                        }
+                    }
+                }
+                "tree" => {
+                    if args.len() > 3 {
+                        eprintln!("error: `tyra mod tree` takes no arguments");
+                        process::exit(1);
+                    }
+                    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                    match tyra_pkg::run_tree_from(&cwd) {
+                        Ok(tree) => print!("{tree}"),
+                        Err(e) => {
+                            eprintln!("error: {e}");
+                            process::exit(1);
+                        }
+                    }
+                }
+                "" => {
+                    eprintln!("usage: tyra mod <init|add|tree>");
+                    process::exit(1);
+                }
+                cmd => {
+                    eprintln!("error: unknown mod subcommand `{cmd}`");
+                    eprintln!("usage: tyra mod <init|add|tree>");
+                    process::exit(1);
+                }
+            }
+        }
         cmd => {
             eprintln!("error: unknown command `{cmd}`");
             print_usage();
@@ -313,15 +458,19 @@ fn print_usage() {
     eprintln!("usage: tyra <command> [options]");
     eprintln!();
     eprintln!("commands:");
-    eprintln!("  check <file.tyra>                type-check without codegen (exit 0 = clean)");
-    eprintln!("  run <file.tyra>                  compile and run a Tyra program");
-    eprintln!("  build <file.tyra>                compile to a native binary");
-    eprintln!("  emit-ir <file.tyra>              emit LLVM IR to stdout");
-    eprintln!("  fmt [--check] <file.tyra|dir>    format source in-place; accepts a directory");
-    eprintln!("  test [path]                      run *_test.tyra files (default: current dir)");
-    eprintln!("  new [--lib] <name>               scaffold a new project in the current directory");
-    eprintln!("  --version                        show version info");
-    eprintln!("  --help                           show this help");
+    eprintln!("  check <file.tyra>                        type-check without codegen (exit 0 = clean)");
+    eprintln!("  run <file.tyra>                          compile and run a Tyra program");
+    eprintln!("  build <file.tyra>                        compile to a native binary");
+    eprintln!("  emit-ir <file.tyra>                      emit LLVM IR to stdout");
+    eprintln!("  fmt [--check] <file.tyra|dir>            format source in-place; accepts a directory");
+    eprintln!("  test [path]                              run *_test.tyra files (default: current dir)");
+    eprintln!("  new [--lib] <name>                       scaffold a new project in the current directory");
+    eprintln!("  mod init [--name <name>]                 create Tyra.toml for an existing directory");
+    eprintln!("  mod add <name> --path <path>             add a path dependency");
+    eprintln!("  mod add <name> --git <url> --rev <rev>   add a git dependency");
+    eprintln!("  mod tree                                 show the dependency tree");
+    eprintln!("  --version                                show version info");
+    eprintln!("  --help                                   show this help");
 }
 
 // ─── Test runner helpers ──────────────────────────────────────────────────────
