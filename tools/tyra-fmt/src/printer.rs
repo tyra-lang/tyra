@@ -332,6 +332,7 @@ impl<'src> Printer<'src> {
     }
 
     fn print_type_def(&mut self, t: &TypeDef) {
+        let t_line = self.line_of(t.span.start);
         let indent = self.indent_str();
         self.out.push_str(&indent);
         if t.is_export {
@@ -344,9 +345,11 @@ impl<'src> Printer<'src> {
             TypeDefKind::Alias(ty) => {
                 self.out.push_str(" = ");
                 self.print_type_expr(ty);
+                self.emit_inline_comment_if_any(t_line);
             }
             TypeDefKind::Adt(variants) => {
                 self.out.push_str(" =");
+                self.emit_inline_comment_if_any(t_line);
                 let var_indent = "  ".repeat(self.indent + 1);
                 for variant in variants {
                     self.out.push('\n');

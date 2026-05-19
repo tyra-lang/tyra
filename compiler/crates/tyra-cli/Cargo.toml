@@ -11,6 +11,7 @@ name = "tyra"
 path = "src/main.rs"
 
 [dependencies]
+tyra-ast.workspace = true
 tyra-diagnostics.workspace = true
 tyra-driver.workspace = true
 tyra-fmt.workspace = true

@@ -1,16 +1,17 @@
 // tyra CLI: the Tyra language compiler.
 //
 // Usage:
-//   tyra check <file.tyra>          Type-check without codegen
-//   tyra run <file.tyra>            Compile and run a Tyra program
-//   tyra build <file.tyra>          Compile to a native binary
-//   tyra emit-ir <file.tyra>        Emit LLVM IR to stdout
-//   tyra fmt [--check] <file.tyra|dir>  Format source (--check: exit 1 if changed)
-//   tyra --version                  Show version info
+//   tyra check <file.tyra>               Type-check without codegen
+//   tyra run <file.tyra>                 Compile and run a Tyra program
+//   tyra build <file.tyra>               Compile to a native binary
+//   tyra emit-ir <file.tyra>             Emit LLVM IR to stdout
+//   tyra fmt [--check] <file.tyra|dir>   Format source (--check: exit 1 if changed)
+//   tyra test [path]                     Run *_test.tyra files (default: .)
+//   tyra --version                       Show version info
 //
 // spec reference: §18 (toolchain)
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process;
 
 // Forces cargo to build the tyra-runtime staticlib (libtyra_runtime.a)
@@ -193,6 +194,49 @@ fn main() {
                 process::exit(1);
             }
         }
+        "test" => {
+            let path = args
+                .get(2)
+                .map(|s| PathBuf::from(s))
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+
+            let test_files: Vec<PathBuf> = if path.is_file() {
+                if is_test_file(&path) {
+                    vec![path.clone()]
+                } else {
+                    eprintln!("error: {} is not a *_test.tyra file", path.display());
+                    process::exit(1);
+                }
+            } else if path.is_dir() {
+                match collect_test_files(&path) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!("error: cannot walk {}: {e}", path.display());
+                        process::exit(1);
+                    }
+                }
+            } else {
+                eprintln!("error: {} not found", path.display());
+                process::exit(1);
+            };
+
+            if test_files.is_empty() {
+                eprintln!("no *_test.tyra files found in {}", path.display());
+                process::exit(0);
+            }
+
+            let mut total_pass: usize = 0;
+            let mut total_fail: usize = 0;
+            for test_file in &test_files {
+                let (p, f) = run_test_file(test_file);
+                total_pass += p;
+                total_fail += f;
+            }
+            eprintln!("\n{} passed, {} failed", total_pass, total_fail);
+            if total_fail > 0 {
+                process::exit(1);
+            }
+        }
         cmd => {
             eprintln!("error: unknown command `{cmd}`");
             print_usage();
@@ -212,8 +256,185 @@ fn print_usage() {
     eprintln!("  build <file.tyra>                compile to a native binary");
     eprintln!("  emit-ir <file.tyra>              emit LLVM IR to stdout");
     eprintln!("  fmt [--check] <file.tyra|dir>    format source in-place; accepts a directory");
+    eprintln!("  test [path]                      run *_test.tyra files (default: current dir)");
     eprintln!("  --version                        show version info");
     eprintln!("  --help                           show this help");
+}
+
+// ─── Test runner helpers ──────────────────────────────────────────────────────
+
+fn is_test_file(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.ends_with("_test.tyra"))
+        .unwrap_or(false)
+}
+
+/// Recursively collect all `*_test.tyra` files under `dir`.
+fn collect_test_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            files.extend(collect_test_files(&path)?);
+        } else if is_test_file(&path) {
+            files.push(path);
+        }
+    }
+    Ok(files)
+}
+
+/// Scan the AST for functions named `test_*` with no parameters.
+fn find_test_fns(ast: &tyra_ast::SourceFile) -> Vec<String> {
+    ast.items
+        .iter()
+        .filter_map(|item| {
+            if let tyra_ast::Item::FnDef(f) = item {
+                if f.name.starts_with("test_")
+                    && f.params.is_empty()
+                    && f.self_param.is_none()
+                {
+                    return Some(f.name.clone());
+                }
+            }
+            None
+        })
+        .collect()
+}
+
+/// Build a complete Tyra source that appends a synthesized `fn main` calling
+/// each `test_*` function and printing TAP-compatible output to stdout.
+fn synthesize_runner(test_source: &str, test_fns: &[String]) -> String {
+    let n = test_fns.len();
+    let mut out = String::from(test_source);
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str("\nfn main() -> Unit\n");
+    out.push_str("  println(\"TAP version 14\")\n");
+    out.push_str(&format!("  println(\"1..{n}\")\n"));
+    for (i, name) in test_fns.iter().enumerate() {
+        let seq = i + 1;
+        out.push_str(&format!("  match {name}()\n"));
+        out.push_str(&format!("  when Ok(_)\n"));
+        out.push_str(&format!("    println(\"ok {seq} - {name}\")\n"));
+        out.push_str(&format!("  when Err(msg)\n"));
+        out.push_str(&format!("    println(\"not ok {seq} - {name}\")\n"));
+        out.push_str(&format!("    println(\"# #{{msg}}\")\n"));
+        out.push_str("  end\n");
+    }
+    out.push_str("end\n");
+    out
+}
+
+/// Parse TAP output, stream it to stdout, and return (pass_count, fail_count).
+fn parse_tap_output(output: &str) -> (usize, usize) {
+    let mut pass = 0usize;
+    let mut fail = 0usize;
+    for line in output.lines() {
+        println!("{line}");
+        if line.starts_with("not ok ") {
+            fail += 1;
+        } else if line.starts_with("ok ") {
+            pass += 1;
+        }
+    }
+    (pass, fail)
+}
+
+/// Compile and run a single `*_test.tyra` file; return (pass, fail) counts.
+fn run_test_file(test_file: &Path) -> (usize, usize) {
+    let source = match std::fs::read_to_string(test_file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read {}: {e}", test_file.display());
+            return (0, 1);
+        }
+    };
+
+    let dir = test_file.parent().unwrap_or(Path::new("."));
+    let workspace_dir = if dir.as_os_str().is_empty() {
+        Some(Path::new("."))
+    } else {
+        Some(dir)
+    };
+
+    // Parse to discover test functions (check-only, no codegen).
+    let check = tyra_driver::check_in_memory(
+        test_file.to_string_lossy().into_owned(),
+        source.clone(),
+        workspace_dir,
+    );
+    if check.report.has_errors() {
+        eprint!("{}", check.report.render(&check.sources));
+        return (0, 1);
+    }
+
+    let test_fns = find_test_fns(&check.ast);
+    if test_fns.is_empty() {
+        eprintln!(
+            "warning: no test_* functions found in {}",
+            test_file.display()
+        );
+        return (0, 0);
+    }
+
+    // Reject files that would produce an invalid synthesized runner.
+    let has_main = check.ast.items.iter().any(|item| {
+        if let tyra_ast::Item::FnDef(f) = item {
+            f.name == "main"
+        } else {
+            false
+        }
+    });
+    let has_top_level_stmts = check
+        .ast
+        .items
+        .iter()
+        .any(|item| matches!(item, tyra_ast::Item::Stmt(_)));
+    if has_main || has_top_level_stmts {
+        eprintln!(
+            "error: {}: *_test.tyra files must not contain fn main or top-level executable statements",
+            test_file.display()
+        );
+        return (0, 1);
+    }
+
+    eprintln!("\n# {}", test_file.display());
+
+    // Write synthesized runner alongside the test file so import resolution works.
+    let runner_name = format!("__tyra_test_runner_{}.tyra", std::process::id());
+    let runner_path = dir.join(&runner_name);
+    let runner_source = synthesize_runner(&source, &test_fns);
+    if let Err(e) = std::fs::write(&runner_path, &runner_source) {
+        eprintln!("error: cannot write runner: {e}");
+        return (0, 1);
+    }
+
+    let result = tyra_driver::run_and_capture(&runner_path);
+    let _ = std::fs::remove_file(&runner_path);
+
+    if result.report.has_errors() {
+        eprint!("{}", result.report.render(&result.sources));
+        return (0, test_fns.len());
+    }
+
+    // Non-zero exit means the binary crashed (panic, abort, OOM, etc.).
+    // Parse whatever TAP lines were emitted before the crash, then ensure at
+    // least one failure is recorded regardless of how many TAP lines appeared.
+    let stdout = result.stdout.unwrap_or_default();
+    let (tap_pass, tap_fail) = parse_tap_output(&stdout);
+    if result.exit_code != Some(0) {
+        let accounted = tap_pass + tap_fail;
+        let unaccounted = test_fns.len().saturating_sub(accounted);
+        eprintln!("# binary exited with code {:?}", result.exit_code);
+        if unaccounted > 0 {
+            eprintln!("# {} test(s) did not run", unaccounted);
+        }
+        // Even if all TAP lines were emitted, treat the run as failed.
+        return (tap_pass, tap_fail + unaccounted.max(1));
+    }
+    (tap_pass, tap_fail)
 }
 
 /// Recursively collect all `.tyra` files under `dir`.

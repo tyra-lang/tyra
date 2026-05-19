@@ -97,4 +97,28 @@ mod tests {
         let second = fmt_source(&out).unwrap();
         assert_eq!(out, second, "must be idempotent");
     }
+
+    #[test]
+    fn inline_comment_on_alias_type_def_preserved() {
+        let src = "type UserId = Int # stable wire id\n";
+        let out = fmt_source(src).unwrap();
+        assert!(
+            out.contains("# stable wire id"),
+            "alias type inline comment must survive: {out:?}"
+        );
+        let second = fmt_source(&out).unwrap();
+        assert_eq!(out, second, "must be idempotent");
+    }
+
+    #[test]
+    fn inline_comment_on_adt_type_def_preserved() {
+        let src = "type Color = # primary colors\n  | Red\n  | Green\n  | Blue\n";
+        let out = fmt_source(src).unwrap();
+        assert!(
+            out.contains("# primary colors"),
+            "ADT type header inline comment must survive: {out:?}"
+        );
+        let second = fmt_source(&out).unwrap();
+        assert_eq!(out, second, "must be idempotent");
+    }
 }

@@ -1378,6 +1378,60 @@ pub fn compile_to_binary(source_path: &Path, output_path: &Path) -> CompileResul
 }
 
 /// Compile and run a Tyra source file.
+/// Result of running a Tyra program and capturing its stdout.
+pub struct CapturedRunResult {
+    pub report: Report,
+    pub sources: SourceMap,
+    /// Captured stdout from the process; None if compilation failed.
+    pub stdout: Option<String>,
+    /// Process exit code; None if compilation or exec failed.
+    pub exit_code: Option<i32>,
+}
+
+/// Compile `source_path` and run it, capturing stdout.
+/// Unlike `run()`, this returns the program's standard output so callers
+/// (e.g. the test runner) can parse it without requiring the binary to
+/// communicate results via its exit code alone.
+pub fn run_and_capture(source_path: &Path) -> CapturedRunResult {
+    let tmp_dir = std::env::temp_dir();
+    let binary_path = tmp_dir.join(format!("tyra_test_{}", std::process::id()));
+
+    let compile = compile_to_binary(source_path, &binary_path);
+    if !compile.success {
+        return CapturedRunResult {
+            report: compile.report,
+            sources: compile.sources,
+            stdout: None,
+            exit_code: None,
+        };
+    }
+
+    let run_result = Command::new(&binary_path).output();
+    let _ = std::fs::remove_file(&binary_path);
+
+    match run_result {
+        Ok(output) => CapturedRunResult {
+            report: compile.report,
+            sources: compile.sources,
+            stdout: Some(String::from_utf8_lossy(&output.stdout).into_owned()),
+            exit_code: output.status.code(),
+        },
+        Err(e) => {
+            let mut report = compile.report;
+            report.add(
+                tyra_diagnostics::Diagnostic::error(format!("cannot execute test binary: {e}"))
+                    .with_code("E0502"),
+            );
+            CapturedRunResult {
+                report,
+                sources: compile.sources,
+                stdout: None,
+                exit_code: None,
+            }
+        }
+    }
+}
+
 pub fn run(source_path: &Path) -> CompileResult {
     let tmp_dir = std::env::temp_dir();
     let binary_path = tmp_dir.join(format!("tyra_run_{}", std::process::id()));

@@ -838,6 +838,7 @@ dependencies = [
 name = "tyra-cli"
 version = "0.1.0"
 dependencies = [
+ "tyra-ast",
  "tyra-diagnostics",
  "tyra-driver",
  "tyra-fmt",

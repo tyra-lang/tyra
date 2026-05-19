@@ -1,0 +1,70 @@
+# stdlib/assert.tyra — test assertion helpers (§22 v0.2).
+#
+# All functions return Result<Unit, String>; use ? to propagate failures.
+# Generic assert.eq<T> requires trait bounds (v0.3+); use typed variants here.
+#
+# Usage:
+#   import assert
+#   fn test_add() -> Result<Unit, String>
+#     assert.eq(1 + 1, 2)?
+#     assert.eq_str("hi", "hi")?
+#     Ok(())
+#   end
+
+export fn eq(actual: Int, expected: Int) -> Result<Unit, String>
+  if actual == expected
+    Ok(())
+  else
+    Err("expected #{expected}, got #{actual}")
+  end
+end
+
+export fn eq_str(actual: String, expected: String) -> Result<Unit, String>
+  if actual == expected
+    Ok(())
+  else
+    Err("expected \"#{expected}\", got \"#{actual}\"")
+  end
+end
+
+export fn eq_bool(actual: Bool, expected: Bool) -> Result<Unit, String>
+  if actual == expected
+    Ok(())
+  else
+    Err("expected #{expected}, got #{actual}")
+  end
+end
+
+export fn ne(actual: Int, expected: Int) -> Result<Unit, String>
+  if actual != expected
+    Ok(())
+  else
+    Err("expected values to differ, but both were #{actual}")
+  end
+end
+
+export fn ne_str(actual: String, expected: String) -> Result<Unit, String>
+  if actual != expected
+    Ok(())
+  else
+    Err("expected strings to differ, but both were \"#{actual}\"")
+  end
+end
+
+export fn is_ok(result: Result<Unit, String>) -> Result<Unit, String>
+  match result
+  when Ok(_)
+    Ok(())
+  when Err(msg)
+    Err("expected Ok, got Err: #{msg}")
+  end
+end
+
+export fn is_err(result: Result<Unit, String>) -> Result<Unit, String>
+  match result
+  when Ok(_)
+    Err("expected Err, got Ok")
+  when Err(_)
+    Ok(())
+  end
+end
