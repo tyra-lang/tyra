@@ -175,13 +175,13 @@ pub fn run_add(project_root: &Path, dep_name: &str, source: DepSource) -> Result
     // declared in the dependency's own Tyra.toml (if accessible).
     if let DepSource::Path(rel) = &source {
         let dep_root = project_root.join(rel);
-        if let Ok(dep_manifest) = load_manifest(&dep_root) {
-            if dep_manifest.package.name != dep_name {
-                return Err(PkgError::NameMismatch {
-                    key: dep_name.to_string(),
-                    package_name: dep_manifest.package.name.clone(),
-                });
-            }
+        if let Ok(dep_manifest) = load_manifest(&dep_root)
+            && dep_manifest.package.name != dep_name
+        {
+            return Err(PkgError::NameMismatch {
+                key: dep_name.to_string(),
+                package_name: dep_manifest.package.name.clone(),
+            });
         }
     }
 
@@ -310,13 +310,13 @@ pub fn run_update(
     }
     if let DepSource::Path(rel) = &source {
         let dep_root = project_root.join(rel);
-        if let Ok(dep_manifest) = load_manifest(&dep_root) {
-            if dep_manifest.package.name != dep_name {
-                return Err(PkgError::NameMismatch {
-                    key: dep_name.to_string(),
-                    package_name: dep_manifest.package.name.clone(),
-                });
-            }
+        if let Ok(dep_manifest) = load_manifest(&dep_root)
+            && dep_manifest.package.name != dep_name
+        {
+            return Err(PkgError::NameMismatch {
+                key: dep_name.to_string(),
+                package_name: dep_manifest.package.name.clone(),
+            });
         }
     }
     let new_line = match &source {
@@ -680,7 +680,7 @@ fn sync_git_dep(dep_name: &str, url: &str, rev: &str) -> Result<SyncStatus, PkgE
     let checkout_status = Command::new("git")
         .args(["-C", tmp_dir.to_str().unwrap_or("."), "checkout", rev])
         .status()
-        .map_err(|e| PkgError::Io(e))?;
+        .map_err(PkgError::Io)?;
     if !checkout_status.success() {
         let _ = std::fs::remove_dir_all(&tmp_dir);
         return Err(PkgError::SyncFailed {
@@ -690,9 +690,8 @@ fn sync_git_dep(dep_name: &str, url: &str, rev: &str) -> Result<SyncStatus, PkgE
     }
 
     // Validate ADR 0009/0010 invariants before committing to cache.
-    validate_dep_root(dep_name, &tmp_dir).map_err(|e| {
+    validate_dep_root(dep_name, &tmp_dir).inspect_err(|_| {
         let _ = std::fs::remove_dir_all(&tmp_dir);
-        e
     })?;
 
     // Atomic rename into the cache.

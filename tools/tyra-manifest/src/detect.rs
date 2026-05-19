@@ -42,8 +42,7 @@ pub fn is_bin_source(src: &str) -> bool {
         // export fn main(...) is still a bin — export does not change the
         // entry-point semantics (ADR 0009).
         for prefix in &["fn main", "export fn main"] {
-            if trimmed.starts_with(prefix) {
-                let after = &trimmed[prefix.len()..];
+            if let Some(after) = trimmed.strip_prefix(prefix) {
                 let boundary = after
                     .chars()
                     .next()

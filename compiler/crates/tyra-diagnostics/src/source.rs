@@ -137,7 +137,7 @@ impl SourceMap {
         // Strip trailing line endings so that past-EOL positions clamp to the
         // last visible character, not into '\n' / '\r\n' or the next line start.
         let line_text = &file.content[line_start..line_end];
-        let line_visible = line_text.trim_end_matches(|c| c == '\r' || c == '\n');
+        let line_visible = line_text.trim_end_matches(['\r', '\n']);
         let visible_end = line_start + line_visible.len();
 
         let mut utf16_seen: u32 = 0;

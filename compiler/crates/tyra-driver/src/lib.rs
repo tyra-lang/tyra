@@ -225,15 +225,38 @@ pub fn compile_to_ir(source_path: &Path) -> CompileResult {
     }
 }
 
-/// Find the stdlib directory by walking up from `main_dir` looking for a `stdlib/` folder.
-/// Also checks the `TYRA_STDLIB` environment variable first.
+/// Find the stdlib directory. Resolution order:
+///
+/// 1. `TYRA_STDLIB` environment variable (highest priority; useful in CI and custom installs)
+/// 2. `<exe_dir>/stdlib/` — portable distribution: stdlib shipped next to the binary
+/// 3. `<exe_dir>/../lib/tyra/stdlib/` — FHS install: `/usr/local/bin/tyra` + `/usr/local/lib/tyra/stdlib/`
+/// 4. Walk up from `main_dir` — source checkout / dev use (finds `<repo_root>/stdlib/`)
 fn find_stdlib_dir(main_dir: &Path) -> Option<std::path::PathBuf> {
+    // 1. Explicit env override.
     if let Ok(p) = std::env::var("TYRA_STDLIB") {
         let pb = std::path::PathBuf::from(p);
         if pb.is_dir() {
             return Some(pb);
         }
     }
+
+    // 2 & 3. Look relative to the running executable.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            // 2. Portable: stdlib/ next to the binary.
+            let beside = exe_dir.join("stdlib");
+            if beside.is_dir() {
+                return Some(beside);
+            }
+            // 3. FHS: ../lib/tyra/stdlib/ relative to the binary directory.
+            let fhs = exe_dir.join("..").join("lib").join("tyra").join("stdlib");
+            if fhs.is_dir() {
+                return Some(fhs);
+            }
+        }
+    }
+
+    // 4. Walk up from the source file's directory (source checkout / script mode).
     let mut dir = main_dir.to_path_buf();
     loop {
         let candidate = dir.join("stdlib");

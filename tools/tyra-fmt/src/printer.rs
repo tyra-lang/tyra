@@ -453,8 +453,7 @@ impl<'src> Printer<'src> {
         let tp_text = {
             let saved = std::mem::take(&mut self.out);
             self.print_type_params(&f.type_params);
-            let tp = std::mem::replace(&mut self.out, saved);
-            tp
+            std::mem::replace(&mut self.out, saved)
         };
         prefix.push_str(&tp_text);
 

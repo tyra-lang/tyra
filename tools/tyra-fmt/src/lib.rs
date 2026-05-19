@@ -21,7 +21,7 @@ pub fn fmt_source(src: &str) -> Result<String, String> {
     let mut report = Report::new();
     let ast = tyra_parser::parse(sid, &sources, &mut report);
     if report.has_errors() {
-        return Err(format!("parse error: cannot format invalid source"));
+        return Err("parse error: cannot format invalid source".to_string());
     }
     let (comments, inline_comments) = printer::extract_comments(src);
     let out = printer::Printer::new(src, sid, &sources, comments, inline_comments).print_file(&ast);
