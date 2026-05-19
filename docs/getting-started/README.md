@@ -13,6 +13,7 @@ Welcome to Tyra — a statically-typed language designed for backend services, C
 5. [Error Handling](05-error-handling.md) — `Option<T>`, `Result<T, E>`, and the `?` operator
 6. [Types and ADTs](06-types-and-adt.md) — Algebraic data types, `value`, `data`, and `impl`
 7. [A Real Program](07-real-program.md) — A complete working example from stdin to output
+8. [Testing your code](08-testing.md)
 
 ## Quick Reference
 

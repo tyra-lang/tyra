@@ -7,6 +7,47 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ---
 
+## [0.2.0] - 2026-05-19
+
+### Stable
+
+**Language**
+- `continue` statement — transfer control to the next loop iteration (`while`/`for` only; E0215 outside a loop)
+
+**Standard library**
+- `assert` module: `eq`, `eq_str`, `eq_bool`, `ne`, `ne_str`, `is_ok`, `is_err` — all return `Result<Unit, String>` for use with `?`
+
+**Compiler and toolchain**
+- `tyra fmt [--check] <file|dir>` — format Tyra source in-place; `--check` exits 1 if any file would change; accepts a directory (recursive)
+- `tyra test [path]` — discover and run `*_test.tyra` files; TAP-compatible output; exits 1 if any test fails
+  - Discovers `fn test_*() -> Result<Unit, String>` functions automatically
+  - Synthesizes a test runner without requiring language-level test syntax
+  - Non-zero binary exit (panic, abort) is always counted as a failure
+
+**Runtime**
+- FFI string ownership fixed: all functions returning strings to Tyra now allocate via `GC_malloc_atomic` instead of `CString::into_raw`, eliminating the long-running string leak
+- Float display: `to_string` on integer-valued floats now preserves `.0` (e.g. `0.0` instead of `0`)
+
+### Known Limitations
+
+- **Windows**: untested. Build via WSL2 is recommended.
+- **`tasks.select` literal-only**: `tasks.select([t1, t2])` accepts list literals only.
+- **Task handles in `for` / `match`**: use index access or `tasks.join_all` instead.
+- **No package manager**: dependency management is not yet available.
+- **Breaking changes**: expect breaking changes before v1.0.
+
+### Not in This Release
+
+- Pre-built binaries (homebrew, apt, etc.) — planned for a later release
+- VS Code Marketplace publication — planned for a later release
+- `tyra mod` / `tyra new` — planned for a later release
+- Package manager — planned for a later release
+- Generic `List<T>`, `map` / `filter` / `fold` — requires lambda C ABI; deferred
+- `Set<T>` — deferred
+- `test "name"` language syntax — deferred (separate ADR)
+
+---
+
 ## [0.1.0] - 2026-05-17
 
 ### Stable

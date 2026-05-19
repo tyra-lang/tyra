@@ -2,7 +2,7 @@
 
 - **Version**: 1.0
 - **Status**: Active
-- **Last updated**: 2026-04-15
+- **Last updated**: 2026-05-19
 - **Owner**: Project lead
 - **Review cadence**: Every 3 months, or after any major spec change
 
@@ -32,7 +32,7 @@ The convergence of three trends creates an opening for Tyra:
 
 Tyra's bet is that **a language designed from scratch for AI auditability and strict semantics, with operational standards matching Go and surface readability matching Ruby, can capture users dissatisfied with Crystal, V, and parts of the Go and Ruby ecosystems.**
 
-**Current status**: v0.1.0 initial release. Specification v0.1 finalized with 7 ADRs. Phase 0 complete (spec, examples, competitive analysis). Phase 1 (LLVM implementation) in progress — compiler, runtime, and Tier 1 stdlib plus frozen Tier 2 APIs (fs, json, http, string, list, map) shipped in v0.1.0 for macOS arm64 and Linux x86_64. Remaining Phase 1 deliverables (LSP, formatter, debugger, CI matrix, broader Tier 2) are in progress.
+**Current status**: v0.2.0 released (2026-05-19). v0.1.0 shipped the compiler, runtime, and Tier 1 stdlib for macOS arm64 and Linux x86_64. v0.2.0 adds `tyra fmt`, `tyra test`, `stdlib/assert`, the `continue` statement, and fixes FFI string GC and float display. Remaining Phase 1 deliverables (debugger, CI matrix, broader Tier 2, package manager) are in progress.
 
 ---
 
