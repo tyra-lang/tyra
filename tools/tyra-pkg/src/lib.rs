@@ -3,8 +3,14 @@
 //! Public API:
 //! - `run_init(dest, name)` — create Tyra.toml in an existing directory
 //! - `run_add(project_root, dep_name, source)` — append a dependency entry
+//! - `run_update(project_root, dep_name, source)` — update an existing entry in-place
+//! - `run_remove(project_root, dep_name)` — delete a dependency entry
+//! - `run_show(project_root, dep_name)` — human-readable dependency details
+//! - `run_show_json(project_root, dep_name)` — JSON dependency details
 //! - `run_tree(project_root)` — render the dependency tree as a string
+//! - `run_tree_json(project_root)` — dependency tree as JSON
 //! - `run_sync(project_root)` — clone git deps into `~/.tyra/cache/git/`
+//! - `run_sync_check(project_root)` — validate deps without mutating
 //! - `run_clean()` — remove the entire `~/.tyra/cache/` directory
 //! - `tyra_cache_root()` — path to the Tyra cache root (`~/.tyra/cache/`)
 //! - `cache_dir_for(dep_name, url, rev)` — canonical cache path for a git dep
@@ -287,6 +293,55 @@ pub fn run_remove_from(start: &Path, dep_name: &str) -> Result<(), PkgError> {
     run_remove(&root, dep_name)
 }
 
+/// `tyra mod update <dep_name> --path <path>` / `--git <url> --rev <rev>`
+///
+/// Replaces an existing `[dependencies]` entry in-place. The entry must
+/// already exist (`DepNotFound` otherwise). For path deps the key/name
+/// invariant is validated, same as `run_add`.
+pub fn run_update(
+    project_root: &Path,
+    dep_name: &str,
+    source: DepSource,
+) -> Result<(), PkgError> {
+    validate_name(dep_name)?;
+    let manifest = load_manifest(project_root)?;
+    if !manifest.dependencies.contains_key(dep_name) {
+        return Err(PkgError::DepNotFound(dep_name.to_string()));
+    }
+    if let DepSource::Path(rel) = &source {
+        let dep_root = project_root.join(rel);
+        if let Ok(dep_manifest) = load_manifest(&dep_root) {
+            if dep_manifest.package.name != dep_name {
+                return Err(PkgError::NameMismatch {
+                    key: dep_name.to_string(),
+                    package_name: dep_manifest.package.name.clone(),
+                });
+            }
+        }
+    }
+    let new_line = match &source {
+        DepSource::Path(p) => format!("{dep_name} = {{ path = \"{p}\" }}"),
+        DepSource::Git { url, rev } => {
+            format!("{dep_name} = {{ git = \"{url}\", rev = \"{rev}\" }}")
+        }
+    };
+    let manifest_path = project_root.join("Tyra.toml");
+    let content = std::fs::read_to_string(&manifest_path)?;
+    let updated = replace_dependency_line(&content, dep_name, &new_line);
+    std::fs::write(&manifest_path, updated)?;
+    Ok(())
+}
+
+/// Locate the project root walking up from `start`, then call `run_update`.
+pub fn run_update_from(
+    start: &Path,
+    dep_name: &str,
+    source: DepSource,
+) -> Result<(), PkgError> {
+    let root = find_project_root(start).ok_or(PkgError::NoProject)?;
+    run_update(&root, dep_name, source)
+}
+
 /// `tyra mod sync`
 ///
 /// Clones all git dependencies declared in `project_root/Tyra.toml` into
@@ -363,6 +418,53 @@ pub fn run_show(project_root: &Path, dep_name: &str) -> Result<String, PkgError>
 pub fn run_show_from(start: &Path, dep_name: &str) -> Result<String, PkgError> {
     let root = find_project_root(start).ok_or(PkgError::NoProject)?;
     run_show(&root, dep_name)
+}
+
+/// `tyra mod show <dep_name> --json`
+///
+/// Returns a JSON object with the dependency's resolved metadata.
+pub fn run_show_json(project_root: &Path, dep_name: &str) -> Result<String, PkgError> {
+    let manifest = load_manifest(project_root)?;
+    let dep = manifest
+        .dependencies
+        .get(dep_name)
+        .ok_or_else(|| PkgError::DepNotFound(dep_name.to_string()))?;
+
+    if let Some(path_str) = &dep.path {
+        let abs = project_root.join(path_str);
+        let (pkg_name, version) = match load_manifest(&abs) {
+            Ok(m) => (m.package.name.clone(), m.package.version.clone()),
+            Err(_) => (String::new(), String::new()),
+        };
+        Ok(format!(
+            "{{\n  \"name\": {},\n  \"source\": \"path\",\n  \"path\": {},\n  \"root\": {},\n  \"package_name\": {},\n  \"version\": {}\n}}\n",
+            json_str(dep_name),
+            json_str(path_str),
+            json_str(&abs.to_string_lossy()),
+            json_str(&pkg_name),
+            json_str(&version),
+        ))
+    } else if let Some(url) = &dep.git {
+        let rev = dep.rev.as_deref().unwrap_or("?");
+        let cache = cache_dir_for(dep_name, url, rev);
+        let synced = cache.join("Tyra.toml").is_file();
+        Ok(format!(
+            "{{\n  \"name\": {},\n  \"source\": \"git\",\n  \"url\": {},\n  \"rev\": {},\n  \"cache\": {},\n  \"synced\": {}\n}}\n",
+            json_str(dep_name),
+            json_str(url),
+            json_str(rev),
+            json_str(&cache.to_string_lossy()),
+            if synced { "true" } else { "false" },
+        ))
+    } else {
+        Err(PkgError::DepNotFound(dep_name.to_string()))
+    }
+}
+
+/// Locate the project root walking up from `start`, then call `run_show_json`.
+pub fn run_show_json_from(start: &Path, dep_name: &str) -> Result<String, PkgError> {
+    let root = find_project_root(start).ok_or(PkgError::NoProject)?;
+    run_show_json(&root, dep_name)
 }
 
 /// Returns the root of the Tyra local cache: `~/.tyra/cache/`.
@@ -459,6 +561,21 @@ pub struct SyncReport {
     pub synced: Vec<String>,
     pub cached: Vec<String>,
     pub skipped: Vec<String>,
+}
+
+impl SyncReport {
+    pub fn to_json(&self) -> String {
+        let arr = |v: &[String]| -> String {
+            let items: Vec<String> = v.iter().map(|s| json_str(s)).collect();
+            format!("[{}]", items.join(", "))
+        };
+        format!(
+            "{{\n  \"synced\": {},\n  \"cached\": {},\n  \"skipped\": {}\n}}\n",
+            arr(&self.synced),
+            arr(&self.cached),
+            arr(&self.skipped),
+        )
+    }
 }
 
 impl std::fmt::Display for SyncReport {
@@ -634,6 +751,28 @@ fn insert_dependency_line(content: &str, new_line: &str) -> String {
         result.push(new_line.to_string());
     }
 
+    let mut s = result.join("\n");
+    if trailing_newline {
+        s.push('\n');
+    }
+    s
+}
+
+/// Replace the entry for `dep_name` in the `[dependencies]` section in-place.
+/// Preserves the surrounding lines and the original position of the entry.
+fn replace_dependency_line(content: &str, dep_name: &str, new_line: &str) -> String {
+    let trailing_newline = content.ends_with('\n');
+    let result: Vec<&str> = content
+        .lines()
+        .map(|l| {
+            let t = l.trim_start();
+            if t.starts_with(dep_name) && t[dep_name.len()..].trim_start().starts_with('=') {
+                new_line
+            } else {
+                l
+            }
+        })
+        .collect();
     let mut s = result.join("\n");
     if trailing_newline {
         s.push('\n');
@@ -1178,6 +1317,60 @@ mod tests {
         make_manifest(dir.path(), "myapp");
         let result = run_remove(dir.path(), "nonexistent");
         assert!(matches!(result, Err(PkgError::DepNotFound(_))));
+    }
+
+    // --- run_update ---
+
+    #[test]
+    fn update_dep_changes_path_in_place() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Tyra.toml"),
+            "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nmylib = { path = \"../mylib\" }\nutils = { path = \"../utils\" }\n",
+        )
+        .unwrap();
+        run_update(dir.path(), "mylib", DepSource::Path("../newlib".into())).unwrap();
+        let content = fs::read_to_string(dir.path().join("Tyra.toml")).unwrap();
+        assert!(content.contains("mylib = { path = \"../newlib\" }"), "path must be updated");
+        assert!(content.contains("utils = { path = \"../utils\" }"), "utils must be unchanged");
+    }
+
+    #[test]
+    fn update_nonexistent_dep_is_error() {
+        let dir = tempfile::tempdir().unwrap();
+        make_manifest(dir.path(), "myapp");
+        let result = run_update(dir.path(), "nonexistent", DepSource::Path("../x".into()));
+        assert!(matches!(result, Err(PkgError::DepNotFound(_))));
+    }
+
+    #[test]
+    fn update_dep_preserves_order() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Tyra.toml"),
+            "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nalpha = { path = \"../alpha\" }\nbeta = { path = \"../beta\" }\n",
+        )
+        .unwrap();
+        run_update(dir.path(), "alpha", DepSource::Path("../alpha2".into())).unwrap();
+        let content = fs::read_to_string(dir.path().join("Tyra.toml")).unwrap();
+        let alpha_pos = content.find("alpha2").unwrap();
+        let beta_pos = content.find("beta").unwrap();
+        assert!(alpha_pos < beta_pos, "alpha must still come before beta");
+    }
+
+    // --- replace_dependency_line (unit) ---
+
+    #[test]
+    fn replace_line_updates_the_matching_entry() {
+        let content =
+            "[package]\nname    = \"x\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nfoo = { path = \"../foo\" }\nbar = { path = \"../bar\" }\n";
+        let result = replace_dependency_line(content, "foo", "foo = { path = \"../newfoo\" }");
+        assert!(result.contains("foo = { path = \"../newfoo\" }"));
+        assert!(result.contains("bar = { path = \"../bar\" }"));
+        assert!(!result.contains("../foo\""), "old path must be gone");
     }
 
     // --- remove_dependency_line (unit) ---

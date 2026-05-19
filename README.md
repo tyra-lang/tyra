@@ -114,8 +114,11 @@ end
 ```
 
 ```bash
-tyra test          # run all *_test.tyra files in the current directory
-tyra test src/     # run a specific directory
+tyra test                      # run all *_test.tyra files in the current directory
+tyra test src/                 # run a specific directory
+tyra test --filter add         # run only tests whose name contains "add"
+tyra test --list               # list test functions without running
+tyra test --format junit       # emit JUnit XML (for CI test summaries)
 ```
 
 See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for the full guide.
@@ -130,12 +133,12 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | Lexer, Parser, Type checker | ✅ Complete |
 | LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 |
 | Standard library: string, list, fs, io, float, json, assert | ✅ Complete |
-| `tyra check / run / build` CLI | ✅ Complete |
-| `tyra fmt [--check] <file\|dir>` formatter + 100-col line wrapping | ✅ Complete |
-| `tyra test [--filter <pat>] [path]` runner — TAP output, E0216 validation | ✅ Complete |
+| `tyra check / run / build` CLI (zero-arg project mode, `--release`) | ✅ Complete |
+| `tyra fmt [--check] [--stdin] <file\|dir>` — formatter + 100-col wrapping | ✅ Complete |
+| `tyra test [--filter <pat>] [--list] [--format tap\|junit] [path]` | ✅ Complete |
 | `continue` statement | ✅ Complete |
-| `tyra new <name> [--lib]` — project scaffolding | ✅ Complete |
-| `tyra mod init/add/tree/sync` — dependency management | ✅ Complete |
+| `tyra new <name> [--lib] [--vcs none]` — project scaffolding | ✅ Complete |
+| `tyra mod init/add/update/remove/show/tree/sync/clean` — dependency management | ✅ Complete |
 | `tyra bench ai-gen` — AI generation benchmark runner | ✅ Complete |
 | LSP server (`tyra-lsp`) + VS Code extension | ✅ Development install |
 | Static conformance corpus (14 programs + error cases) | ✅ CI-gated |
@@ -166,6 +169,8 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 
 ## Documentation
 
+- **[Getting Started](docs/getting-started/README.md)** — installation, hello world, testing, and project lifecycle
+  - [Project Lifecycle](docs/getting-started/09-project-lifecycle.md) — `tyra new`, `tyra mod`, dependencies, builds
 - **[Language Specification (Japanese)](docs/spec/ja/language-spec.md)** — the authoritative source of truth
 - **[Language Specification (English)](docs/spec/en/language-spec.md)** — translation, may lag behind
 - **[Design Decisions](docs/design/)** — architecture decision records explaining *why*

@@ -235,58 +235,104 @@ fn main() {
             }
         }
         "fmt" => {
-            let rest = &args[2..];
-            let check_only = rest.first().map(|s| s.as_str()) == Some("--check");
-            let file_arg = if check_only { rest.get(1) } else { rest.first() };
-            let path = match file_arg {
-                Some(p) => Path::new(p),
-                None => {
-                    eprintln!("error: `tyra fmt` requires a source file or directory");
-                    eprintln!("usage: tyra fmt [--check] <file.tyra|dir>");
+            let mut check_only = false;
+            let mut stdin_mode = false;
+            let mut file_arg: Option<&str> = None;
+            for a in args[2..].iter().map(String::as_str) {
+                match a {
+                    "--check" => check_only = true,
+                    "--stdin" => stdin_mode = true,
+                    a if a.starts_with("--") => {
+                        eprintln!("error: unknown flag `{a}`");
+                        eprintln!("usage: tyra fmt [--check] [--stdin] <file.tyra|dir>");
+                        process::exit(1);
+                    }
+                    a => {
+                        if file_arg.is_some() {
+                            eprintln!("error: unexpected argument `{a}`");
+                            process::exit(1);
+                        }
+                        file_arg = Some(a);
+                    }
+                }
+            }
+            if stdin_mode {
+                if file_arg.is_some() {
+                    eprintln!("error: cannot specify both --stdin and a file path");
                     process::exit(1);
                 }
-            };
-            let files: Vec<std::path::PathBuf> = if path.is_dir() {
-                match collect_tyra_files(path) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        eprintln!("error: cannot walk {}: {e}", path.display());
-                        process::exit(1);
-                    }
+                use std::io::Read;
+                let mut src = String::new();
+                if let Err(e) = std::io::stdin().read_to_string(&mut src) {
+                    eprintln!("error: cannot read stdin: {e}");
+                    process::exit(1);
                 }
-            } else {
-                vec![path.to_path_buf()]
-            };
-            let mut any_would_change = false;
-            for file in &files {
-                let src = match std::fs::read_to_string(file) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        eprintln!("error: cannot read {}: {e}", file.display());
-                        process::exit(1);
-                    }
-                };
                 let formatted = match tyra_fmt::fmt_source(&src) {
                     Ok(s) => s,
                     Err(e) => {
-                        eprintln!("error: {}: {e}", file.display());
+                        eprintln!("error: {e}");
                         process::exit(1);
                     }
                 };
                 if check_only {
                     if src != formatted {
-                        eprintln!("{}: would reformat", file.display());
-                        any_would_change = true;
-                    }
-                } else if src != formatted {
-                    if let Err(e) = std::fs::write(file, &formatted) {
-                        eprintln!("error: cannot write {}: {e}", file.display());
+                        eprintln!("stdin: would reformat");
                         process::exit(1);
                     }
+                } else {
+                    print!("{formatted}");
                 }
-            }
-            if check_only && any_would_change {
-                process::exit(1);
+            } else {
+                let path = match file_arg {
+                    Some(p) => Path::new(p),
+                    None => {
+                        eprintln!("error: `tyra fmt` requires a source file, directory, or --stdin");
+                        eprintln!("usage: tyra fmt [--check] [--stdin] <file.tyra|dir>");
+                        process::exit(1);
+                    }
+                };
+                let files: Vec<std::path::PathBuf> = if path.is_dir() {
+                    match collect_tyra_files(path) {
+                        Ok(f) => f,
+                        Err(e) => {
+                            eprintln!("error: cannot walk {}: {e}", path.display());
+                            process::exit(1);
+                        }
+                    }
+                } else {
+                    vec![path.to_path_buf()]
+                };
+                let mut any_would_change = false;
+                for file in &files {
+                    let src = match std::fs::read_to_string(file) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("error: cannot read {}: {e}", file.display());
+                            process::exit(1);
+                        }
+                    };
+                    let formatted = match tyra_fmt::fmt_source(&src) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("error: {}: {e}", file.display());
+                            process::exit(1);
+                        }
+                    };
+                    if check_only {
+                        if src != formatted {
+                            eprintln!("{}: would reformat", file.display());
+                            any_would_change = true;
+                        }
+                    } else if src != formatted {
+                        if let Err(e) = std::fs::write(file, &formatted) {
+                            eprintln!("error: cannot write {}: {e}", file.display());
+                            process::exit(1);
+                        }
+                    }
+                }
+                if check_only && any_would_change {
+                    process::exit(1);
+                }
             }
         }
         "test" => {
@@ -639,26 +685,47 @@ fn main() {
                     }
                 }
                 "sync" => {
-                    let check_flag = args.get(3).map(String::as_str) == Some("--check");
-                    if args.len() > 3 && !check_flag {
-                        eprintln!("error: unknown argument `{}`", args[3]);
-                        eprintln!("usage: tyra mod sync [--check]");
-                        process::exit(1);
-                    }
-                    if check_flag && args.len() > 4 {
-                        eprintln!("error: unexpected argument `{}`", args[4]);
-                        eprintln!("usage: tyra mod sync [--check]");
-                        process::exit(1);
+                    let mut check_flag = false;
+                    let mut json_flag = false;
+                    let mut quiet_flag = false;
+                    for a in args[3..].iter().map(String::as_str) {
+                        match a {
+                            "--check" => check_flag = true,
+                            "--json" => json_flag = true,
+                            "--quiet" => quiet_flag = true,
+                            a => {
+                                eprintln!("error: unknown argument `{a}`");
+                                eprintln!(
+                                    "usage: tyra mod sync [--check] [--json] [--quiet]"
+                                );
+                                process::exit(1);
+                            }
+                        }
                     }
                     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
                     if check_flag {
                         match tyra_pkg::run_sync_check_from(&cwd) {
                             Ok(issues) => {
                                 if issues.is_empty() {
-                                    println!("all dependencies ok");
+                                    if json_flag {
+                                        println!("{{\"ok\": true, \"issues\": []}}");
+                                    } else if !quiet_flag {
+                                        println!("all dependencies ok");
+                                    }
                                 } else {
-                                    for issue in &issues {
-                                        eprintln!("error: {issue}");
+                                    if json_flag {
+                                        let items: Vec<String> = issues
+                                            .iter()
+                                            .map(|s| format!("\"{}\"", s.replace('"', "\\\"")))
+                                            .collect();
+                                        eprintln!(
+                                            "{{\"ok\": false, \"issues\": [{}]}}",
+                                            items.join(", ")
+                                        );
+                                    } else {
+                                        for issue in &issues {
+                                            eprintln!("error: {issue}");
+                                        }
                                     }
                                     process::exit(1);
                                 }
@@ -671,13 +738,17 @@ fn main() {
                     } else {
                         match tyra_pkg::run_sync_from(&cwd) {
                             Ok(report) => {
-                                if report.synced.is_empty()
-                                    && report.cached.is_empty()
-                                    && report.skipped.is_empty()
-                                {
-                                    println!("nothing to sync (no dependencies declared)");
-                                } else {
-                                    print!("{report}");
+                                if json_flag {
+                                    print!("{}", report.to_json());
+                                } else if !quiet_flag {
+                                    if report.synced.is_empty()
+                                        && report.cached.is_empty()
+                                        && report.skipped.is_empty()
+                                    {
+                                        println!("nothing to sync (no dependencies declared)");
+                                    } else {
+                                        print!("{report}");
+                                    }
                                 }
                             }
                             Err(e) => {
@@ -710,26 +781,130 @@ fn main() {
                         }
                     }
                 }
-                "show" => {
-                    let dep_name = match args.get(3).map(String::as_str) {
-                        Some(n) if !n.starts_with("--") => n,
-                        _ => {
-                            eprintln!("error: `tyra mod show` requires a dependency name");
-                            eprintln!("usage: tyra mod show <name>");
+                "update" => {
+                    let mut dep_name: Option<&str> = None;
+                    let mut path_val: Option<String> = None;
+                    let mut git_val: Option<String> = None;
+                    let mut rev_val: Option<String> = None;
+                    let rest: Vec<String> = args[3..].to_vec();
+                    let mut i = 0;
+                    while i < rest.len() {
+                        match rest[i].as_str() {
+                            "--path" => {
+                                i += 1;
+                                path_val = rest.get(i).map(|s| s.clone());
+                            }
+                            "--git" => {
+                                i += 1;
+                                git_val = rest.get(i).map(|s| s.clone());
+                            }
+                            "--rev" => {
+                                i += 1;
+                                rev_val = rest.get(i).map(|s| s.clone());
+                            }
+                            a if a.starts_with("--") => {
+                                eprintln!("error: unknown flag `{a}`");
+                                eprintln!(
+                                    "usage: tyra mod update <name> --path <path>\n\
+                                     usage: tyra mod update <name> --git <url> --rev <rev>"
+                                );
+                                process::exit(1);
+                            }
+                            a => {
+                                if dep_name.is_some() {
+                                    eprintln!("error: unexpected argument `{a}`");
+                                    process::exit(1);
+                                }
+                                dep_name = Some(a);
+                            }
+                        }
+                        i += 1;
+                    }
+                    let dep_name = match dep_name {
+                        Some(n) => n,
+                        None => {
+                            eprintln!("error: `tyra mod update` requires a dependency name");
+                            eprintln!(
+                                "usage: tyra mod update <name> --path <path>\n\
+                                 usage: tyra mod update <name> --git <url> --rev <rev>"
+                            );
                             process::exit(1);
                         }
                     };
-                    if args.len() > 4 {
-                        eprintln!("error: unexpected argument `{}`", args[4]);
-                        eprintln!("usage: tyra mod show <name>");
-                        process::exit(1);
-                    }
+                    let source = match (path_val, git_val, rev_val) {
+                        (Some(p), None, _) => tyra_pkg::DepSource::Path(p),
+                        (None, Some(url), Some(rev)) => {
+                            tyra_pkg::DepSource::Git { url, rev }
+                        }
+                        (None, Some(_), None) => {
+                            eprintln!("error: `--git` requires `--rev <commit-sha-or-tag>`");
+                            process::exit(1);
+                        }
+                        (Some(_), Some(_), _) => {
+                            eprintln!("error: specify either `--path` or `--git`, not both");
+                            process::exit(1);
+                        }
+                        (None, None, _) => {
+                            eprintln!(
+                                "error: specify `--path <path>` or `--git <url> --rev <rev>`"
+                            );
+                            process::exit(1);
+                        }
+                    };
                     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-                    match tyra_pkg::run_show_from(&cwd, dep_name) {
-                        Ok(info) => print!("{info}"),
+                    match tyra_pkg::run_update_from(&cwd, dep_name, source) {
+                        Ok(()) => println!("updated dependency `{dep_name}`"),
                         Err(e) => {
                             eprintln!("error: {e}");
                             process::exit(1);
+                        }
+                    }
+                }
+                "show" => {
+                    let mut dep_name: Option<&str> = None;
+                    let mut json_flag = false;
+                    for a in args[3..].iter().map(String::as_str) {
+                        match a {
+                            "--json" => json_flag = true,
+                            a if a.starts_with("--") => {
+                                eprintln!("error: unknown flag `{a}`");
+                                eprintln!("usage: tyra mod show <name> [--json]");
+                                process::exit(1);
+                            }
+                            name => {
+                                if dep_name.is_some() {
+                                    eprintln!("error: unexpected argument `{name}`");
+                                    eprintln!("usage: tyra mod show <name> [--json]");
+                                    process::exit(1);
+                                }
+                                dep_name = Some(name);
+                            }
+                        }
+                    }
+                    let dep_name = match dep_name {
+                        Some(n) => n,
+                        None => {
+                            eprintln!("error: `tyra mod show` requires a dependency name");
+                            eprintln!("usage: tyra mod show <name> [--json]");
+                            process::exit(1);
+                        }
+                    };
+                    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                    if json_flag {
+                        match tyra_pkg::run_show_json_from(&cwd, dep_name) {
+                            Ok(json) => print!("{json}"),
+                            Err(e) => {
+                                eprintln!("error: {e}");
+                                process::exit(1);
+                            }
+                        }
+                    } else {
+                        match tyra_pkg::run_show_from(&cwd, dep_name) {
+                            Ok(info) => print!("{info}"),
+                            Err(e) => {
+                                eprintln!("error: {e}");
+                                process::exit(1);
+                            }
                         }
                     }
                 }
@@ -820,17 +995,19 @@ fn print_usage() {
     eprintln!("  run   [--release] [<file.tyra>]          compile and run (defaults to project entry point)");
     eprintln!("  build [--release] [<file.tyra>] [-o out] compile to binary (defaults to project entry point)");
     eprintln!("  emit-ir <file.tyra>                      emit LLVM IR to stdout");
-    eprintln!("  fmt [--check] <file.tyra|dir>            format source in-place; accepts a directory");
+    eprintln!("  fmt [--check] [--stdin] <file.tyra|dir>  format source in-place; --stdin reads stdin");
     eprintln!("  test [--filter <pat>] [--list]           run *_test.tyra files (default: current dir)");
     eprintln!("       [--format tap|junit] [path]");
     eprintln!("  new [--lib] [--vcs none] <name>          scaffold a new project in the current directory");
     eprintln!("  mod init [--name <name>]                 create Tyra.toml for an existing directory");
     eprintln!("  mod add <name> --path <path>             add a path dependency");
     eprintln!("  mod add <name> --git <url> --rev <rev>   add a git dependency");
+    eprintln!("  mod update <name> --path <path>          update an existing path dependency");
+    eprintln!("  mod update <name> --git <url> --rev <r>  update an existing git dependency");
     eprintln!("  mod remove <name>                        remove a dependency");
-    eprintln!("  mod show <name>                          show details of a dependency");
+    eprintln!("  mod show <name> [--json]                 show details of a dependency");
     eprintln!("  mod tree [--json]                        show the dependency tree");
-    eprintln!("  mod sync [--check]                       clone git deps; --check validates without mutating");
+    eprintln!("  mod sync [--check] [--json] [--quiet]    clone git deps; --check validates without mutating");
     eprintln!("  mod clean                                remove ~/.tyra/cache/");
     eprintln!("  bench ai-gen [options]                   run the AI-generation benchmark");
     eprintln!("  --version                                show version info");

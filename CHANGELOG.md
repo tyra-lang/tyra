@@ -11,31 +11,55 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ### Stable
 
-**Project lifecycle**
+**Project lifecycle — scaffolding**
 - `Tyra.toml` manifest — `[package]` (name, version, edition) and `[dependencies]` (path / git+rev)
-- `tyra new <name> [--lib]` — scaffold a new bin or lib project (`src/<name>.tyra`, `.gitignore`, `README.md`)
+- `tyra new <name> [--lib] [--vcs none]` — scaffold a bin or lib project (`src/<name>.tyra`, `.gitignore`, `README.md`)
 - `tyra mod init [--name <name>]` — create `Tyra.toml` for an existing directory
+
+**Project lifecycle — dependency management**
 - `tyra mod add <name> --path <path>` / `--git <url> --rev <rev>` — append a dependency entry
-- `tyra mod tree` — render the dependency tree (cycle detection, diamond DAG safe)
-- `tyra mod sync` — clone git dependencies into `~/.tyra/cache/git/<dep>-<urlhash>/<rev>/`
+- `tyra mod update <name> --path <path>` / `--git <url> --rev <rev>` — update an existing entry in-place
+- `tyra mod remove <name>` — delete a dependency entry
+- `tyra mod show <name> [--json]` — print details of one dependency (source, version, cache path, synced status)
+- `tyra mod tree [--json]` — render the dependency tree; `--json` emits structured JSON (cycle detection, diamond DAG safe)
+- `tyra mod sync [--check] [--json] [--quiet]` — clone git deps; `--check` validates without mutating; `--json` / `--quiet` for CI use
+- `tyra mod clean` — remove `~/.tyra/cache/`
+
+**Project lifecycle — zero-arg project commands**
+- `tyra run [--release]` — inside a project dir, discovers entry point from `Tyra.toml`; `--release` enables `-O2`
+- `tyra build [--release] [-o <out>]` — same discovery; output binary placed at project root; `-o` overrides destination
+- `tyra check` — same discovery; type-checks the project entry point
 
 **Import resolution (ADR 0010)**
 - Three-layer uniqueness rule: local `src/` → `[dependencies]` → stdlib
-- `E0217` on ambiguous import (two layers provide the same path); no silent shadowing
-- `E0218` for bin package dependencies and cached git dep name mismatches
+- `E0217` on ambiguous import (two layers provide the same module name); no silent shadowing
+- `E0218` for bin package dependencies and dep key / `package.name` mismatches
 
 **Dependency invariants (ADR 0009)**
-- Bin packages cannot be imported (E0218)
+- Bin packages cannot be imported (`E0218`)
 - Dependency key must equal `package.name` in the target manifest (no aliasing)
 - Root module `src/<name>.tyra` must exist at `tyra mod sync` time
-- All checks apply to both fresh clones and stale/manually-populated caches
+- All invariant checks apply to both fresh clones and stale/manually-populated caches
+
+**Test runner improvements**
+- `tyra test --filter <pattern>` — substring match on `test_*` function names to run a subset
+- `tyra test --list [--filter <pattern>]` — list matched test functions without executing
+- `tyra test --format junit` — emit JUnit-compatible XML (`<testsuites>` / `<testsuite>` / `<testcase>`)
+  - Infrastructure failures (compile errors) produce a synthetic single-test suite so CI always sees a concrete failure
+  - Each `<testsuite>` carries a `time=` attribute sourced from the per-file wall-clock elapsed
+- TAP output now includes a `# time: <s>s` comment at the end of each file's run
+
+**Formatter improvements**
+- `tyra fmt [--check] [--stdin] <file|dir>` — `--stdin` reads from stdin, writes formatted source to stdout; composable with editors and pipes
+- Line-length wrapping (100-col limit) — long function signatures wrap one-param-per-line; idempotent
 
 **AI benchmark**
 - `tyra bench ai-gen [options]` — thin wrapper over `bench/ai-gen/harness.py`; all harness flags forwarded verbatim
 
-**Toolchain improvements**
-- `tyra test [--filter <pattern>] [path]` — substring filter on `test_*` function names
-- `tyra fmt` line-length wrapping (100-col limit) — long function signatures wrap one-param-per-line; idempotent
+**Documentation**
+- `docs/getting-started/09-project-lifecycle.md` — full lifecycle guide (tyra new → mod add → mod sync → build)
+- `docs/getting-started/08-testing.md` — expanded: `--filter`, `--list`, JUnit XML, timing
+- `docs/design/0009-project-manifest.md` and `docs/design/0010-dependency-resolution.md` — ADR rationale
 
 ### Known Limitations
 
@@ -48,6 +72,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - Lambda C ABI, generic `List<T>`, `map`/`filter`/`fold` → v0.4.0
 - SemVer resolver, `Tyra.lock` → v0.5+
 - Pre-built binaries (Homebrew, apt) → separate release
+- `tyra test --timeout`, parallel test execution → v0.4.0
 
 ---
 

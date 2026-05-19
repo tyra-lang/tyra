@@ -51,11 +51,73 @@ TAP version 14
 1..2
 ok 1 - test_addition
 ok 2 - test_subtraction
+# time: 0.012s
 
 2 passed, 0 failed
 ```
 
 Exit code is 0 when all tests pass, 1 when any test fails.
+
+---
+
+## Filtering tests
+
+Run only tests whose names contain a substring:
+
+```bash
+tyra test --filter add
+```
+
+This runs `test_addition` but skips `test_subtraction`. Useful for focusing on
+a single area without running the whole suite.
+
+To list which tests would run without actually running them:
+
+```bash
+tyra test --list
+tyra test --filter add --list
+```
+
+---
+
+## JUnit XML output
+
+For CI systems that consume JUnit XML (Jenkins, GitHub Actions test summary, etc.):
+
+```bash
+tyra test --format junit
+```
+
+Output is a JUnit-compatible XML document:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="math_test" tests="2" failures="0" time="0.012">
+    <testcase name="test_addition" classname="math_test"/>
+    <testcase name="test_subtraction" classname="math_test"/>
+  </testsuite>
+</testsuites>
+```
+
+When a test fails, the failing test case includes a `<failure>` element:
+
+```xml
+<testcase name="test_bad" classname="math_test">
+  <failure message="expected 2, got 3"/>
+</testcase>
+```
+
+If the test file cannot be compiled (an infrastructure failure), the runner
+emits a synthetic single-test suite with the compile error as the failure
+message, so CI always sees a concrete failure rather than a silent zero-test
+result.
+
+Combine with `--filter` to scope the report:
+
+```bash
+tyra test --filter add --format junit
+```
 
 ---
 
