@@ -21,7 +21,7 @@
 pub fn is_bin_source(src: &str) -> bool {
     const DECLARATION_PREFIXES: &[&str] = &[
         "fn ", "fn(", "type ", "value ", "data ", "trait ", "impl ",
-        "import ", "export ", "end", "when ", "# ", "#\n",
+        "import ", "export ", "end", "when ",
     ];
 
     for line in src.lines() {
@@ -30,12 +30,26 @@ pub fn is_bin_source(src: &str) -> bool {
             continue;
         }
         let trimmed = line.trim_end();
-        if trimmed.is_empty() || trimmed == "#" {
+        if trimmed.is_empty() {
             continue;
         }
-        // Explicit fn main check (fast path).
+        // Any line starting with '#' is a comment regardless of what follows.
+        if trimmed.starts_with('#') {
+            continue;
+        }
+        // `fn main` is a bin entry point only when `main` is not part of a
+        // longer identifier (e.g. `fn mainframe` or `fn main_loop` are lib fns).
         if trimmed.starts_with("fn main") {
-            return true;
+            let after = &trimmed["fn main".len()..];
+            let boundary = after
+                .chars()
+                .next()
+                .map(|c| c == '(' || c == ' ' || c == '\t')
+                .unwrap_or(true); // "fn main" with nothing after → bin
+            if boundary {
+                return true;
+            }
+            // Falls through to the declaration-prefix check below (still a fn).
         }
         // If the line is not a declaration or structural keyword, it is an
         // executable statement at top level.
@@ -115,5 +129,61 @@ data Point
 end
 ";
         assert!(!is_bin_source(src));
+    }
+
+    // Regression: fn mainframe / fn main_loop must NOT be treated as bin.
+    #[test]
+    fn fn_mainframe_is_lib() {
+        let src = "\
+export fn mainframe(args: List<String>) -> Unit
+  ()
+end
+";
+        assert!(!is_bin_source(src), "fn mainframe must not be treated as bin");
+    }
+
+    #[test]
+    fn fn_main_loop_is_lib() {
+        let src = "\
+fn main_loop(state: State) -> State
+  state
+end
+";
+        assert!(!is_bin_source(src), "fn main_loop must not be treated as bin");
+    }
+
+    // Regression: #comment (no space after #) must be treated as a comment.
+    #[test]
+    fn comment_without_space_is_lib() {
+        let src = "\
+#todo: add more exports
+export fn greet(name: String) -> String
+  \"hello, #{name}\"
+end
+";
+        assert!(!is_bin_source(src), "#todo comment must not be treated as executable statement");
+    }
+
+    #[test]
+    fn comment_hashbang_style_is_lib() {
+        let src = "\
+#!tyra
+export fn run() -> Unit
+  ()
+end
+";
+        assert!(!is_bin_source(src), "#! line must not be treated as executable statement");
+    }
+
+    // fn main with no parens on the same line is still bin.
+    #[test]
+    fn fn_main_bare_is_bin() {
+        assert!(is_bin_source("fn main() -> Unit\n  ()\nend\n"));
+    }
+
+    // fn main followed immediately by end-of-string is bin.
+    #[test]
+    fn fn_main_eof_is_bin() {
+        assert!(is_bin_source("fn main"));
     }
 }
