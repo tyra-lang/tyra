@@ -1,0 +1,12 @@
+# bad/E0216-test-file-with-main_test.tyra
+# tyra test must reject *_test.tyra files that contain fn main.
+# EXPECT_ERROR: E0216
+# SPEC_REF: §18 (tyra test discovery rules)
+
+fn test_something() -> Result<Unit, String>
+  Ok(())
+end
+
+fn main() -> Unit
+  ()
+end

@@ -56,8 +56,10 @@ for f in "$SCRIPT_DIR"/*.tyra; do
 done
 
 # Negative corpus: files in bad/ must fail with the expected error code.
+# *_test.tyra files are tested via tyra test (see below), not tyra check.
 for f in "$SCRIPT_DIR"/bad/*.tyra; do
   base="$(basename "$f" .tyra)"
+  [[ "$base" == *_test ]] && continue
   if [[ "$base" =~ ^(E[0-9]{4})- ]]; then
     code="${BASH_REMATCH[1]}"
   else
@@ -80,6 +82,52 @@ for f in "$SCRIPT_DIR"/bad/*.tyra; do
     PASS=$((PASS + 1))
   else
     echo "FAIL $f (expected $code, got different errors)"
+    printf '%s\n' "$out" | sed 's/^/     /'
+    FAIL=$((FAIL + 1))
+  fi
+done
+
+# Test runner: run tyra test on *_test.tyra files in the corpus.
+for f in "$SCRIPT_DIR"/*_test.tyra; do
+  set +e
+  out="$("$TYRA" test "$f" 2>&1)"
+  tyra_exit=$?
+  set -e
+  if [[ $tyra_exit -eq 0 ]]; then
+    echo "OK   $f (tyra test)"
+    PASS=$((PASS + 1))
+  else
+    echo "FAIL $f (tyra test failed)"
+    printf '%s\n' "$out" | sed 's/^/     /'
+    FAIL=$((FAIL + 1))
+  fi
+done
+
+# Negative test runner: bad/*_test.tyra files must fail tyra test with
+# the expected error code.
+for f in "$SCRIPT_DIR"/bad/*_test.tyra; do
+  base="$(basename "$f" .tyra)"
+  if [[ "$base" =~ ^(E[0-9]{4})- ]]; then
+    code="${BASH_REMATCH[1]}"
+  else
+    echo "SKIP $f (no Exxxx prefix in filename)"
+    SKIP=$((SKIP + 1))
+    continue
+  fi
+
+  set +e
+  out="$("$TYRA" test "$f" 2>&1)"
+  tyra_exit=$?
+  set -e
+
+  if [[ $tyra_exit -eq 0 ]]; then
+    echo "FAIL $f (expected $code error from tyra test, but it succeeded)"
+    FAIL=$((FAIL + 1))
+  elif printf '%s\n' "$out" | grep -q "error\[$code\]"; then
+    echo "OK   $f ($code)"
+    PASS=$((PASS + 1))
+  else
+    echo "FAIL $f (expected $code, got different output)"
     printf '%s\n' "$out" | sed 's/^/     /'
     FAIL=$((FAIL + 1))
   fi

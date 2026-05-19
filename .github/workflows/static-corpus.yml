@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   corpus:
-    name: tyra check (static corpus)
+    name: tyra check + test (static corpus)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -39,5 +39,5 @@ jobs:
       - name: Build tyra-cli and runtime
         run: cargo build -p tyra-cli -p tyra-runtime
 
-      - name: Run static corpus check
+      - name: Run static corpus check (tyra check + tyra test)
         run: bash bench/static-corpus/check.sh ./target/debug/tyra

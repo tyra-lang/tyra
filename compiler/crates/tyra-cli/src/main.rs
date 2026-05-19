@@ -394,7 +394,7 @@ fn run_test_file(test_file: &Path) -> (usize, usize) {
         .any(|item| matches!(item, tyra_ast::Item::Stmt(_)));
     if has_main || has_top_level_stmts {
         eprintln!(
-            "error: {}: *_test.tyra files must not contain fn main or top-level executable statements",
+            "error[E0216]: {}: *_test.tyra files must not contain fn main or top-level executable statements",
             test_file.display()
         );
         return (0, 1);
