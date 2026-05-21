@@ -6,6 +6,9 @@
 
 use std::path::Path;
 use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static BINARY_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 pub use tyra_ast::SourceFile;
 pub use tyra_diagnostics::SourceId;
@@ -1665,8 +1668,12 @@ pub struct CapturedRunResult {
     pub sources: SourceMap,
     /// Captured stdout from the process; None if compilation failed.
     pub stdout: Option<String>,
+    /// Captured stderr from the process; None if compilation failed.
+    pub stderr: Option<String>,
     /// Process exit code; None if compilation or exec failed.
     pub exit_code: Option<i32>,
+    /// True when the binary was killed because it exceeded the timeout.
+    pub timed_out: bool,
 }
 
 /// Compile `source_path` and run it, capturing stdout.
@@ -1675,7 +1682,8 @@ pub struct CapturedRunResult {
 /// communicate results via its exit code alone.
 pub fn run_and_capture(source_path: &Path) -> CapturedRunResult {
     let tmp_dir = std::env::temp_dir();
-    let binary_path = tmp_dir.join(format!("tyra_test_{}", std::process::id()));
+    let bin_id = BINARY_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let binary_path = tmp_dir.join(format!("tyra_test_{}_{}", std::process::id(), bin_id));
 
     let compile = compile_to_binary(source_path, &binary_path);
     if !compile.success {
@@ -1683,7 +1691,9 @@ pub fn run_and_capture(source_path: &Path) -> CapturedRunResult {
             report: compile.report,
             sources: compile.sources,
             stdout: None,
+            stderr: None,
             exit_code: None,
+            timed_out: false,
         };
     }
 
@@ -1695,7 +1705,9 @@ pub fn run_and_capture(source_path: &Path) -> CapturedRunResult {
             report: compile.report,
             sources: compile.sources,
             stdout: Some(String::from_utf8_lossy(&output.stdout).into_owned()),
+            stderr: Some(String::from_utf8_lossy(&output.stderr).into_owned()),
             exit_code: output.status.code(),
+            timed_out: false,
         },
         Err(e) => {
             let mut report = compile.report;
@@ -1707,9 +1719,125 @@ pub fn run_and_capture(source_path: &Path) -> CapturedRunResult {
                 report,
                 sources: compile.sources,
                 stdout: None,
+                stderr: None,
                 exit_code: None,
+                timed_out: false,
             }
         }
+    }
+}
+
+/// Compile `source_path` and run it with a wall-clock timeout on the binary
+/// execution phase only (compilation is unlimited).  If the binary does not
+/// exit within `timeout_secs`, it is killed and `timed_out: true` is returned.
+pub fn run_and_capture_with_timeout(source_path: &Path, timeout_secs: u64) -> CapturedRunResult {
+    use std::io::Read;
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+
+    let tmp_dir = std::env::temp_dir();
+    let bin_id = BINARY_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let binary_path = tmp_dir.join(format!("tyra_test_{}_{}", std::process::id(), bin_id));
+
+    let compile = compile_to_binary(source_path, &binary_path);
+    if !compile.success {
+        return CapturedRunResult {
+            report: compile.report,
+            sources: compile.sources,
+            stdout: None,
+            stderr: None,
+            exit_code: None,
+            timed_out: false,
+        };
+    }
+
+    let mut child = match Command::new(&binary_path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = std::fs::remove_file(&binary_path);
+            let mut report = compile.report;
+            report.add(
+                tyra_diagnostics::Diagnostic::error(format!("cannot execute test binary: {e}"))
+                    .with_code("E0502"),
+            );
+            return CapturedRunResult {
+                report,
+                sources: compile.sources,
+                stdout: None,
+                stderr: None,
+                exit_code: None,
+                timed_out: false,
+            };
+        }
+    };
+
+    // Drain stdout and stderr on background threads to prevent pipe-buffer
+    // deadlock when the test binary emits large output.
+    let stdout_drain = child.stdout.take().map(|mut pipe| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            pipe.read_to_end(&mut buf).ok();
+            String::from_utf8_lossy(&buf).into_owned()
+        })
+    });
+    let stderr_drain = child.stderr.take().map(|mut pipe| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            pipe.read_to_end(&mut buf).ok();
+            String::from_utf8_lossy(&buf).into_owned()
+        })
+    });
+
+    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+    let (exit_code, timed_out) = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                break (status.code(), false);
+            }
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    child.kill().ok();
+                    child.wait().ok();
+                    break (None, true);
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(e) => {
+                let _ = std::fs::remove_file(&binary_path);
+                let mut report = compile.report;
+                report.add(
+                    tyra_diagnostics::Diagnostic::error(format!(
+                        "cannot wait for test binary: {e}"
+                    ))
+                    .with_code("E0502"),
+                );
+                return CapturedRunResult {
+                    report,
+                    sources: compile.sources,
+                    stdout: None,
+                    stderr: None,
+                    exit_code: None,
+                    timed_out: false,
+                };
+            }
+        }
+    };
+
+    let stdout_str = stdout_drain.and_then(|h| h.join().ok());
+    let stderr_str = stderr_drain.and_then(|h| h.join().ok());
+
+    let _ = std::fs::remove_file(&binary_path);
+    CapturedRunResult {
+        report: compile.report,
+        sources: compile.sources,
+        stdout: stdout_str,
+        stderr: stderr_str,
+        exit_code,
+        timed_out,
     }
 }
 

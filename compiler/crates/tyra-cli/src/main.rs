@@ -23,6 +23,9 @@
 
 use std::path::{Path, PathBuf};
 use std::process;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static RUN_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 // Forces cargo to build the tyra-runtime staticlib (libtyra_runtime.a)
 // alongside this binary so the driver can link it into Tyra programs.
@@ -348,10 +351,15 @@ fn main() {
             }
         }
         "test" => {
-            // Parse: tyra test [--filter <pat>] [--list] [--format tap|junit] [path]
+            // Parse: tyra test [--filter <pat>] [--list] [--format tap|junit]
+            //                  [--timeout <secs>] [--jobs <n>] [path]
             let mut filter: Option<String> = None;
             let mut list_mode = false;
             let mut junit = false;
+            let mut timeout_secs: Option<u64> = None;
+            let mut jobs: usize = std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1);
             let mut path_arg: Option<&str> = None;
             let mut rest = args[2..].iter().peekable();
             while let Some(arg) = rest.next() {
@@ -377,10 +385,34 @@ fn main() {
                             process::exit(1);
                         }
                     },
+                    "--timeout" => {
+                        let v = rest.next().cloned().unwrap_or_else(|| {
+                            eprintln!("error: --timeout requires a value in seconds");
+                            process::exit(1);
+                        });
+                        timeout_secs = Some(v.parse::<u64>().unwrap_or_else(|_| {
+                            eprintln!("error: --timeout value must be a positive integer");
+                            process::exit(1);
+                        }));
+                    }
+                    "--jobs" => {
+                        let v = rest.next().cloned().unwrap_or_else(|| {
+                            eprintln!("error: --jobs requires a value");
+                            process::exit(1);
+                        });
+                        jobs = v.parse::<usize>().unwrap_or_else(|_| {
+                            eprintln!("error: --jobs value must be a positive integer");
+                            process::exit(1);
+                        });
+                        if jobs == 0 {
+                            eprintln!("error: --jobs must be >= 1");
+                            process::exit(1);
+                        }
+                    }
                     other if other.starts_with("--") => {
                         eprintln!("error: unknown flag `{other}` for `tyra test`");
                         eprintln!(
-                            "usage: tyra test [--filter <pattern>] [--list] [--format tap|junit] [path]"
+                            "usage: tyra test [--filter <pattern>] [--list] [--format tap|junit] [--timeout <secs>] [--jobs <n>] [path]"
                         );
                         process::exit(1);
                     }
@@ -426,30 +458,52 @@ fn main() {
                 for test_file in &test_files {
                     list_test_fns(test_file, filter.as_deref());
                 }
-            } else if junit {
-                let mut suites: Vec<(String, Vec<TestRecord>, f64)> = Vec::new();
-                let mut total_fail: usize = 0;
-                for test_file in &test_files {
-                    let (_, f, tap, elapsed) = run_test_file_capture(test_file, filter.as_deref());
-                    total_fail += f;
-                    let records = parse_tap_to_records(&tap);
-                    suites.push((test_file.display().to_string(), records, elapsed));
-                }
-                print!("{}", render_junit_xml(&suites));
-                if total_fail > 0 {
-                    process::exit(1);
-                }
             } else {
-                let mut total_pass: usize = 0;
-                let mut total_fail: usize = 0;
-                for test_file in &test_files {
-                    let (p, f) = run_test_file_filtered(test_file, filter.as_deref());
-                    total_pass += p;
-                    total_fail += f;
-                }
-                eprintln!("\n{} passed, {} failed", total_pass, total_fail);
-                if total_fail > 0 {
-                    process::exit(1);
+                // Run test files in parallel chunks of `jobs` (deterministic output order).
+                let results: Vec<FileTestOut> =
+                    run_test_files_parallel(&test_files, filter.as_deref(), timeout_secs, jobs);
+
+                if junit {
+                    let mut suites: Vec<(String, Vec<TestRecord>, f64)> = Vec::new();
+                    let mut total_fail: usize = 0;
+                    for out in &results {
+                        total_fail += out.fail;
+                        let mut records = parse_tap_to_records(&out.tap);
+                        // Compile/infra failures produce no TAP lines but do set fail > 0.
+                        // Synthesize a failure record so the XML reflects the real outcome.
+                        if records.is_empty() && out.fail > 0 {
+                            records.push(TestRecord {
+                                name: "infrastructure failure".to_string(),
+                                passed: false,
+                                failure_msg: out.diag.trim().to_string(),
+                            });
+                        }
+                        suites.push((out.path.clone(), records, out.elapsed));
+                    }
+                    print!("{}", render_junit_xml(&suites));
+                    if total_fail > 0 {
+                        process::exit(1);
+                    }
+                } else {
+                    let mut total_pass: usize = 0;
+                    let mut total_fail: usize = 0;
+                    for out in &results {
+                        // Print buffered output in deterministic order.
+                        eprint!("{}", out.diag);
+                        if !out.header.is_empty() {
+                            eprintln!("{}", out.header);
+                        }
+                        print!("{}", out.tap);
+                        if !out.timing.is_empty() {
+                            println!("{}", out.timing);
+                        }
+                        total_pass += out.pass;
+                        total_fail += out.fail;
+                    }
+                    eprintln!("\n{} passed, {} failed", total_pass, total_fail);
+                    if total_fail > 0 {
+                        process::exit(1);
+                    }
                 }
             }
         }
@@ -1043,7 +1097,7 @@ fn print_usage() {
     eprintln!(
         "  test [--filter <pat>] [--list]           run *_test.tyra files (default: current dir)"
     );
-    eprintln!("       [--format tap|junit] [path]");
+    eprintln!("       [--format tap|junit] [--timeout <s>] [--jobs <n>] [path]");
     eprintln!(
         "  new [--lib] [--vcs none] <name>          scaffold a new project in the current directory"
     );
@@ -1200,32 +1254,51 @@ fn synthesize_runner(test_source: &str, test_fns: &[String]) -> String {
     out
 }
 
-/// Parse TAP output, stream it to stdout, and return (pass_count, fail_count).
-fn parse_tap_output(output: &str) -> (usize, usize) {
-    let mut pass = 0usize;
-    let mut fail = 0usize;
-    for line in output.lines() {
-        println!("{line}");
-        if line.starts_with("not ok ") {
-            fail += 1;
-        } else if line.starts_with("ok ") {
-            pass += 1;
+// ─── Parallel / buffered test runner ─────────────────────────────────────────
+
+/// All outputs produced by running one `*_test.tyra` file, buffered for
+/// deterministic ordered printing in parallel mode.
+struct FileTestOut {
+    path: String,
+    pass: usize,
+    fail: usize,
+    /// `# path/to/file` header line (empty when no tests ran).
+    header: String,
+    /// TAP lines (stdout of the test binary).
+    tap: String,
+    /// Timing line (`# time: X.XXXs`).
+    timing: String,
+    /// Compile/infra diagnostics (stderr).
+    diag: String,
+    /// Wall-clock seconds spent running this file (0.0 on compile failure).
+    elapsed: f64,
+}
+
+impl FileTestOut {
+    fn error(path: &Path, diag: String) -> Self {
+        Self {
+            path: path.display().to_string(),
+            pass: 0,
+            fail: 1,
+            header: String::new(),
+            tap: String::new(),
+            timing: String::new(),
+            diag,
+            elapsed: 0.0,
         }
     }
-    (pass, fail)
 }
 
-/// Compile and run a single `*_test.tyra` file; return (pass, fail) counts.
-fn run_test_file_filtered(test_file: &Path, filter: Option<&str>) -> (usize, usize) {
-    run_test_file_inner(test_file, filter)
-}
+/// Run one `*_test.tyra` file, buffering all output.
+/// `timeout` is the per-binary execution timeout in seconds (None = unlimited).
+fn run_test_file_core(test_file: &Path, filter: Option<&str>, timeout: Option<u64>) -> FileTestOut {
+    let mut diag = String::new();
 
-fn run_test_file_inner(test_file: &Path, filter: Option<&str>) -> (usize, usize) {
     let source = match std::fs::read_to_string(test_file) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("error: cannot read {}: {e}", test_file.display());
-            return (0, 1);
+            let msg = format!("error: cannot read {}: {e}\n", test_file.display());
+            return FileTestOut::error(test_file, msg);
         }
     };
 
@@ -1236,42 +1309,50 @@ fn run_test_file_inner(test_file: &Path, filter: Option<&str>) -> (usize, usize)
         Some(dir)
     };
 
-    // Parse to discover test functions (check-only, no codegen).
     let check = tyra_driver::check_in_memory(
         test_file.to_string_lossy().into_owned(),
         source.clone(),
         workspace_dir,
     );
     if check.report.has_errors() {
-        eprint!("{}", check.report.render(&check.sources));
-        return (0, 1);
+        let rendered = check.report.render(&check.sources);
+        diag.push_str(&rendered);
+        return FileTestOut::error(test_file, diag);
     }
 
-    let all_test_fns = find_test_fns(&check.ast);
+    let all_fns = find_test_fns(&check.ast);
     let test_fns: Vec<String> = if let Some(pat) = filter {
-        all_test_fns
-            .into_iter()
-            .filter(|n| n.contains(pat))
-            .collect()
+        all_fns.into_iter().filter(|n| n.contains(pat)).collect()
     } else {
-        all_test_fns
+        all_fns
     };
+
     if test_fns.is_empty() {
-        if filter.is_some() {
-            eprintln!(
-                "warning: no test_* functions match filter in {}",
+        let warn = if filter.is_some() {
+            format!(
+                "warning: no test_* functions match filter in {}\n",
                 test_file.display()
-            );
+            )
         } else {
-            eprintln!(
-                "warning: no test_* functions found in {}",
+            format!(
+                "warning: no test_* functions found in {}\n",
                 test_file.display()
-            );
-        }
-        return (0, 0);
+            )
+        };
+        diag.push_str(&warn);
+        return FileTestOut {
+            path: test_file.display().to_string(),
+            pass: 0,
+            fail: 0,
+            header: String::new(),
+            tap: String::new(),
+            timing: String::new(),
+            diag,
+            elapsed: 0.0,
+        };
     }
 
-    // Reject files that would produce an invalid synthesized runner.
+    // Validate: test files must not define fn main or top-level statements.
     let has_main = check.ast.items.iter().any(|item| {
         if let tyra_ast::Item::FnDef(f) = item {
             f.name == "main"
@@ -1279,57 +1360,155 @@ fn run_test_file_inner(test_file: &Path, filter: Option<&str>) -> (usize, usize)
             false
         }
     });
-    let has_top_level_stmts = check
+    let has_top_stmts = check
         .ast
         .items
         .iter()
         .any(|item| matches!(item, tyra_ast::Item::Stmt(_)));
-    if has_main || has_top_level_stmts {
-        eprintln!(
-            "error[E0216]: {}: *_test.tyra files must not contain fn main or top-level executable statements",
+    if has_main || has_top_stmts {
+        let msg = format!(
+            "error[E0216]: {}: *_test.tyra files must not contain fn main or top-level executable statements\n",
             test_file.display()
         );
-        return (0, 1);
+        diag.push_str(&msg);
+        return FileTestOut::error(test_file, diag);
     }
 
-    eprintln!("\n# {}", test_file.display());
+    let header = format!("\n# {}", test_file.display());
 
-    // Write synthesized runner alongside the test file so import resolution works.
-    let runner_name = format!("__tyra_test_runner_{}.tyra", std::process::id());
+    let run_id = RUN_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let runner_name = format!("__tyra_test_runner_{}_{}.tyra", std::process::id(), run_id);
     let runner_path = dir.join(&runner_name);
     let runner_source = synthesize_runner(&source, &test_fns);
     if let Err(e) = std::fs::write(&runner_path, &runner_source) {
-        eprintln!("error: cannot write runner: {e}");
-        return (0, 1);
+        diag.push_str(&format!("error: cannot write runner: {e}\n"));
+        return FileTestOut::error(test_file, diag);
     }
 
     let t0 = std::time::Instant::now();
-    let result = tyra_driver::run_and_capture(&runner_path);
-    let elapsed = t0.elapsed();
+    let result = match timeout {
+        Some(secs) => tyra_driver::run_and_capture_with_timeout(&runner_path, secs),
+        None => tyra_driver::run_and_capture(&runner_path),
+    };
+    let elapsed = t0.elapsed().as_secs_f64();
     let _ = std::fs::remove_file(&runner_path);
 
     if result.report.has_errors() {
-        eprint!("{}", result.report.render(&result.sources));
-        return (0, test_fns.len());
+        diag.push_str(&result.report.render(&result.sources));
+        return FileTestOut {
+            path: test_file.display().to_string(),
+            pass: 0,
+            fail: test_fns.len(),
+            header,
+            tap: String::new(),
+            timing: String::new(),
+            diag,
+            elapsed,
+        };
     }
 
-    // Non-zero exit means the binary crashed (panic, abort, OOM, etc.).
-    // Parse whatever TAP lines were emitted before the crash, then ensure at
-    // least one failure is recorded regardless of how many TAP lines appeared.
-    let stdout = result.stdout.unwrap_or_default();
-    let (tap_pass, tap_fail) = parse_tap_output(&stdout);
-    println!("# time: {:.3}s", elapsed.as_secs_f64());
-    if result.exit_code != Some(0) {
-        let accounted = tap_pass + tap_fail;
-        let unaccounted = test_fns.len().saturating_sub(accounted);
-        eprintln!("# binary exited with code {:?}", result.exit_code);
-        if unaccounted > 0 {
-            eprintln!("# {} test(s) did not run", unaccounted);
+    // Buffer stderr from the test binary into diag so parallel jobs stay ordered.
+    if let Some(se) = result.stderr.as_deref()
+        && !se.is_empty()
+    {
+        diag.push_str(se);
+        if !se.ends_with('\n') {
+            diag.push('\n');
         }
-        // Even if all TAP lines were emitted, treat the run as failed.
-        return (tap_pass, tap_fail + unaccounted.max(1));
     }
-    (tap_pass, tap_fail)
+
+    if result.timed_out {
+        // Synthesize TAP failure lines for every test function.
+        let mut tap = format!("TAP version 14\n1..{}\n", test_fns.len());
+        for (i, name) in test_fns.iter().enumerate() {
+            tap.push_str(&format!(
+                "not ok {} - {} (timeout after {}s)\n",
+                i + 1,
+                name,
+                timeout.unwrap_or(0)
+            ));
+        }
+        diag.push_str(&format!(
+            "# binary timed out after {}s\n",
+            timeout.unwrap_or(0)
+        ));
+        return FileTestOut {
+            path: test_file.display().to_string(),
+            pass: 0,
+            fail: test_fns.len(),
+            header,
+            tap,
+            timing: format!("# time: {elapsed:.3}s"),
+            diag,
+            elapsed,
+        };
+    }
+
+    let stdout = result.stdout.unwrap_or_default();
+    let (pass, fail) = count_tap_lines(&stdout);
+    let timing = format!("# time: {elapsed:.3}s");
+
+    // Handle binary crash: account for unrun tests.
+    let (tap_pass, tap_fail) = if result.exit_code != Some(0) {
+        let accounted = pass + fail;
+        let unaccounted = test_fns.len().saturating_sub(accounted);
+        if unaccounted > 0 {
+            diag.push_str(&format!("# {} test(s) did not run\n", unaccounted));
+        }
+        diag.push_str(&format!(
+            "# binary exited with code {:?}\n",
+            result.exit_code
+        ));
+        (pass, fail + unaccounted.max(1))
+    } else {
+        (pass, fail)
+    };
+
+    FileTestOut {
+        path: test_file.display().to_string(),
+        pass: tap_pass,
+        fail: tap_fail,
+        header,
+        tap: stdout,
+        timing,
+        diag,
+        elapsed,
+    }
+}
+
+/// Run `test_files` in parallel chunks of `jobs`, returning results in the
+/// same order as the input slice (deterministic output).
+fn run_test_files_parallel(
+    test_files: &[PathBuf],
+    filter: Option<&str>,
+    timeout: Option<u64>,
+    jobs: usize,
+) -> Vec<FileTestOut> {
+    let jobs = jobs.max(1);
+    let mut results = Vec::with_capacity(test_files.len());
+    for chunk in test_files.chunks(jobs) {
+        let handles: Vec<_> = chunk
+            .iter()
+            .map(|f| {
+                let f = f.clone();
+                let filter = filter.map(str::to_owned);
+                std::thread::spawn(move || run_test_file_core(&f, filter.as_deref(), timeout))
+            })
+            .collect();
+        for handle in handles {
+            results.push(handle.join().unwrap_or_else(|_| FileTestOut {
+                path: String::new(),
+                pass: 0,
+                fail: 1,
+                header: String::new(),
+                tap: String::new(),
+                timing: String::new(),
+                diag: "error: test thread panicked\n".into(),
+                elapsed: 0.0,
+            }));
+        }
+    }
+    results
 }
 
 /// Recursively collect all `.tyra` files under `dir`.
@@ -1385,84 +1564,6 @@ struct TestRecord {
     name: String,
     passed: bool,
     failure_msg: String,
-}
-
-/// Run a test file and return `(pass, fail, raw_tap_output, elapsed_secs)`.
-/// The TAP output is captured (not printed) so the caller can render it.
-fn run_test_file_capture(test_file: &Path, filter: Option<&str>) -> (usize, usize, String, f64) {
-    run_test_file_inner_captured(test_file, filter)
-}
-
-fn run_test_file_inner_captured(
-    test_file: &Path,
-    filter: Option<&str>,
-) -> (usize, usize, String, f64) {
-    let source = match std::fs::read_to_string(test_file) {
-        Ok(s) => s,
-        Err(e) => {
-            let msg = format!("cannot read {}: {e}", test_file.display());
-            eprintln!("error: {msg}");
-            return (0, 1, infra_failure_tap(&msg), 0.0);
-        }
-    };
-    let dir = test_file.parent().unwrap_or(Path::new("."));
-    let workspace_dir = if dir.as_os_str().is_empty() {
-        Some(Path::new("."))
-    } else {
-        Some(dir)
-    };
-    let check = tyra_driver::check_in_memory(
-        test_file.to_string_lossy().into_owned(),
-        source.clone(),
-        workspace_dir,
-    );
-    if check.report.has_errors() {
-        let rendered = check.report.render(&check.sources);
-        eprint!("{rendered}");
-        return (0, 1, infra_failure_tap("compile error (see stderr)"), 0.0);
-    }
-    let all_fns = find_test_fns(&check.ast);
-    let test_fns: Vec<String> = if let Some(pat) = filter {
-        all_fns.into_iter().filter(|n| n.contains(pat)).collect()
-    } else {
-        all_fns
-    };
-    if test_fns.is_empty() {
-        return (0, 0, String::new(), 0.0);
-    }
-    let runner_name = format!("__tyra_junit_runner_{}.tyra", std::process::id());
-    let runner_path = dir.join(&runner_name);
-    let runner_source = synthesize_runner(&source, &test_fns);
-    if let Err(e) = std::fs::write(&runner_path, &runner_source) {
-        let msg = format!("cannot write runner: {e}");
-        eprintln!("error: {msg}");
-        return (0, 1, infra_failure_tap(&msg), 0.0);
-    }
-    let t0 = std::time::Instant::now();
-    let result = tyra_driver::run_and_capture(&runner_path);
-    let elapsed = t0.elapsed().as_secs_f64();
-    let _ = std::fs::remove_file(&runner_path);
-    if result.report.has_errors() {
-        let rendered = result.report.render(&result.sources);
-        eprint!("{rendered}");
-        let n = test_fns.len();
-        return (
-            0,
-            n,
-            infra_failure_tap("compile error (see stderr)"),
-            elapsed,
-        );
-    }
-    let tap = result.stdout.unwrap_or_default();
-    let (pass, fail) = count_tap_lines(&tap);
-    (pass, fail, tap, elapsed)
-}
-
-/// Produce a minimal TAP string representing one infrastructure failure.
-/// Used in JUnit mode so the XML testsuite reflects the real failure count
-/// instead of silently showing tests="0" failures="0".
-fn infra_failure_tap(msg: &str) -> String {
-    format!("TAP version 14\n1..1\nnot ok 1 - infrastructure failure\n# {msg}\n")
 }
 
 fn count_tap_lines(output: &str) -> (usize, usize) {
