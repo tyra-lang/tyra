@@ -870,6 +870,46 @@ pub(crate) fn emit_instruction(
         } => {
             emit_select(out, dest, list, func, ctx);
         }
+
+        Instruction::ClosureBuild {
+            dest,
+            fn_name,
+            env_fields,
+            env_struct_name,
+            param_types,
+            return_type,
+        } => {
+            emit_closure_build(
+                out,
+                dest,
+                fn_name,
+                env_fields,
+                env_struct_name,
+                param_types,
+                return_type,
+                func,
+                ctx,
+            );
+        }
+
+        Instruction::IndirectCall {
+            dest,
+            fat_ptr,
+            args,
+            param_types,
+            return_type,
+        } => {
+            emit_indirect_call(
+                out,
+                dest,
+                fat_ptr,
+                args,
+                param_types,
+                return_type,
+                func,
+                ctx,
+            );
+        }
     }
 }
 
@@ -1098,6 +1138,138 @@ fn emit_await(
 
     let llvm_ty = llvm_type_str(result_type, ctx.struct_map);
     writeln!(out, "  %{dest} = load {llvm_ty}, ptr %{dest}.box").unwrap();
+}
+
+/// Construct the 2-word fat pointer `{ fn_ptr, env_ptr }` for a lambda (ADR-0011).
+/// Allocates the fat struct via GC_malloc; when captures are non-empty, also
+/// allocates an env struct and stores each captured field into it.
+fn emit_closure_build(
+    out: &mut String,
+    dest: &str,
+    fn_name: &str,
+    env_fields: &[Operand],
+    env_struct_name: &str,
+    _param_types: &[tyra_types::Ty],
+    _return_type: &tyra_types::Ty,
+    func: &Function,
+    ctx: &EmitCtx,
+) {
+    // Allocate the fat pointer struct { fn_ptr: ptr, env_ptr: ptr }
+    writeln!(
+        out,
+        "  %{dest}.fat_sz_gep = getelementptr %struct.__closure_fat, ptr null, i32 1"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{dest}.fat_sz = ptrtoint ptr %{dest}.fat_sz_gep to i64"
+    )
+    .unwrap();
+    writeln!(out, "  %{dest} = call ptr @GC_malloc(i64 %{dest}.fat_sz)").unwrap();
+
+    // Store fn_ptr at field 0
+    writeln!(
+        out,
+        "  %{dest}.fn_gep = getelementptr %struct.__closure_fat, ptr %{dest}, i32 0, i32 0"
+    )
+    .unwrap();
+    writeln!(out, "  store ptr @{fn_name}, ptr %{dest}.fn_gep").unwrap();
+
+    // Allocate env struct and store captures (field 1 = env_ptr)
+    if !env_struct_name.is_empty() && !env_fields.is_empty() {
+        let env_llvm = format!("%struct.{env_struct_name}");
+        writeln!(
+            out,
+            "  %{dest}.env_sz_gep = getelementptr {env_llvm}, ptr null, i32 1"
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "  %{dest}.env_sz = ptrtoint ptr %{dest}.env_sz_gep to i64"
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "  %{dest}.env = call ptr @GC_malloc(i64 %{dest}.env_sz)"
+        )
+        .unwrap();
+        let env_info = &ctx.struct_map[env_struct_name];
+        for (i, field_op) in env_fields.iter().enumerate() {
+            let val = operand_ref(field_op, func);
+            let field_ty = llvm_type_str(&env_info.field_types[i], ctx.struct_map);
+            writeln!(
+                out,
+                "  %{dest}.envf{i}.gep = getelementptr {env_llvm}, ptr %{dest}.env, i32 0, i32 {i}"
+            )
+            .unwrap();
+            writeln!(out, "  store {field_ty} {val}, ptr %{dest}.envf{i}.gep").unwrap();
+        }
+        writeln!(
+            out,
+            "  %{dest}.ep_gep = getelementptr %struct.__closure_fat, ptr %{dest}, i32 0, i32 1"
+        )
+        .unwrap();
+        writeln!(out, "  store ptr %{dest}.env, ptr %{dest}.ep_gep").unwrap();
+    } else {
+        // Non-capturing lambda: env_ptr = null
+        writeln!(
+            out,
+            "  %{dest}.ep_gep = getelementptr %struct.__closure_fat, ptr %{dest}, i32 0, i32 1"
+        )
+        .unwrap();
+        writeln!(out, "  store ptr null, ptr %{dest}.ep_gep").unwrap();
+    }
+}
+
+/// Dispatch through a fat-pointer closure value (ADR-0011).
+/// Loads fn_ptr and env_ptr from the fat struct, then issues an indirect call
+/// with env_ptr prepended as the first argument.
+fn emit_indirect_call(
+    out: &mut String,
+    dest: &Option<String>,
+    fat_ptr: &Operand,
+    args: &[Operand],
+    param_types: &[tyra_types::Ty],
+    return_type: &tyra_types::Ty,
+    func: &Function,
+    ctx: &EmitCtx,
+) {
+    let fp_ref = operand_ref(fat_ptr, func);
+    // Use dest name as prefix; for void returns there is no dest SSA value.
+    let pfx = dest.as_deref().unwrap_or("__ic");
+
+    // Extract fn_ptr and env_ptr from the fat struct
+    writeln!(
+        out,
+        "  %{pfx}.fnp_gep = getelementptr %struct.__closure_fat, ptr {fp_ref}, i32 0, i32 0"
+    )
+    .unwrap();
+    writeln!(out, "  %{pfx}.fnp = load ptr, ptr %{pfx}.fnp_gep").unwrap();
+    writeln!(
+        out,
+        "  %{pfx}.envp_gep = getelementptr %struct.__closure_fat, ptr {fp_ref}, i32 0, i32 1"
+    )
+    .unwrap();
+    writeln!(out, "  %{pfx}.envp = load ptr, ptr %{pfx}.envp_gep").unwrap();
+
+    // Build LLVM function type: ret_ty (ptr, param_types...)
+    let ret_ty = llvm_type_str(return_type, ctx.struct_map);
+    let mut sig_tys: Vec<String> = vec!["ptr".to_string()];
+    let mut call_args: Vec<String> = vec![format!("ptr %{pfx}.envp")];
+    for (arg, pty) in args.iter().zip(param_types.iter()) {
+        let val = operand_ref(arg, func);
+        let ty = llvm_type_str(pty, ctx.struct_map);
+        sig_tys.push(ty.clone());
+        call_args.push(format!("{ty} {val}"));
+    }
+    let fn_ty_str = format!("{ret_ty} ({})", sig_tys.join(", "));
+    let args_str = call_args.join(", ");
+
+    if ret_ty == "void" {
+        writeln!(out, "  call {fn_ty_str} %{pfx}.fnp({args_str})").unwrap();
+    } else {
+        writeln!(out, "  %{pfx} = call {fn_ty_str} %{pfx}.fnp({args_str})").unwrap();
+    }
 }
 
 /// Emit call arguments using the callee's function signature for type info.

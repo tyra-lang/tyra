@@ -1,0 +1,9 @@
+# E0402-closure-mut-rebind.tyra
+# expected: error[E0402]: cannot assign to `counter` captured by closure
+# Exercises: type checker — mut rebinding inside a lambda is forbidden (spec §9.4).
+# SPEC_REF: §9.4 — closures capture mut bindings read-only; rebinding is E0402
+
+mut counter = 0
+let f = fn() -> Unit
+  counter = 1
+end

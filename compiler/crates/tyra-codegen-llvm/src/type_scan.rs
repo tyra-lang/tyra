@@ -288,6 +288,11 @@ fn scan_primitive_temps(
                                 string_temps.insert(dest.clone());
                             }
                         }
+                        // Closure fat pointer (ADR-0011): GC-heap ptr, same
+                        // width as String — track as string_temp.
+                        Ty::Fn(..) => {
+                            string_temps.insert(dest.clone());
+                        }
                         _ => {}
                     }
                 }
@@ -412,6 +417,41 @@ fn scan_primitive_temps(
                     {
                         string_temps.insert(dest.clone());
                     }
+                }
+                _ => {}
+            },
+            // ClosureBuild produces a GC-heap ptr (fat pointer struct, ADR-0011).
+            // Track as string_temp so downstream Copy/Store uses ptr semantics.
+            Instruction::ClosureBuild { dest, .. } => {
+                string_temps.insert(dest.clone());
+            }
+            // IndirectCall: track return type the same way as direct Call.
+            Instruction::IndirectCall {
+                dest: Some(dest),
+                return_type,
+                ..
+            } => match return_type {
+                Ty::String => {
+                    string_temps.insert(dest.clone());
+                }
+                Ty::Float => {
+                    float_temps.insert(dest.clone());
+                }
+                Ty::Bool => {
+                    bool_temps.insert(dest.clone());
+                }
+                Ty::Named(name) => {
+                    if struct_map
+                        .get(name.as_str())
+                        .map(|i| i.is_data)
+                        .unwrap_or(false)
+                    {
+                        string_temps.insert(dest.clone());
+                    }
+                }
+                // Closure fat pointer (ADR-0011): GC-heap ptr.
+                Ty::Fn(..) => {
+                    string_temps.insert(dest.clone());
                 }
                 _ => {}
             },

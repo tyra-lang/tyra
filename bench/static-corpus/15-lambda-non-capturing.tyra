@@ -1,0 +1,16 @@
+# 15-lambda-non-capturing.tyra
+# Non-capturing lambda: closure with no free variables.
+# Validates: lambda C ABI (ADR-0011 §1), fat pointer with env_ptr=null,
+#            higher-order function call.
+# SPEC_REF: §9.4 — anonymous functions
+
+fn apply(_ f: fn(Int) -> Int, _ x: Int) -> Int
+  f(x)
+end
+
+let double = fn(_ n: Int) -> Int
+  n * 2
+end
+
+let result = apply(double, 21)
+print(result)

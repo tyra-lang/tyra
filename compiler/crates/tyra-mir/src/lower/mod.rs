@@ -579,6 +579,13 @@ pub fn lower(file: &SourceFile) -> Program {
         });
     }
 
+    // Add closure env struct defs (ADR-0011): __closure_env_N structs emitted
+    // during lambda lowering. These are data types (is_data = true) so that
+    // FieldGet / FieldSet use the GEP+load/store path in codegen.
+    for sd in ctx.closure_struct_defs {
+        struct_defs.push(sd);
+    }
+
     Program {
         functions: ctx.functions,
         string_constants: ctx.string_constants,
@@ -679,6 +686,20 @@ pub(crate) struct LowerCtx {
     pub(crate) fn_defs: std::collections::HashMap<String, FnDef>,
     /// Monomorphization cache: mangled_name → true.
     pub(crate) mono_cache: std::collections::HashSet<String>,
+    /// Counter for generating unique `__lambda_N` / `__closure_env_N` names (ADR-0011).
+    pub(crate) closure_counter: u32,
+    /// Variables/temps whose LLVM type is `i1` (Bool).
+    /// Needed to correctly type Bool captures in lambda env structs (Fix 2).
+    pub(crate) bool_vars: std::collections::HashSet<String>,
+    /// Temporaries/variables that hold closure fat-pointer values (ADR-0011).
+    /// Used to emit IndirectCall instead of Call at closure call sites.
+    pub(crate) closure_vars: std::collections::HashSet<String>,
+    /// Maps closure-valued temp/variable names to their `Ty::Fn(params, ret)` type.
+    /// Propagated through let/mut bindings so call sites can emit typed IndirectCall.
+    pub(crate) closure_fn_types: std::collections::HashMap<String, Ty>,
+    /// Env struct StructDefs accumulated while lowering lambdas (ADR-0011).
+    /// Collected into Program::struct_defs at the end of `lower()`.
+    pub(crate) closure_struct_defs: Vec<crate::ir::StructDef>,
 }
 
 /// Result of resolving an impl method call.
@@ -726,6 +747,11 @@ impl LowerCtx {
             defer_flag_count: 0,
             fn_defs: std::collections::HashMap::new(),
             mono_cache: std::collections::HashSet::new(),
+            bool_vars: std::collections::HashSet::new(),
+            closure_counter: 0,
+            closure_vars: std::collections::HashSet::new(),
+            closure_fn_types: std::collections::HashMap::new(),
+            closure_struct_defs: Vec::new(),
         }
     }
 
@@ -794,6 +820,160 @@ impl LowerCtx {
             self.string_constants.push(s.to_string());
             idx
         }
+    }
+
+    /// Lower a lambda expression into a lifted LLVM function (ADR-0011 §Phase B).
+    ///
+    /// Saves per-function state, builds a new function whose first parameter is
+    /// `__env: ptr` (a pointer to the GC-allocated env struct), lowers the
+    /// lambda body with captures loaded from the env struct at entry, then
+    /// restores state and pushes the resulting `Function` to `self.functions`.
+    ///
+    /// `lambda_id` — the unique counter value assigned to this lambda.
+    /// `lam`       — the AST lambda expression.
+    /// `captures`  — capture names in lexical first-use order.
+    /// `env_struct_name` — the `__closure_env_N` struct name (or "" if empty).
+    /// `param_types` / `ret_ty` — the lifted function's user-visible signature.
+    /// `saved_type_maps` — the enclosing function's type maps, used to recover
+    ///   capture types when setting up the lifted function's context.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn lower_lifted_lambda(
+        &mut self,
+        lambda_id: u32,
+        lam: &LambdaExpr,
+        captures: &[String],
+        env_struct_name: &str,
+        param_types: &[Ty],
+        ret_ty: Ty,
+        saved_var_types: &std::collections::HashMap<String, String>,
+        saved_float_vars: &std::collections::HashSet<String>,
+        saved_string_vars: &std::collections::HashSet<String>,
+        saved_bool_vars: &std::collections::HashSet<String>,
+        saved_generic_var: &std::collections::HashMap<String, Ty>,
+    ) {
+        // Save and clear per-function state so the lifted function gets a fresh context.
+        let bak_var_types = std::mem::take(&mut self.var_types);
+        let bak_float_vars = std::mem::take(&mut self.float_vars);
+        let bak_string_vars = std::mem::take(&mut self.string_vars);
+        let bak_bool_vars = std::mem::take(&mut self.bool_vars);
+        let bak_mut_vars = std::mem::take(&mut self.mut_vars);
+        let bak_pattern_vars = std::mem::take(&mut self.pattern_vars);
+        let bak_local_names = std::mem::take(&mut self.local_binding_names);
+        let bak_generic_var = std::mem::take(&mut self.generic_var_types);
+        let bak_deferred = std::mem::take(&mut self.deferred_exprs);
+        let bak_next_defer = self.next_defer_index;
+        let bak_defer_count = self.defer_flag_count;
+        let bak_return_type = self.current_fn_return_type.clone();
+        let bak_closure_vars = std::mem::take(&mut self.closure_vars);
+        let bak_closure_fn_types = std::mem::take(&mut self.closure_fn_types);
+
+        self.current_fn_return_type = ret_ty.clone();
+        self.register_adt_type(&ret_ty);
+
+        // Build params: (__env: ptr to env struct) + user params.
+        // Non-capturing lambdas use "" for env_struct_name; Ty::String maps to
+        // ptr in LLVM (consistent with "null" env_ptr in ClosureBuild, ADR-0011 §1).
+        let env_ty = if env_struct_name.is_empty() {
+            Ty::String
+        } else {
+            Ty::Named(env_struct_name.to_string())
+        };
+        let mut params: Vec<(String, Ty)> = vec![("__env".into(), env_ty)];
+        self.local_binding_names.insert("__env".into());
+
+        for (p, ty) in lam.params.iter().zip(param_types.iter()) {
+            self.local_binding_names.insert(p.name.clone());
+            self.register_adt_type(ty);
+            match ty {
+                Ty::Float => {
+                    self.float_vars.insert(p.name.clone());
+                }
+                Ty::String => {
+                    self.string_vars.insert(p.name.clone());
+                }
+                Ty::Bool => {
+                    self.bool_vars.insert(p.name.clone());
+                }
+                Ty::Named(n) => {
+                    self.var_types.insert(p.name.clone(), n.clone());
+                }
+                _ if ty.is_option() || ty.is_result() || ty.is_list() => {
+                    self.generic_var_types.insert(p.name.clone(), ty.clone());
+                    self.var_types
+                        .insert(p.name.clone(), ty.monomorphized_name());
+                }
+                _ => {}
+            }
+            params.push((p.name.clone(), ty.clone()));
+        }
+
+        let mut body: Vec<Instruction> = Vec::new();
+
+        // Load each capture from the env struct at function entry (GEP+load).
+        // The FieldGet instruction uses data-type semantics because
+        // __closure_env_N is registered with is_data=true.
+        if !captures.is_empty() {
+            for (i, cap_name) in captures.iter().enumerate() {
+                body.push(Instruction::FieldGet {
+                    dest: cap_name.clone(),
+                    obj: Operand::Var("__env".into()),
+                    type_name: env_struct_name.to_string(),
+                    field_index: i as u32,
+                });
+                // Restore the capture's type in the lifted function's type maps.
+                if saved_float_vars.contains(cap_name.as_str()) {
+                    self.float_vars.insert(cap_name.clone());
+                } else if saved_string_vars.contains(cap_name.as_str()) {
+                    self.string_vars.insert(cap_name.clone());
+                } else if saved_bool_vars.contains(cap_name.as_str()) {
+                    self.bool_vars.insert(cap_name.clone());
+                } else if let Some(gt) = saved_generic_var.get(cap_name.as_str()).cloned() {
+                    self.generic_var_types.insert(cap_name.clone(), gt.clone());
+                    self.var_types
+                        .insert(cap_name.clone(), gt.monomorphized_name());
+                } else if let Some(st) = saved_var_types.get(cap_name.as_str()).cloned() {
+                    self.var_types.insert(cap_name.clone(), st);
+                }
+                self.local_binding_names.insert(cap_name.clone());
+            }
+        }
+
+        // Lower the lambda body statements.
+        for stmt in &lam.body {
+            self.lower_stmt(stmt, &mut body);
+        }
+
+        // Ensure the function ends with a Return.
+        let has_return = body
+            .last()
+            .map_or(false, |i| matches!(i, Instruction::Return { .. }));
+        if !has_return {
+            body.push(Instruction::Return { value: None });
+        }
+
+        self.functions.push(Function {
+            name: format!("__lambda_{lambda_id}"),
+            params,
+            return_type: ret_ty,
+            body,
+            is_main: false,
+        });
+
+        // Restore per-function state.
+        self.var_types = bak_var_types;
+        self.float_vars = bak_float_vars;
+        self.string_vars = bak_string_vars;
+        self.bool_vars = bak_bool_vars;
+        self.mut_vars = bak_mut_vars;
+        self.pattern_vars = bak_pattern_vars;
+        self.local_binding_names = bak_local_names;
+        self.generic_var_types = bak_generic_var;
+        self.deferred_exprs = bak_deferred;
+        self.next_defer_index = bak_next_defer;
+        self.defer_flag_count = bak_defer_count;
+        self.current_fn_return_type = bak_return_type;
+        self.closure_vars = bak_closure_vars;
+        self.closure_fn_types = bak_closure_fn_types;
     }
 
     /// Lower an impl method as a standalone function with mangled name.
@@ -873,6 +1053,9 @@ impl LowerCtx {
                 }
                 Ty::String => {
                     self.string_vars.insert(name.clone());
+                }
+                Ty::Bool => {
+                    self.bool_vars.insert(name.clone());
                 }
                 Ty::Named(type_name) => {
                     if self.struct_fields.contains_key(type_name)
@@ -1021,6 +1204,9 @@ impl LowerCtx {
                 if is_string || self.string_vars.contains(&val) {
                     self.string_vars.insert(s.name.clone());
                 }
+                if self.bool_vars.contains(&val) {
+                    self.bool_vars.insert(s.name.clone());
+                }
                 if let Some(stype) = struct_type {
                     self.var_types.insert(s.name.clone(), stype);
                 } else if let Some(vtype) = self.var_types.get(&val).cloned() {
@@ -1055,6 +1241,13 @@ impl LowerCtx {
                 // Propagate M9 task-handle tracking across let-binding copy.
                 if let Some(trt) = self.task_result_types.get(&val).cloned() {
                     self.task_result_types.insert(s.name.clone(), trt);
+                }
+                // Propagate closure fat-pointer tracking (ADR-0011).
+                if self.closure_vars.contains(&val) {
+                    self.closure_vars.insert(s.name.clone());
+                }
+                if let Some(fn_ty) = self.closure_fn_types.get(&val).cloned() {
+                    self.closure_fn_types.insert(s.name.clone(), fn_ty);
                 }
                 // If the name is already backed by an alloca (from a prior
                 // match pattern binding or a prior `mut`), reuse the slot
@@ -1099,6 +1292,9 @@ impl LowerCtx {
                 if is_string {
                     self.string_vars.insert(s.name.clone());
                 }
+                if self.bool_vars.contains(&val) {
+                    self.bool_vars.insert(s.name.clone());
+                }
                 if let Some(stype) = struct_type {
                     self.var_types.insert(s.name.clone(), stype);
                 }
@@ -1126,6 +1322,13 @@ impl LowerCtx {
                 // `mut t = spawn ...` so `t.await` later unboxes correctly.
                 if let Some(trt) = self.task_result_types.get(&val).cloned() {
                     self.task_result_types.insert(s.name.clone(), trt);
+                }
+                // Propagate closure fat-pointer tracking (ADR-0011).
+                if self.closure_vars.contains(&val) {
+                    self.closure_vars.insert(s.name.clone());
+                }
+                if let Some(fn_ty) = self.closure_fn_types.get(&val).cloned() {
+                    self.closure_fn_types.insert(s.name.clone(), fn_ty);
                 }
                 // Mutable locals use alloca+store for SSA-compatible mutation.
                 // Skip the alloca if the slot was already emitted — either

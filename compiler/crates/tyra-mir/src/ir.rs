@@ -270,6 +270,36 @@ pub enum Instruction {
         list: Operand,
         elem_type: Ty,
     },
+
+    /// Build a closure fat-pointer value (ADR-0011).
+    /// `fn_name` — the name of the lifted LLVM function (`__lambda_N`).
+    /// `env_fields` — captured operands in lexical first-use order.
+    /// `env_struct_name` — name of the `__closure_env_N` StructDef; empty when
+    ///   there are no captures (non-capturing lambda, env_ptr = null).
+    /// `param_types` / `return_type` — the lifted function's user-visible
+    ///   signature (excludes the hidden `__env: ptr` first parameter).
+    ClosureBuild {
+        dest: String,
+        fn_name: String,
+        env_fields: Vec<Operand>,
+        env_struct_name: String,
+        param_types: Vec<Ty>,
+        return_type: Ty,
+    },
+
+    /// Indirect call through a fat-pointer closure value (ADR-0011).
+    /// `fat_ptr` — operand holding the `ptr` to the `__closure_fat` struct.
+    /// `args` — user-visible arguments (the hidden `env_ptr` is prepended by
+    ///   codegen when emitting the LLVM `call` instruction).
+    /// `param_types` / `return_type` — the lifted function's user-visible
+    ///   signature, used to emit the correct LLVM call type.
+    IndirectCall {
+        dest: Option<String>,
+        fat_ptr: Operand,
+        args: Vec<Operand>,
+        param_types: Vec<Ty>,
+        return_type: Ty,
+    },
 }
 
 /// A constant value.

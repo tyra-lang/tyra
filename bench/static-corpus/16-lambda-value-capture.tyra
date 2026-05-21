@@ -1,0 +1,18 @@
+# 16-lambda-value-capture.tyra
+# Capturing lambda: captures an Int from the enclosing scope by value copy.
+# Validates: ADR-0011 §4 value-typed capture, env struct GC_malloc,
+#            GEP+load of captured field inside lifted function.
+# SPEC_REF: §9.4 — anonymous functions, capture semantics
+
+fn apply(_ f: fn(Int) -> Int, _ x: Int) -> Int
+  f(x)
+end
+
+let offset = 10
+
+let add_offset = fn(_ n: Int) -> Int
+  n + offset
+end
+
+let result = apply(add_offset, 5)
+print(result)

@@ -104,6 +104,11 @@ pub fn emit_llvm_ir(program: &Program) -> String {
         writeln!(out).unwrap();
     }
 
+    // Closure fat pointer struct (ADR-0011): { fn_ptr: ptr, env_ptr: ptr }.
+    // Always declared so indirect-call emission can reference the type unconditionally.
+    writeln!(out, "%struct.__closure_fat = type {{ ptr, ptr }}").unwrap();
+    writeln!(out).unwrap();
+
     // String constants
     for (idx, s) in program.string_constants.iter().enumerate() {
         let escaped = llvm_escape_string(s);

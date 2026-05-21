@@ -701,12 +701,111 @@ impl super::LowerCtx {
                 dest
             }
 
-            ExprKind::Lambda(_) => {
+            ExprKind::Lambda(lam) => {
+                let lambda_id = self.closure_counter;
+                self.closure_counter += 1;
+
+                let fn_name = format!("__lambda_{lambda_id}");
+                let env_struct_name = format!("__closure_env_{lambda_id}");
+
+                let param_types: Vec<Ty> = lam
+                    .params
+                    .iter()
+                    .map(|p| Ty::from_type_expr(&p.type_annotation))
+                    .collect();
+                let ret_ty = lam
+                    .return_type
+                    .as_ref()
+                    .map(Ty::from_type_expr)
+                    .unwrap_or(Ty::Unit);
+
+                // Collect free variables in lexical first-use order.
+                let captures = collect_captures(lam, &self.local_binding_names);
+
+                // Register env struct def when there are captures.
+                if !captures.is_empty() {
+                    let env_fields: Vec<(String, Ty)> = captures
+                        .iter()
+                        .map(|name| {
+                            // Infer capture type from all available tracking sets.
+                            // Order: Float > String > Bool > Generic > Named > Int(default).
+                            let ty = if self.float_vars.contains(name.as_str()) {
+                                Ty::Float
+                            } else if self.string_vars.contains(name.as_str()) {
+                                Ty::String
+                            } else if self.bool_vars.contains(name.as_str()) {
+                                Ty::Bool
+                            } else if let Some(gt) =
+                                self.generic_var_types.get(name.as_str()).cloned()
+                            {
+                                gt
+                            } else if let Some(type_name) =
+                                self.var_types.get(name.as_str()).cloned()
+                            {
+                                Ty::Named(type_name)
+                            } else {
+                                Ty::Int
+                            };
+                            (name.clone(), ty)
+                        })
+                        .collect();
+                    self.closure_struct_defs.push(crate::ir::StructDef {
+                        name: env_struct_name.clone(),
+                        fields: env_fields,
+                        is_data: true,
+                        recursive_fields: vec![false; captures.len()],
+                    });
+                }
+
+                // Snapshot enclosing type maps so lower_lifted_lambda can
+                // reconstruct capture types in the lifted function's context.
+                let snap_var_types = self.var_types.clone();
+                let snap_float_vars = self.float_vars.clone();
+                let snap_string_vars = self.string_vars.clone();
+                let snap_bool_vars = self.bool_vars.clone();
+                let snap_generic_var = self.generic_var_types.clone();
+
+                // Lower the lambda body into a lifted function.
+                self.lower_lifted_lambda(
+                    lambda_id,
+                    lam,
+                    &captures,
+                    if captures.is_empty() {
+                        ""
+                    } else {
+                        &env_struct_name
+                    },
+                    &param_types,
+                    ret_ty.clone(),
+                    &snap_var_types,
+                    &snap_float_vars,
+                    &snap_string_vars,
+                    &snap_bool_vars,
+                    &snap_generic_var,
+                );
+
+                // Build the env_fields operands from the *current* scope.
+                let env_field_operands: Vec<Operand> = captures
+                    .iter()
+                    .map(|name| Operand::Var(name.clone()))
+                    .collect();
+
                 let dest = self.fresh_temp();
-                body.push(Instruction::Const {
+                let fn_ty = Ty::Fn(param_types.clone(), Box::new(ret_ty.clone()));
+                body.push(Instruction::ClosureBuild {
                     dest: dest.clone(),
-                    value: Constant::Unit,
+                    fn_name,
+                    env_fields: env_field_operands,
+                    env_struct_name: if captures.is_empty() {
+                        String::new()
+                    } else {
+                        env_struct_name
+                    },
+                    param_types,
+                    return_type: ret_ty,
                 });
+                self.closure_vars.insert(dest.clone());
+                self.closure_fn_types.insert(dest.clone(), fn_ty);
                 dest
             }
 
@@ -943,5 +1042,214 @@ impl super::LowerCtx {
                 dest
             }
         }
+    }
+}
+
+// ── Free variable analysis (ADR-0011 §3) ────────────────────────────────────
+
+/// Collect the free variables of `lam` as a list in lexical first-use order.
+///
+/// A variable is "free" in the lambda when it:
+/// - appears as an `Ident` in the lambda body, AND
+/// - is present in `enclosing_names` (the enclosing function's local bindings), AND
+/// - is NOT a lambda parameter, AND
+/// - is NOT locally bound within the lambda body itself (introduced by a
+///   `let`/`mut` inside the body — i.e. shadowing or new bindings).
+///
+/// Analysis uses **resolved binding identity** by operating on the
+/// `enclosing_names` snapshot rather than raw identifier strings, which
+/// correctly handles shadowing: an inner `let x` shadows an outer `mut x`,
+/// so after the inner binding is defined, `x` is no longer a capture.
+pub(super) fn collect_captures(
+    lam: &LambdaExpr,
+    enclosing_names: &std::collections::HashSet<String>,
+) -> Vec<String> {
+    let mut param_set: std::collections::HashSet<String> =
+        lam.params.iter().map(|p| p.name.clone()).collect();
+    let mut captures: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    collect_free_in_stmts(
+        &lam.body,
+        enclosing_names,
+        &mut param_set,
+        &mut captures,
+        &mut seen,
+    );
+    captures
+}
+
+fn collect_free_in_stmts(
+    stmts: &[Stmt],
+    enclosing: &std::collections::HashSet<String>,
+    bound: &mut std::collections::HashSet<String>,
+    captures: &mut Vec<String>,
+    seen: &mut std::collections::HashSet<String>,
+) {
+    for stmt in stmts {
+        match stmt {
+            Stmt::Let(s) => {
+                collect_free_in_expr(&s.value, enclosing, bound, captures, seen);
+                bound.insert(s.name.clone());
+            }
+            Stmt::Mut(s) => {
+                collect_free_in_expr(&s.value, enclosing, bound, captures, seen);
+                bound.insert(s.name.clone());
+            }
+            Stmt::Return(s) => {
+                if let Some(v) = &s.value {
+                    collect_free_in_expr(v, enclosing, bound, captures, seen);
+                }
+            }
+            Stmt::Defer(s) => {
+                collect_free_in_expr(&s.expr, enclosing, bound, captures, seen);
+            }
+            Stmt::Expr(s) => {
+                collect_free_in_expr(&s.expr, enclosing, bound, captures, seen);
+            }
+            Stmt::Break(_) | Stmt::Continue(_) => {}
+        }
+    }
+}
+
+fn collect_free_in_expr(
+    expr: &Expr,
+    enclosing: &std::collections::HashSet<String>,
+    bound: &mut std::collections::HashSet<String>,
+    captures: &mut Vec<String>,
+    seen: &mut std::collections::HashSet<String>,
+) {
+    match &expr.kind {
+        ExprKind::Ident(name) => {
+            if enclosing.contains(name.as_str())
+                && !bound.contains(name.as_str())
+                && !seen.contains(name.as_str())
+            {
+                seen.insert(name.clone());
+                captures.push(name.clone());
+            }
+        }
+        ExprKind::Lambda(inner) => {
+            // Inner lambda: recurse with inner params added to `bound`.
+            let mut inner_bound = bound.clone();
+            for p in &inner.params {
+                inner_bound.insert(p.name.clone());
+            }
+            collect_free_in_stmts(&inner.body, enclosing, &mut inner_bound, captures, seen);
+        }
+        ExprKind::Call(callee, args) => {
+            collect_free_in_expr(callee, enclosing, bound, captures, seen);
+            for a in args {
+                collect_free_in_expr(&a.value, enclosing, bound, captures, seen);
+            }
+        }
+        ExprKind::TurbofishCall(callee, _, args) => {
+            collect_free_in_expr(callee, enclosing, bound, captures, seen);
+            for a in args {
+                collect_free_in_expr(&a.value, enclosing, bound, captures, seen);
+            }
+        }
+        ExprKind::BinaryOp(lhs, _, rhs) | ExprKind::Assign(lhs, rhs) => {
+            collect_free_in_expr(lhs, enclosing, bound, captures, seen);
+            collect_free_in_expr(rhs, enclosing, bound, captures, seen);
+        }
+        ExprKind::UnaryOp(_, inner) | ExprKind::FieldAccess(inner, _) => {
+            collect_free_in_expr(inner, enclosing, bound, captures, seen);
+        }
+        ExprKind::If(if_expr) => {
+            // Walk the if/else-if/else chain. ElseBranch::ElseIf recurses.
+            let mut cur = if_expr.as_ref();
+            loop {
+                collect_free_in_expr(&cur.condition, enclosing, bound, captures, seen);
+                let mut body_bound = bound.clone();
+                collect_free_in_stmts(&cur.then_body, enclosing, &mut body_bound, captures, seen);
+                match &cur.else_body {
+                    None => break,
+                    Some(ElseBranch::Else(stmts)) => {
+                        let mut else_bound = bound.clone();
+                        collect_free_in_stmts(stmts, enclosing, &mut else_bound, captures, seen);
+                        break;
+                    }
+                    Some(ElseBranch::ElseIf(elif)) => {
+                        cur = elif;
+                    }
+                }
+            }
+        }
+        ExprKind::Match(match_expr) => {
+            collect_free_in_expr(&match_expr.subject, enclosing, bound, captures, seen);
+            for arm in &match_expr.arms {
+                let mut arm_bound = bound.clone();
+                collect_pattern_names(&arm.pattern, &mut arm_bound);
+                collect_free_in_stmts(&arm.body, enclosing, &mut arm_bound, captures, seen);
+            }
+        }
+        ExprKind::StringInterp(parts) => {
+            for part in parts {
+                if let StringPart::Expr(e) = part {
+                    collect_free_in_expr(e, enclosing, bound, captures, seen);
+                }
+            }
+        }
+        ExprKind::ListLit(elems) => {
+            for e in elems {
+                collect_free_in_expr(e, enclosing, bound, captures, seen);
+            }
+        }
+        ExprKind::MapLit(pairs) => {
+            for (k, v) in pairs {
+                collect_free_in_expr(k, enclosing, bound, captures, seen);
+                collect_free_in_expr(v, enclosing, bound, captures, seen);
+            }
+        }
+        ExprKind::Index(base, idx) => {
+            collect_free_in_expr(base, enclosing, bound, captures, seen);
+            collect_free_in_expr(idx, enclosing, bound, captures, seen);
+        }
+        ExprKind::Propagate(inner) | ExprKind::Await(inner) | ExprKind::Spawn(inner) => {
+            collect_free_in_expr(inner, enclosing, bound, captures, seen);
+        }
+        ExprKind::For(for_expr) => {
+            collect_free_in_expr(&for_expr.iter, enclosing, bound, captures, seen);
+            let mut for_bound = bound.clone();
+            for_bound.insert(for_expr.binding.clone());
+            collect_free_in_stmts(&for_expr.body, enclosing, &mut for_bound, captures, seen);
+        }
+        ExprKind::While(while_expr) => {
+            collect_free_in_expr(&while_expr.condition, enclosing, bound, captures, seen);
+            let mut while_bound = bound.clone();
+            collect_free_in_stmts(
+                &while_expr.body,
+                enclosing,
+                &mut while_bound,
+                captures,
+                seen,
+            );
+        }
+        // Literals carry no variable references.
+        ExprKind::IntLit(_)
+        | ExprKind::FloatLit(_)
+        | ExprKind::BoolLit(_)
+        | ExprKind::StringLit(_)
+        | ExprKind::UnitLit => {}
+    }
+}
+
+/// Add pattern-bound names to `bound` so they are not treated as captures.
+fn collect_pattern_names(pat: &Pattern, bound: &mut std::collections::HashSet<String>) {
+    match &pat.kind {
+        PatternKind::Ident(name) => {
+            bound.insert(name.clone());
+        }
+        PatternKind::Constructor(_, fields) => {
+            for f in fields {
+                collect_pattern_names(&f.pattern, bound);
+            }
+        }
+        PatternKind::Wildcard
+        | PatternKind::IntLit(_)
+        | PatternKind::FloatLit(_)
+        | PatternKind::StringLit(_)
+        | PatternKind::BoolLit(_) => {}
     }
 }

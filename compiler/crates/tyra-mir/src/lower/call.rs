@@ -999,7 +999,9 @@ impl super::LowerCtx {
             }
         }
 
-        let func_name = match &callee.kind {
+        // Resolve callee to a name first so the closure check below covers
+        // all callee shapes (Ident, returned temps, parenthesised exprs, …).
+        let callee_name = match &callee.kind {
             ExprKind::Ident(name) => name.clone(),
             ExprKind::FieldAccess(obj, method) => {
                 let obj_name = self.lower_expr(obj, body);
@@ -1007,6 +1009,46 @@ impl super::LowerCtx {
             }
             _ => self.lower_expr(callee, body),
         };
+
+        // Indirect call through a closure fat pointer (ADR-0011).
+        // Works for any callee expression, not just simple identifiers.
+        if self.closure_vars.contains(callee_name.as_str()) {
+            if let Some(tyra_types::Ty::Fn(param_types, ret_box)) =
+                self.closure_fn_types.get(callee_name.as_str()).cloned()
+            {
+                let fat_ptr = Operand::Var(callee_name.clone());
+                let arg_operands: Vec<Operand> = args
+                    .iter()
+                    .map(|a| {
+                        let t = self.lower_expr(&a.value, body);
+                        Operand::Var(t)
+                    })
+                    .collect();
+                let dest = self.fresh_temp();
+                let return_type = *ret_box;
+                body.push(Instruction::IndirectCall {
+                    dest: Some(dest.clone()),
+                    fat_ptr,
+                    args: arg_operands,
+                    param_types,
+                    return_type: return_type.clone(),
+                });
+                if return_type.is_option() || return_type.is_result() || return_type.is_list() {
+                    self.register_adt_type(&return_type);
+                    let mono = return_type.monomorphized_name();
+                    self.generic_var_types.insert(dest.clone(), return_type);
+                    self.var_types.insert(dest.clone(), mono);
+                } else if matches!(return_type, tyra_types::Ty::Fn(..)) {
+                    // Closure returning another closure: propagate fat-pointer
+                    // type so the next call site also emits IndirectCall.
+                    self.closure_vars.insert(dest.clone());
+                    self.closure_fn_types.insert(dest.clone(), return_type);
+                }
+                return dest;
+            }
+        }
+
+        let func_name = callee_name;
 
         let arg_operands: Vec<Operand> = args
             .iter()
@@ -1036,6 +1078,12 @@ impl super::LowerCtx {
                 let mono = ret_ty.monomorphized_name();
                 self.generic_var_types.insert(dest.clone(), ret_ty);
                 self.var_types.insert(dest.clone(), mono);
+            } else if matches!(ret_ty, tyra_types::Ty::Fn(..)) {
+                // The call returns a first-class function value: mark it as
+                // closure-valued so downstream call sites emit IndirectCall
+                // (ADR-0011 §Decision 1 — uniform fat pointer, Fix 3).
+                self.closure_vars.insert(dest.clone());
+                self.closure_fn_types.insert(dest.clone(), ret_ty);
             }
         }
 

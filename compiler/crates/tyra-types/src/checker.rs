@@ -76,6 +76,14 @@ pub struct TypeEnv {
     user_defined_types: HashSet<String>,
     /// Span → Ty map populated during type checking for LSP hover support.
     pub(crate) type_index: TypeIndex,
+    /// Stack of outer-scope `mut` binding name sets — one entry per lambda
+    /// nesting level. Non-empty when inside a lambda body. Used to detect
+    /// E0402 (assignment to an outer `mut` binding from inside a closure).
+    lambda_outer_muts: Vec<HashSet<String>>,
+    /// Scope depth (`bindings.len()`) at each lambda entry point.
+    /// Paired 1-to-1 with lambda_outer_muts; used to detect inner shadows
+    /// (ADR-0011 §3: binding-identity-based check, not name-string-based).
+    lambda_entry_depths: Vec<usize>,
 }
 
 impl TypeEnv {
@@ -92,6 +100,8 @@ impl TypeEnv {
             type_abilities: HashMap::new(),
             user_defined_types: HashSet::new(),
             type_index: HashMap::new(),
+            lambda_outer_muts: Vec::new(),
+            lambda_entry_depths: Vec::new(),
         }
     }
 
@@ -162,6 +172,53 @@ impl TypeEnv {
             }
         }
         None
+    }
+
+    /// Enter a lambda body: snapshot all current `mut`-bound names from every
+    /// enclosing scope and push them onto the lambda_outer_muts stack (E0402).
+    pub fn enter_lambda_scope(&mut self) {
+        // Record the scope depth so is_lambda_outer_mut can distinguish outer
+        // bindings from inner shadows (ADR-0011 §3: binding-identity semantics).
+        self.lambda_entry_depths.push(self.bindings.len());
+        let mut outer_muts: HashSet<String> = HashSet::new();
+        for (bindings, lets) in self.bindings.iter().zip(self.let_bindings.iter()) {
+            for name in bindings.keys() {
+                if !lets.contains(name.as_str()) {
+                    outer_muts.insert(name.clone());
+                }
+            }
+        }
+        self.lambda_outer_muts.push(outer_muts);
+    }
+
+    /// Exit a lambda body: pop the outer-mut snapshot (E0402).
+    pub fn exit_lambda_scope(&mut self) {
+        self.lambda_outer_muts.pop();
+        self.lambda_entry_depths.pop();
+    }
+
+    /// Returns true when inside a lambda and `name` is a `mut` binding from
+    /// an **enclosing** scope — assignment would violate spec §9.4 (E0402).
+    ///
+    /// Uses the scope-depth recorded at lambda entry to handle shadowing:
+    /// if the lambda body introduces its own `mut x`, scopes at depth
+    /// `>= entry_depth` will contain `x` — it is a local binding, not
+    /// an outer capture, so this returns false (no E0402).
+    pub fn is_lambda_outer_mut(&self, name: &str) -> bool {
+        let (Some(outer_muts), Some(&entry_depth)) = (
+            self.lambda_outer_muts.last(),
+            self.lambda_entry_depths.last(),
+        ) else {
+            return false;
+        };
+        if !outer_muts.contains(name) {
+            return false;
+        }
+        // If `name` is defined in any scope introduced inside the lambda,
+        // it is a local binding (inner shadow) — not an outer capture.
+        !self.bindings[entry_depth..]
+            .iter()
+            .any(|s| s.contains_key(name))
     }
 
     /// Register an ADT with its variant names for exhaustiveness checking.
@@ -1126,6 +1183,21 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     .with_label(Label::new(expr.span, "assignment to immutable variable")),
                 );
             }
+            // Reject rebinding an outer `mut` from inside a closure (E0402, spec §9.4).
+            if let ExprKind::Ident(name) = &lhs.kind
+                && env.is_lambda_outer_mut(name)
+            {
+                report.add(
+                    Diagnostic::error(format!(
+                        "cannot assign to `{name}` captured by closure"
+                    ))
+                    .with_code("E0402")
+                    .with_label(Label::new(
+                        expr.span,
+                        "closures capture `mut` bindings by reference but rebinding is forbidden (spec §9.4)",
+                    )),
+                );
+            }
             infer_expr(lhs, env, report);
             infer_expr(rhs, env, report);
             Ty::Unit
@@ -1448,6 +1520,8 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             let saved_loop_depth = env.loop_depth;
             env.loop_depth = 0;
             env.push_return_type(ret_ty.clone());
+            // Snapshot outer mut bindings before entering the lambda scope (E0402).
+            env.enter_lambda_scope();
             env.push();
             for (param, ty) in lam.params.iter().zip(&param_tys) {
                 env.define(param.name.clone(), ty.clone());
@@ -1456,6 +1530,7 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 check_stmt(stmt, env, report);
             }
             env.pop();
+            env.exit_lambda_scope();
             env.pop_return_type();
             env.loop_depth = saved_loop_depth;
             Ty::Fn(param_tys, Box::new(ret_ty))
