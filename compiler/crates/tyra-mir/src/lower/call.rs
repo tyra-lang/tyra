@@ -765,6 +765,52 @@ impl super::LowerCtx {
             }
         }
 
+        // assert.eq / assert.ne — dispatch to the typed stdlib variant based on
+        // the concrete argument type (spec §22, Phase D).  The type checker has
+        // already validated same-type Eq args, so here we only need to select
+        // the right concrete name and emit a plain Call.
+        // Alias imports (e.g. `import assert as a`) are supported: we check the
+        // canonical name via module_local_to_canonical and build the mangled
+        // function name using the local alias (matching how the driver names them).
+        if let ExprKind::FieldAccess(obj, fn_name) = &callee.kind
+            && let ExprKind::Ident(module_name) = &obj.kind
+            && self
+                .module_local_to_canonical
+                .get(module_name.as_str())
+                .map(|c| c == "assert")
+                .unwrap_or(false)
+            && matches!(fn_name.as_str(), "eq" | "ne")
+            && args.len() == 2
+        {
+            let arg_ty = self.infer_expr_type(&args[0].value).unwrap_or(Ty::Int);
+            // Use module_name (local alias) to build the mangled name: the driver
+            // renames exported functions as `{local_name}__{fn}`, so `import assert
+            // as a` → functions named `a__eq`, `a__eq_str`, etc.
+            let concrete = match (&arg_ty, fn_name.as_str()) {
+                (Ty::String, "eq") => format!("{module_name}__eq_str"),
+                (Ty::String, "ne") => format!("{module_name}__ne_str"),
+                (Ty::Bool, "eq") => format!("{module_name}__eq_bool"),
+                (Ty::Bool, "ne") => format!("{module_name}__ne_bool"),
+                (_, "ne") => format!("{module_name}__ne"),
+                _ => format!("{module_name}__eq"),
+            };
+            let result_ty = Ty::Generic("Result".into(), vec![Ty::Unit, Ty::String]);
+            self.register_adt_type(&result_ty);
+            let a = self.lower_expr(&args[0].value, body);
+            let b = self.lower_expr(&args[1].value, body);
+            let dest = self.fresh_temp();
+            body.push(Instruction::Call {
+                dest: Some(dest.clone()),
+                func: concrete,
+                args: vec![Operand::Var(a), Operand::Var(b)],
+            });
+            self.generic_var_types
+                .insert(dest.clone(), result_ty.clone());
+            self.var_types
+                .insert(dest.clone(), result_ty.monomorphized_name());
+            return dest;
+        }
+
         // Check for module-qualified call: math.square() → math__square() (§13)
         if let ExprKind::FieldAccess(obj, fn_name) = &callee.kind {
             if let ExprKind::Ident(module_name) = &obj.kind {

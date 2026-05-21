@@ -1,0 +1,11 @@
+# E0306-assert-eq-float.tyra
+# expected: error[E0306]: Float does not have Eq; assert.eq requires Eq ability
+# Exercises: assert.eq<T: Eq> ability constraint — Float is excluded (ADR-0002)
+# SPEC_REF: §22 v0.4 — assert.eq Eq ability constraint
+import assert
+
+fn main() -> Int
+  # Float has no Eq; assert.eq must reject this with E0306
+  let r = assert.eq(1.0, 1.0)
+  0
+end

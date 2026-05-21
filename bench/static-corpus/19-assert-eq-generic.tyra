@@ -1,0 +1,14 @@
+# 19-assert-eq-generic.tyra
+# Exercises: assert.eq / assert.ne overloaded for Int, String, Bool
+# SPEC_REF: §22 v0.4 — assert.eq dispatched to typed variants (Int/String/Bool)
+import assert
+
+fn main() -> Int
+  let r1 = assert.eq(1 + 1, 2)
+  let r2 = assert.eq("hello", "hello")
+  let r3 = assert.eq(true, true)
+  let r4 = assert.ne(1, 2)
+  let r5 = assert.ne("a", "b")
+  let r6 = assert.ne(false, true)
+  0
+end

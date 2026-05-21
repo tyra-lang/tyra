@@ -1,13 +1,19 @@
-# stdlib/assert.tyra — test assertion helpers (§22 v0.2).
+# stdlib/assert.tyra — test assertion helpers (§22 v0.4).
 #
 # All functions return Result<Unit, String>; use ? to propagate failures.
-# Generic assert.eq<T> requires trait bounds (v0.3+); use typed variants here.
+#
+# assert.eq / assert.ne support Int, String, and Bool (spec §22, v0.4).
+# The compiler dispatches to the appropriate typed variant (assert__eq /
+# assert__eq_str / assert__eq_bool) at MIR lowering time.
+# Float and other types are not supported; use typed variants (eq_str, etc.)
+# for explicit dispatch if needed.
 #
 # Usage:
 #   import assert
 #   fn test_add() -> Result<Unit, String>
 #     assert.eq(1 + 1, 2)?
-#     assert.eq_str("hi", "hi")?
+#     assert.eq("hello", "hello")?
+#     assert.eq(true, true)?
 #     Ok(())
 #   end
 export fn eq(actual: Int, expected: Int) -> Result<Unit, String>
@@ -47,6 +53,14 @@ export fn ne_str(actual: String, expected: String) -> Result<Unit, String>
     Ok(())
   else
     Err("expected strings to differ, but both were \"#{actual}\"")
+  end
+end
+
+export fn ne_bool(actual: Bool, expected: Bool) -> Result<Unit, String>
+  if actual != expected
+    Ok(())
+  else
+    Err("expected booleans to differ, but both were #{actual}")
   end
 end
 

@@ -84,6 +84,12 @@ pub struct TypeEnv {
     /// Paired 1-to-1 with lambda_outer_muts; used to detect inner shadows
     /// (ADR-0011 §3: binding-identity-based check, not name-string-based).
     lambda_entry_depths: Vec<usize>,
+    /// local_name → canonical_name for each imported module.
+    /// canonical_name is the last path segment (e.g. "assert" for `import assert`).
+    /// Populated by check_item when an Item::Import is encountered.
+    /// Used to guard module-qualified special-cases (e.g. assert.eq) and support
+    /// alias imports (`import assert as a` → "a" → "assert").
+    pub(crate) imported_modules: HashMap<String, String>,
 }
 
 impl TypeEnv {
@@ -102,6 +108,7 @@ impl TypeEnv {
             type_index: HashMap::new(),
             lambda_outer_muts: Vec::new(),
             lambda_entry_depths: Vec::new(),
+            imported_modules: HashMap::new(),
         }
     }
 
@@ -334,6 +341,19 @@ pub fn check(file: &SourceFile, report: &mut Report) -> TypeIndex {
     let mut env = TypeEnv::new();
     register_prelude(&mut env);
     collect_top_level_types(&file.items, &mut env);
+
+    // Pre-collect all imports before type-checking so that module-qualified
+    // special-cases (e.g. assert.eq) work regardless of import order in the
+    // source file.  Mirrors the pre-collection pass in tyra-mir/src/lower/mod.rs.
+    for item in &file.items {
+        if let Item::Import(decl) = item {
+            let canonical = decl.path.last().cloned().unwrap_or_default();
+            let local = decl.alias.clone().unwrap_or_else(|| canonical.clone());
+            if !local.is_empty() && !canonical.is_empty() {
+                env.imported_modules.insert(local, canonical);
+            }
+        }
+    }
 
     for item in &file.items {
         check_item(item, &mut env, report);
@@ -916,6 +936,15 @@ fn check_item(item: &Item, env: &mut TypeEnv, report: &mut Report) {
             check_stmt(s, env, report);
         }
         Item::ImplDef(i) => check_impl(i, env, report),
+        Item::Import(decl) => {
+            // Map local_name → canonical_name so that module-qualified
+            // special-cases (e.g. assert.eq) work for alias imports too.
+            let canonical = decl.path.last().cloned().unwrap_or_default();
+            let local = decl.alias.clone().unwrap_or_else(|| canonical.clone());
+            if !local.is_empty() && !canonical.is_empty() {
+                env.imported_modules.insert(local, canonical);
+            }
+        }
         // TypeDef/TraitDef bodies are registered in collect_top_level_types;
         // no further per-item checks yet.
         _ => {}
@@ -1474,6 +1503,86 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                                 report,
                             );
                             return Ty::String;
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Special-case: assert.eq / assert.ne — overloaded equality assertions
+                // dispatched by MIR lowering to assert__eq / assert__eq_str / assert__eq_bool.
+                // Supported types: Int, String, Bool.  Float is always rejected (ADR-0002).
+                // Extending to arbitrary Eq types requires generic comparison lowering (future).
+                if let ExprKind::Ident(module_name) = &obj.kind
+                    && env
+                        .imported_modules
+                        .get(module_name.as_str())
+                        .map(|c| c == "assert")
+                        .unwrap_or(false)
+                {
+                    let ret = Ty::Generic("Result".into(), vec![Ty::Unit, Ty::String]);
+                    match method.as_str() {
+                        "eq" | "ne" => {
+                            if args.len() != 2 {
+                                report.add(
+                                    Diagnostic::error(format!(
+                                        "assert.{method} expects 2 arguments, found {}",
+                                        args.len()
+                                    ))
+                                    .with_code("E0301")
+                                    .with_label(Label::new(expr.span, "wrong number of arguments")),
+                                );
+                                for arg in args {
+                                    infer_expr(&arg.value, env, report);
+                                }
+                                return ret;
+                            }
+                            let actual_ty = infer_expr(&args[0].value, env, report);
+                            let expected_ty = infer_expr(&args[1].value, env, report);
+                            // Float has no Eq (ADR-0002)
+                            if matches!(actual_ty, Ty::Float) || matches!(expected_ty, Ty::Float) {
+                                report.add(
+                                    Diagnostic::error(format!(
+                                        "Float does not have Eq; assert.{method} requires Eq ability"
+                                    ))
+                                    .with_code("E0306")
+                                    .with_label(Label::new(expr.span, "Float has no Eq (ADR-0002)"))
+                                    .with_note("use float.eq() or float.approx_eq() instead"),
+                                );
+                                return ret;
+                            }
+                            // MIR lowering dispatches to typed variants for Int / String / Bool
+                            // only; other types lack a comparison implementation.
+                            if !matches!(actual_ty, Ty::Int | Ty::String | Ty::Bool | Ty::Error) {
+                                report.add(
+                                    Diagnostic::error(format!(
+                                        "assert.{method} supports Int, String, and Bool; \
+                                         `{}` is not yet supported",
+                                        actual_ty.display_name()
+                                    ))
+                                    .with_code("E0306")
+                                    .with_label(Label::new(
+                                        expr.span,
+                                        "unsupported type for assert.eq / assert.ne",
+                                    ))
+                                    .with_note(
+                                        "generic comparison for struct/ADT types is planned for a future release",
+                                    ),
+                                );
+                                return ret;
+                            }
+                            // Both args must have the same type
+                            if !types_compatible(&actual_ty, &expected_ty) {
+                                report.add(
+                                    Diagnostic::error(format!(
+                                        "assert.{method}: actual type `{}` does not match expected type `{}`",
+                                        actual_ty.display_name(),
+                                        expected_ty.display_name()
+                                    ))
+                                    .with_code("E0308")
+                                    .with_label(Label::new(expr.span, "type mismatch")),
+                                );
+                            }
+                            return ret;
                         }
                         _ => {}
                     }

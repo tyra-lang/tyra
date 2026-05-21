@@ -118,6 +118,12 @@ pub fn lower(file: &SourceFile) -> Program {
             let module_key: String = imp.path.join(".");
             ctx.imported_modules.insert(module_key.clone());
 
+            // Track local_name → canonical_name (last path segment) for
+            // alias-aware special-case dispatch (e.g. assert.eq).
+            let canonical = imp.path.last().cloned().unwrap_or_default();
+            ctx.module_local_to_canonical
+                .insert(local_name.to_string(), canonical);
+
             // Register built-in module types
             if module_key == "core.sys" {
                 // sys.args() -> List<String>
@@ -663,6 +669,9 @@ pub(crate) struct LowerCtx {
     pub(crate) impl_methods: std::collections::HashMap<(String, String), String>,
     /// Imported module names for module-qualified call resolution (§13)
     pub(crate) imported_modules: std::collections::HashSet<String>,
+    /// local_name → canonical_name for alias import support.
+    /// e.g. `import assert as a` → "a" → "assert".
+    pub(crate) module_local_to_canonical: std::collections::HashMap<String, String>,
     /// Current self type when lowering impl method bodies (None outside impl methods)
     pub(crate) self_type: Option<String>,
     /// Tracks variables/temps with generic types (Option<T>, Result<T, E>) for ADT lowering
@@ -752,6 +761,7 @@ impl LowerCtx {
             fn_param_types: std::collections::HashMap::new(),
             task_result_types: std::collections::HashMap::new(),
             imported_modules: std::collections::HashSet::new(),
+            module_local_to_canonical: std::collections::HashMap::new(),
             impl_methods: std::collections::HashMap::new(),
             self_type: None,
             generic_var_types: std::collections::HashMap::new(),
