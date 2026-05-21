@@ -412,6 +412,26 @@ pub fn lower(file: &SourceFile) -> Program {
     ctx.fn_param_types
         .insert("__list_int_index_of".into(), vec![list_int, Ty::Int]);
 
+    // §17.3.5 Phase C: list.map / list.filter / list.fold intrinsics.
+    // register_adt_type is intentionally omitted; call.rs registers struct
+    // types lazily when the intrinsic is actually called in the program.
+    {
+        let li = Ty::Generic("List".into(), vec![Ty::Int]);
+        let ls = Ty::Generic("List".into(), vec![Ty::String]);
+        ctx.fn_return_types
+            .insert("__list_map_int".into(), li.clone());
+        ctx.fn_return_types
+            .insert("__list_filter_int".into(), li.clone());
+        ctx.fn_return_types
+            .insert("__list_fold_int".into(), Ty::Int);
+        ctx.fn_return_types
+            .insert("__list_map_str".into(), ls.clone());
+        ctx.fn_return_types
+            .insert("__list_filter_str".into(), ls.clone());
+        ctx.fn_return_types
+            .insert("__list_fold_str".into(), Ty::String);
+    }
+
     // Collect function return types and store definitions for monomorphization
     for item in &file.items {
         if let Item::FnDef(f) = item {

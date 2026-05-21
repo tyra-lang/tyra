@@ -396,6 +396,31 @@ pub(crate) fn emit_builtin_call(
             emit_list_int_min_max(out, dest.as_deref(), args, func, ctx, false);
             true
         }
+        // §17.3.5 Phase C: list.map / list.filter / list.fold (ADR-0011).
+        "__list_map_int" => {
+            emit_list_map(out, dest.as_deref(), args, func, ctx, "i64", "List__Int");
+            true
+        }
+        "__list_filter_int" => {
+            emit_list_filter(out, dest.as_deref(), args, func, ctx, "i64", "List__Int");
+            true
+        }
+        "__list_fold_int" => {
+            emit_list_fold(out, dest.as_deref(), args, func, ctx, "i64");
+            true
+        }
+        "__list_map_str" => {
+            emit_list_map(out, dest.as_deref(), args, func, ctx, "ptr", "List__String");
+            true
+        }
+        "__list_filter_str" => {
+            emit_list_filter(out, dest.as_deref(), args, func, ctx, "ptr", "List__String");
+            true
+        }
+        "__list_fold_str" => {
+            emit_list_fold(out, dest.as_deref(), args, func, ctx, "ptr");
+            true
+        }
         "sys__exit" => {
             // §17.1: core.sys.exit(_ code: Int) -> Never
             if let Some(arg) = args.first() {
@@ -1593,4 +1618,287 @@ fn emit_list_int_min_max(
     writeln!(out, "  br label %{d}.end").unwrap();
     writeln!(out, "{d}.end:").unwrap();
     writeln!(out, "  %{d} = load {opt_ty}, ptr %{d}.slot").unwrap();
+}
+
+// ── Phase C helpers ────────────────────────────────────────────────────
+
+/// Emit `getelementptr` + `load` for both fields of a closure fat pointer.
+/// After this, `%{pfx}.fnp` holds the function pointer and `%{pfx}.envp`
+/// holds the environment pointer, both as `ptr`.
+fn emit_fat_ptr_load(out: &mut String, pfx: &str, fat_val: &str) {
+    writeln!(
+        out,
+        "  %{pfx}.fnp_gep = getelementptr %struct.__closure_fat, ptr {fat_val}, i32 0, i32 0"
+    )
+    .unwrap();
+    writeln!(out, "  %{pfx}.fnp = load ptr, ptr %{pfx}.fnp_gep").unwrap();
+    writeln!(
+        out,
+        "  %{pfx}.envp_gep = getelementptr %struct.__closure_fat, ptr {fat_val}, i32 0, i32 1"
+    )
+    .unwrap();
+    writeln!(out, "  %{pfx}.envp = load ptr, ptr %{pfx}.envp_gep").unwrap();
+}
+
+fn list_str_llvm_ty(ctx: &EmitCtx) -> String {
+    if let Some(info) = ctx.struct_map.get("List__String") {
+        info.llvm_name.clone()
+    } else {
+        "%struct.List__String".into()
+    }
+}
+
+/// `__list_map_int(xs, f)` / `__list_map_str(xs, f)` — apply closure to every
+/// element and return a new list of the same length.
+///
+/// `elem_ty`: LLVM type of each element (`"i64"` or `"ptr"`).
+/// `list_struct`: key used to look up the LLVM struct name (`"List__Int"` or `"List__String"`).
+fn emit_list_map(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+    ctx: &EmitCtx,
+    elem_ty: &str,
+    list_struct: &str,
+) {
+    let d = dest.unwrap_or("_lmap");
+    let list_llvm_ty = if list_struct == "List__Int" {
+        list_int_llvm_ty(ctx)
+    } else {
+        list_str_llvm_ty(ctx)
+    };
+    let list_val = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "undef".into());
+    let fat_val = args
+        .get(1)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+
+    writeln!(
+        out,
+        "  %{d}.data = extractvalue {list_llvm_ty} {list_val}, 0"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{d}.len = extractvalue {list_llvm_ty} {list_val}, 1"
+    )
+    .unwrap();
+    writeln!(out, "  %{d}.size = mul i64 %{d}.len, 8").unwrap();
+    writeln!(out, "  %{d}.newdata = call ptr @GC_malloc(i64 %{d}.size)").unwrap();
+    writeln!(out, "  %{d}.null = icmp eq ptr %{d}.newdata, null").unwrap();
+    writeln!(out, "  br i1 %{d}.null, label %{d}.oom, label %{d}.setup").unwrap();
+    writeln!(out, "{d}.oom:").unwrap();
+    writeln!(out, "  call void @abort()").unwrap();
+    writeln!(out, "  unreachable").unwrap();
+    writeln!(out, "{d}.setup:").unwrap();
+    emit_fat_ptr_load(out, d, &fat_val);
+    writeln!(out, "  %{d}.ctr = alloca i64").unwrap();
+    writeln!(out, "  store i64 0, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  br label %{d}.loop").unwrap();
+    writeln!(out, "{d}.loop:").unwrap();
+    writeln!(out, "  %{d}.i = load i64, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  %{d}.done = icmp sge i64 %{d}.i, %{d}.len").unwrap();
+    writeln!(out, "  br i1 %{d}.done, label %{d}.end, label %{d}.body").unwrap();
+    writeln!(out, "{d}.body:").unwrap();
+    writeln!(
+        out,
+        "  %{d}.srcp = getelementptr {elem_ty}, ptr %{d}.data, i64 %{d}.i"
+    )
+    .unwrap();
+    writeln!(out, "  %{d}.elem = load {elem_ty}, ptr %{d}.srcp").unwrap();
+    writeln!(
+        out,
+        "  %{d}.mapped = call {elem_ty} %{d}.fnp(ptr %{d}.envp, {elem_ty} %{d}.elem)"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{d}.dstp = getelementptr {elem_ty}, ptr %{d}.newdata, i64 %{d}.i"
+    )
+    .unwrap();
+    writeln!(out, "  store {elem_ty} %{d}.mapped, ptr %{d}.dstp").unwrap();
+    writeln!(out, "  %{d}.next = add i64 %{d}.i, 1").unwrap();
+    writeln!(out, "  store i64 %{d}.next, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  br label %{d}.loop").unwrap();
+    writeln!(out, "{d}.end:").unwrap();
+    writeln!(
+        out,
+        "  %{d}.s0 = insertvalue {list_llvm_ty} undef, ptr %{d}.newdata, 0"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{d} = insertvalue {list_llvm_ty} %{d}.s0, i64 %{d}.len, 1"
+    )
+    .unwrap();
+}
+
+/// `__list_filter_int(xs, f)` / `__list_filter_str(xs, f)` — keep elements for
+/// which the predicate returns true. Returns a new list whose length ≤ input length.
+fn emit_list_filter(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+    ctx: &EmitCtx,
+    elem_ty: &str,
+    list_struct: &str,
+) {
+    let d = dest.unwrap_or("_lfilt");
+    let list_llvm_ty = if list_struct == "List__Int" {
+        list_int_llvm_ty(ctx)
+    } else {
+        list_str_llvm_ty(ctx)
+    };
+    let list_val = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "undef".into());
+    let fat_val = args
+        .get(1)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+
+    writeln!(
+        out,
+        "  %{d}.data = extractvalue {list_llvm_ty} {list_val}, 0"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{d}.len = extractvalue {list_llvm_ty} {list_val}, 1"
+    )
+    .unwrap();
+    writeln!(out, "  %{d}.size = mul i64 %{d}.len, 8").unwrap();
+    writeln!(out, "  %{d}.outdata = call ptr @GC_malloc(i64 %{d}.size)").unwrap();
+    writeln!(out, "  %{d}.null = icmp eq ptr %{d}.outdata, null").unwrap();
+    writeln!(out, "  br i1 %{d}.null, label %{d}.oom, label %{d}.setup").unwrap();
+    writeln!(out, "{d}.oom:").unwrap();
+    writeln!(out, "  call void @abort()").unwrap();
+    writeln!(out, "  unreachable").unwrap();
+    writeln!(out, "{d}.setup:").unwrap();
+    emit_fat_ptr_load(out, d, &fat_val);
+    writeln!(out, "  %{d}.ctr = alloca i64").unwrap();
+    writeln!(out, "  store i64 0, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  %{d}.outctr = alloca i64").unwrap();
+    writeln!(out, "  store i64 0, ptr %{d}.outctr").unwrap();
+    writeln!(out, "  br label %{d}.loop").unwrap();
+    writeln!(out, "{d}.loop:").unwrap();
+    writeln!(out, "  %{d}.i = load i64, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  %{d}.done = icmp sge i64 %{d}.i, %{d}.len").unwrap();
+    writeln!(out, "  br i1 %{d}.done, label %{d}.end, label %{d}.body").unwrap();
+    writeln!(out, "{d}.body:").unwrap();
+    writeln!(
+        out,
+        "  %{d}.srcp = getelementptr {elem_ty}, ptr %{d}.data, i64 %{d}.i"
+    )
+    .unwrap();
+    writeln!(out, "  %{d}.elem = load {elem_ty}, ptr %{d}.srcp").unwrap();
+    writeln!(
+        out,
+        "  %{d}.raw = call i1 %{d}.fnp(ptr %{d}.envp, {elem_ty} %{d}.elem)"
+    )
+    .unwrap();
+    writeln!(out, "  br i1 %{d}.raw, label %{d}.keep, label %{d}.skip").unwrap();
+    writeln!(out, "{d}.keep:").unwrap();
+    writeln!(out, "  %{d}.oi = load i64, ptr %{d}.outctr").unwrap();
+    writeln!(
+        out,
+        "  %{d}.dstp = getelementptr {elem_ty}, ptr %{d}.outdata, i64 %{d}.oi"
+    )
+    .unwrap();
+    writeln!(out, "  store {elem_ty} %{d}.elem, ptr %{d}.dstp").unwrap();
+    writeln!(out, "  %{d}.oi1 = add i64 %{d}.oi, 1").unwrap();
+    writeln!(out, "  store i64 %{d}.oi1, ptr %{d}.outctr").unwrap();
+    writeln!(out, "  br label %{d}.skip").unwrap();
+    writeln!(out, "{d}.skip:").unwrap();
+    writeln!(out, "  %{d}.next = add i64 %{d}.i, 1").unwrap();
+    writeln!(out, "  store i64 %{d}.next, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  br label %{d}.loop").unwrap();
+    writeln!(out, "{d}.end:").unwrap();
+    writeln!(out, "  %{d}.outlen = load i64, ptr %{d}.outctr").unwrap();
+    writeln!(
+        out,
+        "  %{d}.s0 = insertvalue {list_llvm_ty} undef, ptr %{d}.outdata, 0"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{d} = insertvalue {list_llvm_ty} %{d}.s0, i64 %{d}.outlen, 1"
+    )
+    .unwrap();
+}
+
+/// `__list_fold_int(xs, init, f)` / `__list_fold_str(xs, init, f)` — left fold.
+/// `elem_ty`: LLVM type of both the accumulator and each element.
+fn emit_list_fold(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+    ctx: &EmitCtx,
+    elem_ty: &str,
+) {
+    let d = dest.unwrap_or("_lfold");
+    let list_llvm_ty = if elem_ty == "i64" {
+        list_int_llvm_ty(ctx)
+    } else {
+        list_str_llvm_ty(ctx)
+    };
+    let list_val = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "undef".into());
+    let init_val = args
+        .get(1)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "0".into());
+    let fat_val = args
+        .get(2)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+
+    writeln!(
+        out,
+        "  %{d}.data = extractvalue {list_llvm_ty} {list_val}, 0"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  %{d}.len = extractvalue {list_llvm_ty} {list_val}, 1"
+    )
+    .unwrap();
+    emit_fat_ptr_load(out, d, &fat_val);
+    writeln!(out, "  %{d}.acc = alloca {elem_ty}").unwrap();
+    writeln!(out, "  store {elem_ty} {init_val}, ptr %{d}.acc").unwrap();
+    writeln!(out, "  %{d}.ctr = alloca i64").unwrap();
+    writeln!(out, "  store i64 0, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  br label %{d}.loop").unwrap();
+    writeln!(out, "{d}.loop:").unwrap();
+    writeln!(out, "  %{d}.i = load i64, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  %{d}.done = icmp sge i64 %{d}.i, %{d}.len").unwrap();
+    writeln!(out, "  br i1 %{d}.done, label %{d}.end, label %{d}.body").unwrap();
+    writeln!(out, "{d}.body:").unwrap();
+    writeln!(
+        out,
+        "  %{d}.srcp = getelementptr {elem_ty}, ptr %{d}.data, i64 %{d}.i"
+    )
+    .unwrap();
+    writeln!(out, "  %{d}.elem = load {elem_ty}, ptr %{d}.srcp").unwrap();
+    writeln!(out, "  %{d}.cur = load {elem_ty}, ptr %{d}.acc").unwrap();
+    writeln!(
+        out,
+        "  %{d}.new = call {elem_ty} %{d}.fnp(ptr %{d}.envp, {elem_ty} %{d}.cur, {elem_ty} %{d}.elem)"
+    )
+    .unwrap();
+    writeln!(out, "  store {elem_ty} %{d}.new, ptr %{d}.acc").unwrap();
+    writeln!(out, "  %{d}.next = add i64 %{d}.i, 1").unwrap();
+    writeln!(out, "  store i64 %{d}.next, ptr %{d}.ctr").unwrap();
+    writeln!(out, "  br label %{d}.loop").unwrap();
+    writeln!(out, "{d}.end:").unwrap();
+    writeln!(out, "  %{d} = load {elem_ty}, ptr %{d}.acc").unwrap();
 }

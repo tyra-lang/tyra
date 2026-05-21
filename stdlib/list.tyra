@@ -1,26 +1,27 @@
 # stdlib/list.tyra — Tier 2 list module (§17.3.5).
 #
-# v0.1 API (frozen, List<Int> only):
-#   list.len(xs)            -> Int        (module form of the xs.len() method)
-#   list.get(xs, i)          -> Option<Int> (module form of xs.get(i))
-#   list.push(xs, x)        -> List<Int>   (immutable append: returns new list)
-#   list.sum(xs)            -> Int
-#   list.max(xs)            -> Option<Int>
-#   list.min(xs)            -> Option<Int>
-#   list.contains(xs, x)    -> Bool
-#   list.index_of(xs, x)    -> Option<Int>
+# v0.4 API:
+#   list.len(xs)                    -> Int
+#   list.get(xs, i)                 -> Option<Int>
+#   list.push(xs, x)                -> List<Int>   (immutable append)
+#   list.sum(xs)                    -> Int
+#   list.max(xs)                    -> Option<Int>
+#   list.min(xs)                    -> Option<Int>
+#   list.contains(xs, x)            -> Bool
+#   list.index_of(xs, x)            -> Option<Int>
+#   list.map(xs, f)                 -> List<Int>   (f: fn(Int)->Int)
+#   list.filter(xs, f)              -> List<Int>   (f: fn(Int)->Bool)
+#   list.fold(xs, init, f)          -> Int         (f: fn(Int,Int)->Int)
+#   list.map_str(xs, f)             -> List<String> (f: fn(String)->String)
+#   list.filter_str(xs, f)          -> List<String> (f: fn(String)->Bool)
+#   list.fold_str(xs, init, f)      -> String      (f: fn(String,String)->String)
 #
-# Backed by `__list_int_*` intrinsics emitted inline as LLVM IR; no C ABI
-# runtime is used. All operations allocate via GC_malloc and never mutate
-# the input list (§coding-style immutability rule).
-#
-# v0.1 caveats:
-# - Int elements only. `List<String>` and arbitrary `List<T>` are deferred
-#   until element-type monomorphization for stdlib intrinsics lands (§22).
-# - `map` / `filter` / `fold` require lambda passing through a C ABI and
-#   are intentionally out of scope for v0.1 (§22).
-# - `push` is O(n) because it copies the underlying data; the semantics
-#   stay immutable even once a true persistent structure is added later.
+# Backed by inline LLVM IR intrinsics; no C ABI runtime used. All operations
+# allocate via GC_malloc and never mutate the input list (immutability rule).
+# push is O(n) because it copies the underlying data.
+# len/get/push are polymorphic at MIR lowering time (List<String> etc.).
+# map/filter/fold use ADR-0011 closure fat pointers; element-type
+# monomorphization is explicit per suffix (_str variants for List<String>).
 export fn len(_ xs: List<Int>) -> Int
   xs.len()
 end
@@ -51,4 +52,28 @@ end
 
 export fn index_of(_ list: List<Int>, _ x: Int) -> Option<Int>
   __list_int_index_of(list, x)
+end
+
+export fn map(_ xs: List<Int>, _ f: fn(Int)->Int) -> List<Int>
+  __list_map_int(xs, f)
+end
+
+export fn filter(_ xs: List<Int>, _ f: fn(Int)->Bool) -> List<Int>
+  __list_filter_int(xs, f)
+end
+
+export fn fold(_ xs: List<Int>, _ init: Int, _ f: fn(Int,Int)->Int) -> Int
+  __list_fold_int(xs, init, f)
+end
+
+export fn map_str(_ xs: List<String>, _ f: fn(String)->String) -> List<String>
+  __list_map_str(xs, f)
+end
+
+export fn filter_str(_ xs: List<String>, _ f: fn(String)->Bool) -> List<String>
+  __list_filter_str(xs, f)
+end
+
+export fn fold_str(_ xs: List<String>, _ init: String, _ f: fn(String,String)->String) -> String
+  __list_fold_str(xs, init, f)
 end

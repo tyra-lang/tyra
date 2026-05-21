@@ -1,0 +1,31 @@
+# E0308-list-hof-suffix-boundary.tyra
+# expected: error[E0308]: type mismatch — list.map requires List<Int>, list.map_str requires List<String>
+# Exercises: checker special-case for list.map / map_str / filter / filter_str / fold / fold_str
+# boundary: passing List<String> to map (Int-only) and List<Int> to map_str (String-only)
+# SPEC_REF: §17.3.5 — list module
+import list
+
+fn main() -> Int
+  let ints   = [1, 2, 3]
+  let strs   = ["a", "b", "c"]
+
+  # list.map expects List<Int> as first argument — passing List<String> is E0308
+  let r1 = list.map(strs, fn(_ x: Int) -> Int x * 2 end)
+
+  # list.map_str expects List<String> as first argument — passing List<Int> is E0308
+  let r2 = list.map_str(ints, fn(_ s: String) -> String s end)
+
+  # list.filter expects List<Int> — passing List<String> is E0308
+  let r3 = list.filter(strs, fn(_ x: Int) -> Bool x > 0 end)
+
+  # list.filter_str expects List<String> — passing List<Int> is E0308
+  let r4 = list.filter_str(ints, fn(_ s: String) -> Bool s == "ok" end)
+
+  # list.fold expects List<Int> — passing List<String> is E0308
+  let r5 = list.fold(strs, 0, fn(_ acc: Int, _ x: Int) -> Int acc + x end)
+
+  # list.fold_str expects List<String> — passing List<Int> is E0308
+  let r6 = list.fold_str(ints, "", fn(_ acc: String, _ s: String) -> String acc end)
+
+  0
+end

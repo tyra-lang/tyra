@@ -1,0 +1,14 @@
+import list
+
+fn main() -> Int
+  let xs = [1, 2, 3, 4, 5]
+
+  let doubled = list.map(xs, fn(_ x: Int) -> Int x * 2 end)
+  let evens   = list.filter(xs, fn(_ x: Int) -> Bool x % 2 == 0 end)
+  let total   = list.fold(xs, 0, fn(_ acc: Int, _ x: Int) -> Int acc + x end)
+
+  let offset = 10
+  let shifted = list.map(xs, fn(_ x: Int) -> Int x + offset end)
+
+  total
+end

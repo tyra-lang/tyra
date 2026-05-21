@@ -1,0 +1,17 @@
+# E0301-list-hof-arity.tyra
+# expected: error[E0301]: list.map / filter / fold expect specific arities
+# Exercises: arity check inside the list.* checker special-case (no arity guard bypass)
+# SPEC_REF: §17.3.5 — list module
+import list
+
+fn main() -> Int
+  let xs = [1, 2, 3]
+
+  # list.map expects 2 arguments — passing 1 is E0301
+  let r1 = list.map(xs)
+
+  # list.fold expects 3 arguments — passing 2 is E0301
+  let r2 = list.fold(xs, 0)
+
+  0
+end

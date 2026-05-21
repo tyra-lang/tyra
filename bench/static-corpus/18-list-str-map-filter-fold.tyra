@@ -1,0 +1,14 @@
+import list
+import string
+
+fn main() -> Int
+  let words = ["hello", "world", "tyra"]
+
+  let upper  = list.map_str(words, fn(_ s: String) -> String string.to_upper(s) end)
+  let short  = list.filter_str(words, fn(_ s: String) -> Bool string.len(s) <= 5 end)
+  let joined = list.fold_str(words, "", fn(_ acc: String, _ s: String) -> String
+    string.concat(acc, s)
+  end)
+
+  list.len(upper)
+end

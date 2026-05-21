@@ -660,6 +660,63 @@ fn register_prelude(env: &mut TypeEnv) {
         Ty::Fn(vec![list_int, Ty::Int], Box::new(opt_int)),
     );
 
+    // §17.3.5 Phase C: list.map / list.filter / list.fold intrinsics (ADR-0011).
+    // Each receives a closure fat pointer (Ty::Fn) as the higher-order argument.
+    {
+        let li = Ty::Generic("List".into(), vec![Ty::Int]);
+        let ls = Ty::Generic("List".into(), vec![Ty::String]);
+        env.define(
+            "__list_map_int".to_string(),
+            Ty::Fn(
+                vec![li.clone(), Ty::Fn(vec![Ty::Int], Box::new(Ty::Int))],
+                Box::new(li.clone()),
+            ),
+        );
+        env.define(
+            "__list_filter_int".to_string(),
+            Ty::Fn(
+                vec![li.clone(), Ty::Fn(vec![Ty::Int], Box::new(Ty::Bool))],
+                Box::new(li.clone()),
+            ),
+        );
+        env.define(
+            "__list_fold_int".to_string(),
+            Ty::Fn(
+                vec![
+                    li,
+                    Ty::Int,
+                    Ty::Fn(vec![Ty::Int, Ty::Int], Box::new(Ty::Int)),
+                ],
+                Box::new(Ty::Int),
+            ),
+        );
+        env.define(
+            "__list_map_str".to_string(),
+            Ty::Fn(
+                vec![ls.clone(), Ty::Fn(vec![Ty::String], Box::new(Ty::String))],
+                Box::new(ls.clone()),
+            ),
+        );
+        env.define(
+            "__list_filter_str".to_string(),
+            Ty::Fn(
+                vec![ls.clone(), Ty::Fn(vec![Ty::String], Box::new(Ty::Bool))],
+                Box::new(ls.clone()),
+            ),
+        );
+        env.define(
+            "__list_fold_str".to_string(),
+            Ty::Fn(
+                vec![
+                    ls,
+                    Ty::String,
+                    Ty::Fn(vec![Ty::String, Ty::String], Box::new(Ty::String)),
+                ],
+                Box::new(Ty::String),
+            ),
+        );
+    }
+
     // Prelude ADTs for §10.3 exhaustiveness checking.
     env.register_adt("Option".into(), vec!["Some".into(), "None".into()]);
     env.register_adt("Result".into(), vec!["Ok".into(), "Err".into()]);
@@ -1222,18 +1279,201 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 // before falling through to the Ty::Error return.
                 if let ExprKind::Ident(module_name) = &obj.kind
                     && module_name == "list"
-                    && matches!(method.as_str(), "push" | "push_str")
-                    && args.len() == 2
                 {
-                    let list_ty = infer_expr(&args[0].value, env, report);
-                    let elem_ty = infer_expr(&args[1].value, env, report);
-                    if let Ty::Generic(name, params) = &list_ty
-                        && name == "List"
-                        && let Some(expected) = params.first()
-                    {
-                        check_type_match(expected, &elem_ty, args[1].span, report);
+                    match method.as_str() {
+                        "push" | "push_str" if args.len() == 2 => {
+                            let list_ty = infer_expr(&args[0].value, env, report);
+                            let elem_ty = infer_expr(&args[1].value, env, report);
+                            if let Ty::Generic(name, params) = &list_ty
+                                && name == "List"
+                                && let Some(expected) = params.first()
+                            {
+                                check_type_match(expected, &elem_ty, args[1].span, report);
+                            }
+                            return list_ty;
+                        }
+                        // map(xs, f): xs must be List<Int>, f: fn(Int)->Int
+                        "map" => {
+                            let ret = Ty::Generic("List".into(), vec![Ty::Int]);
+                            if args.len() != 2 {
+                                report.add(
+                                    Diagnostic::error(format!(
+                                        "list.map expects 2 arguments, found {}",
+                                        args.len()
+                                    ))
+                                    .with_code("E0301")
+                                    .with_label(Label::new(expr.span, "wrong number of arguments")),
+                                );
+                                for arg in args {
+                                    infer_expr(&arg.value, env, report);
+                                }
+                                return ret;
+                            }
+                            let list_ty = infer_expr(&args[0].value, env, report);
+                            let f_ty = infer_expr(&args[1].value, env, report);
+                            check_type_match(&ret, &list_ty, args[0].span, report);
+                            check_type_match(
+                                &Ty::Fn(vec![Ty::Int], Box::new(Ty::Int)),
+                                &f_ty,
+                                args[1].span,
+                                report,
+                            );
+                            return ret;
+                        }
+                        // map_str(xs, f): xs must be List<String>, f: fn(String)->String
+                        "map_str" => {
+                            let ret = Ty::Generic("List".into(), vec![Ty::String]);
+                            if args.len() != 2 {
+                                report.add(
+                                    Diagnostic::error(format!(
+                                        "list.map_str expects 2 arguments, found {}",
+                                        args.len()
+                                    ))
+                                    .with_code("E0301")
+                                    .with_label(Label::new(expr.span, "wrong number of arguments")),
+                                );
+                                for arg in args {
+                                    infer_expr(&arg.value, env, report);
+                                }
+                                return ret;
+                            }
+                            let list_ty = infer_expr(&args[0].value, env, report);
+                            let f_ty = infer_expr(&args[1].value, env, report);
+                            check_type_match(&ret, &list_ty, args[0].span, report);
+                            check_type_match(
+                                &Ty::Fn(vec![Ty::String], Box::new(Ty::String)),
+                                &f_ty,
+                                args[1].span,
+                                report,
+                            );
+                            return ret;
+                        }
+                        // filter(xs, f): xs must be List<Int>, f: fn(Int)->Bool
+                        "filter" => {
+                            let ret = Ty::Generic("List".into(), vec![Ty::Int]);
+                            if args.len() != 2 {
+                                report.add(
+                                    Diagnostic::error(format!(
+                                        "list.filter expects 2 arguments, found {}",
+                                        args.len()
+                                    ))
+                                    .with_code("E0301")
+                                    .with_label(Label::new(expr.span, "wrong number of arguments")),
+                                );
+                                for arg in args {
+                                    infer_expr(&arg.value, env, report);
+                                }
+                                return ret;
+                            }
+                            let list_ty = infer_expr(&args[0].value, env, report);
+                            let f_ty = infer_expr(&args[1].value, env, report);
+                            check_type_match(&ret, &list_ty, args[0].span, report);
+                            check_type_match(
+                                &Ty::Fn(vec![Ty::Int], Box::new(Ty::Bool)),
+                                &f_ty,
+                                args[1].span,
+                                report,
+                            );
+                            return ret;
+                        }
+                        // filter_str(xs, f): xs must be List<String>, f: fn(String)->Bool
+                        "filter_str" => {
+                            let ret = Ty::Generic("List".into(), vec![Ty::String]);
+                            if args.len() != 2 {
+                                report.add(
+                                    Diagnostic::error(format!(
+                                        "list.filter_str expects 2 arguments, found {}",
+                                        args.len()
+                                    ))
+                                    .with_code("E0301")
+                                    .with_label(Label::new(expr.span, "wrong number of arguments")),
+                                );
+                                for arg in args {
+                                    infer_expr(&arg.value, env, report);
+                                }
+                                return ret;
+                            }
+                            let list_ty = infer_expr(&args[0].value, env, report);
+                            let f_ty = infer_expr(&args[1].value, env, report);
+                            check_type_match(&ret, &list_ty, args[0].span, report);
+                            check_type_match(
+                                &Ty::Fn(vec![Ty::String], Box::new(Ty::Bool)),
+                                &f_ty,
+                                args[1].span,
+                                report,
+                            );
+                            return ret;
+                        }
+                        // fold(xs, init, f): xs must be List<Int>, init: Int, f: fn(Int,Int)->Int
+                        "fold" => {
+                            if args.len() != 3 {
+                                report.add(
+                                    Diagnostic::error(format!(
+                                        "list.fold expects 3 arguments, found {}",
+                                        args.len()
+                                    ))
+                                    .with_code("E0301")
+                                    .with_label(Label::new(expr.span, "wrong number of arguments")),
+                                );
+                                for arg in args {
+                                    infer_expr(&arg.value, env, report);
+                                }
+                                return Ty::Int;
+                            }
+                            let list_ty = infer_expr(&args[0].value, env, report);
+                            let init_ty = infer_expr(&args[1].value, env, report);
+                            let f_ty = infer_expr(&args[2].value, env, report);
+                            check_type_match(
+                                &Ty::Generic("List".into(), vec![Ty::Int]),
+                                &list_ty,
+                                args[0].span,
+                                report,
+                            );
+                            check_type_match(&Ty::Int, &init_ty, args[1].span, report);
+                            check_type_match(
+                                &Ty::Fn(vec![Ty::Int, Ty::Int], Box::new(Ty::Int)),
+                                &f_ty,
+                                args[2].span,
+                                report,
+                            );
+                            return Ty::Int;
+                        }
+                        // fold_str: xs List<String>, init String, f fn(String,String)->String
+                        "fold_str" => {
+                            if args.len() != 3 {
+                                report.add(
+                                    Diagnostic::error(format!(
+                                        "list.fold_str expects 3 arguments, found {}",
+                                        args.len()
+                                    ))
+                                    .with_code("E0301")
+                                    .with_label(Label::new(expr.span, "wrong number of arguments")),
+                                );
+                                for arg in args {
+                                    infer_expr(&arg.value, env, report);
+                                }
+                                return Ty::String;
+                            }
+                            let list_ty = infer_expr(&args[0].value, env, report);
+                            let init_ty = infer_expr(&args[1].value, env, report);
+                            let f_ty = infer_expr(&args[2].value, env, report);
+                            check_type_match(
+                                &Ty::Generic("List".into(), vec![Ty::String]),
+                                &list_ty,
+                                args[0].span,
+                                report,
+                            );
+                            check_type_match(&Ty::String, &init_ty, args[1].span, report);
+                            check_type_match(
+                                &Ty::Fn(vec![Ty::String, Ty::String], Box::new(Ty::String)),
+                                &f_ty,
+                                args[2].span,
+                                report,
+                            );
+                            return Ty::String;
+                        }
+                        _ => {}
                     }
-                    return list_ty;
                 }
 
                 // Still infer arg types so argument errors surface.
