@@ -1269,19 +1269,22 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 check_trait_method_call(&obj_ty, method, expr.span, env, report);
 
                 // Special-case: module-qualified List mutations.
-                // `list.push(xs: List<T>, x)` and `list.push_str` require the
-                // element argument to match the list's element type.  The
-                // generic method-call interceptor below intentionally skips
-                // argument type-checking (to avoid cascading errors for
-                // unresolved method returns), but that also silences `List<T>`
-                // × wrong-type-element mismatches that would otherwise reach
-                // LLVM and produce an opaque E0500.  We handle this case here
-                // before falling through to the Ty::Error return.
+                // `list.push(xs: List<T>, x)` requires the element argument to
+                // match the list's element type.  The generic method-call
+                // interceptor below intentionally skips argument type-checking
+                // (to avoid cascading errors for unresolved method returns), but
+                // that also silences `List<T>` × wrong-type-element mismatches
+                // that would otherwise reach LLVM and produce an opaque E0500.
+                // We handle this case here before falling through to the
+                // Ty::Error return.
+                // Note: `push_str` was an undocumented internal alias; it has
+                // been removed. `push` is polymorphic over all List<T> at MIR
+                // lowering time, so no separate String variant is needed.
                 if let ExprKind::Ident(module_name) = &obj.kind
                     && module_name == "list"
                 {
                     match method.as_str() {
-                        "push" | "push_str" if args.len() == 2 => {
+                        "push" if args.len() == 2 => {
                             let list_ty = infer_expr(&args[0].value, env, report);
                             let elem_ty = infer_expr(&args[1].value, env, report);
                             if let Ty::Generic(name, params) = &list_ty

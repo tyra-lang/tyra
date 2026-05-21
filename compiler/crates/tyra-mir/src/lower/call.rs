@@ -680,7 +680,7 @@ impl super::LowerCtx {
             if let ExprKind::Ident(module_name) = &obj.kind {
                 if module_name == "list"
                     && self.imported_modules.contains("list")
-                    && matches!(fn_name.as_str(), "len" | "get" | "push" | "push_str")
+                    && matches!(fn_name.as_str(), "len" | "get" | "push")
                     && !args.is_empty()
                 {
                     let first = &args[0].value;
@@ -697,7 +697,7 @@ impl super::LowerCtx {
                     };
                     if !elem_is_int {
                         match fn_name.as_str() {
-                            "push" | "push_str" if args.len() == 2 => {
+                            "push" if args.len() == 2 => {
                                 let elem_type = if let ExprKind::Ident(name) = &first.kind {
                                     self.generic_var_types
                                         .get(name)
