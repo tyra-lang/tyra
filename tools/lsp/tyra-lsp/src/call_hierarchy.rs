@@ -24,10 +24,8 @@ pub(crate) fn prepare(state: &DocState, uri: &Url, offset: u32) -> Option<CallHi
                 && ref_span.start <= offset
                 && offset < ref_span.end
         });
-        if in_use_site {
-            if let Some(f) = find_fn_by_span(&state.ast, def_span) {
-                return Some(fn_to_item(state, uri, f));
-            }
+        if in_use_site && let Some(f) = find_fn_by_span(&state.ast, def_span) {
+            return Some(fn_to_item(state, uri, f));
         }
     }
     // Case 2: cursor is on the fn name token at the definition site.
@@ -125,10 +123,10 @@ fn resolve_item_span(state: &DocState, item: &CallHierarchyItem) -> Option<Span>
         .sources
         .offset_at_utf16(state.source_id, sel.line, sel.character)?;
     // Try def_index first.
-    if let Some(s) = references::find_def_span_at_cursor(state, offset) {
-        if find_fn_by_span(&state.ast, s).is_some() {
-            return Some(s);
-        }
+    if let Some(s) = references::find_def_span_at_cursor(state, offset)
+        && find_fn_by_span(&state.ast, s).is_some()
+    {
+        return Some(s);
     }
     // Fallback: selection_range.start is inside the fn's own block.
     let f = enclosing_fn(&state.ast, state.source_id, offset)?;
@@ -137,7 +135,7 @@ fn resolve_item_span(state: &DocState, item: &CallHierarchyItem) -> Option<Span>
 
 /// Find a top-level `fn` or an impl/trait method by its definition span
 /// (`FnDef.span` covers the whole `fn … end` block).
-pub(crate) fn find_fn_by_span<'a>(ast: &'a SourceFile, def_span: Span) -> Option<&'a FnDef> {
+pub(crate) fn find_fn_by_span(ast: &SourceFile, def_span: Span) -> Option<&FnDef> {
     for item in &ast.items {
         match item {
             Item::FnDef(f) if f.span == def_span => return Some(f),
@@ -225,8 +223,8 @@ pub(crate) fn enclosing_fn<'a>(
     for item in &ast.items {
         match item {
             Item::FnDef(f) => consider(f),
-            Item::TraitDef(tr) => tr.methods.iter().for_each(|m| consider(m)),
-            Item::ImplDef(im) => im.methods.iter().for_each(|m| consider(m)),
+            Item::TraitDef(tr) => tr.methods.iter().for_each(&mut consider),
+            Item::ImplDef(im) => im.methods.iter().for_each(&mut consider),
             _ => {}
         }
     }
@@ -311,12 +309,11 @@ fn collect_in_expr(
     match &expr.kind {
         ExprKind::Call(callee, args) => {
             // Record Ident callees that resolve to a known fn.
-            if let ExprKind::Ident(_) = &callee.kind {
-                if let Some(&def_span) = def_index.get(&callee.span) {
-                    if find_fn_by_span(ast, def_span).is_some() {
-                        out.push((callee.span, def_span));
-                    }
-                }
+            if let ExprKind::Ident(_) = &callee.kind
+                && let Some(&def_span) = def_index.get(&callee.span)
+                && find_fn_by_span(ast, def_span).is_some()
+            {
+                out.push((callee.span, def_span));
             }
             collect_in_expr(callee, def_index, ast, source_id, out);
             for arg in args {
@@ -324,12 +321,11 @@ fn collect_in_expr(
             }
         }
         ExprKind::TurbofishCall(callee, _, args) => {
-            if let ExprKind::Ident(_) = &callee.kind {
-                if let Some(&def_span) = def_index.get(&callee.span) {
-                    if find_fn_by_span(ast, def_span).is_some() {
-                        out.push((callee.span, def_span));
-                    }
-                }
+            if let ExprKind::Ident(_) = &callee.kind
+                && let Some(&def_span) = def_index.get(&callee.span)
+                && find_fn_by_span(ast, def_span).is_some()
+            {
+                out.push((callee.span, def_span));
             }
             collect_in_expr(callee, def_index, ast, source_id, out);
             for arg in args {
@@ -424,7 +420,6 @@ fn collect_in_expr(
 mod tests {
     use super::*;
     use tower_lsp::lsp_types::Url;
-    use tyra_diagnostics::SourceMap;
 
     const URI: &str = "file:///tmp/test.tyra";
 

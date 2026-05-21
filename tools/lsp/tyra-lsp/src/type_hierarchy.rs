@@ -76,31 +76,31 @@ pub(crate) fn prepare(
             }
             Item::ImplDef(im) => {
                 // Cursor on the trait name token of `impl Foo for X`
-                if name_token_at(text, im.span, &im.trait_name, offset) {
-                    if let Some(tr) = find_trait_def(ast, &im.trait_name) {
-                        let name_span = rename::find_binding_name_span(text, tr.span, &tr.name)
-                            .unwrap_or(tr.span);
-                        return vec![make_item(
-                            uri,
-                            tr.name.clone(),
-                            SymbolKind::INTERFACE,
-                            tr.span,
-                            name_span,
-                            sources,
-                            "trait",
-                        )];
-                    }
+                if name_token_at(text, im.span, &im.trait_name, offset)
+                    && let Some(tr) = find_trait_def(ast, &im.trait_name)
+                {
+                    let name_span =
+                        rename::find_binding_name_span(text, tr.span, &tr.name).unwrap_or(tr.span);
+                    return vec![make_item(
+                        uri,
+                        tr.name.clone(),
+                        SymbolKind::INTERFACE,
+                        tr.span,
+                        name_span,
+                        sources,
+                        "trait",
+                    )];
                 }
                 // Cursor on the target type token of `impl Foo for X`.
                 // Use im.target_type.span (not im.span) so that a type name
                 // that appears in trait type-args (e.g. `impl Into<X> for X`)
                 // does not shadow the actual target position.
-                if let TypeExprKind::Named(ref target) = im.target_type.kind {
-                    if name_token_at(text, im.target_type.span, target, offset) {
-                        // Find the original def for the target type
-                        if let Some(result) = find_concrete_def(ast, text, sources, uri, target) {
-                            return vec![result];
-                        }
+                if let TypeExprKind::Named(ref target) = im.target_type.kind
+                    && name_token_at(text, im.target_type.span, target, offset)
+                {
+                    // Find the original def for the target type
+                    if let Some(result) = find_concrete_def(ast, text, sources, uri, target) {
+                        return vec![result];
                     }
                 }
             }
@@ -124,24 +124,22 @@ pub(crate) fn supertypes(
     let target = &item.name;
     let mut out = Vec::new();
     for it in &ast.items {
-        if let Item::ImplDef(im) = it {
-            if let TypeExprKind::Named(ref t) = im.target_type.kind {
-                if t == target {
-                    if let Some(tr) = find_trait_def(ast, &im.trait_name) {
-                        let name_span = rename::find_binding_name_span(text, tr.span, &tr.name)
-                            .unwrap_or(tr.span);
-                        out.push(make_item(
-                            uri,
-                            tr.name.clone(),
-                            SymbolKind::INTERFACE,
-                            tr.span,
-                            name_span,
-                            sources,
-                            "trait",
-                        ));
-                    }
-                }
-            }
+        if let Item::ImplDef(im) = it
+            && let TypeExprKind::Named(ref t) = im.target_type.kind
+            && t == target
+            && let Some(tr) = find_trait_def(ast, &im.trait_name)
+        {
+            let name_span =
+                rename::find_binding_name_span(text, tr.span, &tr.name).unwrap_or(tr.span);
+            out.push(make_item(
+                uri,
+                tr.name.clone(),
+                SymbolKind::INTERFACE,
+                tr.span,
+                name_span,
+                sources,
+                "trait",
+            ));
         }
     }
     out
@@ -161,14 +159,12 @@ pub(crate) fn subtypes(
     let trait_name = &item.name;
     let mut out = Vec::new();
     for it in &ast.items {
-        if let Item::ImplDef(im) = it {
-            if im.trait_name == *trait_name {
-                if let TypeExprKind::Named(ref target) = im.target_type.kind {
-                    if let Some(result) = find_concrete_def(ast, text, sources, uri, target) {
-                        out.push(result);
-                    }
-                }
-            }
+        if let Item::ImplDef(im) = it
+            && im.trait_name == *trait_name
+            && let TypeExprKind::Named(ref target) = im.target_type.kind
+            && let Some(result) = find_concrete_def(ast, text, sources, uri, target)
+        {
+            out.push(result);
         }
     }
     out

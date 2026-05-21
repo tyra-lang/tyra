@@ -661,7 +661,7 @@ impl LanguageServer for TyraLsp {
         };
         // At a def site the cursor must land specifically on the binding name
         // token (not on `let`, a type annotation, or the RHS expression).
-        if !at_use_site && !(def_name_span.start <= offset && offset < def_name_span.end) {
+        if !(at_use_site || def_name_span.start <= offset && offset < def_name_span.end) {
             return Ok(None);
         }
         let mut spans = references::find_uses_for_def(&state.def_index, def_span, state.source_id);

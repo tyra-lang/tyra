@@ -16,11 +16,7 @@ pub(crate) fn find_type_def_span(
     find_def_by_name(ast, &name)
 }
 
-fn smallest_ty_at<'a>(
-    type_index: &'a TypeIndex,
-    source_id: SourceId,
-    offset: u32,
-) -> Option<&'a Ty> {
+fn smallest_ty_at(type_index: &TypeIndex, source_id: SourceId, offset: u32) -> Option<&Ty> {
     type_index
         .iter()
         .filter(|(span, _)| span.source == source_id && span.start <= offset && offset < span.end)

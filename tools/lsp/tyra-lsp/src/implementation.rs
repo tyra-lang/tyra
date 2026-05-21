@@ -22,10 +22,10 @@ pub(crate) fn find_implementations(ast: &SourceFile, text: &str, offset: u32) ->
         }
     }
     for item in &ast.items {
-        if let Item::ImplDef(im) = item {
-            if name_token_at(text, im.span, &im.trait_name, offset) {
-                return collect_impls_of(ast, &im.trait_name);
-            }
+        if let Item::ImplDef(im) = item
+            && name_token_at(text, im.span, &im.trait_name, offset)
+        {
+            return collect_impls_of(ast, &im.trait_name);
         }
     }
     Vec::new()
@@ -50,12 +50,11 @@ fn collect_impls_of(ast: &SourceFile, trait_name: &str) -> Vec<Span> {
 fn collect_method_impls(ast: &SourceFile, trait_name: &str, method_name: &str) -> Vec<Span> {
     let mut out = Vec::new();
     for item in &ast.items {
-        if let Item::ImplDef(im) = item {
-            if im.trait_name == trait_name {
-                if let Some(m) = im.methods.iter().find(|m| m.name == method_name) {
-                    out.push(m.span);
-                }
-            }
+        if let Item::ImplDef(im) = item
+            && im.trait_name == trait_name
+            && let Some(m) = im.methods.iter().find(|m| m.name == method_name)
+        {
+            out.push(m.span);
         }
     }
     out

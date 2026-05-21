@@ -394,10 +394,8 @@ fn classify_ident(
     def_index: &DefIndex,
     def_kind_map: &HashMap<Span, DefKind>,
 ) -> (u32, u32) {
-    if !name.starts_with("__") {
-        if PRELUDE_FUNCTIONS.contains(&name) {
-            return (TT_FUNCTION, MOD_DEFAULT_LIBRARY);
-        }
+    if !name.starts_with("__") && PRELUDE_FUNCTIONS.contains(&name) {
+        return (TT_FUNCTION, MOD_DEFAULT_LIBRARY);
     }
     if PRELUDE_TYPES.contains(&name) {
         return (TT_TYPE, MOD_DEFAULT_LIBRARY);

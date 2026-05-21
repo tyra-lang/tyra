@@ -1,0 +1,27 @@
+# 20-math_bench.tyra
+# Micro-benchmark suite for arithmetic and list operations.
+# Validates: tyra bench <dir>, bench_* naming convention, __bench_clock_ns intrinsic
+# SPEC_REF: §18.8 — tyra bench <dir>
+import list
+
+fn bench_fib() -> Unit
+  let _ = fib(30)
+end
+
+fn bench_sum_list() -> Unit
+  let xs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  let _ = list.fold(xs, 0, fn(_ acc: Int, _ x: Int) -> Int acc + x end)
+end
+
+fn fib(_ n: Int) -> Int
+  match n
+  when 0
+    0
+
+  when 1
+    1
+
+  when _
+    fib(n - 1) + fib(n - 2)
+  end
+end

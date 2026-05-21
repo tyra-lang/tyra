@@ -100,6 +100,8 @@ pub(crate) fn llvm_type_str(
                 "i64".into() // fallback
             }
         }
+        // ADR-0011: closure fat pointer { fn_ptr: ptr, env_ptr: ptr } is heap-allocated.
+        Ty::Fn(..) => "ptr".into(),
         _ => "i64".into(), // fallback for unresolved types
     }
 }

@@ -421,6 +421,12 @@ pub(crate) fn emit_builtin_call(
             emit_list_fold(out, dest.as_deref(), args, func, ctx, "ptr");
             true
         }
+        "__bench_clock_ns" => {
+            // §18.8: wall-clock nanoseconds. Calls @__bench_clock_ns() -> i64.
+            let d = dest.as_deref().unwrap_or("_bench_ns");
+            writeln!(out, "  %{d} = call i64 @__bench_clock_ns()").unwrap();
+            true
+        }
         "sys__exit" => {
             // §17.1: core.sys.exit(_ code: Int) -> Never
             if let Some(arg) = args.first() {

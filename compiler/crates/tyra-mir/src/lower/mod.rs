@@ -141,6 +141,11 @@ pub fn lower(file: &SourceFile) -> Program {
         }
     }
 
+    // §18.8: bench clock intrinsic (v0.4.0).
+    ctx.fn_return_types
+        .insert("__bench_clock_ns".into(), Ty::Int);
+    ctx.fn_param_types.insert("__bench_clock_ns".into(), vec![]);
+
     // M10 phase 1: fs stdlib intrinsics. Registered unconditionally so that
     // `stdlib/fs.tyra` can call them without an `import` (no circularity).
     ctx.fn_return_types
@@ -968,17 +973,37 @@ impl LowerCtx {
             }
         }
 
-        // Lower the lambda body statements.
+        // Lower the lambda body statements (mirrors lower_fn implicit-return logic).
+        let mut last_expr_result = None;
         for stmt in &lam.body {
-            self.lower_stmt(stmt, &mut body);
+            if let tyra_ast::Stmt::Expr(s) = stmt {
+                last_expr_result = Some(self.lower_expr(&s.expr, &mut body));
+            } else {
+                last_expr_result = None;
+                self.lower_stmt(stmt, &mut body);
+            }
         }
 
-        // Ensure the function ends with a Return.
-        let has_return = body
-            .last()
-            .map_or(false, |i| matches!(i, Instruction::Return { .. }));
-        if !has_return {
-            body.push(Instruction::Return { value: None });
+        // Ensure the function ends with a Return that carries the value when needed.
+        // Mirrors lower_fn: capture last temp BEFORE emitting defers (spec §12.3).
+        if !matches!(body.last(), Some(Instruction::Return { .. })) {
+            let pre_defer_last_temp = self.last_temp_name(&body);
+            self.emit_deferred(&mut body);
+            if ret_ty == Ty::Unit {
+                body.push(Instruction::Return { value: None });
+            } else if let Some(last_temp) = pre_defer_last_temp {
+                let ret_val = self.maybe_wrap_ok_for_return(last_temp, &ret_ty, &mut body);
+                body.push(Instruction::Return {
+                    value: Some(Operand::Var(ret_val)),
+                });
+            } else if let Some(expr_val) = last_expr_result {
+                let ret_val = self.maybe_wrap_ok_for_return(expr_val, &ret_ty, &mut body);
+                body.push(Instruction::Return {
+                    value: Some(Operand::Var(ret_val)),
+                });
+            } else {
+                body.push(Instruction::Return { value: None });
+            }
         }
 
         self.functions.push(Function {

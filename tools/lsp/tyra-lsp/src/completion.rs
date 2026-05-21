@@ -87,19 +87,19 @@ pub(crate) fn module_member_completions(receiver: &str, state: &DocState) -> Vec
     let mut items = Vec::new();
     let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
     for (name, kind) in &state.symbols {
-        if let Some(member) = name.strip_prefix(&prefix) {
-            if seen.insert(member) {
-                items.push(CompletionItem {
-                    label: member.to_string(),
-                    kind: Some(match kind {
-                        CompletionKind::Function => CompletionItemKind::FUNCTION,
-                        CompletionKind::Variable => CompletionItemKind::VARIABLE,
-                        CompletionKind::TypeDef => CompletionItemKind::CLASS,
-                        CompletionKind::Module => CompletionItemKind::MODULE,
-                    }),
-                    ..Default::default()
-                });
-            }
+        if let Some(member) = name.strip_prefix(&prefix)
+            && seen.insert(member)
+        {
+            items.push(CompletionItem {
+                label: member.to_string(),
+                kind: Some(match kind {
+                    CompletionKind::Function => CompletionItemKind::FUNCTION,
+                    CompletionKind::Variable => CompletionItemKind::VARIABLE,
+                    CompletionKind::TypeDef => CompletionItemKind::CLASS,
+                    CompletionKind::Module => CompletionItemKind::MODULE,
+                }),
+                ..Default::default()
+            });
         }
     }
     items

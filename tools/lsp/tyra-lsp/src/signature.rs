@@ -88,10 +88,10 @@ pub(crate) fn find_active_call(text: &str, offset: usize) -> Option<ActiveCall<'
                     j += 1;
                 }
                 b',' => {
-                    if let Some(frame) = stack.last_mut() {
-                        if frame.paren_pos != usize::MAX {
-                            frame.comma_count += 1;
-                        }
+                    if let Some(frame) = stack.last_mut()
+                        && frame.paren_pos != usize::MAX
+                    {
+                        frame.comma_count += 1;
                     }
                     j += 1;
                 }

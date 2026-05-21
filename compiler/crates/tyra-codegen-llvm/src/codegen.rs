@@ -257,6 +257,8 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare void @abort()").unwrap();
     writeln!(out, "declare void @exit(i32)").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();
+    // §18.8: bench clock intrinsic (v0.4.0). See runtime/src/lib.rs.
+    writeln!(out, "declare i64 @__bench_clock_ns()").unwrap();
     // strtol returns long (i64 on LP64 platforms). TODO: use strtoll for Windows LLP64.
     writeln!(out, "declare i64 @strtol(ptr, ptr, i32)").unwrap();
     writeln!(out).unwrap();

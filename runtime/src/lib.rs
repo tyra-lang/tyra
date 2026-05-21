@@ -286,6 +286,18 @@ pub extern "C" fn tyra_rt_init() {
 #[unsafe(no_mangle)]
 pub extern "C" fn tyra_rt_shutdown() {}
 
+/// Return nanoseconds from a monotonic clock baseline.
+/// Uses `std::time::Instant` (monotonic) so benchmark deltas can never be
+/// negative due to NTP corrections or manual clock changes (spec §18.8, v0.4.0).
+#[unsafe(no_mangle)]
+pub extern "C" fn __bench_clock_ns() -> i64 {
+    use std::sync::OnceLock;
+    use std::time::Instant;
+    static BASE: OnceLock<Instant> = OnceLock::new();
+    let base = BASE.get_or_init(Instant::now);
+    base.elapsed().as_nanos() as i64
+}
+
 /// Submit a task for execution. Returns an opaque Task handle.
 ///
 /// # Preconditions

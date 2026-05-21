@@ -220,6 +220,15 @@ pub const PRELUDE_FUNCTIONS: &[&str] = &[
     "__list_int_min",
     "__list_int_contains",
     "__list_int_index_of",
+    // §17.3.5 HOF intrinsics (v0.4.0, ADR-0011 closure ABI).
+    "__list_map_int",
+    "__list_filter_int",
+    "__list_fold_int",
+    "__list_map_str",
+    "__list_filter_str",
+    "__list_fold_str",
+    // §18.8: bench clock intrinsic (v0.4.0). Returns nanoseconds as Int.
+    "__bench_clock_ns",
 ];
 
 /// Prelude ADT constructors: unqualified access to Option/Result variants.

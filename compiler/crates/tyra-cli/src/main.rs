@@ -941,21 +941,47 @@ fn main() {
             }
         }
         "bench" => {
-            // tyra bench ai-gen [<harness-args>...]
-            // All remaining args are forwarded verbatim to bench/ai-gen/harness.py.
+            // tyra bench [<path>]               — run *_bench.tyra files (§18.8)
+            // tyra bench ai-gen [<harness-args>] — AI-generation benchmark (legacy)
             let sub = args.get(2).map(String::as_str);
             if sub != Some("ai-gen") {
-                if sub.is_none() {
-                    eprintln!(
-                        "usage: tyra bench ai-gen [--languages <list>] [--generators <list>]"
-                    );
-                    eprintln!("       [--prompts <glob>] [--seed N | --seeds N,M,...] [--dry-run]");
-                    eprintln!("       [--inject-tyra-spec] [--results-dir <path>]");
+                // New: tyra bench [path]
+                let path = sub.map(PathBuf::from).unwrap_or_else(|| {
+                    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+                });
+
+                let bench_files: Vec<PathBuf> = if path.is_file() {
+                    if is_bench_file(&path) {
+                        vec![path.clone()]
+                    } else {
+                        eprintln!("error: {} is not a *_bench.tyra file", path.display());
+                        process::exit(1);
+                    }
+                } else if path.is_dir() {
+                    match collect_bench_files(&path) {
+                        Ok(f) => f,
+                        Err(e) => {
+                            eprintln!("error: cannot walk {}: {e}", path.display());
+                            process::exit(1);
+                        }
+                    }
                 } else {
-                    eprintln!("error: unknown bench subcommand `{}`", args[2]);
-                    eprintln!("usage: tyra bench ai-gen [options]");
+                    eprintln!("error: {} not found", path.display());
+                    process::exit(1);
+                };
+
+                if bench_files.is_empty() {
+                    eprintln!("no *_bench.tyra files found in {}", path.display());
+                    process::exit(0);
                 }
-                process::exit(1);
+
+                let mut any_fail = false;
+                for bench_file in &bench_files {
+                    if !run_bench_file(bench_file) {
+                        any_fail = true;
+                    }
+                }
+                process::exit(if any_fail { 1 } else { 0 });
             }
 
             // Locate bench/ai-gen/harness.py by walking up from the executable's
@@ -1035,6 +1061,7 @@ fn print_usage() {
         "  mod sync [--check] [--json] [--quiet]    clone git deps; --check validates without mutating"
     );
     eprintln!("  mod clean                                remove ~/.tyra/cache/");
+    eprintln!("  bench [path]                             run *_bench.tyra micro-benchmarks");
     eprintln!("  bench ai-gen [options]                   run the AI-generation benchmark");
     eprintln!("  --version                                show version info");
     eprintln!("  --help                                   show this help");
@@ -1529,4 +1556,145 @@ fn xml_escape(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+// ---------------------------------------------------------------------------
+// tyra bench <dir> — micro-benchmark runner (§18.8, v0.4.0)
+// ---------------------------------------------------------------------------
+
+fn is_bench_file(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.ends_with("_bench.tyra"))
+        .unwrap_or(false)
+}
+
+fn collect_bench_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
+    let mut files = Vec::new();
+    let mut entries: Vec<_> = std::fs::read_dir(dir)?.collect::<Result<_, _>>()?;
+    entries.sort_by_key(|e| e.path());
+    for entry in entries {
+        let path = entry.path();
+        if path.is_dir() {
+            files.extend(collect_bench_files(&path)?);
+        } else if is_bench_file(&path) {
+            files.push(path);
+        }
+    }
+    Ok(files)
+}
+
+/// Scan the AST for `bench_*` functions with no parameters.
+fn find_bench_fns(ast: &tyra_ast::SourceFile) -> Vec<String> {
+    ast.items
+        .iter()
+        .filter_map(|item| {
+            if let tyra_ast::Item::FnDef(f) = item
+                && f.name.starts_with("bench_")
+                && f.params.is_empty()
+                && f.self_param.is_none()
+            {
+                return Some(f.name.clone());
+            }
+            None
+        })
+        .collect()
+}
+
+/// Synthesize a `fn main()` that times each `bench_*` function with
+/// `__bench_clock_ns()` and prints `BENCH <name> <ns> ns` lines.
+fn synthesize_bench_runner(bench_source: &str, bench_fns: &[String]) -> String {
+    let mut out = String::from(bench_source);
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str("\nfn main() -> Unit\n");
+    for name in bench_fns {
+        out.push_str(&format!("  let __t0_{name} = __bench_clock_ns()\n"));
+        out.push_str(&format!("  {name}()\n"));
+        out.push_str(&format!("  let __t1_{name} = __bench_clock_ns()\n"));
+        out.push_str(&format!(
+            "  println(\"BENCH {name} #{{__t1_{name} - __t0_{name}}} ns\")\n"
+        ));
+    }
+    out.push_str("end\n");
+    out
+}
+
+/// Compile and run a single `*_bench.tyra` file; print results and return
+/// true on success.  Mirrors run_test_file_inner: synthesizes a runner, writes
+/// it to a temp file alongside the bench file, compiles + runs, then cleans up.
+fn run_bench_file(bench_file: &Path) -> bool {
+    let source = match std::fs::read_to_string(bench_file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read {}: {e}", bench_file.display());
+            return false;
+        }
+    };
+
+    let dir = bench_file.parent().unwrap_or(Path::new("."));
+    let workspace_dir = if dir.as_os_str().is_empty() {
+        Some(Path::new("."))
+    } else {
+        Some(dir)
+    };
+
+    let check = tyra_driver::check_in_memory(
+        bench_file.to_string_lossy().into_owned(),
+        source.clone(),
+        workspace_dir,
+    );
+    if check.report.has_errors() {
+        eprint!("{}", check.report.render(&check.sources));
+        return false;
+    }
+
+    let bench_fns = find_bench_fns(&check.ast);
+    if bench_fns.is_empty() {
+        eprintln!("warning: no bench_* functions in {}", bench_file.display());
+        return true;
+    }
+
+    let runner_source = synthesize_bench_runner(&source, &bench_fns);
+
+    // Write synthesized runner alongside the bench file so import resolution works.
+    let runner_name = format!("__tyra_bench_runner_{}.tyra", std::process::id());
+    let runner_path = dir.join(&runner_name);
+    if let Err(e) = std::fs::write(&runner_path, &runner_source) {
+        eprintln!("error: cannot write bench runner: {e}");
+        return false;
+    }
+
+    let result = tyra_driver::run_and_capture(&runner_path);
+    let _ = std::fs::remove_file(&runner_path);
+
+    if result.report.has_errors() {
+        eprint!("{}", result.report.render(&result.sources));
+        return false;
+    }
+
+    let stdout = result.stdout.unwrap_or_default();
+    let file_stem = bench_file
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("?");
+    println!("running {} bench(es) in {file_stem}", bench_fns.len());
+    for line in stdout.lines() {
+        if let Some(rest) = line.strip_prefix("BENCH ") {
+            // "BENCH <name> <ns> ns"
+            let parts: Vec<&str> = rest.splitn(3, ' ').collect();
+            if parts.len() >= 2 {
+                let name = parts[0];
+                let ns_str = parts[1];
+                if let Ok(ns) = ns_str.parse::<u64>() {
+                    let ms = ns as f64 / 1_000_000.0;
+                    println!("  {name:<40} {ns:>12} ns  ({ms:.3} ms)");
+                } else {
+                    println!("  {line}");
+                }
+            }
+        }
+    }
+    true
 }

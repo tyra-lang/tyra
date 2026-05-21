@@ -382,6 +382,11 @@ fn register_prelude(env: &mut TypeEnv) {
         "parse".to_string(),
         Ty::Fn(vec![Ty::Error], Box::new(Ty::Error)),
     );
+    // §18.8: bench clock intrinsic (v0.4.0). Returns nanoseconds as Int.
+    env.define(
+        "__bench_clock_ns".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::Int)),
+    );
     // M10 phase 1: fs stdlib intrinsics. See stdlib/fs.tyra.
     env.define(
         "__fs_read_raw".to_string(),

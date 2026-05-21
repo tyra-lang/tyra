@@ -165,11 +165,11 @@ fn descend_expr(expr: &Expr, source_id: SourceId, offset: u32, chain: &mut Vec<S
 
         ExprKind::StringInterp(parts) => {
             for part in parts {
-                if let StringPart::Expr(e) = part {
-                    if span_contains(e.span, source_id, offset) {
-                        try_descend_expr(e, source_id, offset, chain);
-                        return;
-                    }
+                if let StringPart::Expr(e) = part
+                    && span_contains(e.span, source_id, offset)
+                {
+                    try_descend_expr(e, source_id, offset, chain);
+                    return;
                 }
             }
         }
