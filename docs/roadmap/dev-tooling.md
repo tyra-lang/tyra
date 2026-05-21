@@ -65,14 +65,22 @@ and related developer experience tooling.
 ## Near-term (v0.4.0)
 
 - Lambda C ABI and generic `List<T>` (`map`/`filter`/`fold`)
-- Generic `assert.eq<T>` via type-class dispatch
+- Generic `assert.eq<T>` via ability-constraint dispatch (`Eq` ability)
 - `tyra bench <dir>` — general-purpose wall-clock microbenchmark runner
+- `tyra test --timeout <secs>` and `--jobs N` (parallel test execution)
+- `Tyra.lock` + floating version constraints + transitive dependency resolution
+  (minimal solver — see scope boundary below)
+
+> **v0.4.0 / v0.5+ scope boundary:** `Tyra.lock` in v0.4.0 covers lockfile
+> generation/reading and a *minimal solver* (floating version constraint
+> interpretation + transitive dependency merge). A full *registry-backed resolver*
+> (candidate fetching from a central registry) and `tyra publish` remain v0.5+.
 
 ## Medium-term (v0.5+)
 
 - `test "name"` language syntax (requires separate ADR)
 - `assert.panics` — requires per-test subprocess isolation
-- SemVer resolver, `Tyra.lock`, package registry (`tyra publish`)
+- Full registry-backed SemVer resolver and package registry (`tyra publish`)
 
 ## Long-term
 

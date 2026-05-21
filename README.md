@@ -153,9 +153,12 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 
 | Component | Notes |
 | --- | --- |
-| SemVer resolver, `Tyra.lock` | ⏳ v0.5+ |
-| Registry (`tyra publish`) | ⏳ v0.5+ |
-| Lambda C ABI, generic `List<T>` | ⏳ v0.4.0 |
+| Lambda C ABI, generic `List<T>`, `map`/`filter`/`fold` | ⏳ v0.4.0 |
+| `Tyra.lock` + floating version constraints + minimal solver | ⏳ v0.4.0 |
+| Generic `assert.eq<T>` (via `Eq` ability constraint) | ⏳ v0.4.0 |
+| `tyra bench <dir>` — general-purpose microbenchmark runner | ⏳ v0.4.0 |
+| `tyra test --timeout`, parallel test execution (`--jobs N`) | ⏳ v0.4.0 |
+| Registry (`tyra publish`), full registry-backed resolver | ⏳ v0.5+ |
 | `assert.panics` | ⏳ Requires per-test process isolation |
 | `test "name"` language syntax | ⏳ Separate ADR |
 | Pre-built binaries (homebrew, apt) | ⏳ Later |

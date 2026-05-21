@@ -63,16 +63,17 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ### Known Limitations
 
-- Dependency version solving and `Tyra.lock` not yet supported (path and git-rev pin only)
-- Registry (`tyra publish`, crates.io equivalent) not yet available
+- `Tyra.lock` and floating version constraints not yet supported (path and git-rev pin only); `Tyra.lock` + minimal solver planned for v0.4.0
+- Registry (`tyra publish`, crates.io equivalent) not yet available; planned for v0.5+
 - Windows native build untested (WSL2 recommended)
 
 ### Not in This Release
 
 - Lambda C ABI, generic `List<T>`, `map`/`filter`/`fold` → v0.4.0
-- SemVer resolver, `Tyra.lock` → v0.5+
-- Pre-built binaries (Homebrew, apt) → separate release
+- `Tyra.lock` + floating version constraints + transitive dependency resolution (minimal solver) → v0.4.0
 - `tyra test --timeout`, parallel test execution → v0.4.0
+- Full registry-backed SemVer resolver, `tyra publish` → v0.5+
+- Pre-built binaries (Homebrew, apt) → separate release
 
 ---
 

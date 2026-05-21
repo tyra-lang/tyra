@@ -181,10 +181,10 @@ Consequences:
 - `path` dependencies have no pinning mechanism; they reflect the current
   on-disk state of the referenced project.
 
-`Tyra.lock` will be introduced in v0.4 or later when floating version
-constraints or transitive dependency resolution are added. The `~/.tyra/cache/`
+`Tyra.lock` will be introduced in **v0.4.0** together with floating version
+constraints and a minimal transitive dependency solver. The `~/.tyra/cache/`
 structure is designed to be lockfile-compatible (each entry is keyed by exact
-rev).
+rev). A full registry-backed resolver and `tyra publish` are planned for v0.5+.
 
 ---
 
