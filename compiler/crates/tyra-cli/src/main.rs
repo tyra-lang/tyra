@@ -1918,59 +1918,97 @@ mod tests {
         }
     }
 
-    // --- Timeout tests (require LLVM; run with: cargo test -p tyra-cli -- --ignored) ---
+    // --- Timeout tests (require a pre-built tyra binary) ---
+    //
+    // Run with: cargo build && cargo test -p tyra-cli -- --ignored
+    //
+    // These tests invoke the external `tyra` binary via Command so that the
+    // runtime staticlib lookup (current_exe().parent()) resolves correctly.
+    // Calling run_test_file_core() from a test binary would point at
+    // target/debug/deps/ instead of target/debug/ and always fail with E0502.
+
+    /// Locate the built `tyra` binary for end-to-end invocation.
+    /// The test binary lives at target/{debug,release}/deps/; the tyra binary
+    /// is one level up at target/{debug,release}/.
+    fn find_tyra_binary() -> Option<PathBuf> {
+        let exe = std::env::current_exe().ok()?;
+        let profile_dir = exe.parent()?.parent()?;
+        let tyra = profile_dir.join("tyra");
+        if tyra.exists() { Some(tyra) } else { None }
+    }
 
     #[test]
-    #[ignore = "requires LLVM toolchain — run with: cargo test -p tyra-cli -- --ignored"]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
     fn timeout_kills_hanging_test_and_reports_failure() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found at expected path — run `cargo build` first");
+            return;
+        };
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("hang_test.tyra");
         fs::write(
             &path,
-            concat!(
-                "import assert\n",
-                "fn test_infinite() -> Result<Unit, String>\n",
-                "  while true\n",
-                "  end\n",
-                "  Ok(())\n",
-                "end\n",
-            ),
+            "import assert\n\
+             fn test_infinite() -> Result<Unit, String>\n\
+             \x20 while true\n\
+             \x20 end\n\
+             \x20 Ok(())\n\
+             end\n",
         )
         .unwrap();
 
-        let out = run_test_file_core(&path, None, Some(1));
-        assert!(
-            out.fail > 0,
-            "timed-out test must count as failed (pass={} fail={})",
-            out.pass, out.fail
+        let output = std::process::Command::new(&tyra)
+            .args(["test", "--timeout", "1", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+
+        assert_ne!(
+            output.status.code(),
+            Some(0),
+            "timed-out test must exit non-zero"
         );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            out.tap.contains("timeout after 1s") || out.diag.contains("timed out"),
-            "output must mention timeout:\ntap={:?}\ndiag={:?}",
-            out.tap, out.diag
+            stdout.contains("timeout") || stderr.contains("timeout"),
+            "output must mention timeout:\nstdout={stdout:?}\nstderr={stderr:?}"
         );
     }
 
     #[test]
-    #[ignore = "requires LLVM toolchain — run with: cargo test -p tyra-cli -- --ignored"]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
     fn timeout_does_not_affect_fast_passing_test() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found at expected path — run `cargo build` first");
+            return;
+        };
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("fast_test.tyra");
         fs::write(
             &path,
-            concat!(
-                "import assert\n",
-                "fn test_fast() -> Result<Unit, String>\n",
-                "  assert.eq(1, 1)?\n",
-                "  Ok(())\n",
-                "end\n",
-            ),
+            "import assert\n\
+             fn test_fast() -> Result<Unit, String>\n\
+             \x20 assert.eq(1, 1)?\n\
+             \x20 Ok(())\n\
+             end\n",
         )
         .unwrap();
 
         // 10-second budget is ample for a trivial test.
-        let out = run_test_file_core(&path, None, Some(10));
-        assert_eq!(out.pass, 1, "fast test must pass: {:?}", out.diag);
-        assert_eq!(out.fail, 0, "fast test must not fail: {:?}", out.diag);
+        let output = std::process::Command::new(&tyra)
+            .args(["test", "--timeout", "10", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "fast test must pass:\nstdout={stdout:?}\nstderr={stderr:?}"
+        );
+        assert!(
+            stdout.contains("1 passed") || stdout.contains("ok"),
+            "expected passing output:\nstdout={stdout:?}"
+        );
     }
 }
