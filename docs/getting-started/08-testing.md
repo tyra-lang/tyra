@@ -127,11 +127,11 @@ Import `assert` to get typed assertion functions:
 
 | Function | Checks |
 |---|---|
-| `assert.eq(a, b)` | two `Int` values are equal |
-| `assert.eq_str(a, b)` | two `String` values are equal |
-| `assert.eq_bool(a, b)` | two `Bool` values are equal |
-| `assert.ne(a, b)` | two `Int` values differ |
-| `assert.ne_str(a, b)` | two `String` values differ |
+| `assert.eq(a, b)` | two values of the same type are equal (`Int`, `String`, or `Bool`) |
+| `assert.eq_str(a, b)` | two `String` values are equal (explicit typed form) |
+| `assert.eq_bool(a, b)` | two `Bool` values are equal (explicit typed form) |
+| `assert.ne(a, b)` | two values of the same type differ (`Int`, `String`, or `Bool`) |
+| `assert.ne_str(a, b)` | two `String` values differ (explicit typed form) |
 | `assert.is_ok(result)` | a `Result` is `Ok` |
 | `assert.is_err(result)` | a `Result` is `Err` |
 

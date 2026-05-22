@@ -1810,12 +1810,12 @@ end
 - structured concurrency
 - モジュールレベルの初期化セマンティクス (`let`/`mut` のモジュールスコープ)
 - `string` の拡張 API (replace, join, char_at, 正規表現) — `split` / `split_whitespace` は §17.3.4 に追加凍結、それ以外は後続リリース以降
-- `list` の拡張 API (ジェネリック `List<T>` 全般、`map` / `filter` / `fold`、`List<String>` 等) — §17.3.5 で凍結した `List<Int>` 専用 6 関数の外側は後続リリース (要素型モノモーフィゼーションとラムダ C ABI 通し配管が必要)
+- `list` の拡張 API — ジェネリック `List<T>`、`map` / `filter` / `fold`、`List<String>` は v0.4.0 で実装済み (§17.3.5)。`Map` / `Set` 等のその他コレクション拡張は後続リリース以降
 - `Map` の拡張 API (任意の K / V、`put` / `remove` / イテレーション、ハッシュテーブル化) — §17.3.6 で `Map<String, Int>` リテラル + `get` / `contains_key` のみ凍結。それ以外は後続リリース以降
 - `Set<T>` 全般（リテラル構文、操作 API、ハッシュ実装）— 後続リリース以降
 - `test "name"` 言語構文 — 別 ADR にて規定（ADR-0008 参照）
 - `assert.panics` — プロセス境界設計（テスト分離）が前提。後続リリース以降
-- ジェネリック `assert.eq<T>` — trait bound 要件。後続リリース以降
+- ジェネリック `assert.eq<T>` — `Int` / `String` / `Bool` 向け overload は v0.4.0 で実装済み。任意型への完全ジェネリック化 (ability constraint) は後続リリース以降
 
 ---
 

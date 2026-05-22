@@ -1801,12 +1801,12 @@ The following are postponed for later specification:
 - structured concurrency
 - Module-level initialization semantics (`let`/`mut` at module scope)
 - Extended `string` API (replace, join, char_at, regex) — `split` and `split_whitespace` are frozen in §17.3.4; everything else is a later release
-- Extended `list` API (generic `List<T>`, `map` / `filter` / `fold`, `List<String>`, etc.) — the six `List<Int>`-only functions frozen in §17.3.5 are the only current surface (requires element-type monomorphization and lambda-through-C-ABI plumbing)
+- Extended `list` API — generic `List<T>`, `map` / `filter` / `fold`, and `List<String>` are implemented in v0.4.0 (§17.3.5). Further collection extensions (`Map`, `Set`, etc.) are deferred to later releases
 - Extended `Map` API (arbitrary K / V, `put` / `remove` / iteration, hash-table backing) — only `Map<String, Int>` literals plus `get` / `contains_key` are frozen in §17.3.6; everything else is a later release
 - `Set<T>` in full (literal syntax, operations, hash-table backing) — later release
 - `test "name"` language syntax — specified in a separate ADR (see ADR-0008)
 - `assert.panics` — requires per-test process isolation; later release
-- Generic `assert.eq<T>` — requires trait bound support; later release
+- Generic `assert.eq<T>` — overloads for `Int` / `String` / `Bool` are implemented in v0.4.0; full generics via ability constraints are a later release
 
 ---
 
