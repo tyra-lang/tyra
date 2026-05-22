@@ -195,7 +195,7 @@ rev). A full registry-backed resolver and `tyra publish` are planned for v0.5+.
 | `E0200` | Import not found (existing code; unchanged) |
 | `E0217` | `E_IMPORT_AMBIGUOUS` — same import path resolved in two or more layers |
 | `E0218` | `DepConflict` — same package required at two incompatible revisions (or inconsistent `rev`/`branch` constraints) |
-| `E0219` | `LockfileOutOfSync` — dependency in `Tyra.toml` is absent from `Tyra.lock`; run `tyra mod sync` |
+| `E0219` | `LockfileOutOfSync` — `Tyra.lock` is inconsistent with the manifest or path-dep graph (missing dep, source/rev/branch change, constraint-type change, or transitive path dep added/removed); run `tyra mod sync` |
 | `E0220` | `DepNameCollision` — two distinct sources both claim the same import name; a single import name must resolve to exactly one package |
 | `E_DEP_NOT_IMPORTABLE` | Dependency root is a bin package (has `fn main` or top-level executable statements) |
 
