@@ -32,7 +32,7 @@ The convergence of three trends creates an opening for Tyra:
 
 Tyra's bet is that **a language designed from scratch for AI auditability and strict semantics, with operational standards matching Go and surface readability matching Ruby, can capture users dissatisfied with Crystal, V, and parts of the Go and Ruby ecosystems.**
 
-**Current status**: v0.3.0 released (2026-05-19). v0.1.0 shipped the compiler, runtime, and Tier 1 stdlib for macOS arm64 and Linux x86_64. v0.2.0 added `tyra fmt`, `tyra test`, `stdlib/assert`, the `continue` statement, and runtime fixes. v0.3.0 delivers the full project lifecycle: `Tyra.toml` manifest, `tyra new [--lib]`, `tyra mod init/add/update/remove/show/tree/sync/clean`, three-layer import resolution with `E0217`/`E0218` (ADR 0010), zero-arg `run`/`build`/`check` inside a project directory, `--release` builds, `tyra test --filter/--list/--format junit`, `tyra fmt --stdin`, and `tyra bench ai-gen`. Remaining Phase 1 deliverables (debugger, CI matrix, broader Tier 2) are in progress.
+**Current status**: v0.4.0 released (2026-05-22). v0.1.0 shipped the compiler, runtime, and Tier 1 stdlib for macOS arm64 and Linux x86_64. v0.2.0 added `tyra fmt`, `tyra test`, `stdlib/assert`, the `continue` statement, and runtime fixes. v0.3.0 delivered the full project lifecycle (`Tyra.toml`, `tyra new`, `tyra mod`, three-layer import resolution, zero-arg commands). v0.4.0 adds lambda / closures (ADR 0011), generic `List<T>` with `map`/`filter`/`fold`, generic `assert.eq<T>`, `tyra bench <dir>`, `tyra test --timeout/--jobs`, and `Tyra.lock` with floating `branch` constraints and transitive dependency resolution. Remaining Phase 1 deliverables (debugger, CI matrix, broader Tier 2) are in progress.
 
 ---
 

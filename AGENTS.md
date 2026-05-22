@@ -6,7 +6,7 @@ This file provides guidance to AI coding assistants (Claude Code, Codex, Cursor,
 
 Tyra is a statically-typed, AI-friendly programming language designed for backend services, CLI tools, and business applications. It compiles to native binaries via LLVM.
 
-**Current stage**: Pre-alpha. Implementing Language Spec v0.1.
+**Current stage**: Pre-alpha. Implementing Language Spec v0.4.
 
 **Core design principles** (from spec §2):
 
@@ -347,23 +347,23 @@ If you encounter a situation where the spec doesn't clearly answer the question:
 1. **Stop and ask the maintainer** — do not guess
 2. If the ambiguity is about whether a feature belongs in Tyra (rather than how it should work), consult `docs/strategy.md` §9 (Decision Framework)
 3. Document the ambiguity as a GitHub issue with the `spec-clarification` label
-4. The resolution may become a spec patch (v0.1.x) or an RFC for v0.2
+4. The resolution may become a spec patch (e.g. v0.4.x) or an RFC for the next minor version
 
 Never silently make a design choice that the spec doesn't endorse. The point of Tyra is predictability.
 
 ## Versioning
 
-- **Spec versions**: tagged as `spec-v0.1.0`, `spec-v0.1.1`, `spec-v0.2.0`, ...
-- **Compiler versions**: tagged as `v0.1.0`, `v0.1.1`, ...
+- **Spec versions**: tagged as `spec-v0.1.0`, `spec-v0.2.0`, `spec-v0.3.0`, `spec-v0.4.0`, ...
+- **Compiler versions**: tagged as `v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.4.0`, ...
 - The compiler always declares which spec version it implements:
 
   ```console
   $ tyra --version
-  tyra 0.1.0
-  implementing language spec 0.1
+  tyra 0.4.0
+  implementing language spec 0.4
   ```
 
-Spec status is currently **Draft** (v0.1.0). Breaking changes are allowed in MINOR bumps until v1.0.
+Spec status is currently **Stable** (v0.4). Breaking changes are allowed in MINOR bumps until v1.0.
 
 ## Implementation Strategy
 

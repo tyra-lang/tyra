@@ -2,7 +2,7 @@
 
 A statically-typed, AI-friendly programming language for backend services, CLI tools, and business applications.
 
-> **v0.3.0** — adds `tyra new`, `tyra mod` (project lifecycle), `tyra bench ai-gen`, `tyra test --filter`, and `tyra fmt` line-length wrapping. [See known limitations](#known-limitations) before using in production.
+> **v0.4.0** — adds lambda / closures, generic `List<T>` (`map`/`filter`/`fold`), `tyra bench <dir>`, `tyra test --timeout/--jobs`, and `Tyra.lock` with floating branch constraints. [See known limitations](#known-limitations) before using in production.
 
 ---
 
@@ -125,39 +125,39 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 
 ## Status
 
-**Stable in v0.3.0** — supported and tested:
+**Stable in v0.4.0** — supported and tested:
 
 | Component | Notes |
 | --- | --- |
-| Language specification v0.3 | ✅ Complete |
+| Language specification v0.4 | ✅ Complete |
 | Lexer, Parser, Type checker | ✅ Complete |
 | LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 |
 | Standard library: string, list, fs, io, float, json, assert | ✅ Complete |
 | `tyra check / run / build` CLI (zero-arg project mode, `--release`) | ✅ Complete |
 | `tyra fmt [--check] [--stdin] <file\|dir>` — formatter + 100-col wrapping | ✅ Complete |
-| `tyra test [--filter <pat>] [--list] [--format tap\|junit] [path]` | ✅ Complete |
+| `tyra test [--filter] [--list] [--format tap\|junit] [--timeout] [--jobs N]` | ✅ Complete |
 | `continue` statement | ✅ Complete |
 | `tyra new <name> [--lib] [--vcs none]` — project scaffolding | ✅ Complete |
-| `tyra mod init/add/update/remove/show/tree/sync/clean` — dependency management | ✅ Complete |
+| `tyra mod init/add/update/remove/show/tree/sync/clean [--locked]` | ✅ Complete |
 | `tyra bench ai-gen` — AI generation benchmark runner | ✅ Complete |
+| `tyra bench <dir>` — general-purpose wall-clock microbenchmark runner | ✅ Complete |
+| Lambda / closures (spec §9.4, ADR 0011) | ✅ Complete |
+| Generic `List<T>` + `map`/`filter`/`fold` | ✅ Complete |
+| Generic `assert.eq` / `assert.ne` (Int, String, Bool) | ✅ Complete |
+| `Tyra.lock` + floating `branch` constraints + transitive dep resolution | ✅ Complete |
 | LSP server (`tyra-lsp`) + VS Code extension | ✅ Development install |
-| Static conformance corpus (14 programs + error cases) | ✅ CI-gated |
+| Static conformance corpus (19 programs + error cases) | ✅ CI-gated |
 
-**Experimental in v0.3.0** — included but not production-ready:
+**Experimental in v0.4.0** — included but not production-ready:
 
 | Component | Notes |
 | --- | --- |
 | `http.server` stdlib | ⚠️ Basic GET/POST routing only; not production-ready |
 
-**Not in v0.3.0** — explicit backlog:
+**Backlog** — not yet implemented:
 
 | Component | Notes |
 | --- | --- |
-| Lambda C ABI, generic `List<T>`, `map`/`filter`/`fold` | ⏳ v0.4.0 |
-| `Tyra.lock` + floating version constraints + minimal solver | ⏳ v0.4.0 |
-| Generic `assert.eq<T>` (via `Eq` ability constraint) | ⏳ v0.4.0 |
-| `tyra bench <dir>` — general-purpose microbenchmark runner | ⏳ v0.4.0 |
-| `tyra test --timeout`, parallel test execution (`--jobs N`) | ⏳ v0.4.0 |
 | Registry (`tyra publish`), full registry-backed resolver | ⏳ v0.5+ |
 | `assert.panics` | ⏳ Requires per-test process isolation |
 | `test "name"` language syntax | ⏳ Separate ADR |
@@ -247,8 +247,8 @@ The compiler always declares which spec version it implements:
 
 ```console
 $ tyra --version
-tyra 0.3.0
-implementing language spec 0.3
+tyra 0.4.0
+implementing language spec 0.4
 ```
 
 While Tyra is at v0.x, **breaking changes are allowed in MINOR version bumps**. After v1.0, breaking changes will use the Edition model (similar to Rust editions).

@@ -1015,14 +1015,14 @@ dependencies = [
 
 [[package]]
 name = "tyra-ast"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "tyra-diagnostics",
 ]
 
 [[package]]
 name = "tyra-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "tyra-ast",
  "tyra-diagnostics",
@@ -1036,7 +1036,7 @@ dependencies = [
 
 [[package]]
 name = "tyra-codegen-llvm"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "tyra-mir",
  "tyra-types",
@@ -1044,11 +1044,11 @@ dependencies = [
 
 [[package]]
 name = "tyra-diagnostics"
-version = "0.3.0"
+version = "0.4.0"
 
 [[package]]
 name = "tyra-driver"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "tempfile",
  "tyra-ast",
@@ -1063,7 +1063,7 @@ dependencies = [
 
 [[package]]
 name = "tyra-fmt"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "tyra-ast",
  "tyra-diagnostics",
@@ -1073,14 +1073,14 @@ dependencies = [
 
 [[package]]
 name = "tyra-lexer"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "tyra-diagnostics",
 ]
 
 [[package]]
 name = "tyra-lsp"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "futures",
  "serde_json",
@@ -1096,7 +1096,7 @@ dependencies = [
 
 [[package]]
 name = "tyra-manifest"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "tempfile",
@@ -1105,7 +1105,7 @@ dependencies = [
 
 [[package]]
 name = "tyra-mir"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "tyra-ast",
  "tyra-diagnostics",
@@ -1116,14 +1116,14 @@ dependencies = [
 
 [[package]]
 name = "tyra-new"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "tempfile",
 ]
 
 [[package]]
 name = "tyra-parser"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "tyra-ast",
  "tyra-diagnostics",
@@ -1132,7 +1132,7 @@ dependencies = [
 
 [[package]]
 name = "tyra-pkg"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "tempfile",
  "tyra-manifest",
@@ -1140,7 +1140,7 @@ dependencies = [
 
 [[package]]
 name = "tyra-resolve"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "tyra-ast",
  "tyra-diagnostics",
@@ -1149,7 +1149,7 @@ dependencies = [
 
 [[package]]
 name = "tyra-runtime"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "crossbeam-channel",
  "ureq",
@@ -1157,7 +1157,7 @@ dependencies = [
 
 [[package]]
 name = "tyra-types"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "tyra-ast",
  "tyra-diagnostics",

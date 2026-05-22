@@ -7,6 +7,59 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ---
 
+## [0.4.0] - 2026-05-22
+
+### Stable
+
+**Lambda C ABI / closures (ADR 0011)**
+- First-class lambda expressions: `fn(_ x: Int) -> Int x * 2 end`
+- Closure ABI: `{ fn_ptr, env_ptr }` fat pointer; environment heap-allocated via Boehm GC
+- Capture semantics: `value` → copy, `data` → reference (spec §9.4)
+- `E0402` compiler error for illegal mutation of captured variables inside lambdas
+
+**Generic `List<T>` + higher-order functions**
+- `list.map`, `list.filter`, `list.fold` accept `fn(T)->U` closures
+- `List<String>` fully supported alongside `List<Int>`
+- `stdlib/list.tyra` updated; `__list_*` intrinsics extended
+
+**Generic `assert.eq` / `assert.ne`**
+- `assert.eq(a, b)` and `assert.ne(a, b)` overloaded for `Int`, `String`, `Bool`
+- Type-checked dispatch; existing typed helpers (`assert.eq_str` etc.) retained for backward compatibility
+
+**`tyra bench <dir>`** (spec §18.8)
+- Discovers `*_bench.tyra` files in a directory and runs each, reporting wall-clock time
+- `--json` for machine-readable output; `--quiet` for silent runs
+
+**`tyra test --timeout` and parallel execution**
+- `--timeout <secs>`: per-test-file wall-clock limit; timed-out tests counted as failures in TAP and JUnit
+- `--jobs N`: parallel test execution (default: 1); output order is deterministic regardless of completion order
+- JUnit `--format junit` now correctly reports compile/infra failures even when no test records are emitted
+- Pipe-buffer deadlock prevention: stdout and stderr drained on background threads
+
+**`Tyra.lock` + floating branch constraints + transitive dependency resolution**
+- `tyra mod sync` resolves all direct + transitive dependencies and writes `Tyra.lock`
+- `branch = "..."` floating constraint in `Tyra.toml`; resolved to exact SHA via `git ls-remote`; `rev` and `branch` are mutually exclusive
+- `Tyra.lock` records each package: `name`, `source`, `rev`, `branch` (optional), `pkg_version` (informational); format version = 1
+- `tyra mod sync --locked`: CI mode — validates manifest against existing lockfile without network access
+  - Detects source, rev, branch-name, constraint-type (rev↔branch), dep-alias, and transitive path dep changes
+  - Resolver keyed by canonical source (URL for git, abs path for path deps) — prevents cross-subgraph alias collisions
+  - Path dep sources normalised relative to project root — correct across nested manifests at any depth
+- `tyra mod show [--json]` displays resolved rev and branch for floating-constraint deps
+
+### Known Limitations
+
+- Registry (`tyra publish`, full registry-backed resolver) not yet available → v0.5+
+- Windows native build untested (WSL2 recommended)
+- `assert.panics` not yet implemented (requires per-test process isolation)
+
+### Not in This Release
+
+- Full registry-backed SemVer resolver, `tyra publish` → v0.5+
+- `test "name"` language syntax → separate ADR required
+- Pre-built binaries (Homebrew, apt) → later
+
+---
+
 ## [0.3.0] - 2026-05-19
 
 ### Stable

@@ -2,7 +2,7 @@
 
 バックエンドサービス、CLI ツール、業務アプリケーションのための、AI フレンドリーな静的型付け言語。
 
-> **v0.3.0 — プレアルファ (既知の制限あり)。** 小規模 CLI ツール・学習・言語評価に適しています。本番利用前に [既知の制限](#既知の制限) をご確認ください。
+> **v0.4.0 — プレアルファ (既知の制限あり)。** ラムダ / クロージャ、ジェネリック `List<T>`、`Tyra.lock` を追加。本番利用前に [既知の制限](#既知の制限) をご確認ください。
 
 ---
 
@@ -101,40 +101,43 @@ let p2 = p1.copy(x: 3.0)
 
 ## 開発状況
 
-**v0.3.0 で安定** — サポート済み・テスト済み:
+**v0.4.0 で安定** — サポート済み・テスト済み:
 
 | コンポーネント | 備考 |
 | --- | --- |
-| 言語仕様 v0.3 | ✅ 完成 |
+| 言語仕様 v0.4 | ✅ 完成 |
 | Lexer / Parser / 型検査器 | ✅ 完成 |
 | LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 |
-| 標準ライブラリ: string, list, fs, io, float, json | ✅ 完成 |
+| 標準ライブラリ: string, list, fs, io, float, json, assert | ✅ 完成 |
 | `tyra check / run / build / fmt / test / new / mod / bench` CLI | ✅ 完成 |
-| `Tyra.toml` マニフェスト + `tyra mod` 依存管理 | ✅ 完成 |
+| `tyra test --timeout` / `--jobs N` — タイムアウト・並列実行 | ✅ 完成 |
+| `tyra bench <dir>` — 汎用 wall-clock ベンチランナー | ✅ 完成 |
+| ラムダ / クロージャ (spec §9.4, ADR 0011) | ✅ 完成 |
+| ジェネリック `List<T>` + `map`/`filter`/`fold` | ✅ 完成 |
+| `assert.eq` / `assert.ne` ジェネリック多重定義 (Int, String, Bool) | ✅ 完成 |
+| `Tyra.lock` + floating `branch` 制約 + 推移的依存解決 | ✅ 完成 |
+| `Tyra.toml` マニフェスト + `tyra mod` 依存管理 (`--locked` CI モード) | ✅ 完成 |
 | LSP サーバ (`tyra-lsp`) + VS Code 拡張 | ✅ 開発インストール可 |
-| 静的適合コーパス (番号付き 14 本 + エラー 11 本; `math_test.tyra` はテストランナー用サンプル) | ✅ CI ゲート済み |
+| 静的適合コーパス (19 本 + エラー事例) | ✅ CI ゲート済み |
 
-**v0.3.0 で実験的** — 含まれているが本番利用不可:
+**v0.4.0 で実験的** — 含まれているが本番利用不可:
 
 | コンポーネント | 備考 |
 | --- | --- |
 | `http.server` 標準ライブラリ | ⚠️ 基本 GET/POST ルーティングのみ、本番利用不可 |
 
-**v0.3.0 では未提供** — 明示バックログ:
+**バックログ** — 未実装:
 
 | コンポーネント | 備考 |
 | --- | --- |
-| Lambda C ABI、ジェネリック `List<T>`、`map`/`filter`/`fold` | ⏳ v0.4.0 予定 |
-| `Tyra.lock` + floating 版制約 + 推移的依存解決 (minimal solver) | ⏳ v0.4.0 予定 |
-| `tyra test --timeout`、並列テスト実行 | ⏳ v0.4.0 予定 |
-| `tyra bench <dir>` 汎用ベンチランナー | ⏳ v0.4.0 予定 |
 | registry-backed SemVer リゾルバ、`tyra publish` | ⏳ v0.5+ 予定 |
+| `assert.panics` | ⏳ テスト分離が必要 |
+| `test "name"` 言語構文 | ⏳ 別途 ADR が必要 |
 | ビルド済みバイナリ (homebrew, apt) | ⏳ 将来予定 |
 | VS Code Marketplace 公開 | ⏳ 将来予定 |
 
 ## 既知の制限
 
-- **`Tyra.lock`**: v0.3.0 では未サポート。path / git-rev によるピン留めのみ。v0.4.0 で lockfile + minimal solver を導入予定。
 - **Windows**: 未テスト。WSL2 経由のビルドを推奨します。
 - **`http.server`**: 実験的。シングルスレッド、TLS なし、ミドルウェアなし。本番で使用しないでください。
 - **破壊的変更**: v1.0 までは破壊的変更が予想されます。
@@ -211,8 +214,8 @@ Tyra は2系統のバージョンを持ちます:
 
 ```console
 $ tyra --version
-tyra 0.1.0
-implementing language spec 0.1
+tyra 0.4.0
+implementing language spec 0.4
 ```
 
 Tyra が v0.x の間は **MINOR バージョンアップで破壊的変更を許容** します。v1.0 以降は Rust の Edition モデルに似た方式で破壊的変更を管理します。

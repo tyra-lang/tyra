@@ -62,21 +62,22 @@ and related developer experience tooling.
 
 ---
 
-## Near-term (v0.4.0)
+## Shipped in v0.4.0 (2026-05-22)
 
-- Lambda C ABI and generic `List<T>` (`map`/`filter`/`fold`)
-- Generic `assert.eq<T>` via ability-constraint dispatch (`Eq` ability)
-- `tyra bench <dir>` — general-purpose wall-clock microbenchmark runner
-- `tyra test --timeout <secs>` and `--jobs N` (parallel test execution)
-- `Tyra.lock` + floating version constraints + transitive dependency resolution
-  (minimal solver — see scope boundary below)
+- Lambda C ABI and closures (spec §9.4, ADR 0011) — first-class `fn(T)->U` values with captured environments
+- Generic `List<T>` + `map`/`filter`/`fold` (spec §17.3.5) — `List<Int>` and `List<String>` fully supported
+- Generic `assert.eq<T>` / `assert.ne<T>` — overloaded for `Int`, `String`, `Bool` via compiler-known `Eq` ability
+- `tyra bench <dir>` (spec §18.8) — general-purpose wall-clock microbenchmark runner for `*_bench.tyra` files
+- `tyra test --timeout <secs>` and `--jobs N` (parallel test execution with deterministic output)
+- `Tyra.lock` + floating `branch` constraints + transitive dependency resolution (minimal solver)
 
 > **v0.4.0 / v0.5+ scope boundary:** `Tyra.lock` in v0.4.0 covers lockfile
-> generation/reading and a *minimal solver* (floating version constraint
-> interpretation + transitive dependency merge). A full *registry-backed resolver*
-> (candidate fetching from a central registry) and `tyra publish` remain v0.5+.
+> generation/reading and a *minimal solver* (floating `branch` constraint
+> interpretation + transitive dependency merge, `--locked` CI mode). A full
+> *registry-backed resolver* (candidate fetching from a central registry) and
+> `tyra publish` remain v0.5+.
 
-## Medium-term (v0.5+)
+## Near-term (v0.5+)
 
 - `test "name"` language syntax (requires separate ADR)
 - `assert.panics` — requires per-test subprocess isolation
