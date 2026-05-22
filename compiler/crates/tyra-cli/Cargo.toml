@@ -22,3 +22,6 @@ tyra-pkg.workspace = true
 # staticlib that the driver links into Tyra binaries. The rlib itself is
 # unused from Rust-side code (see tyra_runtime as _ below).
 tyra-runtime.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

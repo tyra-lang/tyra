@@ -1817,3 +1817,160 @@ fn run_bench_file(bench_file: &Path) -> bool {
     }
     true
 }
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    /// Write a minimal `.tyra` file with no `test_*` functions.
+    /// `run_test_file_core` returns immediately after `check_in_memory` without
+    /// invoking LLVM, so these helpers are safe to use in fast unit tests.
+    fn write_no_test_file(dir: &std::path::Path, name: &str) -> PathBuf {
+        let path = dir.join(name);
+        fs::write(&path, "fn helper() -> Int\n  42\nend\n").unwrap();
+        path
+    }
+
+    // --- run_test_files_parallel: ordering invariant ---
+
+    #[test]
+    fn parallel_results_maintain_input_order() {
+        // 4 files that finish instantly (no test_* fns → no LLVM needed).
+        // jobs=4 runs all in one chunk; threads may complete in any order.
+        // Results must come back in the same order as the input slice.
+        let dir = tempfile::tempdir().unwrap();
+        let files: Vec<PathBuf> = ["a_test.tyra", "b_test.tyra", "c_test.tyra", "d_test.tyra"]
+            .iter()
+            .map(|n| write_no_test_file(dir.path(), n))
+            .collect();
+
+        let results = run_test_files_parallel(&files, None, None, 4);
+
+        assert_eq!(results.len(), files.len(), "result count must equal input count");
+        for (i, (res, file)) in results.iter().zip(files.iter()).enumerate() {
+            let got = std::path::Path::new(&res.path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+            let want = file.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            assert_eq!(got, want, "result[{i}].path must match input[{i}]");
+        }
+    }
+
+    #[test]
+    fn parallel_jobs_1_and_jobs_n_produce_same_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let files: Vec<PathBuf> = ["x_test.tyra", "y_test.tyra", "z_test.tyra"]
+            .iter()
+            .map(|n| write_no_test_file(dir.path(), n))
+            .collect();
+
+        let seq = run_test_files_parallel(&files, None, None, 1);
+        let par = run_test_files_parallel(&files, None, None, 3);
+
+        assert_eq!(seq.len(), par.len());
+        for (s, p) in seq.iter().zip(par.iter()) {
+            assert_eq!(s.path, p.path, "path order must be identical for jobs=1 vs jobs=N");
+        }
+    }
+
+    #[test]
+    fn parallel_empty_input_returns_empty() {
+        let results = run_test_files_parallel(&[], None, None, 4);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn parallel_filter_no_match_yields_zero_tests() {
+        let dir = tempfile::tempdir().unwrap();
+        let files = vec![write_no_test_file(dir.path(), "q_test.tyra")];
+
+        // "nomatch" won't match anything; file also has no test_ fns anyway.
+        let results = run_test_files_parallel(&files, Some("nomatch"), None, 1);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].pass, 0);
+        assert_eq!(results[0].fail, 0);
+    }
+
+    #[test]
+    fn parallel_single_chunk_larger_than_jobs() {
+        // 5 files, jobs=2 → ceil(5/2)=3 chunks: [2,2,1].
+        // Output must still be in original order.
+        let dir = tempfile::tempdir().unwrap();
+        let names = ["f1_test.tyra", "f2_test.tyra", "f3_test.tyra", "f4_test.tyra", "f5_test.tyra"];
+        let files: Vec<PathBuf> = names.iter().map(|n| write_no_test_file(dir.path(), n)).collect();
+
+        let results = run_test_files_parallel(&files, None, None, 2);
+
+        assert_eq!(results.len(), 5);
+        for (i, (res, file)) in results.iter().zip(files.iter()).enumerate() {
+            let got = std::path::Path::new(&res.path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+            let want = file.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            assert_eq!(got, want, "result[{i}] must match input[{i}]");
+        }
+    }
+
+    // --- Timeout tests (require LLVM; run with: cargo test -p tyra-cli -- --ignored) ---
+
+    #[test]
+    #[ignore = "requires LLVM toolchain — run with: cargo test -p tyra-cli -- --ignored"]
+    fn timeout_kills_hanging_test_and_reports_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hang_test.tyra");
+        fs::write(
+            &path,
+            concat!(
+                "import assert\n",
+                "fn test_infinite() -> Result<Unit, String>\n",
+                "  while true\n",
+                "  end\n",
+                "  Ok(())\n",
+                "end\n",
+            ),
+        )
+        .unwrap();
+
+        let out = run_test_file_core(&path, None, Some(1));
+        assert!(
+            out.fail > 0,
+            "timed-out test must count as failed (pass={} fail={})",
+            out.pass, out.fail
+        );
+        assert!(
+            out.tap.contains("timeout after 1s") || out.diag.contains("timed out"),
+            "output must mention timeout:\ntap={:?}\ndiag={:?}",
+            out.tap, out.diag
+        );
+    }
+
+    #[test]
+    #[ignore = "requires LLVM toolchain — run with: cargo test -p tyra-cli -- --ignored"]
+    fn timeout_does_not_affect_fast_passing_test() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("fast_test.tyra");
+        fs::write(
+            &path,
+            concat!(
+                "import assert\n",
+                "fn test_fast() -> Result<Unit, String>\n",
+                "  assert.eq(1, 1)?\n",
+                "  Ok(())\n",
+                "end\n",
+            ),
+        )
+        .unwrap();
+
+        // 10-second budget is ample for a trivial test.
+        let out = run_test_file_core(&path, None, Some(10));
+        assert_eq!(out.pass, 1, "fast test must pass: {:?}", out.diag);
+        assert_eq!(out.fail, 0, "fast test must not fail: {:?}", out.diag);
+    }
+}
