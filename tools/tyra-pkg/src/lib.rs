@@ -74,6 +74,14 @@ pub enum PkgError {
         rev_existing: String,
         rev_new: String,
     },
+    /// Two distinct sources both claim the same import name (E0220).
+    /// Import identifier == package name (ADR 0009/0010), so this is an
+    /// unresolvable namespace collision, not a rev mismatch.
+    DepNameCollision {
+        name: String,
+        source_existing: String,
+        source_new: String,
+    },
     /// `Tyra.lock` I/O or parse error.
     Lockfile(LockfileError),
     /// `--locked` was requested but `Tyra.lock` does not exist.
@@ -136,6 +144,16 @@ impl std::fmt::Display for PkgError {
                 "error[E0218]: dependency conflict for `{name}`: \
                  required at rev `{rev_existing}` and `{rev_new}` — \
                  update your manifests to use a single revision"
+            ),
+            PkgError::DepNameCollision {
+                name,
+                source_existing,
+                source_new,
+            } => write!(
+                f,
+                "error[E0220]: import name `{name}` is claimed by two different sources: \
+                 `{source_existing}` and `{source_new}` — \
+                 a single import name must resolve to exactly one package"
             ),
             PkgError::Lockfile(e) => write!(f, "Tyra.lock error: {e}"),
             PkgError::LockfileNotFound => write!(
@@ -1022,24 +1040,36 @@ fn resolve_transitive_impl(
                 let dep_root = normalize_path(&root.join(rel));
                 // Canonical key = absolute dep root path (prevents alias collisions).
                 let canonical_key = dep_root.to_string_lossy().to_string();
-                if let std::collections::hash_map::Entry::Vacant(e) =
-                    resolved.entry(canonical_key)
-                {
+                if !resolved.contains_key(&canonical_key) {
                     // Source is relative to the original project root so that
                     // `--locked` validation always joins relative to the same base.
                     let source = format!(
                         "path+{}",
                         path_relative_to(&dep_root, original_root).display()
                     );
-                    let dep_manifest = load_manifest(&dep_root).ok();
-                    let pkg_version = dep_manifest.map(|m| m.package.version.clone());
-                    e.insert(ResolvedEntry {
-                        name: dep_name.clone(),
-                        source,
-                        rev: None,
-                        branch: None,
-                        pkg_version,
-                    });
+                    if let Some(existing) = resolved.values().find(|r| r.name == *dep_name) {
+                        return Err(PkgError::DepNameCollision {
+                            name: dep_name.clone(),
+                            source_existing: existing.source.clone(),
+                            source_new: source.clone(),
+                        });
+                    }
+                    // ADR 0009/0010: validate package.name == dep_key, src/<name>.tyra
+                    // exists, and the dep is not a bin package.
+                    validate_dep_root(dep_name, &dep_root)?;
+                    let pkg_version = load_manifest(&dep_root)
+                        .ok()
+                        .map(|m| m.package.version.clone());
+                    resolved.insert(
+                        canonical_key,
+                        ResolvedEntry {
+                            name: dep_name.clone(),
+                            source,
+                            rev: None,
+                            branch: None,
+                            pkg_version,
+                        },
+                    );
                     if depth == 0 {
                         report.skipped.push(dep_name.clone());
                     }
@@ -1051,6 +1081,13 @@ fn resolve_transitive_impl(
                         depth + 1,
                         original_root,
                     )?;
+                } else if resolved[&canonical_key].name != *dep_name {
+                    // Same source already resolved under a different alias — ADR 0009/0010
+                    // requires dep_key == package.name, so this is a no-aliasing violation.
+                    return Err(PkgError::NameMismatch {
+                        key: dep_name.clone(),
+                        package_name: resolved[&canonical_key].name.clone(),
+                    });
                 }
             }
             (None, Some(url)) => {
@@ -1065,6 +1102,14 @@ fn resolve_transitive_impl(
 
                 // Canonical key = git URL (same URL from different aliases = same package).
                 if let Some(existing) = resolved.get(url.as_str()) {
+                    // ADR 0009/0010: dep_key must equal package.name; the same git URL
+                    // must not be referenced under a different alias.
+                    if existing.name != *dep_name {
+                        return Err(PkgError::NameMismatch {
+                            key: dep_name.clone(),
+                            package_name: existing.name.clone(),
+                        });
+                    }
                     if existing.rev.as_deref() != Some(rev.as_str()) {
                         return Err(PkgError::DepConflict {
                             name: format!("{dep_name} ({url})"),
@@ -1105,11 +1150,19 @@ fn resolve_transitive_impl(
                     .ok()
                     .map(|m| m.package.version.clone());
 
+                let git_source = format!("git+{url}");
+                if let Some(existing) = resolved.values().find(|r| r.name == *dep_name) {
+                    return Err(PkgError::DepNameCollision {
+                        name: dep_name.clone(),
+                        source_existing: existing.source.clone(),
+                        source_new: git_source.clone(),
+                    });
+                }
                 resolved.insert(
                     url.clone(),
                     ResolvedEntry {
                         name: dep_name.clone(),
-                        source: format!("git+{url}"),
+                        source: git_source,
                         rev: Some(rev.clone()),
                         branch,
                         pkg_version,
@@ -1792,6 +1845,132 @@ mod tests {
             tree.matches("common").count(),
             2,
             "common should appear twice:\n{tree}"
+        );
+    }
+
+    #[test]
+    fn resolver_rejects_same_name_different_source() {
+        // app -> pkg_a -> shared  (source = shared_a)
+        // app -> pkg_b -> shared  (source = shared_b, different path, same package.name)
+        // → DepNameCollision: both claim import name "shared"
+        let dir_shared_a = tempfile::tempdir().unwrap();
+        let dir_shared_b = tempfile::tempdir().unwrap();
+        let dir_a = tempfile::tempdir().unwrap();
+        let dir_b = tempfile::tempdir().unwrap();
+        let dir_app = tempfile::tempdir().unwrap();
+
+        make_manifest(dir_shared_a.path(), "shared");
+        make_src_file(
+            dir_shared_a.path(),
+            "shared",
+            "export fn hello() -> String\n  \"a\"\nend\n",
+        );
+        make_manifest(dir_shared_b.path(), "shared");
+        // shared_b does not need a src file — DepNameCollision fires before validation.
+
+        make_manifest(dir_a.path(), "pkg_a");
+        make_src_file(
+            dir_a.path(),
+            "pkg_a",
+            "export fn hello() -> String\n  \"a\"\nend\n",
+        );
+        fs::write(
+            dir_a.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"pkg_a\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\nshared = {{ path = \"{}\" }}\n",
+                dir_shared_a.path().display()
+            ),
+        )
+        .unwrap();
+        make_manifest(dir_b.path(), "pkg_b");
+        make_src_file(
+            dir_b.path(),
+            "pkg_b",
+            "export fn hello() -> String\n  \"b\"\nend\n",
+        );
+        fs::write(
+            dir_b.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"pkg_b\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\nshared = {{ path = \"{}\" }}\n",
+                dir_shared_b.path().display()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir_app.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"app\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\npkg_a = {{ path = \"{}\" }}\npkg_b = {{ path = \"{}\" }}\n",
+                dir_a.path().display(),
+                dir_b.path().display()
+            ),
+        )
+        .unwrap();
+
+        let result = run_sync(dir_app.path());
+        assert!(
+            matches!(result, Err(PkgError::DepNameCollision { .. })),
+            "expected DepNameCollision, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn run_sync_path_dep_name_mismatch_is_error() {
+        // Manifest declares dep key "utils" but the dep's package.name is "mylib".
+        // run_sync must reject this with NameMismatch (ADR 0009/0010 invariant).
+        let app_dir = tempfile::tempdir().unwrap();
+        let lib_dir = tempfile::tempdir().unwrap();
+        make_manifest(lib_dir.path(), "mylib");
+        make_src_file(
+            lib_dir.path(),
+            "mylib",
+            "export fn greet() -> String\n  \"hi\"\nend\n",
+        );
+        fs::write(
+            app_dir.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"app\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\nutils = {{ path = \"{}\" }}\n",
+                lib_dir.path().display()
+            ),
+        )
+        .unwrap();
+        let result = run_sync(app_dir.path());
+        assert!(
+            matches!(result, Err(PkgError::NameMismatch { .. })),
+            "expected NameMismatch, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn run_sync_path_dep_same_source_different_alias_is_error() {
+        // app -> lib (first visit under dep key "lib")
+        // app -> alias (second visit to same path under dep key "alias")
+        // → NameMismatch: ADR 0009/0010 no-aliasing violation
+        let app_dir = tempfile::tempdir().unwrap();
+        let lib_dir = tempfile::tempdir().unwrap();
+        make_manifest(lib_dir.path(), "lib");
+        make_src_file(
+            lib_dir.path(),
+            "lib",
+            "export fn greet() -> String\n  \"hi\"\nend\n",
+        );
+        fs::write(
+            app_dir.path().join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"app\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\nalias = {{ path = \"{}\" }}\nlib = {{ path = \"{}\" }}\n",
+                lib_dir.path().display(),
+                lib_dir.path().display()
+            ),
+        )
+        .unwrap();
+        let result = run_sync(app_dir.path());
+        assert!(
+            matches!(result, Err(PkgError::NameMismatch { .. })),
+            "expected NameMismatch, got: {result:?}"
         );
     }
 
