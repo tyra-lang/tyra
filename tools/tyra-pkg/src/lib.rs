@@ -15,10 +15,13 @@
 //! - `tyra_cache_root()` — path to the Tyra cache root (`~/.tyra/cache/`)
 //! - `cache_dir_for(dep_name, url, rev)` — canonical cache path for a git dep
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tyra_manifest::{Dependency, find_project_root, load_manifest};
+use tyra_manifest::{
+    Dependency, LockedPackage, LockfileError, build_and_write_lockfile, find_project_root,
+    load_lockfile, load_manifest,
+};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -65,6 +68,18 @@ pub enum PkgError {
     },
     /// Root module `src/<name>.tyra` is absent (ADR 0009 requires it).
     MissingRootModule(String),
+    /// Same package required by two paths with incompatible revisions (E0218).
+    DepConflict {
+        name: String,
+        rev_existing: String,
+        rev_new: String,
+    },
+    /// `Tyra.lock` I/O or parse error.
+    Lockfile(LockfileError),
+    /// `--locked` was requested but `Tyra.lock` does not exist.
+    LockfileNotFound,
+    /// `--locked` was requested but `Tyra.toml` has a direct dep not in the lockfile.
+    LockfileOutOfSync(String),
 }
 
 impl std::fmt::Display for PkgError {
@@ -112,6 +127,26 @@ impl std::fmt::Display for PkgError {
                 f,
                 "dependency `{dep}` has no root module `src/{dep}.tyra` (ADR 0009 requires it)"
             ),
+            PkgError::DepConflict {
+                name,
+                rev_existing,
+                rev_new,
+            } => write!(
+                f,
+                "error[E0218]: dependency conflict for `{name}`: \
+                 required at rev `{rev_existing}` and `{rev_new}` — \
+                 update your manifests to use a single revision"
+            ),
+            PkgError::Lockfile(e) => write!(f, "Tyra.lock error: {e}"),
+            PkgError::LockfileNotFound => write!(
+                f,
+                "Tyra.lock not found; run `tyra mod sync` first (or remove --locked)"
+            ),
+            PkgError::LockfileOutOfSync(dep) => write!(
+                f,
+                "error[E0219]: `{dep}` is in Tyra.toml but missing from Tyra.lock; \
+                 run `tyra mod sync` to regenerate the lockfile"
+            ),
         }
     }
 }
@@ -127,6 +162,12 @@ impl From<std::io::Error> for PkgError {
 impl From<tyra_manifest::ManifestError> for PkgError {
     fn from(e: tyra_manifest::ManifestError) -> Self {
         PkgError::Manifest(e)
+    }
+}
+
+impl From<LockfileError> for PkgError {
+    fn from(e: LockfileError) -> Self {
+        PkgError::Lockfile(e)
     }
 }
 
@@ -353,25 +394,38 @@ pub fn run_update_from(start: &Path, dep_name: &str, source: DepSource) -> Resul
 ///
 /// Clones all git dependencies declared in `project_root/Tyra.toml` into
 /// `~/.tyra/cache/git/<dep_name>/<rev>/`.  Path dependencies are skipped.
+/// Resolve, fetch, and lock all direct + transitive dependencies.
+///
+/// After a successful run `Tyra.lock` is written (or updated) in `project_root`.
 pub fn run_sync(project_root: &Path) -> Result<SyncReport, PkgError> {
-    let manifest = load_manifest(project_root)?;
     let mut report = SyncReport::default();
+    let mut resolved: HashMap<String, ResolvedEntry> = HashMap::new();
+    let original_root = project_root
+        .canonicalize()
+        .unwrap_or_else(|_| project_root.to_path_buf());
 
-    let mut deps: Vec<(&String, &Dependency)> = manifest.dependencies.iter().collect();
-    deps.sort_by_key(|(k, _)| k.as_str());
+    resolve_transitive_impl(
+        &original_root,
+        &original_root,
+        &mut resolved,
+        &mut report,
+        0,
+        &original_root,
+    )?;
 
-    for (dep_name, dep) in &deps {
-        match (&dep.path, &dep.git, &dep.rev) {
-            (Some(_), _, _) => {
-                report.skipped.push(dep_name.to_string());
-            }
-            (None, Some(url), Some(rev)) => match sync_git_dep(dep_name, url, rev)? {
-                SyncStatus::Fresh => report.synced.push(dep_name.to_string()),
-                SyncStatus::Cached => report.cached.push(dep_name.to_string()),
-            },
-            _ => {} // load_manifest already validated
-        }
-    }
+    // Build and write Tyra.lock.
+    let packages: Vec<LockedPackage> = resolved
+        .values()
+        .map(|e| LockedPackage {
+            name: e.name.clone(),
+            source: e.source.clone(),
+            rev: e.rev.clone(),
+            branch: e.branch.clone(),
+            pkg_version: e.pkg_version.clone(),
+        })
+        .collect();
+    build_and_write_lockfile(project_root, packages).map_err(PkgError::Io)?;
+
     Ok(report)
 }
 
@@ -379,6 +433,166 @@ pub fn run_sync(project_root: &Path) -> Result<SyncReport, PkgError> {
 pub fn run_sync_from(start: &Path) -> Result<SyncReport, PkgError> {
     let root = find_project_root(start).ok_or(PkgError::NoProject)?;
     run_sync(&root)
+}
+
+/// CI mode: read an existing `Tyra.lock` and verify the cache is populated.
+///
+/// Does **not** fetch anything new or update the lockfile.  Fails if:
+/// - `Tyra.lock` is absent,
+/// - a direct dependency in `Tyra.toml` is missing from the lock, or
+/// - a locked git dep is not in the cache.
+pub fn run_sync_locked(project_root: &Path) -> Result<SyncReport, PkgError> {
+    let lf = load_lockfile(project_root)?.ok_or(PkgError::LockfileNotFound)?;
+    let original_root = project_root
+        .canonicalize()
+        .unwrap_or_else(|_| project_root.to_path_buf());
+
+    // Verify every direct dep in Tyra.toml is present in the lockfile.
+    // Match by canonical source (not by alias) so that alias renames are caught.
+    let manifest = load_manifest(&original_root)?;
+    for (dep_name, dep) in &manifest.dependencies {
+        let expected_source = if let Some(rel) = &dep.path {
+            let abs = normalize_path(&original_root.join(rel));
+            format!("path+{}", path_relative_to(&abs, &original_root).display())
+        } else if let Some(url) = &dep.git {
+            format!("git+{url}")
+        } else {
+            continue;
+        };
+
+        let pkg = lf
+            .packages
+            .iter()
+            .find(|p| p.source == expected_source)
+            .ok_or_else(|| {
+                PkgError::LockfileOutOfSync(format!(
+                    "{dep_name}: source `{expected_source}` not in Tyra.lock (run `tyra mod sync`)"
+                ))
+            })?;
+
+        // For pinned-rev git deps, verify the rev hasn't changed.
+        if let Some(manifest_rev) = &dep.rev
+            && pkg.rev.as_deref() != Some(manifest_rev.as_str())
+        {
+            return Err(PkgError::LockfileOutOfSync(format!(
+                "{dep_name}: rev changed from `{}` to `{manifest_rev}`",
+                pkg.rev.as_deref().unwrap_or("?")
+            )));
+        }
+        // For branch deps, verify the branch name hasn't changed.
+        if let Some(manifest_branch) = &dep.branch
+            && pkg.branch.as_deref() != Some(manifest_branch.as_str())
+        {
+            return Err(PkgError::LockfileOutOfSync(format!(
+                "{dep_name}: branch changed from `{}` to `{manifest_branch}` (run `tyra mod sync`)",
+                pkg.branch.as_deref().unwrap_or("?")
+            )));
+        }
+        // Constraint type must also match: changing branch→rev or rev→branch requires
+        // a fresh sync even if the SHA happens to be the same right now.
+        if dep.rev.is_some() && dep.branch.is_none() && pkg.branch.is_some() {
+            return Err(PkgError::LockfileOutOfSync(format!(
+                "{dep_name}: constraint changed from branch `{}` to rev `{}` (run `tyra mod sync`)",
+                pkg.branch.as_deref().unwrap_or("?"),
+                dep.rev.as_deref().unwrap_or("?")
+            )));
+        }
+        if dep.branch.is_some() && dep.rev.is_none() && pkg.branch.is_none() {
+            return Err(PkgError::LockfileOutOfSync(format!(
+                "{dep_name}: constraint changed from rev to branch `{}` (run `tyra mod sync`)",
+                dep.branch.as_deref().unwrap_or("?")
+            )));
+        }
+        // The dep key (alias) must still equal the lockfile's recorded name.
+        // run_sync / run_sync_check enforce dep_key == package_name, so a rename
+        // that hasn't been re-synced would pass source matching but break imports.
+        if dep_name != &pkg.name {
+            return Err(PkgError::LockfileOutOfSync(format!(
+                "{dep_name}: dep key was `{}` when lockfile was last generated \
+                 (run `tyra mod sync`)",
+                pkg.name
+            )));
+        }
+        // For path deps, also validate the dep structure with the current key — the
+        // same check run_sync and run_sync_check perform.
+        if let Some(rel) = &dep.path {
+            let dep_root = normalize_path(&original_root.join(rel));
+            if let Err(e) = validate_dep_root(dep_name, &dep_root) {
+                return Err(PkgError::SyncFailed {
+                    dep: dep_name.clone(),
+                    message: e.to_string(),
+                });
+            }
+        }
+    }
+
+    // Verify transitive path deps haven't changed.
+    //
+    // Re-walk the local path-dep tree (no network) and compare the live set of
+    // canonical path sources against what the lockfile records.  A mismatch means
+    // a nested Tyra.toml was edited without re-running `tyra mod sync`.
+    let mut live_path_sources: HashSet<String> = HashSet::new();
+    collect_path_dep_sources(&original_root, &original_root, &mut live_path_sources, 0)?;
+
+    let locked_path_sources: HashSet<String> = lf
+        .packages
+        .iter()
+        .filter(|p| p.source.starts_with("path+"))
+        .map(|p| p.source.clone())
+        .collect();
+
+    for src in &live_path_sources {
+        if !locked_path_sources.contains(src.as_str()) {
+            return Err(PkgError::LockfileOutOfSync(format!(
+                "new transitive path dep `{src}` not in Tyra.lock (run `tyra mod sync`)"
+            )));
+        }
+    }
+    for src in &locked_path_sources {
+        if !live_path_sources.contains(src.as_str()) {
+            return Err(PkgError::LockfileOutOfSync(format!(
+                "path dep `{src}` removed from project but still in Tyra.lock (run `tyra mod sync`)"
+            )));
+        }
+    }
+
+    let mut report = SyncReport::default();
+    for pkg in &lf.packages {
+        if let Some(rev) = &pkg.rev {
+            // git dep — extract url from "git+<url>"
+            let url = pkg.source.strip_prefix("git+").unwrap_or(&pkg.source);
+            let cache_dir = cache_dir_for(&pkg.name, url, rev);
+            if cache_dir.join("Tyra.toml").is_file() {
+                report.cached.push(pkg.name.clone());
+            } else {
+                return Err(PkgError::SyncFailed {
+                    dep: pkg.name.clone(),
+                    message: format!(
+                        "not in cache at expected path `{}`; run `tyra mod sync` to populate",
+                        cache_dir.display()
+                    ),
+                });
+            }
+        } else {
+            // path dep — source is relative to original_root, validate root structure
+            let dep_path = pkg.source.strip_prefix("path+").unwrap_or(&pkg.source);
+            let dep_root = original_root.join(dep_path);
+            if let Err(e) = validate_dep_root(&pkg.name, &dep_root) {
+                return Err(PkgError::SyncFailed {
+                    dep: pkg.name.clone(),
+                    message: e.to_string(),
+                });
+            }
+            report.skipped.push(pkg.name.clone());
+        }
+    }
+    Ok(report)
+}
+
+/// Locate the project root walking up from `start`, then call `run_sync_locked`.
+pub fn run_sync_locked_from(start: &Path) -> Result<SyncReport, PkgError> {
+    let root = find_project_root(start).ok_or(PkgError::NoProject)?;
+    run_sync_locked(&root)
 }
 
 /// `tyra mod show <dep_name>`
@@ -407,16 +621,36 @@ pub fn run_show(project_root: &Path, dep_name: &str) -> Result<String, PkgError>
             }
         }
     } else if let Some(url) = &dep.git {
-        let rev = dep.rev.as_deref().unwrap_or("?");
+        // For branch deps, look up the resolved rev from the lockfile.
+        let resolved_rev: Option<String> = if dep.rev.is_some() {
+            dep.rev.clone()
+        } else {
+            let expected_source = format!("git+{url}");
+            load_lockfile(project_root)
+                .ok()
+                .flatten()
+                .and_then(|lf| {
+                    lf.packages
+                        .into_iter()
+                        .find(|p| p.source == expected_source)
+                        .and_then(|p| p.rev)
+                })
+        };
+
         out.push_str(&format!("  source:  git {url}\n"));
-        out.push_str(&format!("  rev:     {rev}\n"));
-        let cache = cache_dir_for(dep_name, url, rev);
-        let synced = cache.join("Tyra.toml").is_file();
-        out.push_str(&format!("  cache:   {}\n", cache.display()));
-        out.push_str(&format!(
-            "  synced:  {}\n",
-            if synced { "yes" } else { "no" }
-        ));
+        if let Some(branch) = &dep.branch {
+            out.push_str(&format!("  branch:  {branch}\n"));
+        }
+        let rev_display = resolved_rev.as_deref().unwrap_or("?");
+        out.push_str(&format!("  rev:     {rev_display}\n"));
+        if let Some(rev) = &resolved_rev {
+            let cache = cache_dir_for(dep_name, url, rev);
+            let synced = cache.join("Tyra.toml").is_file();
+            out.push_str(&format!("  cache:   {}\n", cache.display()));
+            out.push_str(&format!("  synced:  {}\n", if synced { "yes" } else { "no" }));
+        } else {
+            out.push_str("  synced:  no (not yet synced)\n");
+        }
     }
 
     Ok(out)
@@ -453,15 +687,41 @@ pub fn run_show_json(project_root: &Path, dep_name: &str) -> Result<String, PkgE
             json_str(&version),
         ))
     } else if let Some(url) = &dep.git {
-        let rev = dep.rev.as_deref().unwrap_or("?");
-        let cache = cache_dir_for(dep_name, url, rev);
-        let synced = cache.join("Tyra.toml").is_file();
+        // For branch deps, look up the resolved rev from the lockfile.
+        let resolved_rev: Option<String> = if dep.rev.is_some() {
+            dep.rev.clone()
+        } else {
+            let expected_source = format!("git+{url}");
+            load_lockfile(project_root)
+                .ok()
+                .flatten()
+                .and_then(|lf| {
+                    lf.packages
+                        .into_iter()
+                        .find(|p| p.source == expected_source)
+                        .and_then(|p| p.rev)
+                })
+        };
+        let rev_str = resolved_rev.as_deref().unwrap_or("?");
+        let (cache_str, synced) = if let Some(rev) = &resolved_rev {
+            let cache = cache_dir_for(dep_name, url, rev);
+            let synced = cache.join("Tyra.toml").is_file();
+            (cache.to_string_lossy().into_owned(), synced)
+        } else {
+            (String::new(), false)
+        };
+        let branch_field = if let Some(b) = &dep.branch {
+            format!(",\n  \"branch\": {}", json_str(b))
+        } else {
+            String::new()
+        };
         Ok(format!(
-            "{{\n  \"name\": {},\n  \"source\": \"git\",\n  \"url\": {},\n  \"rev\": {},\n  \"cache\": {},\n  \"synced\": {}\n}}\n",
+            "{{\n  \"name\": {},\n  \"source\": \"git\",\n  \"url\": {}{},\n  \"rev\": {},\n  \"cache\": {},\n  \"synced\": {}\n}}\n",
             json_str(dep_name),
             json_str(url),
-            json_str(rev),
-            json_str(&cache.to_string_lossy()),
+            branch_field,
+            json_str(rev_str),
+            json_str(&cache_str),
             if synced { "true" } else { "false" },
         ))
     } else {
@@ -512,19 +772,52 @@ pub fn run_sync_check(project_root: &Path) -> Result<Vec<String>, PkgError> {
     deps.sort_by_key(|(k, _)| k.as_str());
 
     for (dep_name, dep) in &deps {
-        match (&dep.path, &dep.git, &dep.rev) {
-            (Some(rel), _, _) => {
+        match (&dep.path, &dep.git) {
+            (Some(rel), _) => {
                 let dep_root = project_root.join(rel);
                 if let Err(e) = validate_dep_root(dep_name, &dep_root) {
                     issues.push(format!("{dep_name}: {e}"));
                 }
             }
-            (None, Some(url), Some(rev)) => {
-                let cache_dir = cache_dir_for(dep_name, url, rev);
-                if !cache_dir.join("Tyra.toml").is_file() {
-                    issues.push(format!("{dep_name}: not synced (run `tyra mod sync`)"));
-                } else if let Err(e) = validate_dep_root(dep_name, &cache_dir) {
-                    issues.push(format!("{dep_name}: {e}"));
+            (None, Some(url)) => {
+                if let Some(rev) = &dep.rev {
+                    let cache_dir = cache_dir_for(dep_name, url, rev);
+                    if !cache_dir.join("Tyra.toml").is_file() {
+                        issues.push(format!("{dep_name}: not synced (run `tyra mod sync`)"));
+                    } else if let Err(e) = validate_dep_root(dep_name, &cache_dir) {
+                        issues.push(format!("{dep_name}: {e}"));
+                    }
+                } else {
+                    // branch dep — check lockfile for resolved rev (match by git source)
+                    let expected_source = format!("git+{url}");
+                    match load_lockfile(project_root) {
+                        Ok(Some(lf)) => {
+                            if let Some(pkg) =
+                                lf.packages.iter().find(|p| p.source == expected_source)
+                            {
+                                if let Some(rev) = &pkg.rev {
+                                    let cache_dir = cache_dir_for(dep_name, url, rev);
+                                    if !cache_dir.join("Tyra.toml").is_file() {
+                                        issues.push(format!(
+                                            "{dep_name}: not synced (run `tyra mod sync`)"
+                                        ));
+                                    } else if let Err(e) = validate_dep_root(dep_name, &cache_dir) {
+                                        issues.push(format!("{dep_name}: {e}"));
+                                    }
+                                }
+                            } else {
+                                issues.push(format!(
+                                    "{dep_name}: not in Tyra.lock (run `tyra mod sync`)"
+                                ));
+                            }
+                        }
+                        Ok(None) => {
+                            issues.push(format!(
+                                "{dep_name}: branch dep requires Tyra.lock — run `tyra mod sync`"
+                            ));
+                        }
+                        Err(e) => issues.push(format!("{dep_name}: {e}")),
+                    }
                 }
             }
             _ => {}
@@ -555,6 +848,46 @@ pub fn cache_dir_for(dep_name: &str, url: &str, rev: &str) -> PathBuf {
         .join("git")
         .join(dir_name)
         .join(rev)
+}
+
+/// Resolve `..` and `.` segments without requiring the path to exist.
+fn normalize_path(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut comps: Vec<Component<'_>> = Vec::new();
+    for c in path.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if matches!(comps.last(), Some(Component::Normal(_))) {
+                    comps.pop();
+                } else {
+                    comps.push(c);
+                }
+            }
+            other => comps.push(other),
+        }
+    }
+    comps.iter().collect()
+}
+
+/// Relative path from `base` to `path` (both should be absolute or share a common root).
+fn path_relative_to(path: &Path, base: &Path) -> PathBuf {
+    let path = normalize_path(path);
+    let base = normalize_path(base);
+    let p: Vec<_> = path.components().collect();
+    let b: Vec<_> = base.components().collect();
+    let common = p.iter().zip(b.iter()).take_while(|(a, c)| a == c).count();
+    let mut result = PathBuf::new();
+    for _ in 0..(b.len() - common) {
+        result.push("..");
+    }
+    for comp in &p[common..] {
+        result.push(comp);
+    }
+    if result.as_os_str().is_empty() {
+        result.push(".");
+    }
+    result
 }
 
 /// 12-character lowercase hex of FNV-1a(url). No extra crate needed.
@@ -603,6 +936,236 @@ impl std::fmt::Display for SyncReport {
         }
         Ok(())
     }
+}
+
+// ---------------------------------------------------------------------------
+// Transitive resolver
+// ---------------------------------------------------------------------------
+
+/// Internal record of a resolved dependency (git or path).
+struct ResolvedEntry {
+    name: String,
+    source: String,
+    rev: Option<String>,
+    /// Branch constraint that was resolved to `rev` (branch deps only).
+    branch: Option<String>,
+    pkg_version: Option<String>,
+}
+
+/// Walk the local path-dep tree from `dep_root` and collect the canonical source
+/// string (`path+<project-root-relative>`) for every reachable path dep.
+///
+/// Uses `original_root` to normalise each dep's path relative to the project root,
+/// matching how `resolve_transitive_impl` writes sources to the lockfile.
+/// Only follows `path` edges; git dep sub-graphs are pinned by rev and opaque here.
+fn collect_path_dep_sources(
+    dep_root: &Path,
+    original_root: &Path,
+    out: &mut HashSet<String>,
+    depth: u32,
+) -> Result<(), PkgError> {
+    if depth > 32 {
+        return Ok(());
+    }
+    let manifest = load_manifest(dep_root)?;
+    for dep in manifest.dependencies.values() {
+        if let Some(rel) = &dep.path {
+            let child_root = normalize_path(&dep_root.join(rel));
+            let source = format!("path+{}", path_relative_to(&child_root, original_root).display());
+            if out.insert(source) {
+                collect_path_dep_sources(&child_root, original_root, out, depth + 1)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Recursively resolve all dependencies reachable from `project_root`.
+///
+/// # Key scheme (Issue 2 fix)
+///
+/// `resolved` is keyed by **canonical source**, not by the local dep alias:
+/// - path dep → absolute (normalised) dep root path as string
+/// - git dep  → bare git URL (without rev)
+///
+/// This prevents two manifests that use the same local alias (e.g. `utils`)
+/// for different packages from silently colliding or generating false conflicts.
+///
+/// # Path normalisation (Issue 1 fix)
+///
+/// Path dep sources are stored as `path+<relative-to-original-root>` so that
+/// `--locked` validation can always join relative to the top-level project root
+/// regardless of which sub-manifest declared the dependency.
+///
+/// A depth limit of 32 guards against accidental cycles.
+fn resolve_transitive_impl(
+    project_root: &Path,
+    root: &Path,
+    resolved: &mut HashMap<String, ResolvedEntry>,
+    report: &mut SyncReport,
+    depth: u32,
+    original_root: &Path,
+) -> Result<(), PkgError> {
+    if depth > 32 {
+        return Err(PkgError::SyncFailed {
+            dep: String::new(),
+            message: "dependency graph exceeds depth limit of 32 (possible cycle)".to_string(),
+        });
+    }
+    let manifest = load_manifest(project_root)?;
+    let mut deps: Vec<(&String, &Dependency)> = manifest.dependencies.iter().collect();
+    deps.sort_by_key(|(k, _)| k.as_str());
+
+    for (dep_name, dep) in deps {
+        match (&dep.path, &dep.git) {
+            (Some(rel), _) => {
+                let dep_root = normalize_path(&root.join(rel));
+                // Canonical key = absolute dep root path (prevents alias collisions).
+                let canonical_key = dep_root.to_string_lossy().to_string();
+                if let std::collections::hash_map::Entry::Vacant(e) =
+                    resolved.entry(canonical_key)
+                {
+                    // Source is relative to the original project root so that
+                    // `--locked` validation always joins relative to the same base.
+                    let source = format!(
+                        "path+{}",
+                        path_relative_to(&dep_root, original_root).display()
+                    );
+                    let dep_manifest = load_manifest(&dep_root).ok();
+                    let pkg_version = dep_manifest.map(|m| m.package.version.clone());
+                    e.insert(ResolvedEntry {
+                        name: dep_name.clone(),
+                        source,
+                        rev: None,
+                        branch: None,
+                        pkg_version,
+                    });
+                    if depth == 0 {
+                        report.skipped.push(dep_name.clone());
+                    }
+                    resolve_transitive_impl(
+                        &dep_root,
+                        &dep_root,
+                        resolved,
+                        report,
+                        depth + 1,
+                        original_root,
+                    )?;
+                }
+            }
+            (None, Some(url)) => {
+                // Resolve branch → exact SHA if needed.
+                let (rev, branch) = if let Some(r) = &dep.rev {
+                    (r.clone(), None)
+                } else if let Some(b) = &dep.branch {
+                    (git_resolve_branch(dep_name, url, b)?, Some(b.clone()))
+                } else {
+                    continue; // validated already, unreachable
+                };
+
+                // Canonical key = git URL (same URL from different aliases = same package).
+                if let Some(existing) = resolved.get(url.as_str()) {
+                    if existing.rev.as_deref() != Some(rev.as_str()) {
+                        return Err(PkgError::DepConflict {
+                            name: format!("{dep_name} ({url})"),
+                            rev_existing: existing.rev.clone().unwrap_or_default(),
+                            rev_new: rev,
+                        });
+                    }
+                    // Same rev but different branch constraints: even if the SHA matches
+                    // today, the two branches may diverge later.  Require a single
+                    // consistent constraint across the whole dep graph.
+                    if existing.branch.as_deref() != branch.as_deref() {
+                        let describe = |b: Option<&str>, r: &str| match b {
+                            Some(br) => format!("branch={br} ({r})"),
+                            None => format!("rev={r}"),
+                        };
+                        return Err(PkgError::DepConflict {
+                            name: format!("{dep_name} ({url})"),
+                            rev_existing: describe(
+                                existing.branch.as_deref(),
+                                existing.rev.as_deref().unwrap_or("?"),
+                            ),
+                            rev_new: describe(branch.as_deref(), &rev),
+                        });
+                    }
+                    continue; // same rev and same constraint — already resolved
+                }
+
+                let status = sync_git_dep(dep_name, url, &rev)?;
+                if depth == 0 {
+                    match status {
+                        SyncStatus::Fresh => report.synced.push(dep_name.clone()),
+                        SyncStatus::Cached => report.cached.push(dep_name.clone()),
+                    }
+                }
+
+                let cache_dir = cache_dir_for(dep_name, url, &rev);
+                let pkg_version = load_manifest(&cache_dir)
+                    .ok()
+                    .map(|m| m.package.version.clone());
+
+                resolved.insert(
+                    url.clone(),
+                    ResolvedEntry {
+                        name: dep_name.clone(),
+                        source: format!("git+{url}"),
+                        rev: Some(rev.clone()),
+                        branch,
+                        pkg_version,
+                    },
+                );
+
+                resolve_transitive_impl(
+                    &cache_dir,
+                    &cache_dir,
+                    resolved,
+                    report,
+                    depth + 1,
+                    original_root,
+                )?;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// Resolve a branch name to an exact commit SHA using `git ls-remote`.
+///
+/// Returns the 40-character SHA string.
+fn git_resolve_branch(dep_name: &str, url: &str, branch: &str) -> Result<String, PkgError> {
+    let refspec = format!("refs/heads/{branch}");
+    let output = Command::new("git")
+        .args(["ls-remote", url, &refspec])
+        .output()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                PkgError::GitNotAvailable
+            } else {
+                PkgError::Io(e)
+            }
+        })?;
+
+    if !output.status.success() {
+        return Err(PkgError::SyncFailed {
+            dep: dep_name.to_string(),
+            message: format!("git ls-remote failed for `{url}` branch `{branch}`"),
+        });
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // ls-remote output: "<sha>\trefs/heads/<branch>\n"
+    if let Some(sha) = stdout.split_whitespace().next()
+        && sha.len() >= 7
+    {
+        return Ok(sha.to_string());
+    }
+
+    Err(PkgError::SyncFailed {
+        dep: dep_name.to_string(),
+        message: format!("branch `{branch}` not found in `{url}`"),
+    })
 }
 
 // ---------------------------------------------------------------------------

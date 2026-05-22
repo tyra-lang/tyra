@@ -1,10 +1,15 @@
 mod detect;
+pub mod lockfile;
 
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 pub use detect::is_bin_source;
+pub use lockfile::{
+    LockedPackage, LockfileError, build_and_write as build_and_write_lockfile, load_lockfile,
+    write_lockfile,
+};
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -33,8 +38,12 @@ pub struct Dependency {
     pub path: Option<String>,
     /// HTTPS git URL.
     pub git: Option<String>,
-    /// Commit SHA or tag. Required when `git` is set.
+    /// Exact commit SHA or tag.  Required when `git` is set unless `branch` is given.
     pub rev: Option<String>,
+    /// Branch name (floating constraint).  Mutually exclusive with `rev`.
+    /// `tyra mod sync` resolves the branch to an exact SHA and writes it to
+    /// `Tyra.lock`; subsequent `--locked` runs use the pinned SHA.
+    pub branch: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -46,9 +55,19 @@ pub enum ManifestError {
     Io(std::io::Error),
     Parse(String),
     InvalidEdition(String),
-    MissingRev { name: String },
-    ConflictingSource { name: String },
-    MissingSource { name: String },
+    MissingRev {
+        name: String,
+    },
+    ConflictingSource {
+        name: String,
+    },
+    MissingSource {
+        name: String,
+    },
+    /// Both `rev` and `branch` were specified for a git dependency.
+    ConflictingRevBranch {
+        name: String,
+    },
 }
 
 impl std::fmt::Display for ManifestError {
@@ -62,7 +81,7 @@ impl std::fmt::Display for ManifestError {
             ManifestError::MissingRev { name } => {
                 write!(
                     f,
-                    "dependency `{name}`: `rev` is required for git dependencies"
+                    "dependency `{name}`: git dependencies require either `rev` or `branch`"
                 )
             }
             ManifestError::ConflictingSource { name } => {
@@ -73,6 +92,12 @@ impl std::fmt::Display for ManifestError {
             }
             ManifestError::MissingSource { name } => {
                 write!(f, "dependency `{name}`: must specify `path` or `git`")
+            }
+            ManifestError::ConflictingRevBranch { name } => {
+                write!(
+                    f,
+                    "dependency `{name}`: specify exactly one of `rev` or `branch`, not both"
+                )
             }
         }
     }
@@ -134,8 +159,17 @@ fn validate(manifest: &Manifest) -> Result<(), ManifestError> {
                 return Err(ManifestError::ConflictingSource { name: name.clone() });
             }
             (None, None) => return Err(ManifestError::MissingSource { name: name.clone() }),
-            (None, Some(_)) if dep.rev.is_none() => {
-                return Err(ManifestError::MissingRev { name: name.clone() });
+            (None, Some(_)) => {
+                // git dep: require exactly one of `rev` or `branch`
+                match (&dep.rev, &dep.branch) {
+                    (None, None) => {
+                        return Err(ManifestError::MissingRev { name: name.clone() });
+                    }
+                    (Some(_), Some(_)) => {
+                        return Err(ManifestError::ConflictingRevBranch { name: name.clone() });
+                    }
+                    _ => {}
+                }
             }
             _ => {}
         }
@@ -297,5 +331,42 @@ foo = "bar"
     fn find_project_root_returns_none_without_manifest() {
         let dir = tempfile::tempdir().unwrap();
         assert!(find_project_root(dir.path()).is_none());
+    }
+
+    #[test]
+    fn git_dependency_branch_is_valid() {
+        let m = parse(
+            r#"
+[package]
+name    = "myapp"
+version = "0.1.0"
+edition = "2026"
+
+[dependencies]
+utils = { git = "https://github.com/example/utils.git", branch = "main" }
+"#,
+        )
+        .unwrap();
+        assert_eq!(m.dependencies["utils"].branch.as_deref(), Some("main"));
+        assert!(m.dependencies["utils"].rev.is_none());
+    }
+
+    #[test]
+    fn git_dependency_rev_and_branch_is_error() {
+        let result = parse(
+            r#"
+[package]
+name    = "myapp"
+version = "0.1.0"
+edition = "2026"
+
+[dependencies]
+utils = { git = "https://github.com/example/utils.git", rev = "abc", branch = "main" }
+"#,
+        );
+        assert!(
+            matches!(result, Err(ManifestError::ConflictingRevBranch { .. })),
+            "expected ConflictingRevBranch, got {result:?}"
+        );
     }
 }

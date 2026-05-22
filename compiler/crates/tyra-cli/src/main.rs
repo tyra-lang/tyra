@@ -749,16 +749,20 @@ fn main() {
                 }
                 "sync" => {
                     let mut check_flag = false;
+                    let mut locked_flag = false;
                     let mut json_flag = false;
                     let mut quiet_flag = false;
                     for a in args[3..].iter().map(String::as_str) {
                         match a {
                             "--check" => check_flag = true,
+                            "--locked" => locked_flag = true,
                             "--json" => json_flag = true,
                             "--quiet" => quiet_flag = true,
                             a => {
                                 eprintln!("error: unknown argument `{a}`");
-                                eprintln!("usage: tyra mod sync [--check] [--json] [--quiet]");
+                                eprintln!(
+                                    "usage: tyra mod sync [--check] [--locked] [--json] [--quiet]"
+                                );
                                 process::exit(1);
                             }
                         }
@@ -789,6 +793,20 @@ fn main() {
                                         }
                                     }
                                     process::exit(1);
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("error: {e}");
+                                process::exit(1);
+                            }
+                        }
+                    } else if locked_flag {
+                        match tyra_pkg::run_sync_locked_from(&cwd) {
+                            Ok(report) => {
+                                if json_flag {
+                                    print!("{}", report.to_json());
+                                } else if !quiet_flag {
+                                    print!("{report}");
                                 }
                             }
                             Err(e) => {
