@@ -2244,4 +2244,324 @@ mod tests {
             "common must appear twice: {json}"
         );
     }
+
+    // --- run_sync_locked ---
+
+    #[test]
+    fn locked_no_lockfile_is_error() {
+        let dir = tempfile::tempdir().unwrap();
+        make_manifest(dir.path(), "myapp");
+        let result = run_sync_locked(dir.path());
+        assert!(
+            matches!(result, Err(PkgError::LockfileNotFound)),
+            "expected LockfileNotFound, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn locked_passes_with_valid_path_dep() {
+        // Layout: base/proj/ (project), base/lib/ (dep "mylib")
+        // manifest: mylib = { path = "../lib" }
+        // lockfile: source = "path+../lib"
+        let base = tempfile::tempdir().unwrap();
+        let proj = base.path().join("proj");
+        let lib_dir = base.path().join("lib");
+        fs::create_dir_all(&proj).unwrap();
+        fs::create_dir_all(&lib_dir).unwrap();
+
+        fs::write(
+            proj.join("Tyra.toml"),
+            "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nmylib = { path = \"../lib\" }\n",
+        )
+        .unwrap();
+        make_manifest(&lib_dir, "mylib");
+        make_src_file(
+            &lib_dir,
+            "mylib",
+            "export fn greet() -> String\n  \"hi\"\nend\n",
+        );
+
+        let pkgs = vec![LockedPackage {
+            name: "mylib".into(),
+            source: "path+../lib".into(),
+            rev: None,
+            branch: None,
+            pkg_version: Some("0.1.0".into()),
+        }];
+        build_and_write_lockfile(&proj, pkgs).unwrap();
+
+        let result = run_sync_locked(&proj);
+        assert!(result.is_ok(), "expected Ok, got: {result:?}");
+    }
+
+    #[test]
+    fn locked_detects_source_url_change() {
+        let dir = tempfile::tempdir().unwrap();
+        // Manifest: new URL
+        fs::write(
+            dir.path().join("Tyra.toml"),
+            "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nutils = { git = \"https://github.com/example/NEW.git\", \
+             rev = \"abc1234\" }\n",
+        )
+        .unwrap();
+        // Lockfile: old URL
+        let pkgs = vec![LockedPackage {
+            name: "utils".into(),
+            source: "git+https://github.com/example/OLD.git".into(),
+            rev: Some("abc1234".into()),
+            branch: None,
+            pkg_version: None,
+        }];
+        build_and_write_lockfile(dir.path(), pkgs).unwrap();
+
+        let result = run_sync_locked(dir.path());
+        assert!(
+            matches!(result, Err(PkgError::LockfileOutOfSync(_))),
+            "expected LockfileOutOfSync (url change), got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn locked_detects_dep_key_rename() {
+        let dir = tempfile::tempdir().unwrap();
+        // Manifest: dep key "renamed_lib" with same URL
+        fs::write(
+            dir.path().join("Tyra.toml"),
+            "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nrenamed_lib = { git = \"https://github.com/example/lib.git\", \
+             rev = \"abc1234\" }\n",
+        )
+        .unwrap();
+        // Lockfile: was named "mylib" (original key before rename)
+        let pkgs = vec![LockedPackage {
+            name: "mylib".into(),
+            source: "git+https://github.com/example/lib.git".into(),
+            rev: Some("abc1234".into()),
+            branch: None,
+            pkg_version: None,
+        }];
+        build_and_write_lockfile(dir.path(), pkgs).unwrap();
+
+        let result = run_sync_locked(dir.path());
+        assert!(
+            matches!(result, Err(PkgError::LockfileOutOfSync(_))),
+            "expected LockfileOutOfSync (dep key rename), got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn locked_detects_rev_change() {
+        let dir = tempfile::tempdir().unwrap();
+        // Manifest: rev = "newrev"
+        fs::write(
+            dir.path().join("Tyra.toml"),
+            "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nutils = { git = \"https://github.com/example/utils.git\", \
+             rev = \"newrev\" }\n",
+        )
+        .unwrap();
+        // Lockfile: rev = "oldrev"
+        let pkgs = vec![LockedPackage {
+            name: "utils".into(),
+            source: "git+https://github.com/example/utils.git".into(),
+            rev: Some("oldrev".into()),
+            branch: None,
+            pkg_version: None,
+        }];
+        build_and_write_lockfile(dir.path(), pkgs).unwrap();
+
+        let result = run_sync_locked(dir.path());
+        assert!(
+            matches!(result, Err(PkgError::LockfileOutOfSync(_))),
+            "expected LockfileOutOfSync (rev change), got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn locked_detects_branch_name_change() {
+        let dir = tempfile::tempdir().unwrap();
+        // Manifest: branch = "develop"
+        fs::write(
+            dir.path().join("Tyra.toml"),
+            "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nutils = { git = \"https://github.com/example/utils.git\", \
+             branch = \"develop\" }\n",
+        )
+        .unwrap();
+        // Lockfile: branch = "main"
+        let pkgs = vec![LockedPackage {
+            name: "utils".into(),
+            source: "git+https://github.com/example/utils.git".into(),
+            rev: Some("abc1234".into()),
+            branch: Some("main".into()),
+            pkg_version: None,
+        }];
+        build_and_write_lockfile(dir.path(), pkgs).unwrap();
+
+        let result = run_sync_locked(dir.path());
+        assert!(
+            matches!(result, Err(PkgError::LockfileOutOfSync(_))),
+            "expected LockfileOutOfSync (branch name change), got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn locked_detects_branch_to_rev_constraint_change() {
+        let dir = tempfile::tempdir().unwrap();
+        // Manifest: now pinned rev (was floating branch)
+        fs::write(
+            dir.path().join("Tyra.toml"),
+            "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nutils = { git = \"https://github.com/example/utils.git\", \
+             rev = \"abc1234\" }\n",
+        )
+        .unwrap();
+        // Lockfile: was floating branch
+        let pkgs = vec![LockedPackage {
+            name: "utils".into(),
+            source: "git+https://github.com/example/utils.git".into(),
+            rev: Some("abc1234".into()),
+            branch: Some("main".into()),
+            pkg_version: None,
+        }];
+        build_and_write_lockfile(dir.path(), pkgs).unwrap();
+
+        let result = run_sync_locked(dir.path());
+        assert!(
+            matches!(result, Err(PkgError::LockfileOutOfSync(_))),
+            "expected LockfileOutOfSync (branch→rev), got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn locked_detects_rev_to_branch_constraint_change() {
+        let dir = tempfile::tempdir().unwrap();
+        // Manifest: now floating branch (was pinned rev)
+        fs::write(
+            dir.path().join("Tyra.toml"),
+            "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nutils = { git = \"https://github.com/example/utils.git\", \
+             branch = \"main\" }\n",
+        )
+        .unwrap();
+        // Lockfile: was pinned rev, no branch field
+        let pkgs = vec![LockedPackage {
+            name: "utils".into(),
+            source: "git+https://github.com/example/utils.git".into(),
+            rev: Some("abc1234".into()),
+            branch: None,
+            pkg_version: None,
+        }];
+        build_and_write_lockfile(dir.path(), pkgs).unwrap();
+
+        let result = run_sync_locked(dir.path());
+        assert!(
+            matches!(result, Err(PkgError::LockfileOutOfSync(_))),
+            "expected LockfileOutOfSync (rev→branch), got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn locked_detects_new_transitive_path_dep() {
+        // proj → lib → child  (child is new — not in lockfile)
+        let base = tempfile::tempdir().unwrap();
+        let proj = base.path().join("proj");
+        let lib_dir = base.path().join("lib");
+        let child_dir = base.path().join("child");
+        fs::create_dir_all(&proj).unwrap();
+        fs::create_dir_all(&lib_dir).unwrap();
+        fs::create_dir_all(&child_dir).unwrap();
+
+        make_manifest(&child_dir, "child");
+        make_src_file(&child_dir, "child", "export fn noop() -> Unit\nend\n");
+
+        fs::write(
+            lib_dir.join("Tyra.toml"),
+            format!(
+                "[package]\nname    = \"mylib\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+                 \n[dependencies]\nchild = {{ path = \"../child\" }}\n"
+            ),
+        )
+        .unwrap();
+        make_src_file(
+            &lib_dir,
+            "mylib",
+            "export fn greet() -> String\n  \"hi\"\nend\n",
+        );
+
+        fs::write(
+            proj.join("Tyra.toml"),
+            "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nmylib = { path = \"../lib\" }\n",
+        )
+        .unwrap();
+
+        // Lockfile only records mylib — child is missing
+        let pkgs = vec![LockedPackage {
+            name: "mylib".into(),
+            source: "path+../lib".into(),
+            rev: None,
+            branch: None,
+            pkg_version: Some("0.1.0".into()),
+        }];
+        build_and_write_lockfile(&proj, pkgs).unwrap();
+
+        let result = run_sync_locked(&proj);
+        assert!(
+            matches!(result, Err(PkgError::LockfileOutOfSync(_))),
+            "expected LockfileOutOfSync (new transitive dep), got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn locked_detects_removed_transitive_path_dep() {
+        // proj → lib  (child was removed from lib, but lockfile still records it)
+        let base = tempfile::tempdir().unwrap();
+        let proj = base.path().join("proj");
+        let lib_dir = base.path().join("lib");
+        fs::create_dir_all(&proj).unwrap();
+        fs::create_dir_all(&lib_dir).unwrap();
+
+        // lib: no deps now
+        make_manifest(&lib_dir, "mylib");
+        make_src_file(
+            &lib_dir,
+            "mylib",
+            "export fn greet() -> String\n  \"hi\"\nend\n",
+        );
+
+        fs::write(
+            proj.join("Tyra.toml"),
+            "[package]\nname    = \"myapp\"\nversion = \"0.1.0\"\nedition = \"2026\"\n\
+             \n[dependencies]\nmylib = { path = \"../lib\" }\n",
+        )
+        .unwrap();
+
+        // Lockfile still has stale "child" entry
+        let pkgs = vec![
+            LockedPackage {
+                name: "mylib".into(),
+                source: "path+../lib".into(),
+                rev: None,
+                branch: None,
+                pkg_version: Some("0.1.0".into()),
+            },
+            LockedPackage {
+                name: "child".into(),
+                source: "path+../child".into(),
+                rev: None,
+                branch: None,
+                pkg_version: None,
+            },
+        ];
+        build_and_write_lockfile(&proj, pkgs).unwrap();
+
+        let result = run_sync_locked(&proj);
+        assert!(
+            matches!(result, Err(PkgError::LockfileOutOfSync(_))),
+            "expected LockfileOutOfSync (removed transitive dep), got: {result:?}"
+        );
+    }
 }
