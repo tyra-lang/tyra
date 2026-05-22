@@ -46,6 +46,11 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
   - Path dep sources normalised relative to project root — correct across nested manifests at any depth
 - `tyra mod show [--json]` displays resolved rev and branch for floating-constraint deps
 
+**Resolver correctness (ADR 0009/0010 enforcement)**
+- `run_sync` now calls `validate_dep_root` for path dependencies on first insert — catches `package.name ≠ dep_key`, missing `src/<name>.tyra`, and bin-package violations that previously passed silently
+- Same-source-different-alias: a canonical source already in the resolved set under a different dep key now returns `NameMismatch` (path and git, both branches)
+- `E0220 DepNameCollision`: two unrelated packages sharing the same `package.name` from different sources are rejected during resolution instead of producing a broken lockfile
+
 ### Known Limitations
 
 - Registry (`tyra publish`, full registry-backed resolver) not yet available → v0.5+
