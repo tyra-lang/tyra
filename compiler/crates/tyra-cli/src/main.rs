@@ -169,6 +169,13 @@ fn main() {
                 Some(ref o) => PathBuf::from(o),
                 None => auto_output.unwrap_or_else(|| source_path.with_extension("")),
             };
+            if static_link && !cfg!(target_env = "musl") {
+                eprintln!("error: --static is only supported on musl Linux (Alpine or similar).");
+                eprintln!("       glibc static linking is known to break getaddrinfo and NSS.");
+                eprintln!("       Build with the musl-compiled tyra binary (e.g. on Alpine) to");
+                eprintln!("       produce a static output. See README § Platform support.");
+                process::exit(1);
+            }
             let result = match (static_link, release) {
                 (true, true) => {
                     tyra_driver::compile_to_binary_static_release(&source_path, &output_path)
