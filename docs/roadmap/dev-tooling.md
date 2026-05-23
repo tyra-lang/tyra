@@ -77,10 +77,18 @@ and related developer experience tooling.
 > *registry-backed resolver* (candidate fetching from a central registry) and
 > `tyra publish` remain v0.5+.
 
+## Shipped in v0.5.0 (2026-05-23)
+
+- **Per-test process isolation** in `tyra test`: each `test_*` function now
+  runs in its own subprocess. A panic/abort/OOM in one test no longer
+  prevents sibling tests from running. TAP output format is unchanged.
+  Implementation: compile-once + `sys.args()` argv dispatch per test.
+  New public API in `tyra-driver`: `RunOutcome` and `run_binary`.
+
 ## Near-term (v0.5+)
 
 - `test "name"` language syntax (requires separate ADR)
-- `assert.panics` — requires per-test subprocess isolation
+- `assert.panics` — per-test isolation (prerequisite) is now shipped; stdlib API TBD
 - Full registry-backed SemVer resolver and package registry (`tyra publish`)
 
 ## Long-term

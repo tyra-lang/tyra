@@ -23,10 +23,25 @@ v0.2 adds `tyra test` as the official test runner. The design must:
 - Functions: `fn test_*() -> Result<Unit, String>` with no parameters
 - Files must not contain `fn main` or top-level executable statements
 
-### Execution model
+### Execution model (v0.5.0: per-test process isolation)
 
-The runner synthesizes a `fn main` that calls each `test_*` function in order
-and prints TAP (Test Anything Protocol) version 14 output to stdout:
+The runner synthesizes a `fn main` that supports two modes via `sys.args()`:
+
+- **Dispatch mode** (argv[1] = test function name): runs exactly one test,
+  exits 0 on pass, 1 on fail. Used by the Rust runner for isolation.
+- **All-tests mode** (no argv): runs all tests in TAP order (legacy/compat).
+
+**Compile-once, exec-per-test:** For each `*_test.tyra` file, the runner:
+1. Writes the synthesized source alongside the test file (same directory, so
+   `import` resolution works without resolver changes).
+2. Compiles once to a native binary (kept across all test runs for the file).
+3. For each `test_*` function, spawns a subprocess passing the test name as
+   argv[1]. Each subprocess is isolated: a panic/abort/OOM in one test does
+   not affect subsequent tests.
+4. Aggregates per-subprocess TAP lines into file-level TAP output.
+5. Deletes the binary and the synthesized source after all tests finish.
+
+TAP output format is identical to earlier versions:
 
 ```
 TAP version 14
@@ -37,17 +52,13 @@ not ok 2 - test_subtraction
 ok 3 - test_multiplication
 ```
 
-The synthesized runner is written alongside the test file as a temporary
-`__tyra_test_runner_<pid>.tyra` and deleted after execution. Writing it to the
-same directory ensures `import` resolution (stdlib and local modules) works
-correctly without any changes to the resolver.
-
 ### Failure semantics
 
-- A test function returning `Err(msg)` → `not ok`
-- The synthesized binary exiting with a non-zero code (panic, abort, OOM) is
-  always treated as at least one failure, regardless of how many TAP lines were
-  emitted before the crash.
+- A test function returning `Err(msg)` → `not ok` (subprocess exits with code 1)
+- A subprocess exiting with a non-zero code (panic, abort, OOM, signal) →
+  `not ok`; subsequent tests in the same file still run (isolation guarantee).
+- Timeout kills the subprocess; remaining tests are also reported as `not ok`
+  with a `(timeout after Ns)` annotation.
 
 ### Assertion API
 
@@ -81,15 +92,18 @@ subcommands) is a stated Tyra design goal.
 
 ### C. Subprocess per test function
 
-Rejected for v0.2: eliminates the "binary crash = failure" ambiguity but adds
-significant startup overhead and requires a process-spawning API not yet
-stabilized. Deferred to v0.2.x or v0.3.
+Deferred in v0.2 due to startup overhead and process-spawning API maturity.
+**Implemented in v0.5.0** as the primary execution model (see above). The
+synthesis approach (compile once, exec per test using `sys.args()` dispatch)
+minimises per-test overhead to one process spawn without any new language syntax.
 
 ## Consequences
 
-- `assert.panics` is out of scope: Tyra's `panic` returns `Never`, so a
-  panicking test brings down the entire synthesized runner process. Per-test
-  subprocess isolation is the prerequisite; deferred.
+- **v0.5.0**: Per-test subprocess isolation ships. A panicking test no longer
+  kills sibling tests in the same file — each test runs in its own process.
+- `assert.panics` is still out of scope: it requires a way to assert on crash
+  semantics (signal, exit code) that is not yet in the stdlib. Now that
+  isolation is available, `assert.panics` can be implemented in a future ADR.
 - The `test "name"` syntax remains available as a future ADR.
 - TAP output is parseable by most CI systems (pytest-tap, tap-junit, etc.)
   without any Tyra-specific plugin.

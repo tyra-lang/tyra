@@ -1661,6 +1661,96 @@ fn compile_to_binary_opts(source_path: &Path, output_path: &Path, release: bool)
     }
 }
 
+/// Result of running a pre-compiled binary.
+pub struct RunOutcome {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: Option<i32>,
+    pub timed_out: bool,
+}
+
+/// Run the binary at `binary_path` with the given `args`, optionally killing
+/// it after `timeout_secs` seconds.  Does NOT compile anything and does NOT
+/// delete the binary — that is left to the caller.
+pub fn run_binary(binary_path: &Path, args: &[&str], timeout_secs: Option<u64>) -> RunOutcome {
+    use std::io::Read;
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+
+    let mut child = match Command::new(binary_path)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return RunOutcome {
+                stdout: String::new(),
+                stderr: format!("cannot execute binary: {e}"),
+                exit_code: None,
+                timed_out: false,
+            };
+        }
+    };
+
+    // Drain stdout and stderr on background threads to prevent pipe-buffer
+    // deadlock when the binary emits large output.
+    let stdout_drain = child.stdout.take().map(|mut pipe| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            pipe.read_to_end(&mut buf).ok();
+            String::from_utf8_lossy(&buf).into_owned()
+        })
+    });
+    let stderr_drain = child.stderr.take().map(|mut pipe| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            pipe.read_to_end(&mut buf).ok();
+            String::from_utf8_lossy(&buf).into_owned()
+        })
+    });
+
+    let (exit_code, timed_out) = if let Some(secs) = timeout_secs {
+        let deadline = Instant::now() + Duration::from_secs(secs);
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break (status.code(), false),
+                Ok(None) => {
+                    if Instant::now() >= deadline {
+                        child.kill().ok();
+                        child.wait().ok();
+                        break (None, true);
+                    }
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(_) => {
+                    break (None, false);
+                }
+            }
+        }
+    } else {
+        match child.wait() {
+            Ok(status) => (status.code(), false),
+            Err(_) => (None, false),
+        }
+    };
+
+    let stdout = stdout_drain
+        .and_then(|h| h.join().ok())
+        .unwrap_or_default();
+    let stderr = stderr_drain
+        .and_then(|h| h.join().ok())
+        .unwrap_or_default();
+
+    RunOutcome {
+        stdout,
+        stderr,
+        exit_code,
+        timed_out,
+    }
+}
+
 /// Compile and run a Tyra source file.
 /// Result of running a Tyra program and capturing its stdout.
 pub struct CapturedRunResult {
@@ -1697,33 +1787,16 @@ pub fn run_and_capture(source_path: &Path) -> CapturedRunResult {
         };
     }
 
-    let run_result = Command::new(&binary_path).output();
+    let outcome = run_binary(&binary_path, &[], None);
     let _ = std::fs::remove_file(&binary_path);
 
-    match run_result {
-        Ok(output) => CapturedRunResult {
-            report: compile.report,
-            sources: compile.sources,
-            stdout: Some(String::from_utf8_lossy(&output.stdout).into_owned()),
-            stderr: Some(String::from_utf8_lossy(&output.stderr).into_owned()),
-            exit_code: output.status.code(),
-            timed_out: false,
-        },
-        Err(e) => {
-            let mut report = compile.report;
-            report.add(
-                tyra_diagnostics::Diagnostic::error(format!("cannot execute test binary: {e}"))
-                    .with_code("E0502"),
-            );
-            CapturedRunResult {
-                report,
-                sources: compile.sources,
-                stdout: None,
-                stderr: None,
-                exit_code: None,
-                timed_out: false,
-            }
-        }
+    CapturedRunResult {
+        report: compile.report,
+        sources: compile.sources,
+        stdout: Some(outcome.stdout),
+        stderr: Some(outcome.stderr),
+        exit_code: outcome.exit_code,
+        timed_out: false,
     }
 }
 
@@ -1731,10 +1804,6 @@ pub fn run_and_capture(source_path: &Path) -> CapturedRunResult {
 /// execution phase only (compilation is unlimited).  If the binary does not
 /// exit within `timeout_secs`, it is killed and `timed_out: true` is returned.
 pub fn run_and_capture_with_timeout(source_path: &Path, timeout_secs: u64) -> CapturedRunResult {
-    use std::io::Read;
-    use std::process::Stdio;
-    use std::time::{Duration, Instant};
-
     let tmp_dir = std::env::temp_dir();
     let bin_id = BINARY_COUNTER.fetch_add(1, Ordering::Relaxed);
     let binary_path = tmp_dir.join(format!("tyra_test_{}_{}", std::process::id(), bin_id));
@@ -1751,93 +1820,16 @@ pub fn run_and_capture_with_timeout(source_path: &Path, timeout_secs: u64) -> Ca
         };
     }
 
-    let mut child = match Command::new(&binary_path)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            let _ = std::fs::remove_file(&binary_path);
-            let mut report = compile.report;
-            report.add(
-                tyra_diagnostics::Diagnostic::error(format!("cannot execute test binary: {e}"))
-                    .with_code("E0502"),
-            );
-            return CapturedRunResult {
-                report,
-                sources: compile.sources,
-                stdout: None,
-                stderr: None,
-                exit_code: None,
-                timed_out: false,
-            };
-        }
-    };
-
-    // Drain stdout and stderr on background threads to prevent pipe-buffer
-    // deadlock when the test binary emits large output.
-    let stdout_drain = child.stdout.take().map(|mut pipe| {
-        std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            pipe.read_to_end(&mut buf).ok();
-            String::from_utf8_lossy(&buf).into_owned()
-        })
-    });
-    let stderr_drain = child.stderr.take().map(|mut pipe| {
-        std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            pipe.read_to_end(&mut buf).ok();
-            String::from_utf8_lossy(&buf).into_owned()
-        })
-    });
-
-    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
-    let (exit_code, timed_out) = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                break (status.code(), false);
-            }
-            Ok(None) => {
-                if Instant::now() >= deadline {
-                    child.kill().ok();
-                    child.wait().ok();
-                    break (None, true);
-                }
-                std::thread::sleep(Duration::from_millis(50));
-            }
-            Err(e) => {
-                let _ = std::fs::remove_file(&binary_path);
-                let mut report = compile.report;
-                report.add(
-                    tyra_diagnostics::Diagnostic::error(format!(
-                        "cannot wait for test binary: {e}"
-                    ))
-                    .with_code("E0502"),
-                );
-                return CapturedRunResult {
-                    report,
-                    sources: compile.sources,
-                    stdout: None,
-                    stderr: None,
-                    exit_code: None,
-                    timed_out: false,
-                };
-            }
-        }
-    };
-
-    let stdout_str = stdout_drain.and_then(|h| h.join().ok());
-    let stderr_str = stderr_drain.and_then(|h| h.join().ok());
-
+    let outcome = run_binary(&binary_path, &[], Some(timeout_secs));
     let _ = std::fs::remove_file(&binary_path);
+
     CapturedRunResult {
         report: compile.report,
         sources: compile.sources,
-        stdout: stdout_str,
-        stderr: stderr_str,
-        exit_code,
-        timed_out,
+        stdout: Some(outcome.stdout),
+        stderr: Some(outcome.stderr),
+        exit_code: outcome.exit_code,
+        timed_out: outcome.timed_out,
     }
 }
 

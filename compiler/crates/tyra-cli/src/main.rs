@@ -1247,27 +1247,61 @@ fn list_test_fns(test_file: &Path, filter: Option<&str>) {
     }
 }
 
-/// Build a complete Tyra source that appends a synthesized `fn main` calling
-/// each `test_*` function and printing TAP-compatible output to stdout.
+/// Build a complete Tyra source that appends a synthesized `fn main` that:
+/// - With argv[1] = a test function name: runs ONLY that test, exits 0 on
+///   pass, 1 on fail (per-test isolation mode used by the runner).
+/// - With no arguments (or argv[1] = "--all"): runs all tests in TAP order
+///   (legacy / backward-compat mode).
 fn synthesize_runner(test_source: &str, test_fns: &[String]) -> String {
     let n = test_fns.len();
     let mut out = String::from(test_source);
     if !out.ends_with('\n') {
         out.push('\n');
     }
+    out.push_str("\nimport core.sys\n");
     out.push_str("\nfn main() -> Unit\n");
-    out.push_str("  println(\"TAP version 14\")\n");
-    out.push_str(&format!("  println(\"1..{n}\")\n"));
+    out.push_str("  let __runner_args = sys.args()\n");
+    out.push_str("  let __runner_target = __runner_args.get(1)\n");
+    // Single-test dispatch branch
+    out.push_str("  match __runner_target\n");
+    out.push_str("  when Some(__runner_test_name)\n");
+    if test_fns.is_empty() {
+        out.push_str("    println(\"not ok 1 - unknown\")\n");
+        out.push_str("    sys.exit(1)\n");
+    } else {
+        // Emit one arm per test function; the final `when _` catches unknown names.
+        out.push_str("    match __runner_test_name\n");
+        for name in test_fns.iter() {
+            out.push_str(&format!("    when \"{name}\"\n"));
+            out.push_str(&format!("      match {name}()\n"));
+            out.push_str("      when Ok(_)\n");
+            out.push_str(&format!("        println(\"ok 1 - {name}\")\n"));
+            out.push_str("      when Err(__runner_msg)\n");
+            out.push_str(&format!("        println(\"not ok 1 - {name}\")\n"));
+            out.push_str("        println(\"# #{__runner_msg}\")\n");
+            out.push_str("        sys.exit(1)\n");
+            out.push_str("      end\n");
+        }
+        out.push_str("    when _\n");
+        out.push_str("      println(\"not ok 1 - unknown test\")\n");
+        out.push_str("      sys.exit(1)\n");
+        out.push_str("    end\n");
+    }
+    // All-tests (legacy) branch — no argv, or used for backward compat.
+    out.push_str("  when None\n");
+    out.push_str(&format!("    println(\"TAP version 14\")\n"));
+    out.push_str(&format!("    println(\"1..{n}\")\n"));
     for (i, name) in test_fns.iter().enumerate() {
         let seq = i + 1;
-        out.push_str(&format!("  match {name}()\n"));
-        out.push_str("  when Ok(_)\n");
-        out.push_str(&format!("    println(\"ok {seq} - {name}\")\n"));
-        out.push_str("  when Err(msg)\n");
-        out.push_str(&format!("    println(\"not ok {seq} - {name}\")\n"));
-        out.push_str("    println(\"# #{msg}\")\n");
-        out.push_str("  end\n");
+        out.push_str(&format!("    match {name}()\n"));
+        out.push_str("    when Ok(_)\n");
+        out.push_str(&format!("      println(\"ok {seq} - {name}\")\n"));
+        out.push_str("    when Err(__runner_msg)\n");
+        out.push_str(&format!("      println(\"not ok {seq} - {name}\")\n"));
+        out.push_str("      println(\"# #{__runner_msg}\")\n");
+        out.push_str("    end\n");
     }
+    out.push_str("  end\n");
     out.push_str("end\n");
     out
 }
@@ -1403,16 +1437,22 @@ fn run_test_file_core(test_file: &Path, filter: Option<&str>, timeout: Option<u6
         return FileTestOut::error(test_file, diag);
     }
 
+    // Compile once; keep the binary for per-test subprocess dispatch.
+    let tmp_dir = std::env::temp_dir();
+    let bin_id = RUN_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let binary_path = tmp_dir.join(format!(
+        "tyra_test_{}_{}",
+        std::process::id(),
+        bin_id
+    ));
+
     let t0 = std::time::Instant::now();
-    let result = match timeout {
-        Some(secs) => tyra_driver::run_and_capture_with_timeout(&runner_path, secs),
-        None => tyra_driver::run_and_capture(&runner_path),
-    };
-    let elapsed = t0.elapsed().as_secs_f64();
+    let compile = tyra_driver::compile_to_binary(&runner_path, &binary_path);
     let _ = std::fs::remove_file(&runner_path);
 
-    if result.report.has_errors() {
-        diag.push_str(&result.report.render(&result.sources));
+    if compile.report.has_errors() {
+        diag.push_str(&compile.report.render(&compile.sources));
+        let elapsed = t0.elapsed().as_secs_f64();
         return FileTestOut {
             path: test_file.display().to_string(),
             pass: 0,
@@ -1425,69 +1465,86 @@ fn run_test_file_core(test_file: &Path, filter: Option<&str>, timeout: Option<u6
         };
     }
 
-    // Buffer stderr from the test binary into diag so parallel jobs stay ordered.
-    if let Some(se) = result.stderr.as_deref()
-        && !se.is_empty()
-    {
-        diag.push_str(se);
-        if !se.ends_with('\n') {
-            diag.push('\n');
-        }
-    }
+    // Run each test in its own subprocess for isolation.
+    let n = test_fns.len();
+    let mut tap = format!("TAP version 14\n1..{n}\n");
+    let mut pass = 0usize;
+    let mut fail = 0usize;
 
-    if result.timed_out {
-        // Synthesize TAP failure lines for every test function.
-        let mut tap = format!("TAP version 14\n1..{}\n", test_fns.len());
-        for (i, name) in test_fns.iter().enumerate() {
+    for (i, name) in test_fns.iter().enumerate() {
+        let seq = i + 1;
+        let outcome =
+            tyra_driver::run_binary(&binary_path, &[name.as_str()], timeout);
+
+        // Collect any stderr from the subprocess into diag.
+        if !outcome.stderr.is_empty() {
+            diag.push_str(&outcome.stderr);
+            if !outcome.stderr.ends_with('\n') {
+                diag.push('\n');
+            }
+        }
+
+        if outcome.timed_out {
             tap.push_str(&format!(
-                "not ok {} - {} (timeout after {}s)\n",
-                i + 1,
-                name,
+                "not ok {seq} - {name} (timeout after {}s)\n",
                 timeout.unwrap_or(0)
             ));
+            diag.push_str(&format!(
+                "# {name}: timed out after {}s\n",
+                timeout.unwrap_or(0)
+            ));
+            fail += 1;
+        } else if outcome.exit_code == Some(0) {
+            // Parse the single TAP line the subprocess emitted to get the
+            // test name verbatim (the subprocess always writes seq=1).
+            let stdout = outcome.stdout.trim();
+            if stdout.starts_with("not ok ") {
+                // Unexpected: subprocess exited 0 but emitted "not ok" — treat as fail.
+                tap.push_str(&format!("not ok {seq} - {name}\n"));
+                // Forward any diagnostic content.
+                for line in stdout.lines() {
+                    if line.starts_with("# ") {
+                        tap.push_str(line);
+                        tap.push('\n');
+                    }
+                }
+                fail += 1;
+            } else {
+                tap.push_str(&format!("ok {seq} - {name}\n"));
+                pass += 1;
+            }
+        } else {
+            // Non-zero exit or None: test failed or crashed.
+            tap.push_str(&format!("not ok {seq} - {name}\n"));
+            // Propagate any diagnostic lines the test printed to stdout.
+            for line in outcome.stdout.lines() {
+                if line.starts_with("# ") {
+                    tap.push_str(line);
+                    tap.push('\n');
+                }
+            }
+            if outcome.exit_code.is_none() {
+                diag.push_str(&format!("# {name}: process could not be started\n"));
+            } else {
+                diag.push_str(&format!(
+                    "# {name}: exited with code {:?}\n",
+                    outcome.exit_code
+                ));
+            }
+            fail += 1;
         }
-        diag.push_str(&format!(
-            "# binary timed out after {}s\n",
-            timeout.unwrap_or(0)
-        ));
-        return FileTestOut {
-            path: test_file.display().to_string(),
-            pass: 0,
-            fail: test_fns.len(),
-            header,
-            tap,
-            timing: format!("# time: {elapsed:.3}s"),
-            diag,
-            elapsed,
-        };
     }
 
-    let stdout = result.stdout.unwrap_or_default();
-    let (pass, fail) = count_tap_lines(&stdout);
+    let elapsed = t0.elapsed().as_secs_f64();
+    let _ = std::fs::remove_file(&binary_path);
     let timing = format!("# time: {elapsed:.3}s");
-
-    // Handle binary crash: account for unrun tests.
-    let (tap_pass, tap_fail) = if result.exit_code != Some(0) {
-        let accounted = pass + fail;
-        let unaccounted = test_fns.len().saturating_sub(accounted);
-        if unaccounted > 0 {
-            diag.push_str(&format!("# {} test(s) did not run\n", unaccounted));
-        }
-        diag.push_str(&format!(
-            "# binary exited with code {:?}\n",
-            result.exit_code
-        ));
-        (pass, fail + unaccounted.max(1))
-    } else {
-        (pass, fail)
-    };
 
     FileTestOut {
         path: test_file.display().to_string(),
-        pass: tap_pass,
-        fail: tap_fail,
+        pass,
+        fail,
         header,
-        tap: stdout,
+        tap,
         timing,
         diag,
         elapsed,
@@ -1582,19 +1639,6 @@ struct TestRecord {
     name: String,
     passed: bool,
     failure_msg: String,
-}
-
-fn count_tap_lines(output: &str) -> (usize, usize) {
-    let mut pass = 0usize;
-    let mut fail = 0usize;
-    for line in output.lines() {
-        if line.starts_with("not ok ") {
-            fail += 1;
-        } else if line.starts_with("ok ") {
-            pass += 1;
-        }
-    }
-    (pass, fail)
 }
 
 fn parse_tap_to_records(tap: &str) -> Vec<TestRecord> {
