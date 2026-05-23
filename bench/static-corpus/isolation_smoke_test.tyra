@@ -1,0 +1,21 @@
+import assert
+
+# Smoke fixture for per-test isolation.
+# test_will_crash causes a stack overflow (abnormal process exit).
+# Without per-test isolation, that crash would kill the shared test binary
+# and suppress test_will_pass. With isolation each test runs in its own
+# subprocess, so test_will_pass is reported even after the crash.
+
+fn recurse(n: Int) -> Int
+  recurse(n + 1) + 1
+end
+
+fn test_will_crash() -> Result<Unit, String>
+  let _ = recurse(0)
+  Ok(())
+end
+
+fn test_will_pass() -> Result<Unit, String>
+  assert.eq(1 + 1, 2)?
+  Ok(())
+end

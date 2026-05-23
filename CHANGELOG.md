@@ -16,6 +16,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - `tyra build --static`: links the compiled program statically on musl (`-static`); produces a fully self-contained binary with no shared-lib deps
 - CI verifies the Alpine musl artifact is statically linked (`file` check); musl static artifact added to GitHub Releases
 - Windows tracking job (non-blocking allow-failure) added to surface toolchain drift
+- macOS x86_64 (Intel, macos-13) tracking job (non-blocking allow-failure) added; no artifact produced, build-only to surface toolchain drift
 - Platform matrix: Linux glibc (dynamic), Linux musl (static), macOS arm64 (dynamic), Windows (unguaranteed / tracking)
 
 **`string.replace` and `string.join`**
@@ -27,6 +28,14 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - A panic or abort in one test no longer voids sibling test results
 - TAP output format unchanged; timeout (`--timeout`) applied per test
 - Groundwork for `assert.panics` (deferred pending panic-semantics ADR)
+
+**Correctness and diagnostic fixes**
+- `tyra test`: `collect_test_files` now returns results in stable lexicographic path order (was filesystem order — non-deterministic across OSes and filesystems)
+- `tyra test`: compile-error synthetic TAP plan corrected to `1..1` (was `1..n`; TAP consumers saw a plan/actual mismatch)
+- `tyra build --static`: guard now queries `clang -print-target-triple` for "musl" instead of a compile-time `cfg!` check; error message includes the detected triple for easier diagnosis
+- `tyra test --format junit`: compile-error `<failure>` element now carries the compiler diagnostic text (was empty)
+- `tyra test --list`: stable output order (lexicographic file order, source-declaration function order within a file) now formally documented
+- musl release artifact now includes a pre-built `examples/hello` static binary for quick verification without a full build
 
 ### Known Limitations
 
