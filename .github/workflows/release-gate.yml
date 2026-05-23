@@ -119,8 +119,9 @@ jobs:
         run: |
           # Verify JUnit failure case: isolation_smoke_test has one crashing test,
           # so the XML must contain a <failure> element (not just <testcase>).
-          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/isolation_smoke_test.tyra 2>/dev/null \
-            | grep -q '<failure' || {
+          # Capture with || true so pipefail does not fire on tyra test's non-0 exit.
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/isolation_smoke_test.tyra 2>/dev/null || true)
+          echo "$output" | grep -q '<failure' || {
             echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1
           }
@@ -211,8 +212,9 @@ jobs:
         run: |
           # Verify JUnit failure case: isolation_smoke_test has one crashing test,
           # so the XML must contain a <failure> element (not just <testcase>).
-          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/isolation_smoke_test.tyra 2>/dev/null \
-            | grep -q '<failure' || {
+          # Capture with || true so pipefail does not fire on tyra test's non-0 exit.
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/isolation_smoke_test.tyra 2>/dev/null || true)
+          echo "$output" | grep -q '<failure' || {
             echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1
           }
@@ -333,8 +335,9 @@ jobs:
         run: |
           # Verify JUnit failure case: isolation_smoke_test has one crashing test,
           # so the XML must contain a <failure> element (not just <testcase>).
-          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/isolation_smoke_test.tyra 2>/dev/null \
-            | grep -q '<failure' || {
+          # Capture with || true so pipefail does not fire on tyra test's non-0 exit.
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/isolation_smoke_test.tyra 2>/dev/null || true)
+          echo "$output" | grep -q '<failure' || {
             echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1
           }
@@ -413,8 +416,9 @@ jobs:
         run: |
           # Verify JUnit failure case: isolation_smoke_test has one crashing test,
           # so the XML must contain a <failure> element (not just <testcase>).
-          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/isolation_smoke_test.tyra 2>/dev/null \
-            | grep -q '<failure' || {
+          # Capture with || true so pipefail does not fire on tyra test's non-0 exit.
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/isolation_smoke_test.tyra 2>/dev/null || true)
+          echo "$output" | grep -q '<failure' || {
             echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1
           }
