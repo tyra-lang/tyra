@@ -82,3 +82,153 @@ jobs:
             echo "FAIL: expected '$expected', got '$output'"
             exit 1
           fi
+
+  release-gate-macos:
+    name: build + test + corpus + smoke (macos-14 arm64)
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (macOS)
+        run: |
+          brew install bdw-gc llvm@21
+          echo "/opt/homebrew/opt/llvm@21/bin" >> "$GITHUB_PATH"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-gate-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-gate-
+
+      - name: Build release binary and runtime
+        run: cargo build --release -p tyra-cli -p tyra-runtime
+
+      - name: Run workspace tests
+        run: cargo test --workspace
+
+      - name: Run static corpus check
+        env:
+          TYRA_STDLIB: ${{ github.workspace }}/stdlib
+        run: bash bench/static-corpus/check.sh ./target/release/tyra
+
+      - name: Verify LLVM 21
+        run: |
+          version=$(llvm-config --version)
+          echo "LLVM version: $version"
+          echo "$version" | grep -qE '^21\.' || { echo "ERROR: expected LLVM 21.x, got $version"; exit 1; }
+
+      - name: Smoke test (hello world)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra run examples/01-hello.tyra)
+          expected="hello, tyra"
+          if [ "$output" != "$expected" ]; then
+            echo "FAIL: expected '$expected', got '$output'"
+            exit 1
+          fi
+
+  release-gate-alpine:
+    name: build + test + corpus + smoke (alpine musl)
+    runs-on: ubuntu-latest
+    container: alpine:3.21
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Alpine dependencies
+        run: |
+          apk add --no-cache \
+            gc-dev \
+            clang19 \
+            llvm19 \
+            musl-dev \
+            pkgconf \
+            bash \
+            curl \
+            git
+
+      - name: Set up LLVM 19 symlinks
+        run: |
+          # Ensure llvm-config and clang resolve to versioned binaries on PATH
+          ln -sf /usr/bin/llvm-config-19 /usr/local/bin/llvm-config || true
+          ln -sf /usr/bin/clang-19 /usr/local/bin/clang || true
+          llvm-config --version
+          clang --version
+
+      - name: Install Rust via rustup
+        run: |
+          # Alpine apk ships an older Rust; use rustup to guarantee >= MSRV 1.88
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: alpine-musl-cargo-release-gate-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            alpine-musl-cargo-release-gate-
+
+      - name: Build release binary and runtime
+        run: |
+          . "$HOME/.cargo/env"
+          cargo build --release -p tyra-cli -p tyra-runtime
+
+      - name: Run workspace tests
+        run: |
+          . "$HOME/.cargo/env"
+          cargo test --workspace
+
+      - name: Run static corpus check
+        env:
+          TYRA_STDLIB: ${{ github.workspace }}/stdlib
+        run: |
+          . "$HOME/.cargo/env"
+          bash bench/static-corpus/check.sh ./target/release/tyra
+
+      - name: Smoke test (hello world)
+        run: |
+          . "$HOME/.cargo/env"
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra run examples/01-hello.tyra)
+          expected="hello, tyra"
+          if [ "$output" != "$expected" ]; then
+            echo "FAIL: expected '$expected', got '$output'"
+            exit 1
+          fi
+
+  release-gate-windows:
+    name: build only (windows tracking)
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-gate-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-gate-
+
+      - name: Build workspace (tracking only)
+        run: cargo build --workspace
