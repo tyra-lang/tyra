@@ -175,6 +175,7 @@ fn main() {
                 eprintln!("error: --static is only supported on musl Linux (Alpine or similar).");
                 eprintln!("       detected clang target: {triple}");
                 eprintln!("       glibc static linking is known to break getaddrinfo and NSS.");
+                eprintln!("       recommended environment: Alpine Linux (apk add gc-dev clang llvm musl-dev)");
                 eprintln!("       Build with the musl-compiled tyra binary (e.g. on Alpine) to");
                 eprintln!("       produce a static output. See README § Platform support.");
                 process::exit(1);

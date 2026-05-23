@@ -1,0 +1,18 @@
+import assert
+
+# Smoke fixture for per-test timeout isolation.
+# test_will_timeout runs an infinite loop so it is killed by --timeout.
+# Without timeout support the CI step would hang indefinitely.
+# test_will_pass must still be reported even after the timeout.
+
+fn test_will_timeout() -> Result<Unit, String>
+  while true
+    let _ = 0
+  end
+  Ok(())
+end
+
+fn test_will_pass() -> Result<Unit, String>
+  assert.eq(1 + 1, 2)?
+  Ok(())
+end

@@ -83,22 +83,7 @@ jobs:
           cp target/release/tyra "dist/${name}/"
           cp target/release/libtyra_runtime.a "dist/${name}/"
           cp -r stdlib "dist/${name}/"
-          cp README.md LICENSE CHANGELOG.md "dist/${name}/"
-          cat > "dist/${name}/PLATFORMS.md" << 'PLATFORMS_EOF'
-          # Platform Support
-
-          | Platform        | Binary type | Status              |
-          |-----------------|-------------|---------------------|
-          | Linux x86_64 (glibc) | Dynamic | Supported      |
-          | Linux x86_64 (musl)  | Static  | Supported (v0.5.0+) |
-          | macOS arm64     | Dynamic     | Supported           |
-          | Windows         | —           | Unguaranteed (tracking) |
-
-          `tyra build --static` is only supported on musl Linux (Alpine or similar).
-          glibc static linking is unsupported (breaks getaddrinfo/NSS).
-
-          See README.md § Platform support for full details.
-          PLATFORMS_EOF
+          cp README.md LICENSE CHANGELOG.md PLATFORMS.md "dist/${name}/"
           tar -czf "dist/${name}.tar.gz" -C dist "${name}"
           echo "ARTIFACT_NAME=${name}" >> "$GITHUB_ENV"
           echo "ARTIFACT_PATH=dist/${name}.tar.gz" >> "$GITHUB_ENV"
@@ -174,22 +159,7 @@ jobs:
           cp target/release/tyra "dist/${name}/"
           cp target/release/libtyra_runtime.a "dist/${name}/"
           cp -r stdlib "dist/${name}/"
-          cp README.md LICENSE CHANGELOG.md "dist/${name}/"
-          cat > "dist/${name}/PLATFORMS.md" << 'PLATFORMS_EOF'
-          # Platform Support
-
-          | Platform        | Binary type | Status              |
-          |-----------------|-------------|---------------------|
-          | Linux x86_64 (glibc) | Dynamic | Supported      |
-          | Linux x86_64 (musl)  | Static  | Supported (v0.5.0+) |
-          | macOS arm64     | Dynamic     | Supported           |
-          | Windows         | —           | Unguaranteed (tracking) |
-
-          `tyra build --static` is only supported on musl Linux (Alpine or similar).
-          glibc static linking is unsupported (breaks getaddrinfo/NSS).
-
-          See README.md § Platform support for full details.
-          PLATFORMS_EOF
+          cp README.md LICENSE CHANGELOG.md PLATFORMS.md "dist/${name}/"
           # Include the verified static hello binary so users can immediately
           # confirm static linking works without building anything themselves.
           cp /tmp/tyra_static_verify "dist/${name}/examples/hello"

@@ -102,6 +102,27 @@ jobs:
             exit 1
           }
 
+      - name: Smoke test (tyra test --timeout)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/static-corpus/timeout_smoke_test.tyra 2>&1 || true)
+          echo "$output"
+          echo "$output" | grep -qE '^not ok [0-9]+ - test_will_timeout' || {
+            echo "FAIL: timed-out test was not reported as failed"
+            exit 1
+          }
+          echo "$output" | grep -qE '^ok [0-9]+ - test_will_pass' || {
+            echo "FAIL: passing sibling test was not reported after timeout"
+            exit 1
+          }
+
+      - name: Smoke test (tyra test --format junit)
+        run: |
+          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/math_test.tyra \
+            | grep -q '<testcase' || {
+            echo "FAIL: JUnit output contains no <testcase> elements"
+            exit 1
+          }
+
   release-gate-macos:
     name: build + test + corpus + smoke (macos-14 arm64)
     runs-on: macos-14
@@ -168,6 +189,27 @@ jobs:
           }
           echo "$output" | grep -qE '^not ok [0-9]+ - test_will_crash' || {
             echo "FAIL: crashing test was not reported"
+            exit 1
+          }
+
+      - name: Smoke test (tyra test --timeout)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/static-corpus/timeout_smoke_test.tyra 2>&1 || true)
+          echo "$output"
+          echo "$output" | grep -qE '^not ok [0-9]+ - test_will_timeout' || {
+            echo "FAIL: timed-out test was not reported as failed"
+            exit 1
+          }
+          echo "$output" | grep -qE '^ok [0-9]+ - test_will_pass' || {
+            echo "FAIL: passing sibling test was not reported after timeout"
+            exit 1
+          }
+
+      - name: Smoke test (tyra test --format junit)
+        run: |
+          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/math_test.tyra \
+            | grep -q '<testcase' || {
+            echo "FAIL: JUnit output contains no <testcase> elements"
             exit 1
           }
 
@@ -270,8 +312,29 @@ jobs:
             exit 1
           }
 
+      - name: Smoke test (tyra test --timeout)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/static-corpus/timeout_smoke_test.tyra 2>&1 || true)
+          echo "$output"
+          echo "$output" | grep -qE '^not ok [0-9]+ - test_will_timeout' || {
+            echo "FAIL: timed-out test was not reported as failed"
+            exit 1
+          }
+          echo "$output" | grep -qE '^ok [0-9]+ - test_will_pass' || {
+            echo "FAIL: passing sibling test was not reported after timeout"
+            exit 1
+          }
+
+      - name: Smoke test (tyra test --format junit)
+        run: |
+          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/math_test.tyra \
+            | grep -q '<testcase' || {
+            echo "FAIL: JUnit output contains no <testcase> elements"
+            exit 1
+          }
+
   release-gate-macos-x86_64:
-    name: build only (macos-13 x86_64 tracking)
+    name: build + smoke (macos-13 x86_64 tracking)
     runs-on: macos-13
     continue-on-error: true
     steps:
@@ -297,8 +360,51 @@ jobs:
           restore-keys: |
             macos-x86_64-cargo-release-gate-
 
-      - name: Build workspace (tracking only)
-        run: cargo build --workspace
+      - name: Build release binary and runtime
+        run: cargo build --release -p tyra-cli -p tyra-runtime
+
+      - name: Smoke test (hello world)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra run examples/01-hello.tyra)
+          expected="hello, tyra"
+          if [ "$output" != "$expected" ]; then
+            echo "FAIL: expected '$expected', got '$output'"
+            exit 1
+          fi
+
+      - name: Smoke test (tyra test / per-test isolation)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/static-corpus/isolation_smoke_test.tyra 2>&1 || true)
+          echo "$output"
+          echo "$output" | grep -qE '^ok [0-9]+ - test_will_pass' || {
+            echo "FAIL: passing sibling test was not reported — isolation broken"
+            exit 1
+          }
+          echo "$output" | grep -qE '^not ok [0-9]+ - test_will_crash' || {
+            echo "FAIL: crashing test was not reported"
+            exit 1
+          }
+
+      - name: Smoke test (tyra test --timeout)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/static-corpus/timeout_smoke_test.tyra 2>&1 || true)
+          echo "$output"
+          echo "$output" | grep -qE '^not ok [0-9]+ - test_will_timeout' || {
+            echo "FAIL: timed-out test was not reported as failed"
+            exit 1
+          }
+          echo "$output" | grep -qE '^ok [0-9]+ - test_will_pass' || {
+            echo "FAIL: passing sibling test was not reported after timeout"
+            exit 1
+          }
+
+      - name: Smoke test (tyra test --format junit)
+        run: |
+          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/math_test.tyra \
+            | grep -q '<testcase' || {
+            echo "FAIL: JUnit output contains no <testcase> elements"
+            exit 1
+          }
 
   release-gate-windows:
     name: build only (windows tracking)

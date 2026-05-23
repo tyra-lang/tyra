@@ -78,6 +78,43 @@ tyra test --list
 tyra test --filter add --list
 ```
 
+Output order is stable: files in lexicographic path order, functions in
+source-declaration order within each file.
+
+---
+
+## Parallel execution and timeouts
+
+Run tests in parallel across multiple workers:
+
+```bash
+tyra test --jobs 4
+```
+
+The default is 1 (sequential). Output order is deterministic regardless of
+completion order.
+
+Set a per-test wall-clock limit:
+
+```bash
+tyra test --timeout 10
+```
+
+A test that exceeds the limit is killed and counted as a failure. Combine with
+`--jobs` for fast, bounded CI runs:
+
+```bash
+tyra test --jobs 4 --timeout 10
+```
+
+---
+
+## Per-test process isolation
+
+Each `test_*` function runs in its own subprocess (v0.5.0+). A panic, abort, or
+out-of-memory event in one test does not prevent sibling tests from running or
+appearing in the output. The TAP output format is unchanged.
+
 ---
 
 ## JUnit XML output
