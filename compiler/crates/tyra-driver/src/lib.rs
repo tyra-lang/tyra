@@ -1622,8 +1622,8 @@ fn compile_to_binary_opts(
         // default search path resolves it automatically.  We don't pass
         // explicit -L because the prefix probing above already added it for
         // Homebrew paths, and on Alpine the system search path is sufficient.
-        clang_args.push("-lgc".into());
         clang_args.push("-static".into());
+        clang_args.push("-lgc".into());
         // musl includes pthread and math in libc; libdl does not exist as a
         // separate library on musl.  On glibc static builds these are still
         // separate, but static glibc is unsupported; we keep -lpthread -lm
