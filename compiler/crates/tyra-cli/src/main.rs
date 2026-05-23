@@ -169,7 +169,7 @@ fn main() {
                 Some(ref o) => PathBuf::from(o),
                 None => auto_output.unwrap_or_else(|| source_path.with_extension("")),
             };
-            if static_link && !cfg!(target_env = "musl") {
+            if static_link && !is_musl_host() {
                 eprintln!("error: --static is only supported on musl Linux (Alpine or similar).");
                 eprintln!("       glibc static linking is known to break getaddrinfo and NSS.");
                 eprintln!("       Build with the musl-compiled tyra binary (e.g. on Alpine) to");
@@ -499,15 +499,18 @@ fn main() {
                                 passed: false,
                                 failure_msg: out.diag.trim().to_string(),
                             });
-                        } else if !out.diag.is_empty() {
-                            // Propagate diag into failure records that have no message yet.
-                            // This covers compile-error synthetic TAP records and subprocess
-                            // crashes whose stderr landed in diag rather than stdout # lines.
-                            for r in records.iter_mut() {
-                                if !r.passed && r.failure_msg.is_empty() {
-                                    r.failure_msg = out.diag.trim().to_string();
-                                }
-                            }
+                        } else if records.len() == 1
+                            && !records[0].passed
+                            && records[0].failure_msg.is_empty()
+                            && records[0].name.ends_with(": compile error")
+                            && !out.diag.is_empty()
+                        {
+                            // Propagate diag only into the synthetic compile-error record
+                            // (name = "{filename}: compile error", failure_msg empty).
+                            // Do NOT propagate to subprocess-crash records: diag accumulates
+                            // stderr from all subprocesses in a file, so attributing the
+                            // combined blob to individual records breaks JUnit granularity.
+                            records[0].failure_msg = out.diag.trim().to_string();
                         }
                         suites.push((out.path.clone(), records, out.elapsed));
                     }
@@ -1203,6 +1206,24 @@ fn find_bench_harness() -> Option<std::path::PathBuf> {
     }
 
     None
+}
+
+// ─── Host environment checks ─────────────────────────────────────────────────
+
+/// Returns true when the *host* libc is musl (checked at runtime via the
+/// presence of the musl dynamic linker). This is the correct guard for
+/// `--static`: what matters is whether clang on this host links against
+/// musl, not what target the `tyra` binary itself was compiled for.
+#[cfg(target_os = "linux")]
+fn is_musl_host() -> bool {
+    ["x86_64", "aarch64", "arm"]
+        .iter()
+        .any(|arch| std::path::Path::new(&format!("/lib/ld-musl-{arch}.so.1")).exists())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn is_musl_host() -> bool {
+    false
 }
 
 // ─── RAII guard: delete a temp binary on drop ────────────────────────────────
