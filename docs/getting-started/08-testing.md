@@ -156,6 +156,23 @@ Combine with `--filter` to scope the report:
 tyra test --filter add --format junit
 ```
 
+**GitHub Actions integration example:**
+
+```yaml
+- name: Run tests
+  run: TYRA_STDLIB=$PWD/stdlib tyra test --format junit src/ > test-results.xml || true
+
+- name: Publish test results
+  uses: mikepenz/action-junit-report@v4
+  if: always()
+  with:
+    report_paths: test-results.xml
+```
+
+The `|| true` prevents the step from failing before the report action uploads
+results. The report action marks the check as failed when `<failure>` elements
+are present.
+
 ---
 
 ## Assertion helpers

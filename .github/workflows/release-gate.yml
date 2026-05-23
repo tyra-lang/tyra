@@ -115,11 +115,13 @@ jobs:
             exit 1
           }
 
-      - name: Smoke test (tyra test --format junit)
+      - name: Smoke test (tyra test --format junit / failure case)
         run: |
-          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/math_test.tyra \
-            | grep -q '<testcase' || {
-            echo "FAIL: JUnit output contains no <testcase> elements"
+          # Verify JUnit failure case: isolation_smoke_test has one crashing test,
+          # so the XML must contain a <failure> element (not just <testcase>).
+          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/isolation_smoke_test.tyra 2>/dev/null \
+            | grep -q '<failure' || {
+            echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1
           }
 
@@ -205,11 +207,13 @@ jobs:
             exit 1
           }
 
-      - name: Smoke test (tyra test --format junit)
+      - name: Smoke test (tyra test --format junit / failure case)
         run: |
-          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/math_test.tyra \
-            | grep -q '<testcase' || {
-            echo "FAIL: JUnit output contains no <testcase> elements"
+          # Verify JUnit failure case: isolation_smoke_test has one crashing test,
+          # so the XML must contain a <failure> element (not just <testcase>).
+          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/isolation_smoke_test.tyra 2>/dev/null \
+            | grep -q '<failure' || {
+            echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1
           }
 
@@ -325,11 +329,13 @@ jobs:
             exit 1
           }
 
-      - name: Smoke test (tyra test --format junit)
+      - name: Smoke test (tyra test --format junit / failure case)
         run: |
-          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/math_test.tyra \
-            | grep -q '<testcase' || {
-            echo "FAIL: JUnit output contains no <testcase> elements"
+          # Verify JUnit failure case: isolation_smoke_test has one crashing test,
+          # so the XML must contain a <failure> element (not just <testcase>).
+          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/isolation_smoke_test.tyra 2>/dev/null \
+            | grep -q '<failure' || {
+            echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1
           }
 
@@ -362,6 +368,11 @@ jobs:
 
       - name: Build release binary and runtime
         run: cargo build --release -p tyra-cli -p tyra-runtime
+
+      - name: Run static corpus check
+        env:
+          TYRA_STDLIB: ${{ github.workspace }}/stdlib
+        run: bash bench/static-corpus/check.sh ./target/release/tyra
 
       - name: Smoke test (hello world)
         run: |
@@ -398,11 +409,13 @@ jobs:
             exit 1
           }
 
-      - name: Smoke test (tyra test --format junit)
+      - name: Smoke test (tyra test --format junit / failure case)
         run: |
-          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/math_test.tyra \
-            | grep -q '<testcase' || {
-            echo "FAIL: JUnit output contains no <testcase> elements"
+          # Verify JUnit failure case: isolation_smoke_test has one crashing test,
+          # so the XML must contain a <failure> element (not just <testcase>).
+          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/isolation_smoke_test.tyra 2>/dev/null \
+            | grep -q '<failure' || {
+            echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1
           }
 
