@@ -155,11 +155,14 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME:-dev}"
           name="tyra-${version}-linux-musl-x86_64-static"
-          mkdir -p "dist/${name}"
+          mkdir -p "dist/${name}/examples"
           cp target/release/tyra "dist/${name}/"
           cp target/release/libtyra_runtime.a "dist/${name}/"
           cp -r stdlib "dist/${name}/"
           cp README.md LICENSE CHANGELOG.md "dist/${name}/"
+          # Include the verified static hello binary so users can immediately
+          # confirm static linking works without building anything themselves.
+          cp /tmp/tyra_static_verify "dist/${name}/examples/hello"
           tar -czf "dist/${name}.tar.gz" -C dist "${name}"
           echo "ARTIFACT_NAME=${name}" >> "$GITHUB_ENV"
           echo "ARTIFACT_PATH=dist/${name}.tar.gz" >> "$GITHUB_ENV"
