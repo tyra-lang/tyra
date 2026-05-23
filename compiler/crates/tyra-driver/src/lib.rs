@@ -1505,15 +1505,35 @@ fn stmt_span(s: &tyra_ast::Stmt) -> tyra_ast::Span {
 
 /// Compile a Tyra source file to a native binary (debug, `-O0`).
 pub fn compile_to_binary(source_path: &Path, output_path: &Path) -> CompileResult {
-    compile_to_binary_opts(source_path, output_path, false)
+    compile_to_binary_opts(source_path, output_path, false, false)
 }
 
 /// Compile a Tyra source file to a native binary (release, `-O2`).
 pub fn compile_to_binary_release(source_path: &Path, output_path: &Path) -> CompileResult {
-    compile_to_binary_opts(source_path, output_path, true)
+    compile_to_binary_opts(source_path, output_path, true, false)
 }
 
-fn compile_to_binary_opts(source_path: &Path, output_path: &Path, release: bool) -> CompileResult {
+/// Compile a Tyra source file to a fully static native binary (debug, `-O0`).
+///
+/// Links with `-static` so the result is a self-contained single binary.
+/// Reliable on musl libc (Alpine Linux).  On glibc hosts, static linking
+/// is unsupported due to `getaddrinfo` / NSS requirements — the flag is
+/// accepted at the CLI level but results are not guaranteed.
+pub fn compile_to_binary_static(source_path: &Path, output_path: &Path) -> CompileResult {
+    compile_to_binary_opts(source_path, output_path, false, true)
+}
+
+/// Compile a Tyra source file to a fully static native binary (release, `-O2`).
+pub fn compile_to_binary_static_release(source_path: &Path, output_path: &Path) -> CompileResult {
+    compile_to_binary_opts(source_path, output_path, true, true)
+}
+
+fn compile_to_binary_opts(
+    source_path: &Path,
+    output_path: &Path,
+    release: bool,
+    static_link: bool,
+) -> CompileResult {
     let result = compile_to_ir(source_path);
     if !result.success {
         return result;
@@ -1596,15 +1616,33 @@ fn compile_to_binary_opts(source_path: &Path, output_path: &Path, release: bool)
             };
         }
     }
-    clang_args.push("-lgc".into());
-    // The Rust staticlib pulls in std, which on Unix needs pthread + dl.
-    // `cfg!` evaluates against the compiling host's target. v0.1 only
-    // supports host-target compilation; cross-compile will need target-
-    // triple plumbing here.
-    if cfg!(target_os = "linux") {
-        clang_args.push("-lpthread".into());
-        clang_args.push("-ldl".into());
-        clang_args.push("-lm".into());
+    if static_link {
+        // Static linking: pass -static so the linker prefers libgc.a over
+        // libgc.so.  On Alpine musl, `gc-dev` installs libgc.a and the
+        // default search path resolves it automatically.  We don't pass
+        // explicit -L because the prefix probing above already added it for
+        // Homebrew paths, and on Alpine the system search path is sufficient.
+        clang_args.push("-lgc".into());
+        clang_args.push("-static".into());
+        // musl includes pthread and math in libc; libdl does not exist as a
+        // separate library on musl.  On glibc static builds these are still
+        // separate, but static glibc is unsupported; we keep -lpthread -lm
+        // for robustness and omit -ldl (breaks musl + is fragile on glibc).
+        if cfg!(target_os = "linux") {
+            clang_args.push("-lpthread".into());
+            clang_args.push("-lm".into());
+        }
+    } else {
+        clang_args.push("-lgc".into());
+        // The Rust staticlib pulls in std, which on Unix needs pthread + dl.
+        // `cfg!` evaluates against the compiling host's target. v0.1 only
+        // supports host-target compilation; cross-compile will need target-
+        // triple plumbing here.
+        if cfg!(target_os = "linux") {
+            clang_args.push("-lpthread".into());
+            clang_args.push("-ldl".into());
+            clang_args.push("-lm".into());
+        }
     }
 
     let clang_result = Command::new("clang").args(&clang_args).output();
@@ -1845,7 +1883,7 @@ fn run_opts(source_path: &Path, release: bool) -> CompileResult {
     let tmp_dir = std::env::temp_dir();
     let binary_path = tmp_dir.join(format!("tyra_run_{}", std::process::id()));
 
-    let result = compile_to_binary_opts(source_path, &binary_path, release);
+    let result = compile_to_binary_opts(source_path, &binary_path, release, false);
     if !result.success {
         return result;
     }

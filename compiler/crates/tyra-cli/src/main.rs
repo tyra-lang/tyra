@@ -3,7 +3,7 @@
 // Usage:
 //   tyra check [<file.tyra>]                      Type-check without codegen
 //   tyra run   [--release] [<file.tyra>]         Compile and run a Tyra program
-//   tyra build [--release] [<file.tyra>] [-o <out>]  Compile to a native binary
+//   tyra build [--release] [--static] [<file.tyra>] [-o <out>]  Compile to a native binary
 //   tyra emit-ir <file.tyra>                     Emit LLVM IR to stdout
 //   tyra fmt [--check] <file.tyra|dir>           Format source (--check: exit 1 if changed)
 //   tyra test [--filter <pat>] [--list] [--format tap|junit] [path]
@@ -112,12 +112,14 @@ fn main() {
         }
         "build" => {
             let mut release = false;
+            let mut static_link = false;
             let mut file_arg: Option<String> = None;
             let mut output_arg: Option<String> = None;
             let mut rest_iter = args[2..].iter().peekable();
             while let Some(arg) = rest_iter.next() {
                 match arg.as_str() {
                     "--release" => release = true,
+                    "--static" => static_link = true,
                     "-o" => {
                         let val = rest_iter.next().cloned().unwrap_or_else(|| {
                             eprintln!("error: `-o` requires an output path");
@@ -125,14 +127,18 @@ fn main() {
                         });
                         if val.starts_with("--") {
                             eprintln!("error: `-o` requires an output path, got flag `{val}`");
-                            eprintln!("usage: tyra build [--release] [<file.tyra>] [-o <out>]");
+                            eprintln!(
+                                "usage: tyra build [--release] [--static] [<file.tyra>] [-o <out>]"
+                            );
                             process::exit(1);
                         }
                         output_arg = Some(val);
                     }
                     a if a.starts_with("--") => {
                         eprintln!("error: unknown flag `{a}`");
-                        eprintln!("usage: tyra build [--release] [<file.tyra>] [-o <out>]");
+                        eprintln!(
+                            "usage: tyra build [--release] [--static] [<file.tyra>] [-o <out>]"
+                        );
                         process::exit(1);
                     }
                     a => {
@@ -163,16 +169,26 @@ fn main() {
                 Some(ref o) => PathBuf::from(o),
                 None => auto_output.unwrap_or_else(|| source_path.with_extension("")),
             };
-            let result = if release {
-                tyra_driver::compile_to_binary_release(&source_path, &output_path)
-            } else {
-                tyra_driver::compile_to_binary(&source_path, &output_path)
+            let result = match (static_link, release) {
+                (true, true) => {
+                    tyra_driver::compile_to_binary_static_release(&source_path, &output_path)
+                }
+                (true, false) => {
+                    tyra_driver::compile_to_binary_static(&source_path, &output_path)
+                }
+                (false, true) => tyra_driver::compile_to_binary_release(&source_path, &output_path),
+                (false, false) => tyra_driver::compile_to_binary(&source_path, &output_path),
             };
             if result.report.has_errors() {
                 eprint!("{}", result.report.render(&result.sources));
                 process::exit(1);
             }
-            let mode = if release { " (release)" } else { "" };
+            let mode = match (static_link, release) {
+                (true, true) => " (release, static)",
+                (true, false) => " (static)",
+                (false, true) => " (release)",
+                (false, false) => "",
+            };
             println!("compiled to {}{mode}", output_path.display());
         }
         "check" => {
@@ -1106,7 +1122,7 @@ fn print_usage() {
         "  run   [--release] [<file.tyra>]          compile and run (defaults to project entry point)"
     );
     eprintln!(
-        "  build [--release] [<file.tyra>] [-o out] compile to binary (defaults to project entry point)"
+        "  build [--release] [--static] [<file.tyra>] [-o out]  compile to binary (--static: musl-only)"
     );
     eprintln!("  emit-ir <file.tyra>                      emit LLVM IR to stdout");
     eprintln!(

@@ -204,6 +204,21 @@ jobs:
             exit 1
           fi
 
+      - name: Smoke test (static binary)
+        run: |
+          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra build --static examples/01-hello.tyra -o /tmp/tyra_static_test
+          file /tmp/tyra_static_test | grep -q "statically linked" || {
+            echo "FAIL: binary is not statically linked"
+            file /tmp/tyra_static_test
+            exit 1
+          }
+          output=$(/tmp/tyra_static_test)
+          expected="hello, tyra"
+          if [ "$output" != "$expected" ]; then
+            echo "FAIL: expected '$expected', got '$output'"
+            exit 1
+          fi
+
   release-gate-windows:
     name: build only (windows tracking)
     runs-on: windows-latest

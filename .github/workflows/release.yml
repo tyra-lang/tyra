@@ -94,9 +94,85 @@ jobs:
           name: ${{ env.ARTIFACT_NAME }}
           path: ${{ env.ARTIFACT_PATH }}
 
+  build-musl-static:
+    name: build static (alpine musl x86_64)
+    runs-on: ubuntu-latest
+    container: alpine:3.21
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Alpine dependencies
+        run: |
+          apk add --no-cache \
+            gc-dev \
+            clang19 \
+            llvm19 \
+            musl-dev \
+            pkgconf \
+            bash \
+            curl \
+            git
+
+      - name: Set up LLVM 19 symlinks
+        run: |
+          ln -sf /usr/bin/llvm-config-19 /usr/local/bin/llvm-config
+          ln -sf /usr/bin/clang-19 /usr/local/bin/clang
+          llvm-config --version
+          clang --version
+
+      - name: Install Rust via rustup
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --default-toolchain stable --profile minimal
+          [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: alpine-musl-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            alpine-musl-cargo-release-
+
+      - name: Build release binary and runtime
+        run: cargo build --release -p tyra-cli -p tyra-runtime
+
+      - name: Verify static binary
+        run: |
+          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra build --static examples/01-hello.tyra -o /tmp/tyra_static_verify
+          file /tmp/tyra_static_verify | grep -q "statically linked" || {
+            echo "FAIL: binary is not statically linked"
+            file /tmp/tyra_static_verify
+            exit 1
+          }
+
+      - name: Package artifact
+        run: |
+          version="${GITHUB_REF_NAME:-dev}"
+          name="tyra-${version}-linux-musl-x86_64-static"
+          mkdir -p "dist/${name}"
+          cp target/release/tyra "dist/${name}/"
+          cp target/release/libtyra_runtime.a "dist/${name}/"
+          cp -r stdlib "dist/${name}/"
+          cp README.md LICENSE CHANGELOG.md "dist/${name}/"
+          tar -czf "dist/${name}.tar.gz" -C dist "${name}"
+          echo "ARTIFACT_NAME=${name}" >> "$GITHUB_ENV"
+          echo "ARTIFACT_PATH=dist/${name}.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_PATH }}
+
   publish:
     name: Publish GitHub Release
-    needs: build
+    needs: [build, build-musl-static]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
