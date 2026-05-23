@@ -7,6 +7,43 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ---
 
+## [0.5.0] - 2026-05-23
+
+### Stable
+
+**Cross-OS CI matrix + static output binary**
+- `release-gate.yml` now runs build+test+static-corpus+smoke on all three required OSes per PR: Linux glibc (ubuntu-latest), macOS arm64 (macos-14), and Alpine musl — macOS regressions are now caught before release
+- `tyra build --static`: links the compiled program statically on musl (`-static`); produces a fully self-contained binary with no shared-lib deps
+- CI verifies the Alpine musl artifact is statically linked (`file` check); musl static artifact added to GitHub Releases
+- Windows tracking job (non-blocking allow-failure) added to surface toolchain drift
+- Platform matrix: Linux glibc (dynamic), Linux musl (static), macOS arm64 (dynamic), Windows (unguaranteed / tracking)
+
+**`string.replace` and `string.join`**
+- `string.replace(_ s: String, _ from: String, _ to: String) -> String` — replaces all occurrences of `from` with `to`
+- `string.join(_ parts: List<String>, _ sep: String) -> String` — joins a `List<String>` with a separator
+
+**Per-test process isolation in `tyra test`**
+- Each `test_*` function now runs in its own subprocess (compile-once, exec-per-test)
+- A panic or abort in one test no longer voids sibling test results
+- TAP output format unchanged; timeout (`--timeout`) applied per test
+- Groundwork for `assert.panics` (deferred pending panic-semantics ADR)
+
+### Known Limitations
+
+- `assert.panics` not yet implemented (deferred — needs panic-semantics ADR to define a distinguishable signal vs segfault/timeout)
+- `tyra build --static` only reliable on musl (glibc static linking is unsupported — breaks `getaddrinfo`)
+- Windows native build untested (WSL2 recommended); toolchain tracking CI job only
+
+### Not in This Release
+
+- `tyra publish` / package registry
+- `Set<T>`, generic `Map<K,V>`, `time`/`log`/`float` stdlib
+- `test "name"` language syntax
+- Coverage reporting
+- macOS x86_64 (Intel) build artifact
+
+---
+
 ## [0.4.0] - 2026-05-22
 
 ### Stable

@@ -1816,7 +1816,7 @@ end
 - `Map` の拡張 API (任意の K / V、`put` / `remove` / イテレーション、ハッシュテーブル化) — §17.3.6 で `Map<String, Int>` リテラル + `get` / `contains_key` のみ凍結。それ以外は後続リリース以降
 - `Set<T>` 全般（リテラル構文、操作 API、ハッシュ実装）— 後続リリース以降
 - `test "name"` 言語構文 — 別 ADR にて規定（ADR-0008 参照）
-- `assert.panics` — プロセス境界設計（テスト分離）が前提。後続リリース以降
+- `assert.panics` — per-test プロセス分離は v0.5.0 で実装済み。panic を segfault / timeout と区別するシグナル設計は別 ADR にて規定（後続リリース以降）
 - ジェネリック `assert.eq<T>` — `Int` / `String` / `Bool` 向け overload は v0.4.0 で実装済み。任意型への完全ジェネリック化 (ability constraint) は後続リリース以降
 
 ---

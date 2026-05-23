@@ -2,7 +2,7 @@
 
 A statically-typed, AI-friendly programming language for backend services, CLI tools, and business applications.
 
-> **v0.4.0** — adds lambda / closures, generic `List<T>` (`map`/`filter`/`fold`), `tyra bench <dir>`, `tyra test --timeout/--jobs`, and `Tyra.lock` with floating branch constraints. [See known limitations](#known-limitations) before using in production.
+> **v0.5.0** — adds cross-OS CI gate (Linux glibc + macOS arm64 + Alpine musl), `tyra build --static` (musl static binary), `string.replace`/`string.join`, and per-test process isolation. [See known limitations](#known-limitations) before using in production.
 
 ---
 
@@ -125,17 +125,19 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 
 ## Status
 
-**Stable in v0.4.0** — supported and tested:
+**Stable in v0.5.0** — supported and tested:
 
 | Component | Notes |
 | --- | --- |
 | Language specification v0.4 | ✅ Complete |
 | Lexer, Parser, Type checker | ✅ Complete |
-| LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 |
+| LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 (glibc + musl) |
 | Standard library: string, list, fs, io, float, json, assert | ✅ Complete |
 | `tyra check / run / build` CLI (zero-arg project mode, `--release`) | ✅ Complete |
+| `tyra build --static` — static single binary (musl) | ✅ Complete (v0.5.0+) |
 | `tyra fmt [--check] [--stdin] <file\|dir>` — formatter + 100-col wrapping | ✅ Complete |
 | `tyra test [--filter] [--list] [--format tap\|junit] [--timeout] [--jobs N]` | ✅ Complete |
+| Per-test process isolation in `tyra test` | ✅ Complete (v0.5.0+) |
 | `continue` statement | ✅ Complete |
 | `tyra new <name> [--lib] [--vcs none]` — project scaffolding | ✅ Complete |
 | `tyra mod init/add/update/remove/show/tree/sync/clean [--locked]` | ✅ Complete |
@@ -144,9 +146,19 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | Lambda / closures (spec §9.4, ADR 0011) | ✅ Complete |
 | Generic `List<T>` + `map`/`filter`/`fold` | ✅ Complete |
 | Generic `assert.eq` / `assert.ne` (Int, String, Bool) | ✅ Complete |
+| `string.replace` / `string.join` | ✅ Complete (v0.5.0+) |
 | `Tyra.lock` + floating `branch` constraints + transitive dep resolution | ✅ Complete |
 | LSP server (`tyra-lsp`) + VS Code extension | ✅ Development install |
 | Static conformance corpus (19 programs + error cases) | ✅ CI-gated |
+
+## Platform support
+
+| Platform | Binary type | Status |
+|----------|-------------|--------|
+| Linux x86_64 (glibc) | Dynamic | Supported |
+| Linux x86_64 (musl) | Static | Supported (v0.5.0+) |
+| macOS arm64 | Dynamic | Supported |
+| Windows | — | Unguaranteed (tracking) |
 
 **Experimental in v0.4.0** — included but not production-ready:
 
@@ -158,15 +170,17 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 
 | Component | Notes |
 | --- | --- |
-| Registry (`tyra publish`), full registry-backed resolver | ⏳ v0.5+ |
-| `assert.panics` | ⏳ Requires per-test process isolation |
+| Registry (`tyra publish`), full registry-backed resolver | ⏳ Future |
+| `assert.panics` | ⏳ Needs panic-semantics ADR |
 | `test "name"` language syntax | ⏳ Separate ADR |
 | Pre-built binaries (homebrew, apt) | ⏳ Later |
 | VS Code Marketplace publication | ⏳ Later |
+| macOS x86_64 (Intel) build artifact | ⏳ Later |
 
 ## Known limitations
 
-- **Windows**: untested. Build via WSL2 is recommended.
+- **Windows**: untested. Build via WSL2 is recommended. A non-blocking tracking CI job surfaces toolchain drift.
+- **`tyra build --static`**: only reliable on musl. glibc static linking is unsupported (breaks `getaddrinfo`).
 - **`http.server`**: experimental. Single-threaded, no TLS, no middleware. Do not use in production.
 - **Breaking changes**: expect breaking changes before v1.0.
 
@@ -247,7 +261,7 @@ The compiler always declares which spec version it implements:
 
 ```console
 $ tyra --version
-tyra 0.4.0
+tyra 0.5.0
 implementing language spec 0.4
 ```
 
