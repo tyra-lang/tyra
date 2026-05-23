@@ -1277,8 +1277,7 @@ fn list_test_fns(test_file: &Path, filter: Option<&str>) {
 /// Build a complete Tyra source that appends a synthesized `fn main` that:
 /// - With argv[1] = a test function name: runs ONLY that test, exits 0 on
 ///   pass, 1 on fail (per-test isolation mode used by the runner).
-/// - With no arguments (or argv[1] = "--all"): runs all tests in TAP order
-///   (legacy / backward-compat mode).
+/// - With no arguments: runs all tests in TAP order (manual debug mode).
 fn synthesize_runner(test_source: &str, test_fns: &[String]) -> String {
     let n = test_fns.len();
     let mut out = String::from(test_source);
@@ -1482,15 +1481,14 @@ fn run_test_file_core(test_file: &Path, filter: Option<&str>, timeout: Option<u6
     if compile.report.has_errors() {
         diag.push_str(&compile.report.render(&compile.sources));
         let elapsed = t0.elapsed().as_secs_f64();
-        let n = test_fns.len().max(1);
         let filename = test_file.file_name().unwrap_or_default().to_string_lossy();
         let synthetic_tap = format!(
-            "TAP version 14\n1..{n}\nnot ok 1 - {filename}: compile error\n",
+            "TAP version 14\n1..1\nnot ok 1 - {filename}: compile error\n",
         );
         return FileTestOut {
             path: test_file.display().to_string(),
             pass: 0,
-            fail: test_fns.len().max(1),
+            fail: 1,
             header,
             tap: synthetic_tap,
             timing: String::new(),
