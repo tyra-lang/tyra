@@ -66,6 +66,8 @@ jobs:
         run: cargo test --workspace
 
       - name: Run static corpus check
+        env:
+          TYRA_STDLIB: ${{ github.workspace }}/stdlib
         run: bash bench/static-corpus/check.sh ./target/release/tyra
 
       - name: Verify LLVM 21
@@ -158,8 +160,8 @@ jobs:
       - name: Set up LLVM 19 symlinks
         run: |
           # Ensure llvm-config and clang resolve to versioned binaries on PATH
-          ln -sf /usr/bin/llvm-config-19 /usr/local/bin/llvm-config || true
-          ln -sf /usr/bin/clang-19 /usr/local/bin/clang || true
+          ln -sf /usr/bin/llvm-config-19 /usr/local/bin/llvm-config
+          ln -sf /usr/bin/clang-19 /usr/local/bin/clang
           llvm-config --version
           clang --version
 
@@ -168,6 +170,7 @@ jobs:
           # Alpine apk ships an older Rust; use rustup to guarantee >= MSRV 1.88
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
             | sh -s -- -y --default-toolchain stable --profile minimal
+          [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Cache cargo registry and target
@@ -182,25 +185,18 @@ jobs:
             alpine-musl-cargo-release-gate-
 
       - name: Build release binary and runtime
-        run: |
-          . "$HOME/.cargo/env"
-          cargo build --release -p tyra-cli -p tyra-runtime
+        run: cargo build --release -p tyra-cli -p tyra-runtime
 
       - name: Run workspace tests
-        run: |
-          . "$HOME/.cargo/env"
-          cargo test --workspace
+        run: cargo test --workspace
 
       - name: Run static corpus check
         env:
           TYRA_STDLIB: ${{ github.workspace }}/stdlib
-        run: |
-          . "$HOME/.cargo/env"
-          bash bench/static-corpus/check.sh ./target/release/tyra
+        run: bash bench/static-corpus/check.sh ./target/release/tyra
 
       - name: Smoke test (hello world)
         run: |
-          . "$HOME/.cargo/env"
           output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra run examples/01-hello.tyra)
           expected="hello, tyra"
           if [ "$output" != "$expected" ]; then
