@@ -1,8 +1,8 @@
 # Tyra Project Strategy
 
-- **Version**: 1.0
+- **Version**: 1.2
 - **Status**: Active
-- **Last updated**: 2026-05-19
+- **Last updated**: 2026-05-23
 - **Owner**: Project lead
 - **Review cadence**: Every 3 months, or after any major spec change
 
@@ -629,6 +629,7 @@ When updating:
 
 - **v1.0 (2026-04-15)**: Initial document. Captures Phase 0a/0b conclusions, 5-layer competitive model, 5-language comparison, 3 axes of victory, risk analysis.
 - **v1.1 (2026-04-15)**: Remove prototype transpiler phase (old Phase 1). Renumber: LLVM implementation is now Phase 1, adoption is Phase 2. Go directly from spec to compiler.
+- **v1.2 (2026-05-23)**: Updated §1 current status for v0.5.0 release (cross-OS CI matrix, musl static binary, string.replace/join, per-test isolation).
 
 ---
 

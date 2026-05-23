@@ -1,6 +1,6 @@
 # Developer Tooling Roadmap
 
-**Last updated**: 2026-05-19
+**Last updated**: 2026-05-23
 
 This document tracks the status and future direction of `tyra fmt`, `tyra test`,
 and related developer experience tooling.
