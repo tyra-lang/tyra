@@ -91,7 +91,7 @@ jobs:
           # isolation_smoke_test.tyra has one test that stack-overflows (non-tail recursion,
           # TCO-proof) and one that passes. Without isolation the crash kills the shared binary
           # and suppresses the sibling's TAP line.
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/static-corpus/isolation_smoke_test.tyra 2>&1 || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/isolation_smoke_test.tyra 2>&1 || true)
           echo "$output"
           echo "$output" | grep -qE '^ok [0-9]+ - test_will_pass' || {
             echo "FAIL: passing sibling test was not reported — isolation broken"
@@ -104,7 +104,7 @@ jobs:
 
       - name: Smoke test (tyra test --timeout)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/static-corpus/timeout_smoke_test.tyra 2>&1 || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/smoke/timeout_smoke_test.tyra 2>&1 || true)
           echo "$output"
           echo "$output" | grep -qE '^not ok [0-9]+ - test_will_timeout' || {
             echo "FAIL: timed-out test was not reported as failed"
@@ -120,7 +120,7 @@ jobs:
           # Verify JUnit failure case: isolation_smoke_test has one crashing test,
           # so the XML must contain a <failure> element (not just <testcase>).
           # Capture with || true so pipefail does not fire on tyra test's non-0 exit.
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/isolation_smoke_test.tyra 2>/dev/null || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/smoke/isolation_smoke_test.tyra 2>/dev/null || true)
           echo "$output" | grep -q '<failure' || {
             echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1
@@ -184,7 +184,7 @@ jobs:
           # isolation_smoke_test.tyra has one test that stack-overflows (non-tail recursion,
           # TCO-proof) and one that passes. Without isolation the crash kills the shared binary
           # and suppresses the sibling's TAP line.
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/static-corpus/isolation_smoke_test.tyra 2>&1 || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/isolation_smoke_test.tyra 2>&1 || true)
           echo "$output"
           echo "$output" | grep -qE '^ok [0-9]+ - test_will_pass' || {
             echo "FAIL: passing sibling test was not reported — isolation broken"
@@ -197,7 +197,7 @@ jobs:
 
       - name: Smoke test (tyra test --timeout)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/static-corpus/timeout_smoke_test.tyra 2>&1 || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/smoke/timeout_smoke_test.tyra 2>&1 || true)
           echo "$output"
           echo "$output" | grep -qE '^not ok [0-9]+ - test_will_timeout' || {
             echo "FAIL: timed-out test was not reported as failed"
@@ -213,7 +213,7 @@ jobs:
           # Verify JUnit failure case: isolation_smoke_test has one crashing test,
           # so the XML must contain a <failure> element (not just <testcase>).
           # Capture with || true so pipefail does not fire on tyra test's non-0 exit.
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/isolation_smoke_test.tyra 2>/dev/null || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/smoke/isolation_smoke_test.tyra 2>/dev/null || true)
           echo "$output" | grep -q '<failure' || {
             echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1
@@ -236,6 +236,7 @@ jobs:
             llvm19-dev \
             musl-dev \
             pkgconf \
+            file \
             bash \
             curl \
             git
@@ -313,7 +314,7 @@ jobs:
           # isolation_smoke_test.tyra has one test that stack-overflows (non-tail recursion,
           # TCO-proof) and one that passes. Without isolation the crash kills the shared binary
           # and suppresses the sibling's TAP line.
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/static-corpus/isolation_smoke_test.tyra 2>&1 || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/isolation_smoke_test.tyra 2>&1 || true)
           echo "$output"
           echo "$output" | grep -qE '^ok [0-9]+ - test_will_pass' || {
             echo "FAIL: passing sibling test was not reported — isolation broken"
@@ -326,7 +327,7 @@ jobs:
 
       - name: Smoke test (tyra test --timeout)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/static-corpus/timeout_smoke_test.tyra 2>&1 || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/smoke/timeout_smoke_test.tyra 2>&1 || true)
           echo "$output"
           echo "$output" | grep -qE '^not ok [0-9]+ - test_will_timeout' || {
             echo "FAIL: timed-out test was not reported as failed"
@@ -342,7 +343,7 @@ jobs:
           # Verify JUnit failure case: isolation_smoke_test has one crashing test,
           # so the XML must contain a <failure> element (not just <testcase>).
           # Capture with || true so pipefail does not fire on tyra test's non-0 exit.
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/isolation_smoke_test.tyra 2>/dev/null || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/smoke/isolation_smoke_test.tyra 2>/dev/null || true)
           echo "$output" | grep -q '<failure' || {
             echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1
@@ -394,7 +395,7 @@ jobs:
 
       - name: Smoke test (tyra test / per-test isolation)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/static-corpus/isolation_smoke_test.tyra 2>&1 || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/isolation_smoke_test.tyra 2>&1 || true)
           echo "$output"
           echo "$output" | grep -qE '^ok [0-9]+ - test_will_pass' || {
             echo "FAIL: passing sibling test was not reported — isolation broken"
@@ -407,7 +408,7 @@ jobs:
 
       - name: Smoke test (tyra test --timeout)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/static-corpus/timeout_smoke_test.tyra 2>&1 || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/smoke/timeout_smoke_test.tyra 2>&1 || true)
           echo "$output"
           echo "$output" | grep -qE '^not ok [0-9]+ - test_will_timeout' || {
             echo "FAIL: timed-out test was not reported as failed"
@@ -423,7 +424,7 @@ jobs:
           # Verify JUnit failure case: isolation_smoke_test has one crashing test,
           # so the XML must contain a <failure> element (not just <testcase>).
           # Capture with || true so pipefail does not fire on tyra test's non-0 exit.
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/static-corpus/isolation_smoke_test.tyra 2>/dev/null || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/smoke/isolation_smoke_test.tyra 2>/dev/null || true)
           echo "$output" | grep -q '<failure' || {
             echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1

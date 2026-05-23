@@ -111,6 +111,7 @@ jobs:
             llvm19-dev \
             musl-dev \
             pkgconf \
+            file \
             bash \
             curl \
             git
