@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     name: build (${{ matrix.runner }})
@@ -43,6 +46,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install bdw-gc llvm@21
+          brew link --force --overwrite llvm@21
           echo "/opt/homebrew/opt/llvm@21/bin" >> "$GITHUB_PATH"
 
       - name: Verify LLVM 21
@@ -98,6 +102,9 @@ jobs:
     name: build static (alpine musl x86_64)
     runs-on: ubuntu-latest
     container: alpine:3.21
+    env:
+      CARGO_HOME: /root/.cargo
+      RUSTUP_HOME: /root/.rustup
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -133,15 +140,15 @@ jobs:
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
             | sh -s -- -y --default-toolchain stable --profile minimal
-          [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          [ -f "$CARGO_HOME/env" ] && . "$CARGO_HOME/env"
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
 
       - name: Cache cargo registry and target
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
+            ${{ env.CARGO_HOME }}/registry
+            ${{ env.CARGO_HOME }}/git
             target
           key: alpine-musl-cargo-release-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
