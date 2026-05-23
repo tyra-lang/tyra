@@ -1210,20 +1210,19 @@ fn find_bench_harness() -> Option<std::path::PathBuf> {
 
 // ─── Host environment checks ─────────────────────────────────────────────────
 
-/// Returns true when the *host* libc is musl (checked at runtime via the
-/// presence of the musl dynamic linker). This is the correct guard for
-/// `--static`: what matters is whether clang on this host links against
-/// musl, not what target the `tyra` binary itself was compiled for.
-#[cfg(target_os = "linux")]
+/// Returns true when the host clang defaults to a musl target triple
+/// (e.g. `x86_64-alpine-linux-musl`). This is the toolchain-level
+/// condition that guarantees `--static` will produce a correct binary:
+/// the default target triple determines which libc clang links against,
+/// not merely whether musl packages happen to be installed on the host.
 fn is_musl_host() -> bool {
-    ["x86_64", "aarch64", "arm"]
-        .iter()
-        .any(|arch| std::path::Path::new(&format!("/lib/ld-musl-{arch}.so.1")).exists())
-}
-
-#[cfg(not(target_os = "linux"))]
-fn is_musl_host() -> bool {
-    false
+    std::process::Command::new("clang")
+        .arg("-print-target-triple")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.contains("musl"))
+        .unwrap_or(false)
 }
 
 // ─── RAII guard: delete a temp binary on drop ────────────────────────────────
