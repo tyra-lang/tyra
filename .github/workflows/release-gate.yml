@@ -241,8 +241,8 @@ jobs:
 
       - name: Set up LLVM 19 symlinks
         run: |
-          # Ensure llvm-config and clang resolve to versioned binaries on PATH
-          ln -sf /usr/bin/llvm-config-19 /usr/local/bin/llvm-config
+          # Alpine llvm19 installs llvm-config under /usr/lib/llvm19/bin/ (not /usr/bin)
+          ln -sf /usr/lib/llvm19/bin/llvm-config /usr/local/bin/llvm-config
           ln -sf /usr/bin/clang-19 /usr/local/bin/clang
           llvm-config --version
           clang --version

@@ -116,7 +116,7 @@ jobs:
 
       - name: Set up LLVM 19 symlinks
         run: |
-          ln -sf /usr/bin/llvm-config-19 /usr/local/bin/llvm-config
+          ln -sf /usr/lib/llvm19/bin/llvm-config /usr/local/bin/llvm-config
           ln -sf /usr/bin/clang-19 /usr/local/bin/clang
           llvm-config --version
           clang --version
