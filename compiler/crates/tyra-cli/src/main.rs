@@ -1211,8 +1211,10 @@ fn is_test_file(path: &Path) -> bool {
 /// Recursively collect all `*_test.tyra` files under `dir`.
 fn collect_test_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
     let mut files = Vec::new();
-    for entry in std::fs::read_dir(dir)? {
-        let path = entry?.path();
+    let mut entries: Vec<_> = std::fs::read_dir(dir)?.collect::<Result<_, _>>()?;
+    entries.sort_by_key(|e| e.path());
+    for entry in entries {
+        let path = entry.path();
         if path.is_dir() {
             files.extend(collect_test_files(&path)?);
         } else if is_test_file(&path) {
