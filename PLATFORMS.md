@@ -8,6 +8,7 @@
 | Linux x86_64 (glibc) | Dynamic | Supported      |
 | Linux x86_64 (musl)  | Static  | Supported (v0.5.0+) |
 | macOS arm64     | Dynamic     | Supported           |
+| macOS x86_64 (Intel) | —      | Unguaranteed (tracking) |
 | Windows         | —           | Unguaranteed (tracking) |
 
 `tyra build --static` is only supported on musl Linux (Alpine or similar).

@@ -343,7 +343,7 @@ jobs:
           }
 
   release-gate-macos-x86_64:
-    name: build + smoke (macos-13 x86_64 tracking)
+    name: build + corpus + smoke (macos-13 x86_64 tracking)
     runs-on: macos-13
     continue-on-error: true
     steps:

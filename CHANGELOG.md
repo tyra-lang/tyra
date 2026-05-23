@@ -41,6 +41,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 - `assert.panics` not yet implemented (deferred — needs panic-semantics ADR to define a distinguishable signal vs segfault/timeout)
 - `tyra build --static` only reliable on musl (glibc static linking is unsupported — breaks `getaddrinfo`)
+- macOS x86_64 (Intel) untested; build + corpus + smoke tracking CI job only (non-blocking); no release artifact
 - Windows native build untested (WSL2 recommended); toolchain tracking CI job only
 
 ### Not in This Release

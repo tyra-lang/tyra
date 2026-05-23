@@ -160,6 +160,7 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | Linux x86_64 (glibc) | Dynamic | Supported |
 | Linux x86_64 (musl) | Static | Supported (v0.5.0+) |
 | macOS arm64 | Dynamic | Supported |
+| macOS x86_64 (Intel) | — | Unguaranteed (tracking) |
 | Windows | — | Unguaranteed (tracking) |
 
 **Using the musl static release artifact:**
@@ -198,6 +199,7 @@ tyra build --static myprogram.tyra
 
 ## Known limitations
 
+- **macOS x86_64 (Intel)**: untested. A non-blocking tracking CI job (build + corpus + smoke) surfaces toolchain drift; no release artifact produced.
 - **Windows**: untested. Build via WSL2 is recommended. A non-blocking tracking CI job surfaces toolchain drift.
 - **`tyra build --static`**: only reliable on musl. glibc static linking is unsupported (breaks `getaddrinfo`).
 - **`http.server`**: experimental. Single-threaded, no TLS, no middleware. Do not use in production.
