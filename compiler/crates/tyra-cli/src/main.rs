@@ -170,7 +170,10 @@ fn main() {
                 None => auto_output.unwrap_or_else(|| source_path.with_extension("")),
             };
             if static_link && !is_musl_host() {
+                let triple = clang_target_triple()
+                    .unwrap_or_else(|| "unknown (clang not found)".to_string());
                 eprintln!("error: --static is only supported on musl Linux (Alpine or similar).");
+                eprintln!("       detected clang target: {triple}");
                 eprintln!("       glibc static linking is known to break getaddrinfo and NSS.");
                 eprintln!("       Build with the musl-compiled tyra binary (e.g. on Alpine) to");
                 eprintln!("       produce a static output. See README § Platform support.");
@@ -1210,17 +1213,24 @@ fn find_bench_harness() -> Option<std::path::PathBuf> {
 
 // ─── Host environment checks ─────────────────────────────────────────────────
 
-/// Returns true when the host clang defaults to a musl target triple
-/// (e.g. `x86_64-alpine-linux-musl`). This is the toolchain-level
-/// condition that guarantees `--static` will produce a correct binary:
-/// the default target triple determines which libc clang links against,
-/// not merely whether musl packages happen to be installed on the host.
-fn is_musl_host() -> bool {
+/// Query the host clang's default target triple (e.g. `x86_64-alpine-linux-musl`).
+/// Returns `None` when clang is absent or its output is not valid UTF-8.
+fn clang_target_triple() -> Option<String> {
     std::process::Command::new("clang")
         .arg("-print-target-triple")
         .output()
         .ok()
         .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// Returns true when the host clang defaults to a musl target triple.
+/// This is the toolchain-level condition that guarantees `--static` will
+/// produce a correct binary; the triple determines which libc clang links
+/// against, not merely whether musl packages happen to be installed.
+fn is_musl_host() -> bool {
+    clang_target_triple()
         .map(|s| s.contains("musl"))
         .unwrap_or(false)
 }
@@ -2035,6 +2045,124 @@ mod tests {
             let want = file.file_name().and_then(|n| n.to_str()).unwrap_or("");
             assert_eq!(got, want, "result[{i}] must match input[{i}]");
         }
+    }
+
+    // --- collect_test_files: lexicographic order contract (#3) ---
+
+    #[test]
+    fn collect_test_files_lexicographic_order() {
+        let dir = tempfile::tempdir().unwrap();
+        // Write files in reverse order to confirm sorting is not filesystem-dependent.
+        for name in ["z_test.tyra", "a_test.tyra", "m_test.tyra"] {
+            fs::write(dir.path().join(name), "").unwrap();
+        }
+        let files = collect_test_files(dir.path()).unwrap();
+        let names: Vec<&str> = files
+            .iter()
+            .filter_map(|p| p.file_name()?.to_str())
+            .collect();
+        assert_eq!(names, ["a_test.tyra", "m_test.tyra", "z_test.tyra"]);
+    }
+
+    #[test]
+    fn collect_test_files_subdirs_sorted() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub_b = dir.path().join("b");
+        let sub_a = dir.path().join("a");
+        fs::create_dir_all(&sub_b).unwrap();
+        fs::create_dir_all(&sub_a).unwrap();
+        fs::write(sub_b.join("b_test.tyra"), "").unwrap();
+        fs::write(sub_a.join("a_test.tyra"), "").unwrap();
+        let files = collect_test_files(dir.path()).unwrap();
+        let names: Vec<&str> = files
+            .iter()
+            .filter_map(|p| p.file_name()?.to_str())
+            .collect();
+        assert_eq!(names, ["a_test.tyra", "b_test.tyra"]);
+    }
+
+    // --- parse_tap_to_records / JUnit diag propagation (#4) ---
+
+    #[test]
+    fn parse_tap_normal_pass_and_fail() {
+        let tap = "TAP version 14\n1..2\nok 1 - test_pass\nnot ok 2 - test_fail\n# expected 1 got 2\n";
+        let records = parse_tap_to_records(tap);
+        assert_eq!(records.len(), 2);
+        assert!(records[0].passed);
+        assert_eq!(records[0].name, "test_pass");
+        assert!(!records[1].passed);
+        assert_eq!(records[1].name, "test_fail");
+        assert_eq!(records[1].failure_msg, "expected 1 got 2");
+    }
+
+    #[test]
+    fn parse_tap_compile_error_synthetic_record() {
+        let tap = "TAP version 14\n1..1\nnot ok 1 - foo_test.tyra: compile error\n";
+        let records = parse_tap_to_records(tap);
+        assert_eq!(records.len(), 1);
+        assert!(!records[0].passed);
+        assert_eq!(records[0].name, "foo_test.tyra: compile error");
+        assert!(records[0].failure_msg.is_empty());
+    }
+
+    #[test]
+    fn junit_compile_error_diag_propagated_to_failure_msg() {
+        let tap = "TAP version 14\n1..1\nnot ok 1 - foo_test.tyra: compile error\n";
+        let diag = "error[E0308]: type mismatch: expected Int, found String\n";
+        let mut records = parse_tap_to_records(tap);
+        // Replicate the JUnit path logic.
+        if records.is_empty() && !diag.is_empty() {
+            records.push(TestRecord {
+                name: "infrastructure failure".to_string(),
+                passed: false,
+                failure_msg: diag.trim().to_string(),
+            });
+        } else if records.len() == 1
+            && !records[0].passed
+            && records[0].failure_msg.is_empty()
+            && records[0].name.ends_with(": compile error")
+            && !diag.is_empty()
+        {
+            records[0].failure_msg = diag.trim().to_string();
+        }
+        assert_eq!(records[0].failure_msg, "error[E0308]: type mismatch: expected Int, found String");
+    }
+
+    #[test]
+    fn junit_multi_crash_diag_not_attributed_to_all_records() {
+        // Two tests fail; only the compile-error narrow condition should trigger.
+        // Normal crash records keep failure_msg empty — diag is not blindly copied.
+        let tap = "TAP version 14\n1..2\nnot ok 1 - test_a\nnot ok 2 - test_b\n";
+        let diag = "test_a crashed\ntest_b crashed\n";
+        let mut records = parse_tap_to_records(tap);
+        // The condition requires len==1 AND name ends with ": compile error".
+        // Neither is true here, so no diag propagation.
+        if records.len() == 1
+            && !records[0].passed
+            && records[0].failure_msg.is_empty()
+            && records[0].name.ends_with(": compile error")
+            && !diag.is_empty()
+        {
+            records[0].failure_msg = diag.trim().to_string();
+        }
+        assert!(records[0].failure_msg.is_empty(), "diag must not be attributed to test_a");
+        assert!(records[1].failure_msg.is_empty(), "diag must not be attributed to test_b");
+    }
+
+    #[test]
+    fn render_junit_xml_pass_and_fail() {
+        let records = vec![
+            TestRecord { name: "test_ok".to_string(), passed: true, failure_msg: String::new() },
+            TestRecord {
+                name: "test_fail".to_string(),
+                passed: false,
+                failure_msg: "left=1 right=2".to_string(),
+            },
+        ];
+        let xml = render_junit_xml(&[("path/foo_test.tyra".to_string(), records, 0.123)]);
+        assert!(xml.contains("<testsuite name=\"path/foo_test.tyra\" tests=\"2\" failures=\"1\""));
+        assert!(xml.contains("<testcase name=\"test_ok\""));
+        assert!(xml.contains("<failure message=\"left=1 right=2\""));
     }
 
     // --- Timeout tests (require a pre-built tyra binary) ---

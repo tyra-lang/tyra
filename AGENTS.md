@@ -172,6 +172,12 @@ For strategic decisions (new features, competitive positioning, roadmap changes)
 
 When generating code, comments, and identifiers must be in English. When discussing design or explaining decisions in chat, Japanese is fine.
 
+## Platform support
+
+See **README.md § Platform support** for the canonical table (glibc dynamic / musl static / macOS dynamic / Windows deferred). That section is the single source of truth; do not duplicate platform or link-mode descriptions in this file.
+
+Key constraint relevant to implementation work: `tyra build --static` is only supported when the host clang targets musl (verified at runtime via `clang -print-target-triple`). glibc static linking is unsupported.
+
 ## Build and Test Commands
 
 ```bash
@@ -185,7 +191,7 @@ cargo test
 cargo test --test conformance
 
 # Run a single Tyra program (after build)
-./target/debug/tyra run examples/hello/main.tyra
+./target/debug/tyra run examples/01-hello.tyra
 
 # Format check (when formatter exists)
 ./target/debug/tyra fmt --check stdlib/

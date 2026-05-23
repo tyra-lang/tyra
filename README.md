@@ -153,12 +153,31 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 
 ## Platform support
 
+> **Canonical reference.** This section is the single source of truth for platform and link-mode support. All other docs (AGENTS.md, release notes) refer here.
+
 | Platform | Binary type | Status |
 |----------|-------------|--------|
 | Linux x86_64 (glibc) | Dynamic | Supported |
 | Linux x86_64 (musl) | Static | Supported (v0.5.0+) |
 | macOS arm64 | Dynamic | Supported |
 | Windows | — | Unguaranteed (tracking) |
+
+**Using the musl static release artifact:**
+
+The `tyra-*-linux-musl-x86_64-static.tar.gz` release includes a pre-built static `examples/hello` binary. To verify static linking works on your system:
+
+```bash
+tar xzf tyra-*-linux-musl-x86_64-static.tar.gz
+cd tyra-*/
+./examples/hello        # prints: hello, tyra
+file examples/hello     # should say: statically linked
+```
+
+To compile your own static binary, use the musl-targeting `tyra` (i.e. run on Alpine Linux or equivalent musl toolchain):
+
+```bash
+tyra build --static myprogram.tyra
+```
 
 **Experimental in v0.4.0** — included but not production-ready:
 
