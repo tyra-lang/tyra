@@ -1408,6 +1408,8 @@ export fn reverse(_ s: String) -> String
 export fn from_byte(_ b: Int) -> String
 export fn split_whitespace(_ s: String) -> List<String>
 export fn split(_ s: String, _ sep: String) -> List<String>
+export fn replace(_ s: String, _ from: String, _ to: String) -> String
+export fn join(_ parts: List<String>, _ sep: String) -> String
 ```
 
 - `len` は UTF-8 バイト長を返す。Unicode コードポイント数ではない
@@ -1442,7 +1444,7 @@ export fn split(_ s: String, _ sep: String) -> List<String>
   同等のバイトレベル動作)。連続する区切りからは空文字列要素が生じる。
   `sep` が空文字列の場合、v0.1 では文字単位での分割は行わず単一要素
   リスト `[s]` を返す。
-- `replace` / `join` / `char_at` / 正規表現は本凍結には含まれない。§22
+- `char_at` / 正規表現は本凍結には含まれない。§22
   の「`string` の拡張 API」として追跡する。
 
 #### 17.3.5 list
@@ -1809,7 +1811,7 @@ end
 - tuple 型
 - structured concurrency
 - モジュールレベルの初期化セマンティクス (`let`/`mut` のモジュールスコープ)
-- `string` の拡張 API (replace, join, char_at, 正規表現) — `split` / `split_whitespace` は §17.3.4 に追加凍結、それ以外は後続リリース以降
+- `string` の拡張 API (char_at, 正規表現) — `split` / `split_whitespace` / `replace` / `join` は §17.3.4 に凍結済み、それ以外は後続リリース以降
 - `list` の拡張 API — ジェネリック `List<T>`、`map` / `filter` / `fold`、`List<String>` は v0.4.0 で実装済み (§17.3.5)。`Map` / `Set` 等のその他コレクション拡張は後続リリース以降
 - `Map` の拡張 API (任意の K / V、`put` / `remove` / イテレーション、ハッシュテーブル化) — §17.3.6 で `Map<String, Int>` リテラル + `get` / `contains_key` のみ凍結。それ以外は後続リリース以降
 - `Set<T>` 全般（リテラル構文、操作 API、ハッシュ実装）— 後続リリース以降

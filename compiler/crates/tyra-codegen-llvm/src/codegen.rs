@@ -225,6 +225,8 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare ptr @tyra_string_from_byte(i64)").unwrap();
     writeln!(out, "declare void @tyra_string_split_whitespace(ptr, ptr)").unwrap();
     writeln!(out, "declare void @tyra_string_split(ptr, ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_string_replace(ptr, ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_string_join(ptr, ptr)").unwrap();
     // §17.3.x: float stdlib. See runtime/src/stdlib_float.rs.
     writeln!(out, "declare i32 @tyra_float_eq(double, double)").unwrap();
     writeln!(

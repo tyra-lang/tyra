@@ -192,6 +192,8 @@ pub const PRELUDE_FUNCTIONS: &[&str] = &[
     "__string_from_byte",
     "__string_split_whitespace",
     "__string_split",
+    "__string_replace",
+    "__string_join",
     // §17.3.x: float stdlib backing. See runtime/src/stdlib_float.rs.
     "__float_eq",
     "__float_approx_eq",

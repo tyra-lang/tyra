@@ -230,6 +230,14 @@ pub(crate) fn emit_builtin_call(
             emit_string_split(out, dest.as_deref(), args, func, ctx);
             true
         }
+        "__string_replace" => {
+            emit_string_replace(out, dest.as_deref(), args, func);
+            true
+        }
+        "__string_join" => {
+            emit_string_join(out, dest.as_deref(), args, func, ctx);
+            true
+        }
         // §17.3.x: float stdlib intrinsics.
         "__float_eq" => {
             emit_float_double2_to_bool(out, dest.as_deref(), "tyra_float_eq", args, func);
@@ -1097,6 +1105,67 @@ fn emit_string_split(
     )
     .unwrap();
     writeln!(out, "  %{d} = load {list_ty}, ptr %{d}.slot").unwrap();
+}
+
+/// `__string_replace(s, from, to) -> String` — three-ptr-to-ptr call.
+fn emit_string_replace(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+) {
+    let d = dest.unwrap_or("_replace");
+    let s = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    let from = args
+        .get(1)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    let to = args
+        .get(2)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    writeln!(
+        out,
+        "  %{d} = call ptr @tyra_string_replace(ptr {s}, ptr {from}, ptr {to})"
+    )
+    .unwrap();
+}
+
+/// `__string_join(parts, sep) -> String` — passes the `List<String>` struct
+/// by alloca'd pointer (same pattern as `__string_split` out-param, but in
+/// reverse: we store the struct value into a slot and pass a pointer to the
+/// runtime, which reads the `{ptr, i64}` layout directly).
+fn emit_string_join(
+    out: &mut String,
+    dest: Option<&str>,
+    args: &[Operand],
+    func: &Function,
+    ctx: &EmitCtx,
+) {
+    let d = dest.unwrap_or("_join");
+    let list_val = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "undef".into());
+    let sep = args
+        .get(1)
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    let list_ty = if let Some(info) = ctx.struct_map.get("List__String") {
+        info.llvm_name.clone()
+    } else {
+        "%struct.List__String".into()
+    };
+    writeln!(out, "  %{d}.lslot = alloca {list_ty}").unwrap();
+    writeln!(out, "  store {list_ty} {list_val}, ptr %{d}.lslot").unwrap();
+    writeln!(
+        out,
+        "  %{d} = call ptr @tyra_string_join(ptr %{d}.lslot, ptr {sep})"
+    )
+    .unwrap();
 }
 
 // ---------------------------------------------------------------------------

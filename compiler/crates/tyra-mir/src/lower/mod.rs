@@ -311,9 +311,19 @@ pub fn lower(file: &SourceFile) -> Program {
     ctx.fn_param_types
         .insert("__string_split_whitespace".into(), vec![Ty::String]);
     ctx.fn_return_types
-        .insert("__string_split".into(), list_string);
+        .insert("__string_split".into(), list_string.clone());
     ctx.fn_param_types
         .insert("__string_split".into(), vec![Ty::String, Ty::String]);
+    ctx.fn_return_types
+        .insert("__string_replace".into(), Ty::String);
+    ctx.fn_param_types.insert(
+        "__string_replace".into(),
+        vec![Ty::String, Ty::String, Ty::String],
+    );
+    ctx.fn_return_types
+        .insert("__string_join".into(), Ty::String);
+    ctx.fn_param_types
+        .insert("__string_join".into(), vec![list_string, Ty::String]);
     // §17.3.x: float stdlib intrinsics.
     ctx.fn_return_types.insert("__float_eq".into(), Ty::Bool);
     ctx.fn_param_types

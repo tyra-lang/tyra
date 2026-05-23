@@ -576,6 +576,17 @@ fn register_prelude(env: &mut TypeEnv) {
         "__string_split".to_string(),
         Ty::Fn(vec![Ty::String, Ty::String], Box::new(list_string.clone())),
     );
+    env.define(
+        "__string_replace".to_string(),
+        Ty::Fn(
+            vec![Ty::String, Ty::String, Ty::String],
+            Box::new(Ty::String),
+        ),
+    );
+    env.define(
+        "__string_join".to_string(),
+        Ty::Fn(vec![list_string.clone(), Ty::String], Box::new(Ty::String)),
+    );
     // §17.3.x: float stdlib intrinsics. See stdlib/float.tyra.
     env.define(
         "__float_eq".to_string(),

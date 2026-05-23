@@ -324,6 +324,62 @@ pub unsafe extern "C" fn tyra_string_split(
     unsafe { fill_list_string_ret(out, parts) };
 }
 
+/// `__string_replace(s, from, to) -> String` — replace all occurrences of
+/// `from` in `s` with `to`. Uses Rust's `str::replace`. An empty `from`
+/// matches between every character (Rust semantics); callers should guard
+/// against empty `from` if that is not the desired behaviour.
+///
+/// # Safety
+/// All three pointers must be null-terminated UTF-8 (or null).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_string_replace(
+    s: *const c_char,
+    from: *const c_char,
+    to: *const c_char,
+) -> *const c_char {
+    let input = borrow_utf8(s);
+    let pat = borrow_utf8(from);
+    let rep = borrow_utf8(to);
+    let result = input.replace(pat, rep);
+    alloc_gc_cstring(&result)
+}
+
+/// `__string_join(parts, sep) -> String` — join the strings in the
+/// `List<String>` `parts` with the separator `sep`. Mirrors the inverse
+/// of `__string_split`.
+///
+/// The `parts` pointer is a `*const ListStringRet` — the same `{ptr, i64}`
+/// layout produced by `__string_split` / `__string_split_whitespace`.
+///
+/// # Safety
+/// `parts` must point at a valid `ListStringRet` (or null, yielding `""`).
+/// `sep` must be null-terminated UTF-8 (or null).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_string_join(
+    parts: *const ListStringRet,
+    sep: *const c_char,
+) -> *const c_char {
+    if parts.is_null() {
+        return alloc_gc_cstring("");
+    }
+    let separator = borrow_utf8(sep);
+    let list = unsafe { &*parts };
+    let len = list.len as usize;
+    if len == 0 {
+        return alloc_gc_cstring("");
+    }
+    let mut result = String::new();
+    for i in 0..len {
+        if i > 0 {
+            result.push_str(separator);
+        }
+        let elem_ptr = unsafe { *list.data.add(i) };
+        let elem = borrow_utf8(elem_ptr);
+        result.push_str(elem);
+    }
+    alloc_gc_cstring(&result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -546,5 +602,59 @@ mod tests {
             tyra_string_split(cs("hi").as_ptr(), cs("").as_ptr(), &mut out);
         }
         assert_eq!(read_list(&out), vec!["hi"]);
+    }
+
+    #[test]
+    fn replace_all_occurrences() {
+        let s = cs("hello world hello");
+        let from = cs("hello");
+        let to = cs("hi");
+        let p = unsafe { tyra_string_replace(s.as_ptr(), from.as_ptr(), to.as_ptr()) };
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "hi world hi");
+        // No match → unchanged.
+        let p2 = unsafe { tyra_string_replace(s.as_ptr(), cs("xyz").as_ptr(), to.as_ptr()) };
+        assert_eq!(
+            unsafe { CStr::from_ptr(p2) }.to_str().unwrap(),
+            "hello world hello"
+        );
+        // Empty input → empty output.
+        let p3 = unsafe {
+            tyra_string_replace(cs("").as_ptr(), cs("x").as_ptr(), cs("y").as_ptr())
+        };
+        assert_eq!(unsafe { CStr::from_ptr(p3) }.to_str().unwrap(), "");
+    }
+
+    #[test]
+    fn join_parts_with_separator() {
+        // Build a ListStringRet manually (mirrors what split produces).
+        let a = cs("a");
+        let b = cs("b");
+        let c = cs("c");
+        let mut ptrs: Vec<*const c_char> = vec![a.as_ptr(), b.as_ptr(), c.as_ptr()];
+        let list = ListStringRet {
+            data: ptrs.as_mut_ptr(),
+            len: 3,
+        };
+        let sep = cs("-");
+        let p = unsafe { tyra_string_join(&list, sep.as_ptr()) };
+        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "a-b-c");
+        // Empty separator.
+        let p2 = unsafe { tyra_string_join(&list, cs("").as_ptr()) };
+        assert_eq!(unsafe { CStr::from_ptr(p2) }.to_str().unwrap(), "abc");
+        // Single element.
+        let mut one: Vec<*const c_char> = vec![a.as_ptr()];
+        let list1 = ListStringRet {
+            data: one.as_mut_ptr(),
+            len: 1,
+        };
+        let p3 = unsafe { tyra_string_join(&list1, sep.as_ptr()) };
+        assert_eq!(unsafe { CStr::from_ptr(p3) }.to_str().unwrap(), "a");
+        // Empty list.
+        let list0 = ListStringRet {
+            data: std::ptr::null_mut(),
+            len: 0,
+        };
+        let p4 = unsafe { tyra_string_join(&list0, sep.as_ptr()) };
+        assert_eq!(unsafe { CStr::from_ptr(p4) }.to_str().unwrap(), "");
     }
 }

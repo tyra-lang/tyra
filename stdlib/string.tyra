@@ -14,6 +14,8 @@
 #   string.substring(s, start, stop) -> String       (byte-level half-open)
 #   string.reverse(s)                -> String       (byte-level)
 #   string.from_byte(b)              -> String       (single-byte, 0..=255)
+#   string.replace(s, from, to)      -> String       (all occurrences, byte-level)
+#   string.join(parts, sep)          -> String       (List<String> join)
 #
 # Backed by `__string_*` intrinsics (see runtime/src/stdlib_string.rs).
 #
@@ -25,8 +27,7 @@
 #   the case-mapping functions.
 # - parse_int accepts optional leading `+`/`-` and ASCII decimal digits.
 #   Leading / trailing whitespace is rejected — trim first if needed.
-# - split / split_whitespace are intentionally deferred to a later phase
-#   (requires intrinsic → List<String> construction plumbing); §22.
+# - split / split_whitespace / replace / join are now implemented (v0.5.0 Phase D).
 export fn len(_ s: String) -> Int
   __string_len(s)
 end
@@ -118,4 +119,20 @@ end
 # single-element list `[s]`.
 export fn split(_ s: String, _ sep: String) -> List<String>
   __string_split(s, sep)
+end
+
+# Replace all occurrences of `from` in `s` with `to`. Uses Rust's
+# `str::replace` (byte-level). Returns a new GC-allocated String; `s`
+# is not mutated. When `from` is empty, Rust inserts `to` between every
+# character; callers should avoid empty `from` unless that behaviour is
+# intentional.
+export fn replace(_ s: String, _ from: String, _ to: String) -> String
+  __string_replace(s, from, to)
+end
+
+# Join the elements of `parts` (a `List<String>`) with `sep` interleaved
+# between them. An empty list returns `""`. A single-element list returns
+# that element unchanged (no trailing separator).
+export fn join(_ parts: List<String>, _ sep: String) -> String
+  __string_join(parts, sep)
 end
