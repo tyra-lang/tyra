@@ -16,7 +16,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - `tyra build --static`: links the compiled program statically on musl (`-static`); produces a fully self-contained binary with no shared-lib deps
 - CI verifies the Alpine musl artifact is statically linked (`file` check); musl static artifact added to GitHub Releases
 - Windows tracking job (non-blocking allow-failure) added to surface toolchain drift
-- macOS x86_64 (Intel, macos-13) tracking job (non-blocking allow-failure) added; no artifact produced, build-only to surface toolchain drift
+- macOS x86_64 (Intel, macos-13) tracking job (non-blocking allow-failure) added; no artifact produced, runs build + corpus + smoke to surface toolchain drift
 - Platform matrix: Linux glibc (dynamic), Linux musl (static), macOS arm64 (dynamic), Windows (unguaranteed / tracking)
 
 **`string.replace` and `string.join`**
