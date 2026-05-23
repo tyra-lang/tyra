@@ -1174,6 +1174,15 @@ fn find_bench_harness() -> Option<std::path::PathBuf> {
     None
 }
 
+// ─── RAII guard: delete a temp binary on drop ────────────────────────────────
+
+struct TempBinary(PathBuf);
+impl Drop for TempBinary {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
 // ─── Test runner helpers ──────────────────────────────────────────────────────
 
 fn is_test_file(path: &Path) -> bool {
@@ -1283,7 +1292,9 @@ fn synthesize_runner(test_source: &str, test_fns: &[String]) -> String {
             out.push_str("      end\n");
         }
         out.push_str("    when _\n");
-        out.push_str("      println(\"not ok 1 - unknown test\")\n");
+        out.push_str("      println(\"TAP version 14\")\n");
+        out.push_str("      println(\"1..1\")\n");
+        out.push_str("      println(\"not ok 1 - unknown test: #{__runner_test_name}\")\n");
         out.push_str("      sys.exit(1)\n");
         out.push_str("    end\n");
     }
@@ -1453,17 +1464,25 @@ fn run_test_file_core(test_file: &Path, filter: Option<&str>, timeout: Option<u6
     if compile.report.has_errors() {
         diag.push_str(&compile.report.render(&compile.sources));
         let elapsed = t0.elapsed().as_secs_f64();
+        let n = test_fns.len().max(1);
+        let filename = test_file.file_name().unwrap_or_default().to_string_lossy();
+        let synthetic_tap = format!(
+            "TAP version 14\n1..{n}\nnot ok 1 - {filename}: compile error\n",
+        );
         return FileTestOut {
             path: test_file.display().to_string(),
             pass: 0,
-            fail: test_fns.len(),
+            fail: test_fns.len().max(1),
             header,
-            tap: String::new(),
+            tap: synthetic_tap,
             timing: String::new(),
             diag,
             elapsed,
         };
     }
+
+    // RAII guard: ensure the compiled binary is removed even if the loop panics.
+    let _guard = TempBinary(binary_path.clone());
 
     // Run each test in its own subprocess for isolation.
     let n = test_fns.len();
@@ -1536,7 +1555,7 @@ fn run_test_file_core(test_file: &Path, filter: Option<&str>, timeout: Option<u6
     }
 
     let elapsed = t0.elapsed().as_secs_f64();
-    let _ = std::fs::remove_file(&binary_path);
+    // binary_path is cleaned up by the TempBinary RAII guard above.
     let timing = format!("# time: {elapsed:.3}s");
 
     FileTestOut {
