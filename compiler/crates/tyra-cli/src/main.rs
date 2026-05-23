@@ -1224,6 +1224,7 @@ fn is_test_file(path: &Path) -> bool {
 }
 
 /// Recursively collect all `*_test.tyra` files under `dir`.
+/// Results are in lexicographic path order (stable across OSes and filesystems).
 fn collect_test_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
     let mut files = Vec::new();
     let mut entries: Vec<_> = std::fs::read_dir(dir)?.collect::<Result<_, _>>()?;
@@ -1258,6 +1259,10 @@ fn find_test_fns(ast: &tyra_ast::SourceFile) -> Vec<String> {
 
 /// Print test function names found in `test_file` (one per line, tab-separated
 /// as `<file>\t<fn_name>`), applying an optional substring filter.
+///
+/// Output order contract (stable, suitable for CI scripts):
+/// - Files are visited in lexicographic path order (guaranteed by `collect_test_files`).
+/// - Functions within a file are listed in source declaration order.
 fn list_test_fns(test_file: &Path, filter: Option<&str>) {
     let source = match std::fs::read_to_string(test_file) {
         Ok(s) => s,

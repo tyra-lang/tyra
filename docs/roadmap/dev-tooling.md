@@ -21,10 +21,11 @@ and related developer experience tooling.
 ### `tyra test`
 
 - `--filter <pattern>`: substring match on test function names to run a subset
-- `--list [--filter]`: list matched test functions without executing
+- `--list [--filter]`: list matched test functions without executing; output order is stable: files in lexicographic path order, functions in source declaration order
 - `--format tap`: TAP version 14 (default); includes `# time: <s>s` per file
 - `--format junit`: JUnit-compatible XML (`<testsuites>`/`<testsuite>`/`<testcase>` with `time=`)
   - Infrastructure failures (compile errors) produce a synthetic suite — no silent green in CI
+  - Compile-error diagnostics are propagated into `<failure message="…"/>` (v0.5.0+)
 - Non-zero binary exit (panic, OOM, abort) always counted as at least one failure
 - `import assert` provides typed assertion helpers (`eq`, `ne`, `eq_str`, `is_ok`, `is_err`, etc.)
 
