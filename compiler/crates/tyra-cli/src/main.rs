@@ -492,14 +492,22 @@ fn main() {
                     for out in &results {
                         total_fail += out.fail;
                         let mut records = parse_tap_to_records(&out.tap);
-                        // Compile/infra failures produce no TAP lines but do set fail > 0.
-                        // Synthesize a failure record so the XML reflects the real outcome.
+                        // Compile/infra failures with no TAP at all: synthesize a record.
                         if records.is_empty() && out.fail > 0 {
                             records.push(TestRecord {
                                 name: "infrastructure failure".to_string(),
                                 passed: false,
                                 failure_msg: out.diag.trim().to_string(),
                             });
+                        } else if !out.diag.is_empty() {
+                            // Propagate diag into failure records that have no message yet.
+                            // This covers compile-error synthetic TAP records and subprocess
+                            // crashes whose stderr landed in diag rather than stdout # lines.
+                            for r in records.iter_mut() {
+                                if !r.passed && r.failure_msg.is_empty() {
+                                    r.failure_msg = out.diag.trim().to_string();
+                                }
+                            }
                         }
                         suites.push((out.path.clone(), records, out.elapsed));
                     }
