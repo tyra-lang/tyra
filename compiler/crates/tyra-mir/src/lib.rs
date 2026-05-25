@@ -1847,4 +1847,81 @@ end
             f.body
         );
     }
+
+    // ── Source-location tests (ADR 0014 / Phase 1) ──────────────────────
+
+    /// A top-level `panic()` call must carry the line of the panic() expression,
+    /// not line 0 or some surrounding statement's line.
+    #[test]
+    fn panic_call_loc_is_its_own_line() {
+        // Line 1: let x = 0
+        // Line 2: panic("boom")
+        let source = "let x = 0\npanic(\"boom\")\n";
+        let prog = lower_str(source);
+        let main = &prog.functions[0];
+        let panic_stmt = main.body.iter().find(|s| {
+            matches!(&s.instr, Instruction::Call { func, .. } if func == "panic")
+        });
+        let stmt = panic_stmt.expect("expected a Call to panic in MIR");
+        assert_eq!(
+            stmt.loc.line, 2,
+            "panic() on line 2 should carry line=2, got loc={:?}",
+            stmt.loc
+        );
+    }
+
+    /// `panic()` nested inside an if-arm must carry the panic line, not the
+    /// if-expression line.  This is the key regression: before Phase 1 the
+    /// parent statement's loc (the `if`) was used for all instructions in the
+    /// arm, so the wrong line was reported on stderr.
+    #[test]
+    fn panic_inside_if_arm_loc_is_panic_line() {
+        // Line 1: fn f
+        // Line 2:   if true
+        // Line 3:     panic("inner")
+        // Line 4:   else
+        // Line 5:     0
+        // Line 6:   end
+        // Line 7: end
+        let source = "fn f() -> Int\n  if true\n    panic(\"inner\")\n  else\n    0\n  end\nend\n";
+        let prog = lower_str(source);
+        let f = prog.functions.iter().find(|f| f.name == "f").unwrap();
+        let panic_stmt = f.body.iter().find(|s| {
+            matches!(&s.instr, Instruction::Call { func, .. } if func == "panic")
+        });
+        let stmt = panic_stmt.expect("expected a Call to panic in MIR body of f");
+        assert_eq!(
+            stmt.loc.line, 3,
+            "panic() on line 3 (inside if-arm) should carry line=3, got loc={:?}",
+            stmt.loc
+        );
+    }
+
+    /// Compiler-synthesised control-flow instructions (Label, Jump, BranchIf,
+    /// result-slot Alloca) must carry a dummy SourceLoc so they never contribute
+    /// spurious line information to DWARF or coverage.
+    #[test]
+    fn synthetic_cfg_instructions_have_dummy_loc() {
+        // A simple if/else forces Label + BranchIf + Jump + Alloca into the MIR.
+        let source = "fn f(_ x: Int) -> Int\n  if x > 0\n    1\n  else\n    0\n  end\nend\n";
+        let prog = lower_str(source);
+        let f = prog.functions.iter().find(|f| f.name == "f").unwrap();
+        for stmt in &f.body {
+            let is_synthetic = matches!(
+                &stmt.instr,
+                Instruction::Label(_)
+                    | Instruction::Jump { .. }
+                    | Instruction::BranchIf { .. }
+                    | Instruction::Alloca { .. }
+            );
+            if is_synthetic {
+                assert!(
+                    stmt.loc.is_dummy(),
+                    "synthetic {:?} should have dummy loc, got {:?}",
+                    stmt.instr,
+                    stmt.loc
+                );
+            }
+        }
+    }
 }
