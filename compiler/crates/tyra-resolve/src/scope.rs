@@ -217,6 +217,9 @@ pub const PRELUDE_FUNCTIONS: &[&str] = &[
     "__float_to_int",
     "__float_is_nan",
     "__float_is_infinite",
+    // §17.3.x Set<T> generic module (ADR-0015). `set` is always in scope so
+    // `set.new()` requires no explicit import.
+    "set",
     // §17.3.6 Map<K,V> generic intrinsics (ADR-0015).
     // These are synthesized by MIR lowering — never appear in Tyra source —
     // so they do not need to be prelude-visible.  The old hardcoded

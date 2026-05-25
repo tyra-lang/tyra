@@ -119,6 +119,17 @@ impl Ty {
         }
     }
 
+    pub fn is_set(&self) -> bool {
+        matches!(self, Ty::Generic(name, args) if name == "Set" && args.len() == 1)
+    }
+
+    pub fn set_elem(&self) -> Option<&Ty> {
+        match self {
+            Ty::Generic(name, args) if name == "Set" && args.len() == 1 => Some(&args[0]),
+            _ => None,
+        }
+    }
+
     /// Generate a monomorphized name for codegen.
     /// e.g., Option<Int> → "Option__Int", Result<String, AppError> → "Result__String__AppError"
     pub fn monomorphized_name(&self) -> String {

@@ -298,6 +298,11 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare i64 @tyra_map_len(ptr)").unwrap();
     writeln!(out, "declare i64 @tyra_hash_cstr(ptr)").unwrap();
     writeln!(out, "declare i32 @tyra_cstr_eq(ptr, ptr)").unwrap();
+    // §17.3.x Set<T> generic runtime (ADR-0015).
+    writeln!(out, "declare ptr @tyra_set_new(ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_set_insert(ptr, ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_set_contains(ptr, ptr)").unwrap();
+    writeln!(out, "declare i64 @tyra_set_len(ptr)").unwrap();
     // Zero-slot for null-safe map-get unboxing (read-only; never written).
     writeln!(out, "@.tyra_zero_slot = private unnamed_addr constant i64 0").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
@@ -379,34 +384,35 @@ pub fn emit_llvm_ir(program: &Program) -> String {
         writeln!(&mut out).unwrap();
     }
 
-    // Emit compiler-generated eq/hash functions for every K type used in Map
-    // literals or map method calls in this program.
-    let map_key_types = collect_map_key_types(program);
-    for k in &map_key_types {
+    // Emit compiler-generated eq/hash functions for every K/T type used in
+    // Map<K,_> or Set<T> intrinsic calls in this program.
+    let elem_types = collect_elem_types(program);
+    for k in &elem_types {
         emit_map_eq_hash(&mut out, k);
     }
 
     out
 }
 
-/// Collect the set of K type names used in Map<K,_> intrinsic calls.
-fn collect_map_key_types(program: &Program) -> std::collections::HashSet<String> {
+/// Collect all element type names that need compiler-emitted eq/hash functions.
+/// Covers Map<K,_> key types and Set<T> element types.
+fn collect_elem_types(program: &Program) -> std::collections::HashSet<String> {
     let mut keys = std::collections::HashSet::new();
     for func in &program.functions {
         for stmt in &func.body {
-            collect_map_key_types_stmt(stmt, &mut keys);
+            collect_elem_types_stmt(stmt, &mut keys);
         }
     }
     keys
 }
 
-fn collect_map_key_types_stmt(
+fn collect_elem_types_stmt(
     stmt: &MirStmt,
     keys: &mut std::collections::HashSet<String>,
 ) {
     let instr = &stmt.instr;
     if let Instruction::Call { func, .. } = instr {
-        // Match __map_new__K__V  or  __map_insert__K__V  or  __map_contains__K
+        // Map: __map_new__K__V  or  __map_insert__K__V  or  __map_contains__K
         if let Some(rest) = func.strip_prefix("__map_new__") {
             // rest = "K__V"
             if let Some(k) = rest.split("__").next() {
@@ -414,6 +420,12 @@ fn collect_map_key_types_stmt(
             }
         } else if let Some(rest) = func.strip_prefix("__map_contains__") {
             keys.insert(rest.to_string());
+        }
+        // Set: __set_new__T  or  __set_insert__T  or  __set_contains__T
+        if let Some(t) = func.strip_prefix("__set_new__") {
+            keys.insert(t.to_string());
+        } else if let Some(t) = func.strip_prefix("__set_contains__") {
+            keys.insert(t.to_string());
         }
     }
     if let Instruction::MapGetOption { key_ty, .. } = instr {

@@ -382,6 +382,51 @@ impl super::LowerCtx<'_> {
         }
     }
 
+    pub(super) fn infer_set_type(&self, expr: &Expr) -> Option<Ty> {
+        match &expr.kind {
+            ExprKind::Ident(name) => self
+                .generic_var_types
+                .get(name)
+                .filter(|t| t.is_set())
+                .cloned(),
+            ExprKind::Call(callee, args) => {
+                if let ExprKind::FieldAccess(obj, method) = &callee.kind {
+                    // s.insert(x) returns Set<T>: recurse to unwrap any chain depth.
+                    if method == "insert" {
+                        return self.infer_set_type(obj);
+                    }
+                    // set.new() as a receiver — resolve T using the same priority
+                    // as the set.new() handler in lower_call.
+                    if let ExprKind::Ident(mod_name) = &obj.kind
+                        && mod_name == "set"
+                        && method == "new"
+                        && args.is_empty()
+                    {
+                        let elem_ty = self
+                            .binding_type_hint
+                            .as_ref()
+                            .and_then(|h| h.set_elem())
+                            .or_else(|| self.current_fn_return_type.set_elem())
+                            .cloned()
+                            .unwrap_or(Ty::Int);
+                        return Some(Ty::Generic("Set".into(), vec![elem_ty]));
+                    }
+                }
+                // General call: look up declared return type to cover
+                // make_set().contains(x) / make_set().insert(y) / make_set().len().
+                if let ExprKind::Ident(func_name) = &callee.kind {
+                    if let Some(ret_ty) = self.fn_return_types.get(func_name.as_str()) {
+                        if ret_ty.is_set() {
+                            return Some(ret_ty.clone());
+                        }
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
     /// Infer if an expression is a List<T> type from variable tracking.
     pub(super) fn infer_list_type(&self, expr: &Expr) -> Option<Ty> {
         match &expr.kind {

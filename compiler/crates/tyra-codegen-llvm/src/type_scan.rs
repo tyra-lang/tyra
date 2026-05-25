@@ -69,6 +69,7 @@ fn builtin_primitive_return(fname: &str) -> Option<Ty> {
         // pre_scan_struct_types; only the Bool return needs registration here.
         "__list_int_contains" => Some(Ty::Bool),
         name if name.starts_with("__map_contains__") => Some(Ty::Bool),
+        name if name.starts_with("__set_contains__") => Some(Ty::Bool),
         _ => None,
     }
 }
@@ -698,11 +699,11 @@ fn pre_scan_struct_types(
                             struct_temps.insert(dest.clone(), mono_name);
                         }
                     }
-                    // List<T> returns (e.g. `list.push(_) -> List<Int>` from the
-                    // §17.3.5 stdlib wrappers): propagate the monomorphized
-                    // struct so downstream Copy / Store uses struct-aware paths.
+                    // Generic struct returns: List<T>, Set<T>, Map<K,V>.
+                    // Propagate the monomorphized struct type so downstream
+                    // Copy / Store uses the struct-aware codegen path.
                     if let Ty::Generic(name, _) = &sig.return_type {
-                        if name == "List" {
+                        if matches!(name.as_str(), "List" | "Set" | "Map") {
                             let mono_name = sig.return_type.monomorphized_name();
                             if struct_map.contains_key(mono_name.as_str()) {
                                 struct_temps.insert(dest.clone(), mono_name);

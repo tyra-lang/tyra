@@ -60,6 +60,9 @@ pub use stdlib_map::{
     tyra_map_len, tyra_map_new,
 };
 
+mod stdlib_set;
+pub use stdlib_set::{tyra_set_contains, tyra_set_insert, tyra_set_len, tyra_set_new};
+
 mod stdlib_string;
 pub use stdlib_string::{
     tyra_string_byte_at, tyra_string_contains, tyra_string_ends_with, tyra_string_from_byte,

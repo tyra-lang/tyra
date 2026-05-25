@@ -1,0 +1,21 @@
+# stdlib/set.tyra — Generic Set<T> (§17.3.x, ADR-0015).
+#
+# Set<T> is a built-in open-addressing hash set.
+# T must satisfy the Eq + Hash ability constraints.
+# Float elements are not permitted (Float is not Hash).
+#
+# v0.6 API:
+#   Construction:  let s: Set<T> = set.new()   — explicit type annotation required
+#   s.insert(x)    -> Set<T>                    — idempotent; returns updated set
+#   s.contains(x)  -> Bool                      — membership test
+#   s.len()        -> Int                        — element count
+#
+# All operations are non-mutating from the language's perspective;
+# `insert` returns a new binding (same underlying GC_malloc'd table).
+# Managed by Boehm GC (ADR-0007) — no manual free needed.
+#
+# v0.6 restriction: T must be Int, Bool, or String.
+# User-defined value types as Set elements are planned for a future release.
+#
+# This module has no exported functions — all Set operations are accessed via
+# `set.new()` construction and method-call syntax on Set<T> values.

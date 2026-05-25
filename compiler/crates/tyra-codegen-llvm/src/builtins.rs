@@ -402,6 +402,50 @@ pub(crate) fn emit_builtin_call(
             writeln!(out, "  %{d} = call i64 @tyra_map_len(ptr {m})").unwrap();
             true
         }
+        // §17.3.x Set<T> generic intrinsics (ADR-0015).
+        _ if fname.starts_with("__set_new__") => {
+            let t = fname.strip_prefix("__set_new__").unwrap_or("Int");
+            let d = dest.as_deref().unwrap_or("_set");
+            writeln!(
+                out,
+                "  %{d} = call ptr @tyra_set_new(ptr @tyra_eq_{t}, ptr @tyra_hash_{t})"
+            )
+            .unwrap();
+            true
+        }
+        _ if fname.starts_with("__set_insert__") => {
+            let t = fname.strip_prefix("__set_insert__").unwrap_or("Int");
+            let d = dest.as_deref().unwrap_or("_set_ins");
+            let s = args.first().map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            let k_val = args.get(1).map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            emit_box_value(out, &format!("{d}.kbox"), k_val.as_str(), t, d);
+            writeln!(
+                out,
+                "  %{d} = call ptr @tyra_set_insert(ptr {s}, ptr %{d}.kbox)"
+            )
+            .unwrap();
+            true
+        }
+        _ if fname.starts_with("__set_contains__") => {
+            let t = fname.strip_prefix("__set_contains__").unwrap_or("Int");
+            let d = dest.as_deref().unwrap_or("_set_has");
+            let s = args.first().map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            let k_val = args.get(1).map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            emit_box_value(out, &format!("{d}.kbox"), k_val.as_str(), t, d);
+            writeln!(
+                out,
+                "  %{d}.i32 = call i32 @tyra_set_contains(ptr {s}, ptr %{d}.kbox)"
+            )
+            .unwrap();
+            writeln!(out, "  %{d} = icmp ne i32 %{d}.i32, 0").unwrap();
+            true
+        }
+        _ if fname == "__set_len" => {
+            let d = dest.as_deref().unwrap_or("_set_len");
+            let s = args.first().map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            writeln!(out, "  %{d} = call i64 @tyra_set_len(ptr {s})").unwrap();
+            true
+        }
         // §17.3.5: list stdlib intrinsics (List<Int> only).
         "__list_int_push" => {
             emit_list_int_push(out, dest.as_deref(), args, func, ctx);

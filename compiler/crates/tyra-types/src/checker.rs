@@ -90,6 +90,10 @@ pub struct TypeEnv {
     /// Used to guard module-qualified special-cases (e.g. assert.eq) and support
     /// alias imports (`import assert as a` → "a" → "assert").
     pub(crate) imported_modules: HashMap<String, String>,
+    /// Active type hint from the enclosing `let`/`mut` annotation. Set before
+    /// calling `infer_expr` on the RHS so that context-sensitive constructors
+    /// like `set.new()` can read the expected element type.
+    pub(crate) binding_type_hint: Option<Ty>,
 }
 
 impl TypeEnv {
@@ -109,6 +113,7 @@ impl TypeEnv {
             lambda_outer_muts: Vec::new(),
             lambda_entry_depths: Vec::new(),
             imported_modules: HashMap::new(),
+            binding_type_hint: None,
         }
     }
 
@@ -1133,7 +1138,14 @@ fn check_fn(f: &FnDef, env: &mut TypeEnv, self_ty: Option<&Ty>, report: &mut Rep
 fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
     match stmt {
         Stmt::Let(s) => {
+            // Pre-set binding_type_hint so context-sensitive RHS constructors
+            // (set.new(), map.new(), None, etc.) can read the expected type.
+            let prev_hint = env.binding_type_hint.take();
+            if let Some(ann) = &s.type_annotation {
+                env.binding_type_hint = Some(Ty::from_type_expr(ann));
+            }
             let value_ty = infer_expr(&s.value, env, report);
+            env.binding_type_hint = prev_hint;
             // When a type annotation is present, use the declared type as the
             // binding type rather than the inferred value type.  This lets the
             // type checker resolve generic collections correctly: e.g.
@@ -1153,7 +1165,12 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
             env.define_let(s.name.clone(), binding_ty);
         }
         Stmt::Mut(s) => {
+            let prev_hint = env.binding_type_hint.take();
+            if let Some(ann) = &s.type_annotation {
+                env.binding_type_hint = Some(Ty::from_type_expr(ann));
+            }
             let value_ty = infer_expr(&s.value, env, report);
+            env.binding_type_hint = prev_hint;
             // Same annotation-takes-precedence logic as Stmt::Let above.
             let binding_ty = if let Some(annotation) = &s.type_annotation {
                 let expected = Ty::from_type_expr(annotation);
@@ -1421,8 +1438,55 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             // Method-call shape: `obj.method(args)` parses as Call(FieldAccess(obj, m), args).
             // Intercept to verify trait impls (§8.7) before general call type-checking.
             if let ExprKind::FieldAccess(obj, method) = &callee.kind {
+                // set.new() — resolve T from the closest available type context.
+                // Priority: let/mut binding annotation → enclosing return type → error.
+                if let ExprKind::Ident(mod_name) = &obj.kind
+                    && mod_name == "set"
+                    && method == "new"
+                    && args.is_empty()
+                {
+                    if let Some(hint) = env.binding_type_hint.as_ref().filter(|t| t.is_set()) {
+                        return hint.clone();
+                    }
+                    if let Some(ret_ty) = env.current_return_type().filter(|t| t.is_set()) {
+                        return ret_ty.clone();
+                    }
+                    report.add(
+                        Diagnostic::error(
+                            "cannot infer Set element type: add a type annotation, e.g. `let s: Set<Int> = set.new()`".to_string(),
+                        )
+                        .with_code("E0308")
+                        .with_label(Label::new(expr.span, "element type unknown")),
+                    );
+                    return Ty::Error;
+                }
+
                 let obj_ty = infer_expr(obj, env, report);
                 check_trait_method_call(&obj_ty, method, expr.span, env, report);
+
+                // Set<T> method dispatch (ADR-0015).
+                if let Ty::Generic(name, type_args) = &obj_ty
+                    && name == "Set"
+                    && !type_args.is_empty()
+                {
+                    let elem_ty = type_args[0].clone();
+                    match method.as_str() {
+                        "insert" if args.len() == 1 => {
+                            let arg_ty = infer_expr(&args[0].value, env, report);
+                            check_type_match(&elem_ty, &arg_ty, args[0].span, report);
+                            return obj_ty.clone();
+                        }
+                        "contains" if args.len() == 1 => {
+                            let arg_ty = infer_expr(&args[0].value, env, report);
+                            check_type_match(&elem_ty, &arg_ty, args[0].span, report);
+                            return Ty::Bool;
+                        }
+                        "len" if args.is_empty() => {
+                            return Ty::Int;
+                        }
+                        _ => {}
+                    }
+                }
 
                 // Special-case: module-qualified List mutations.
                 // `list.push(xs: List<T>, x)` requires the element argument to
@@ -2324,7 +2388,23 @@ fn check_supported_map_ty(ty: &Ty, span: Span, report: &mut Report) {
                 );
             }
         }
-        // Walk through Option/Result/List wrappers to catch e.g. Option<Map<K,V>>.
+        Ty::Generic(name, args) if name == "Set" && args.len() == 1 => {
+            let elem_ty = &args[0];
+            if !matches!(elem_ty, Ty::Int | Ty::Bool | Ty::String | Ty::Error) {
+                report.add(
+                    Diagnostic::error(format!(
+                        "Set element type `{}` is not supported in this version",
+                        elem_ty.display_name()
+                    ))
+                    .with_label(Label::new(span, "unsupported element type"))
+                    .with_note(
+                        "Set elements must be Int, Bool, or String. \
+                         User-defined value types are planned for a future release.",
+                    ),
+                );
+            }
+        }
+        // Walk through Option/Result/List wrappers to catch e.g. Option<Set<T>>.
         Ty::Generic(_, args) => {
             for arg in args {
                 check_supported_map_ty(arg, span, report);

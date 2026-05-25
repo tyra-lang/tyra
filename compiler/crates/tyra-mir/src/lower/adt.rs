@@ -30,9 +30,13 @@ impl super::LowerCtx<'_> {
                 ],
             );
         } else if matches!(ty, Ty::Generic(n, _) if n == "Map") {
-            // Map<String, Int> v0.1 = { handle: ptr } — opaque handle to a
-            // runtime-managed linked list of (key, value) nodes. Other K/V
-            // combinations are rejected at type-check (§22 deferred).
+            // Map<K,V> (ADR-0015): single opaque handle ptr to runtime hash table.
+            self.adt_struct_defs.insert(
+                mono_name,
+                vec![("handle".into(), Ty::String)], // ptr in LLVM
+            );
+        } else if matches!(ty, Ty::Generic(n, _) if n == "Set") {
+            // Set<T> (ADR-0015): single opaque handle ptr to runtime hash set.
             self.adt_struct_defs.insert(
                 mono_name,
                 vec![("handle".into(), Ty::String)], // ptr in LLVM

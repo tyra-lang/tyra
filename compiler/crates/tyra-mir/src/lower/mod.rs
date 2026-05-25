@@ -1369,7 +1369,12 @@ impl<'a> LowerCtx<'a> {
                 // find the list element type.
                 if let Some(ann) = &s.type_annotation {
                     let ann_ty = Ty::from_type_expr(ann);
-                    if ann_ty.is_option() || ann_ty.is_result() || ann_ty.is_list() {
+                    if ann_ty.is_option()
+                        || ann_ty.is_result()
+                        || ann_ty.is_list()
+                        || ann_ty.is_set()
+                        || matches!(&ann_ty, Ty::Generic(n, _) if n == "Map")
+                    {
                         self.register_adt_type(&ann_ty);
                         self.generic_var_types
                             .insert(s.name.clone(), ann_ty.clone());
@@ -1449,7 +1454,12 @@ impl<'a> LowerCtx<'a> {
                 // Fallback to explicit annotation (see Stmt::Let rationale).
                 if let Some(ann) = &s.type_annotation {
                     let ann_ty = Ty::from_type_expr(ann);
-                    if ann_ty.is_option() || ann_ty.is_result() || ann_ty.is_list() {
+                    if ann_ty.is_option()
+                        || ann_ty.is_result()
+                        || ann_ty.is_list()
+                        || ann_ty.is_set()
+                        || matches!(&ann_ty, Ty::Generic(n, _) if n == "Map")
+                    {
                         self.register_adt_type(&ann_ty);
                         self.generic_var_types
                             .insert(s.name.clone(), ann_ty.clone());

@@ -263,7 +263,7 @@ impl super::LowerCtx<'_> {
             }
         }
 
-        // Check for .len() on List<T> (spec §11) or Map<K,V> (ADR-0015)
+        // Check for .len() on List<T> (spec §11), Map<K,V>, or Set<T> (ADR-0015)
         if let ExprKind::FieldAccess(obj, method) = &callee.kind
             && method == "len"
             && args.is_empty()
@@ -296,6 +296,117 @@ impl super::LowerCtx<'_> {
                 });
                 return dest;
             }
+            if let Some(set_ty) = self.infer_set_type(obj) {
+                let set_struct = set_ty.monomorphized_name();
+                let obj_val = self.lower_expr(obj, body);
+                let handle = self.fresh_temp();
+                self.emit(body, Instruction::FieldGet {
+                    dest: handle.clone(),
+                    obj: Operand::Var(obj_val),
+                    type_name: set_struct,
+                    field_index: 0,
+                });
+                self.string_vars.insert(handle.clone());
+                let dest = self.fresh_temp();
+                self.emit_at(body, call_loc, Instruction::Call {
+                    dest: Some(dest.clone()),
+                    func: "__set_len".to_string(),
+                    args: vec![Operand::Var(handle)],
+                });
+                return dest;
+            }
+        }
+
+        // §17.3.x Set<T> method dispatch (ADR-0015).
+        // - s.insert(x)   → Set<T> (returns updated set, idempotent on duplicates)
+        // - s.contains(x) → Bool
+        if let ExprKind::FieldAccess(obj, method) = &callee.kind {
+            if matches!(method.as_str(), "insert" | "contains") && args.len() == 1 {
+                if let Some(set_ty) = self.infer_set_type(obj) {
+                    let elem_ty = set_ty.set_elem().cloned().unwrap_or(Ty::Int);
+                    let set_struct = set_ty.monomorphized_name();
+                    let t_name = elem_ty.monomorphized_name();
+                    let obj_val = self.lower_expr(obj, body);
+                    let handle = self.fresh_temp();
+                    self.emit(body, Instruction::FieldGet {
+                        dest: handle.clone(),
+                        obj: Operand::Var(obj_val),
+                        type_name: set_struct.clone(),
+                        field_index: 0,
+                    });
+                    self.string_vars.insert(handle.clone());
+                    let key_val = self.lower_expr(&args[0].value, body);
+                    match method.as_str() {
+                        "contains" => {
+                            let dest = self.fresh_temp();
+                            self.emit_at(body, call_loc, Instruction::Call {
+                                dest: Some(dest.clone()),
+                                func: format!("__set_contains__{t_name}"),
+                                args: vec![Operand::Var(handle), Operand::Var(key_val)],
+                            });
+                            return dest;
+                        }
+                        "insert" => {
+                            let new_handle = self.fresh_temp();
+                            self.emit_at(body, call_loc, Instruction::Call {
+                                dest: Some(new_handle.clone()),
+                                func: format!("__set_insert__{t_name}"),
+                                args: vec![Operand::Var(handle), Operand::Var(key_val)],
+                            });
+                            self.string_vars.insert(new_handle.clone());
+                            let dest = self.fresh_temp();
+                            self.emit(body, Instruction::StructInit {
+                                dest: dest.clone(),
+                                type_name: set_struct.clone(),
+                                fields: vec![Operand::Var(new_handle)],
+                            });
+                            self.string_vars.insert(dest.clone());
+                            self.var_types.insert(dest.clone(), set_struct);
+                            self.generic_var_types.insert(dest.clone(), set_ty);
+                            return dest;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        // set.new() — creates an empty Set<T>.
+        // T resolution order: let/mut annotation hint → fn return type → Int fallback.
+        if let ExprKind::FieldAccess(obj, method) = &callee.kind
+            && let ExprKind::Ident(module_name) = &obj.kind
+            && module_name == "set"
+            && method == "new"
+            && args.is_empty()
+        {
+            let elem_ty = self
+                .binding_type_hint
+                .as_ref()
+                .and_then(|h| h.set_elem())
+                .or_else(|| self.current_fn_return_type.set_elem())
+                .cloned()
+                .unwrap_or(Ty::Int);
+            let set_ty = Ty::Generic("Set".into(), vec![elem_ty.clone()]);
+            self.register_adt_type(&set_ty);
+            let set_struct = set_ty.monomorphized_name();
+            let t_name = elem_ty.monomorphized_name();
+            let handle = self.fresh_temp();
+            self.emit_at(body, call_loc, Instruction::Call {
+                dest: Some(handle.clone()),
+                func: format!("__set_new__{t_name}"),
+                args: vec![],
+            });
+            self.string_vars.insert(handle.clone());
+            let dest = self.fresh_temp();
+            self.emit(body, Instruction::StructInit {
+                dest: dest.clone(),
+                type_name: set_struct.clone(),
+                fields: vec![Operand::Var(handle)],
+            });
+            self.string_vars.insert(dest.clone());
+            self.var_types.insert(dest.clone(), set_struct);
+            self.generic_var_types.insert(dest.clone(), set_ty);
+            return dest;
         }
 
         // Check for .get(index) on List<T> (spec §11)
@@ -1153,7 +1264,10 @@ impl super::LowerCtx<'_> {
         // through to the raw-call path that emits `@nums.get` as a
         // literal function name — LLVM then rejects the cross-type call.
         if let Some(ret_ty) = self.fn_return_types.get(&func_name).cloned() {
-            if ret_ty.is_option() || ret_ty.is_result() || ret_ty.is_list() {
+            if ret_ty.is_option() || ret_ty.is_result() || ret_ty.is_list()
+                || ret_ty.is_set()
+                || matches!(&ret_ty, tyra_types::Ty::Generic(n, _) if n == "Map")
+            {
                 self.register_adt_type(&ret_ty);
                 let mono = ret_ty.monomorphized_name();
                 self.generic_var_types.insert(dest.clone(), ret_ty);
