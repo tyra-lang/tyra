@@ -76,6 +76,12 @@ pub use stdlib_float::{
     tyra_float_to_string,
 };
 
+pub mod stdlib_time;
+pub use stdlib_time::{tyra_time_monotonic_millis, tyra_time_now_unix};
+
+pub mod stdlib_log;
+pub use stdlib_log::{tyra_log_error, tyra_log_info, tyra_log_warn};
+
 /// Thunk signature emitted by codegen for each `spawn` site.
 /// Takes opaque arg pointer, returns opaque result pointer.
 pub type ThunkFn = unsafe extern "C" fn(*mut c_void) -> *mut c_void;

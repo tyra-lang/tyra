@@ -1,0 +1,15 @@
+# stdlib/time.tyra — Time utilities (§17.3.x).
+#
+# v0.1 API (frozen):
+#   time.now_unix()          -> Int   seconds since Unix epoch (UTC)
+#   time.monotonic_millis()  -> Int   monotonic milliseconds since first call
+#
+# Backed by `__time_*` intrinsics (see runtime/src/stdlib_time.rs).
+
+export fn now_unix() -> Int
+  __time_now_unix()
+end
+
+export fn monotonic_millis() -> Int
+  __time_monotonic_millis()
+end

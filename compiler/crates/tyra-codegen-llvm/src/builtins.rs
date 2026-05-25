@@ -239,6 +239,30 @@ pub(crate) fn emit_builtin_call(
             emit_string_join(out, dest.as_deref(), args, func, ctx);
             true
         }
+        // §17.3.x: time stdlib intrinsics.
+        "__time_now_unix" => {
+            let d = dest.as_deref().unwrap_or("_time_now_unix");
+            writeln!(out, "  %{d} = call i64 @tyra_time_now_unix()").unwrap();
+            true
+        }
+        "__time_monotonic_millis" => {
+            let d = dest.as_deref().unwrap_or("_time_monotonic_millis");
+            writeln!(out, "  %{d} = call i64 @tyra_time_monotonic_millis()").unwrap();
+            true
+        }
+        // §17.3.x: log stdlib intrinsics.
+        "__log_info" => {
+            emit_log_call(out, "tyra_log_info", args, func);
+            true
+        }
+        "__log_warn" => {
+            emit_log_call(out, "tyra_log_warn", args, func);
+            true
+        }
+        "__log_error" => {
+            emit_log_call(out, "tyra_log_error", args, func);
+            true
+        }
         // §17.3.x: float stdlib intrinsics.
         "__float_eq" => {
             emit_float_double2_to_bool(out, dest.as_deref(), "tyra_float_eq", args, func);
@@ -1998,4 +2022,13 @@ fn emit_list_fold(
     writeln!(out, "  br label %{d}.loop").unwrap();
     writeln!(out, "{d}.end:").unwrap();
     writeln!(out, "  %{d} = load {elem_ty}, ptr %{d}.acc").unwrap();
+}
+
+/// `__log_info/warn/error(msg) -> Unit` — emit a call to a `tyra_log_*` C function.
+fn emit_log_call(out: &mut String, fn_name: &str, args: &[Operand], func: &Function) {
+    let msg = args
+        .first()
+        .map(|a| operand_ref(a, func))
+        .unwrap_or_else(|| "null".into());
+    writeln!(out, "  call void @{fn_name}(ptr {msg})").unwrap();
 }

@@ -194,6 +194,13 @@ pub const PRELUDE_FUNCTIONS: &[&str] = &[
     "__string_split",
     "__string_replace",
     "__string_join",
+    // §17.3.x: time stdlib backing. See runtime/src/stdlib_time.rs.
+    "__time_now_unix",
+    "__time_monotonic_millis",
+    // §17.3.x: log stdlib backing. See runtime/src/stdlib_log.rs.
+    "__log_info",
+    "__log_warn",
+    "__log_error",
     // §17.3.x: float stdlib backing. See runtime/src/stdlib_float.rs.
     "__float_eq",
     "__float_approx_eq",

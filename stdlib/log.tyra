@@ -1,0 +1,20 @@
+# stdlib/log.tyra — Structured logging (§17.3.x).
+#
+# v0.1 API (frozen):
+#   log.info(_ msg: String)  -> Unit   writes "[INFO] msg\n" to stderr
+#   log.warn(_ msg: String)  -> Unit   writes "[WARN] msg\n" to stderr
+#   log.error(_ msg: String) -> Unit   writes "[ERROR] msg\n" to stderr
+#
+# Backed by `__log_*` intrinsics (see runtime/src/stdlib_log.rs).
+
+export fn info(_ msg: String) -> Unit
+  __log_info(msg)
+end
+
+export fn warn(_ msg: String) -> Unit
+  __log_warn(msg)
+end
+
+export fn error(_ msg: String) -> Unit
+  __log_error(msg)
+end

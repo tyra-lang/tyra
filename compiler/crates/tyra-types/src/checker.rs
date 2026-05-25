@@ -587,6 +587,28 @@ fn register_prelude(env: &mut TypeEnv) {
         "__string_join".to_string(),
         Ty::Fn(vec![list_string.clone(), Ty::String], Box::new(Ty::String)),
     );
+    // §17.3.x: time stdlib intrinsics. See stdlib/time.tyra.
+    env.define(
+        "__time_now_unix".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__time_monotonic_millis".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::Int)),
+    );
+    // §17.3.x: log stdlib intrinsics. See stdlib/log.tyra.
+    env.define(
+        "__log_info".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(Ty::Unit)),
+    );
+    env.define(
+        "__log_warn".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(Ty::Unit)),
+    );
+    env.define(
+        "__log_error".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(Ty::Unit)),
+    );
     // §17.3.x: float stdlib intrinsics. See stdlib/float.tyra.
     env.define(
         "__float_eq".to_string(),
