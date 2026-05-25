@@ -21,8 +21,8 @@ use tyra_types::Ty;
 use crate::ir::*;
 
 /// Lower a source file to MIR.
-pub fn lower(file: &SourceFile) -> Program {
-    let mut ctx = LowerCtx::new();
+pub fn lower(file: &SourceFile, sources: &tyra_diagnostics::SourceMap) -> Program {
+    let mut ctx = LowerCtx::new(sources);
 
     let has_explicit_main = file
         .items
@@ -561,13 +561,13 @@ pub fn lower(file: &SourceFile) -> Program {
             if ctx.mut_vars.contains(name) {
                 continue;
             }
-            body.push(Instruction::Alloca { dest: name.clone() });
+            ctx.emit(&mut body, Instruction::Alloca { dest: name.clone() });
             ctx.pattern_vars.insert(name.clone());
             ctx.local_binding_names.insert(name.clone());
         }
         for (name, count) in &let_counts {
             if *count > 1 && !ctx.pattern_vars.contains(name) && !ctx.mut_vars.contains(name) {
-                body.push(Instruction::Alloca { dest: name.clone() });
+                ctx.emit(&mut body, Instruction::Alloca { dest: name.clone() });
                 ctx.pattern_vars.insert(name.clone());
                 ctx.local_binding_names.insert(name.clone());
             }
@@ -579,7 +579,7 @@ pub fn lower(file: &SourceFile) -> Program {
         }
         // spec §12.3: emit deferred expressions before implicit main return
         ctx.emit_deferred(&mut body);
-        body.push(Instruction::Return { value: None });
+        ctx.emit(&mut body, Instruction::Return { value: None });
 
         ctx.functions.push(Function {
             name: "main".into(),
@@ -587,6 +587,7 @@ pub fn lower(file: &SourceFile) -> Program {
             return_type: Ty::Unit,
             body,
             is_main: true,
+            local_metas: vec![],
         });
     }
 
@@ -631,10 +632,17 @@ pub fn lower(file: &SourceFile) -> Program {
         functions: ctx.functions,
         string_constants: ctx.string_constants,
         struct_defs,
+        source_files: ctx.source_files,
     }
 }
 
-pub(crate) struct LowerCtx {
+pub(crate) struct LowerCtx<'a> {
+    /// Source map for converting byte-offset spans to (line, col) pairs (ADR 0014).
+    pub(crate) source_map: &'a tyra_diagnostics::SourceMap,
+    /// Maps SourceId → MIR file_id (index into source_files). Built lazily.
+    pub(crate) source_id_map: std::collections::HashMap<tyra_diagnostics::SourceId, u32>,
+    /// File names in file_id order; transferred to Program::source_files at the end.
+    pub(crate) source_files: Vec<String>,
     pub(crate) functions: Vec<Function>,
     pub(crate) string_constants: Vec<String>,
     pub(crate) temp_counter: u32,
@@ -744,6 +752,9 @@ pub(crate) struct LowerCtx {
     /// Env struct StructDefs accumulated while lowering lambdas (ADR-0011).
     /// Collected into Program::struct_defs at the end of `lower()`.
     pub(crate) closure_struct_defs: Vec<crate::ir::StructDef>,
+    /// Source location of the AST node currently being lowered (ADR 0014).
+    /// Updated at the start of each statement lowering.
+    pub(crate) current_loc: crate::ir::SourceLoc,
 }
 
 /// Result of resolving an impl method call.
@@ -756,9 +767,12 @@ pub(crate) enum ImplMethodResult {
     NotFound,
 }
 
-impl LowerCtx {
-    fn new() -> Self {
+impl<'a> LowerCtx<'a> {
+    fn new(source_map: &'a tyra_diagnostics::SourceMap) -> Self {
         Self {
+            source_map,
+            source_id_map: std::collections::HashMap::new(),
+            source_files: Vec::new(),
             functions: Vec::new(),
             string_constants: Vec::new(),
             temp_counter: 0,
@@ -797,7 +811,49 @@ impl LowerCtx {
             closure_vars: std::collections::HashSet::new(),
             closure_fn_types: std::collections::HashMap::new(),
             closure_struct_defs: Vec::new(),
+            current_loc: crate::ir::SourceLoc::dummy(),
         }
+    }
+
+    /// Emit an instruction tagged with the current source location.
+    /// All lowering code should use this instead of self.emit(body, Instruction::...)
+    /// so that instructions carry accurate source positions (ADR 0014).
+    #[inline]
+    pub(crate) fn emit(&self, body: &mut Vec<MirStmt>, instr: Instruction) {
+        body.push(MirStmt::new(self.current_loc, instr));
+    }
+
+    /// Emit an instruction with an explicit source location, ignoring `current_loc`.
+    /// Use for the "result" instruction of a non-leaf expression, so the location
+    /// of the outer expression (not its last child) is recorded (ADR 0014).
+    #[inline]
+    pub(crate) fn emit_at(&self, body: &mut Vec<MirStmt>, loc: crate::ir::SourceLoc, instr: Instruction) {
+        body.push(MirStmt::new(loc, instr));
+    }
+
+    /// Emit a compiler-synthesized instruction with no source position.
+    /// Use for control-flow glue (Label, Jump, BranchIf, Phi), alloca
+    /// result-slots, and implicit returns that have no AST counterpart.
+    #[inline]
+    pub(crate) fn emit_synthetic(&self, body: &mut Vec<MirStmt>, instr: Instruction) {
+        body.push(MirStmt::synthetic(instr));
+    }
+
+    /// Convert an AST `Span` to a `SourceLoc`, assigning a new file_id on the
+    /// first encounter of each `SourceId` (ADR 0014).
+    pub(crate) fn span_to_loc(&mut self, span: tyra_diagnostics::Span) -> crate::ir::SourceLoc {
+        use std::collections::hash_map::Entry;
+        let file_id = match self.source_id_map.entry(span.source) {
+            Entry::Occupied(e) => *e.get(),
+            Entry::Vacant(e) => {
+                let id = self.source_files.len() as u32;
+                self.source_files.push(self.source_map.name(span.source).to_owned());
+                e.insert(id);
+                id
+            }
+        };
+        let (line, col) = self.source_map.line_col(span.source, span.start);
+        crate::ir::SourceLoc { file_id, line, col }
     }
 
     fn fresh_temp(&mut self) -> String {
@@ -818,7 +874,7 @@ impl LowerCtx {
         &mut self,
         temp: String,
         return_type: &Ty,
-        body: &mut Vec<Instruction>,
+        body: &mut Vec<MirStmt>,
     ) -> String {
         if !return_type.is_result() {
             return temp;
@@ -826,17 +882,17 @@ impl LowerCtx {
         // Only wrap when the last instruction is AdtPayload field 1 (the ?
         // ok-extract).  Any other instruction means the value is already a
         // full Result struct (Load from alloca, AdtInit, Call, …).
-        let is_adt_payload_ok = body.last().map_or(false, |instr| {
+        let is_adt_payload_ok = body.last().map_or(false, |stmt| {
             matches!(
-                instr,
-                Instruction::AdtPayload { dest, field_index: 1, .. } if dest == &temp
+                stmt.instr,
+                Instruction::AdtPayload { dest: ref d, field_index: 1, .. } if d == &temp
             )
         });
         if is_adt_payload_ok {
             let ret_type_name = return_type.monomorphized_name();
             self.register_adt_type(return_type);
             let ok_temp = self.fresh_temp();
-            body.push(Instruction::AdtInit {
+            self.emit(body, Instruction::AdtInit {
                 dest: ok_temp.clone(),
                 type_name: ret_type_name,
                 tag: 0,
@@ -952,14 +1008,14 @@ impl LowerCtx {
             params.push((p.name.clone(), ty.clone()));
         }
 
-        let mut body: Vec<Instruction> = Vec::new();
+        let mut body: Vec<MirStmt> = Vec::new();
 
         // Load each capture from the env struct at function entry (GEP+load).
         // The FieldGet instruction uses data-type semantics because
         // __closure_env_N is registered with is_data=true.
         if !captures.is_empty() {
             for (i, cap_name) in captures.iter().enumerate() {
-                body.push(Instruction::FieldGet {
+                self.emit(&mut body, Instruction::FieldGet {
                     dest: cap_name.clone(),
                     obj: Operand::Var("__env".into()),
                     type_name: env_struct_name.to_string(),
@@ -987,6 +1043,7 @@ impl LowerCtx {
         let mut last_expr_result = None;
         for stmt in &lam.body {
             if let tyra_ast::Stmt::Expr(s) = stmt {
+                self.current_loc = self.span_to_loc(s.span);
                 last_expr_result = Some(self.lower_expr(&s.expr, &mut body));
             } else {
                 last_expr_result = None;
@@ -996,23 +1053,23 @@ impl LowerCtx {
 
         // Ensure the function ends with a Return that carries the value when needed.
         // Mirrors lower_fn: capture last temp BEFORE emitting defers (spec §12.3).
-        if !matches!(body.last(), Some(Instruction::Return { .. })) {
+        if !body.last().is_some_and(|s| matches!(s.instr, Instruction::Return { .. })) {
             let pre_defer_last_temp = self.last_temp_name(&body);
             self.emit_deferred(&mut body);
             if ret_ty == Ty::Unit {
-                body.push(Instruction::Return { value: None });
+                self.emit(&mut body, Instruction::Return { value: None });
             } else if let Some(last_temp) = pre_defer_last_temp {
                 let ret_val = self.maybe_wrap_ok_for_return(last_temp, &ret_ty, &mut body);
-                body.push(Instruction::Return {
+                self.emit(&mut body, Instruction::Return {
                     value: Some(Operand::Var(ret_val)),
                 });
             } else if let Some(expr_val) = last_expr_result {
                 let ret_val = self.maybe_wrap_ok_for_return(expr_val, &ret_ty, &mut body);
-                body.push(Instruction::Return {
+                self.emit(&mut body, Instruction::Return {
                     value: Some(Operand::Var(ret_val)),
                 });
             } else {
-                body.push(Instruction::Return { value: None });
+                self.emit(&mut body, Instruction::Return { value: None });
             }
         }
 
@@ -1022,6 +1079,7 @@ impl LowerCtx {
             return_type: ret_ty,
             body,
             is_main: false,
+            local_metas: vec![],
         });
 
         // Restore per-function state.
@@ -1133,7 +1191,7 @@ impl LowerCtx {
             }
         }
 
-        let mut body = Vec::new();
+        let mut body: Vec<MirStmt> = Vec::new();
 
         // Pre-emit allocas for every match-pattern binding reachable in
         // this function. Placing them in the entry block guarantees they
@@ -1162,7 +1220,7 @@ impl LowerCtx {
             if self.mut_vars.contains(name) {
                 continue;
             }
-            body.push(Instruction::Alloca { dest: name.clone() });
+            self.emit(&mut body, Instruction::Alloca { dest: name.clone() });
             self.pattern_vars.insert(name.clone());
             self.local_binding_names.insert(name.clone());
         }
@@ -1171,7 +1229,7 @@ impl LowerCtx {
         // emit a Load on subsequent Ident references.
         for (name, count) in &let_counts {
             if *count > 1 && !self.pattern_vars.contains(name) && !self.mut_vars.contains(name) {
-                body.push(Instruction::Alloca { dest: name.clone() });
+                self.emit(&mut body, Instruction::Alloca { dest: name.clone() });
                 self.pattern_vars.insert(name.clone());
                 self.local_binding_names.insert(name.clone());
             }
@@ -1187,10 +1245,10 @@ impl LowerCtx {
         self.defer_flag_count = defer_count;
         for idx in 0..defer_count {
             let flag_name = format!(".defer_active_{idx}");
-            body.push(Instruction::Alloca {
+            self.emit(&mut body, Instruction::Alloca {
                 dest: flag_name.clone(),
             });
-            body.push(Instruction::Store {
+            self.emit(&mut body, Instruction::Store {
                 dest: flag_name,
                 value: Operand::Const(Constant::Int(0)),
             });
@@ -1199,8 +1257,11 @@ impl LowerCtx {
 
         let mut last_expr_result = None;
         for stmt in &f.body {
-            // Track the result of expression statements for implicit return
+            // Track the result of expression statements for implicit return.
+            // Also update current_loc here so that Expr-statement instructions
+            // (including panic) carry the correct source line (ADR 0014).
             if let Stmt::Expr(s) = stmt {
+                self.current_loc = self.span_to_loc(s.span);
                 last_expr_result = Some(self.lower_expr(&s.expr, &mut body));
             } else {
                 last_expr_result = None;
@@ -1209,29 +1270,29 @@ impl LowerCtx {
         }
 
         // If last instruction isn't a return, add implicit return
-        if !matches!(body.last(), Some(Instruction::Return { .. })) {
+        if !body.last().is_some_and(|s| matches!(s.instr, Instruction::Return { .. })) {
             // Capture last temp BEFORE emitting defers so defer calls don't
             // overwrite the return value (spec §12.3).
             let pre_defer_last_temp = self.last_temp_name(&body);
             // spec §12.3: emit deferred expressions before implicit return
             self.emit_deferred(&mut body);
             if return_type == Ty::Unit {
-                body.push(Instruction::Return { value: None });
+                self.emit(&mut body, Instruction::Return { value: None });
             } else if let Some(last_temp) = pre_defer_last_temp {
                 // If fn returns Result<T,E> but the tail temp is T (extracted by ?),
                 // wrap it in Ok(T) so the return type matches.
                 let ret_val = self.maybe_wrap_ok_for_return(last_temp, &return_type, &mut body);
-                body.push(Instruction::Return {
+                self.emit(&mut body, Instruction::Return {
                     value: Some(Operand::Var(ret_val)),
                 });
             } else if let Some(expr_val) = last_expr_result {
                 // Last expression was a simple variable reference (no instruction generated)
                 let ret_val = self.maybe_wrap_ok_for_return(expr_val, &return_type, &mut body);
-                body.push(Instruction::Return {
+                self.emit(&mut body, Instruction::Return {
                     value: Some(Operand::Var(ret_val)),
                 });
             } else {
-                body.push(Instruction::Return { value: None });
+                self.emit(&mut body, Instruction::Return { value: None });
             }
         }
 
@@ -1241,10 +1302,22 @@ impl LowerCtx {
             return_type,
             body,
             is_main: false,
+            local_metas: vec![],
         }
     }
 
-    fn lower_stmt(&mut self, stmt: &Stmt, body: &mut Vec<Instruction>) {
+    fn lower_stmt(&mut self, stmt: &Stmt, body: &mut Vec<MirStmt>) {
+        // Update the current source location from this statement's span (ADR 0014).
+        let stmt_span = match stmt {
+            Stmt::Let(s) => s.span,
+            Stmt::Mut(s) => s.span,
+            Stmt::Return(s) => s.span,
+            Stmt::Defer(s) => s.span,
+            Stmt::Break(s) => s.span,
+            Stmt::Continue(s) => s.span,
+            Stmt::Expr(s) => s.span,
+        };
+        self.current_loc = self.span_to_loc(stmt_span);
         match stmt {
             Stmt::Let(s) => {
                 // Record the binding name first so even Int/Bool/Unit lets
@@ -1325,12 +1398,12 @@ impl LowerCtx {
                 // lookups already Load from the alloca for pattern_vars /
                 // mut_vars (see lower/expr.rs:82).
                 if self.pattern_vars.contains(&s.name) || self.mut_vars.contains(&s.name) {
-                    body.push(Instruction::Store {
+                    self.emit(body, Instruction::Store {
                         dest: s.name.clone(),
                         value: Operand::Var(val),
                     });
                 } else {
-                    body.push(Instruction::Copy {
+                    self.emit(body, Instruction::Copy {
                         dest: s.name.clone(),
                         source: val,
                     });
@@ -1411,11 +1484,11 @@ impl LowerCtx {
                     self.pattern_vars.contains(&s.name) || self.mut_vars.contains(&s.name);
                 self.mut_vars.insert(s.name.clone());
                 if !already_slotted {
-                    body.push(Instruction::Alloca {
+                    self.emit_synthetic(body, Instruction::Alloca {
                         dest: s.name.clone(),
                     });
                 }
-                body.push(Instruction::Store {
+                self.emit(body, Instruction::Store {
                     dest: s.name.clone(),
                     value: Operand::Var(val),
                 });
@@ -1427,7 +1500,7 @@ impl LowerCtx {
                 });
                 // spec §12.3: emit deferred expressions before return
                 self.emit_deferred(body);
-                body.push(Instruction::Return { value });
+                self.emit(body, Instruction::Return { value });
             }
             Stmt::Defer(d) => {
                 // spec §12.3: mark the pre-allocated activation flag as
@@ -1451,7 +1524,7 @@ impl LowerCtx {
                 );
                 self.next_defer_index += 1;
                 let flag_name = format!(".defer_active_{idx}");
-                body.push(Instruction::Store {
+                self.emit(body, Instruction::Store {
                     dest: flag_name.clone(),
                     value: Operand::Const(Constant::Int(1)),
                 });
@@ -1471,7 +1544,7 @@ impl LowerCtx {
                     .last()
                     .expect("break without enclosing loop (should be caught by type checker)")
                     .clone();
-                body.push(Instruction::Jump { label: exit });
+                self.emit_synthetic(body, Instruction::Jump { label: exit });
             }
             Stmt::Continue(_) => {
                 // Jump to the innermost loop's head label (condition-check for
@@ -1481,7 +1554,7 @@ impl LowerCtx {
                     .last()
                     .expect("continue without enclosing loop (should be caught by type checker)")
                     .clone();
-                body.push(Instruction::Jump { label: head });
+                self.emit_synthetic(body, Instruction::Jump { label: head });
             }
             Stmt::Expr(s) => {
                 self.lower_expr(&s.expr, body);
@@ -1503,7 +1576,7 @@ impl LowerCtx {
     fn lower_block_collect_tail(
         &mut self,
         stmts: &[Stmt],
-        body: &mut Vec<Instruction>,
+        body: &mut Vec<MirStmt>,
     ) -> BlockTail {
         let mut tail = BlockTail::Fallback;
         for (i, stmt) in stmts.iter().enumerate() {
@@ -1524,7 +1597,7 @@ impl LowerCtx {
         tail
     }
 
-    fn lower_if(&mut self, if_expr: &IfExpr, body: &mut Vec<Instruction>) -> String {
+    fn lower_if(&mut self, if_expr: &IfExpr, body: &mut Vec<MirStmt>) -> String {
         let cond = self.lower_expr(&if_expr.condition, body);
         let then_label = self.fresh_label("then");
         let else_label = self.fresh_label("else");
@@ -1532,18 +1605,18 @@ impl LowerCtx {
 
         // Allocate result slot (like match)
         let result_slot = self.fresh_temp();
-        body.push(Instruction::Alloca {
+        self.emit_synthetic(body, Instruction::Alloca {
             dest: result_slot.clone(),
         });
 
-        body.push(Instruction::BranchIf {
+        self.emit_synthetic(body, Instruction::BranchIf {
             cond: Operand::Var(cond),
             true_label: then_label.clone(),
             false_label: else_label.clone(),
         });
 
         // Then branch
-        body.push(Instruction::Label(then_label));
+        self.emit_synthetic(body, Instruction::Label(then_label));
         let then_start = body.len();
         let then_tail = self.lower_block_collect_tail(&if_expr.then_body, body);
         if !range_terminates(body, then_start) {
@@ -1554,19 +1627,19 @@ impl LowerCtx {
                     BlockTail::Fallback => self.last_temp_in_range(body, then_start),
                 };
                 if let Some(last) = last {
-                    body.push(Instruction::Store {
+                    self.emit(body, Instruction::Store {
                         dest: result_slot.clone(),
                         value: Operand::Var(last),
                     });
                 }
             }
-            body.push(Instruction::Jump {
+            self.emit_synthetic(body, Instruction::Jump {
                 label: end_label.clone(),
             });
         }
 
         // Else branch
-        body.push(Instruction::Label(else_label));
+        self.emit_synthetic(body, Instruction::Label(else_label));
         let else_start = body.len();
         let else_tail: BlockTail = match &if_expr.else_body {
             Some(ElseBranch::Else(stmts)) => self.lower_block_collect_tail(stmts, body),
@@ -1581,21 +1654,21 @@ impl LowerCtx {
                     BlockTail::Fallback => self.last_temp_in_range(body, else_start),
                 };
                 if let Some(last) = last {
-                    body.push(Instruction::Store {
+                    self.emit(body, Instruction::Store {
                         dest: result_slot.clone(),
                         value: Operand::Var(last),
                     });
                 }
             }
-            body.push(Instruction::Jump {
+            self.emit_synthetic(body, Instruction::Jump {
                 label: end_label.clone(),
             });
         }
 
-        body.push(Instruction::Label(end_label));
+        self.emit_synthetic(body, Instruction::Label(end_label));
 
         let result = self.fresh_temp();
-        body.push(Instruction::Load {
+        self.emit(body, Instruction::Load {
             dest: result.clone(),
             source: result_slot,
         });
@@ -1607,24 +1680,24 @@ impl LowerCtx {
     /// Note: this deliberately does NOT clear deferred_exprs — every return path
     /// (including multiple ? early returns within a single function) must emit the
     /// full set of deferred expressions. The list is cleared at lower_fn entry.
-    fn emit_deferred(&mut self, body: &mut Vec<Instruction>) {
+    fn emit_deferred(&mut self, body: &mut Vec<MirStmt>) {
         // Clone to avoid borrow conflict (deferred_exprs is on self).
         let entries: Vec<(String, Expr)> = self.deferred_exprs.iter().rev().cloned().collect();
         for (flag, expr) in &entries {
             // Runtime check: only execute this deferred expression if its
             // activation flag was set to true by a reached `defer` stmt.
             let tmp = self.fresh_temp();
-            body.push(Instruction::Load {
+            self.emit(body, Instruction::Load {
                 dest: tmp.clone(),
                 source: flag.clone(),
             });
             let zero = self.fresh_temp();
-            body.push(Instruction::Const {
+            self.emit(body, Instruction::Const {
                 dest: zero.clone(),
                 value: Constant::Int(0),
             });
             let active = self.fresh_temp();
-            body.push(Instruction::BinOp {
+            self.emit(body, Instruction::BinOp {
                 dest: active.clone(),
                 op: MirBinOp::NeqInt,
                 lhs: Operand::Var(tmp),
@@ -1632,23 +1705,23 @@ impl LowerCtx {
             });
             let then_lbl = self.fresh_label("defer_run");
             let skip_lbl = self.fresh_label("defer_skip");
-            body.push(Instruction::BranchIf {
+            self.emit_synthetic(body, Instruction::BranchIf {
                 cond: Operand::Var(active),
                 true_label: then_lbl.clone(),
                 false_label: skip_lbl.clone(),
             });
-            body.push(Instruction::Label(then_lbl));
+            self.emit_synthetic(body, Instruction::Label(then_lbl));
             self.lower_expr(expr, body);
-            body.push(Instruction::Jump {
+            self.emit_synthetic(body, Instruction::Jump {
                 label: skip_lbl.clone(),
             });
-            body.push(Instruction::Label(skip_lbl));
+            self.emit_synthetic(body, Instruction::Label(skip_lbl));
         }
     }
 
-    fn last_temp_in_range(&self, body: &[Instruction], start: usize) -> Option<String> {
-        for inst in body[start..].iter().rev() {
-            match inst {
+    fn last_temp_in_range(&self, body: &[MirStmt], start: usize) -> Option<String> {
+        for stmt in body[start..].iter().rev() {
+            match &stmt.instr {
                 Instruction::Const { dest, .. }
                 | Instruction::Call {
                     dest: Some(dest), ..
@@ -1674,9 +1747,9 @@ impl LowerCtx {
         None
     }
 
-    fn last_temp_name(&self, body: &[Instruction]) -> Option<String> {
-        for inst in body.iter().rev() {
-            match inst {
+    fn last_temp_name(&self, body: &[MirStmt]) -> Option<String> {
+        for stmt in body.iter().rev() {
+            match &stmt.instr {
                 Instruction::Const { dest, .. }
                 | Instruction::Call {
                     dest: Some(dest), ..
@@ -1789,11 +1862,11 @@ pub(crate) fn ast_binop_to_mir(op: BinOp, is_float: bool) -> MirBinOp {
 /// an i64 from `x = x + 1` — and clashes with a sibling arm whose
 /// tail is a Bool assignment (`done = true`). That mismatch surfaces in
 /// LLVM codegen as E0500 (`'%_tN' defined with type 'i64' but expected 'i1'`).
-pub(crate) fn block_ends_with_assignment(body: &[Instruction], start: usize) -> bool {
+pub(crate) fn block_ends_with_assignment(body: &[MirStmt], start: usize) -> bool {
     // Walk backwards skipping Jump/Label/Alloca bookkeeping to find the
     // instruction that actually expresses the block's tail value.
-    for inst in body[start..].iter().rev() {
-        match inst {
+    for stmt in body[start..].iter().rev() {
+        match &stmt.instr {
             Instruction::Jump { .. } | Instruction::Label(_) | Instruction::Alloca { .. } => {
                 continue;
             }
@@ -1812,14 +1885,14 @@ pub(crate) fn block_ends_with_assignment(body: &[Instruction], start: usize) -> 
     false
 }
 
-pub(crate) fn range_terminates(body: &[Instruction], start: usize) -> bool {
+pub(crate) fn range_terminates(body: &[MirStmt], start: usize) -> bool {
     body[start..]
         .iter()
         .rev()
-        .find(|i| !matches!(i, Instruction::Alloca { .. } | Instruction::Label(_)))
-        .is_some_and(|i| {
+        .find(|s| !matches!(s.instr, Instruction::Alloca { .. } | Instruction::Label(_)))
+        .is_some_and(|s| {
             matches!(
-                i,
+                s.instr,
                 Instruction::Return { .. }
                     | Instruction::Jump { .. }
                     | Instruction::BranchIf { .. }

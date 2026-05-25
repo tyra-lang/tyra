@@ -20,6 +20,7 @@ use crate::list_codegen::emit_list_instruction;
 pub(crate) fn emit_instruction(
     out: &mut String,
     inst: &Instruction,
+    loc: tyra_mir::SourceLoc,
     func: &Function,
     strings: &[String],
     ctx: &EmitCtx,
@@ -58,7 +59,7 @@ pub(crate) fn emit_instruction(
             args,
         } => {
             // Try builtin dispatch first; fall through to user-defined call
-            if !emit_builtin_call(out, dest, fname, args, func, ctx) {
+            if !emit_builtin_call(out, dest, fname, args, loc, func, ctx) {
                 // User-defined function call — look up signature for types
                 let ret_ty = if let Some(sig) = ctx.fn_sigs.get(fname.as_str()) {
                     llvm_type_str(&sig.return_type, ctx.struct_map)

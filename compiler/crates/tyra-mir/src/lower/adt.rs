@@ -4,7 +4,7 @@ use tyra_types::Ty;
 
 use crate::monomorphize::substitute_fn_def;
 
-impl super::LowerCtx {
+impl super::LowerCtx<'_> {
     /// Register an ADT struct def for a generic type (Option<T>, Result<T, E>).
     /// Creates a monomorphized StructDef if not already registered.
     pub(super) fn register_adt_type(&mut self, ty: &Ty) {

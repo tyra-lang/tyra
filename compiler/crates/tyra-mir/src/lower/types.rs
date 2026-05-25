@@ -13,7 +13,7 @@ use crate::ir::*;
 
 use super::ImplMethodResult;
 
-impl super::LowerCtx {
+impl super::LowerCtx<'_> {
     /// Check if an expression produces a Float value.
     /// Used to select between Int and Float MIR binary operations.
     pub(super) fn is_float_expr(&self, expr: &Expr) -> bool {
@@ -175,7 +175,7 @@ impl super::LowerCtx {
         op: BinOp,
         lhs_expr: &Expr,
         rhs_expr: &Expr,
-        body: &mut Vec<Instruction>,
+        body: &mut Vec<MirStmt>,
     ) -> Option<String> {
         // Both operands must be the same named type
         let l_type = self.resolve_struct_type(lhs_expr);
@@ -196,14 +196,14 @@ impl super::LowerCtx {
                 let mut field_conds = Vec::new();
                 for (i, (_, field_ty)) in fields.iter().enumerate() {
                     let l_field = self.fresh_temp();
-                    body.push(Instruction::FieldGet {
+                    self.emit(body, Instruction::FieldGet {
                         dest: l_field.clone(),
                         obj: Operand::Var(l.to_string()),
                         type_name: type_name.clone(),
                         field_index: i as u32,
                     });
                     let r_field = self.fresh_temp();
-                    body.push(Instruction::FieldGet {
+                    self.emit(body, Instruction::FieldGet {
                         dest: r_field.clone(),
                         obj: Operand::Var(r.to_string()),
                         type_name: type_name.clone(),
@@ -215,7 +215,7 @@ impl super::LowerCtx {
                     } else {
                         MirBinOp::EqInt
                     };
-                    body.push(Instruction::BinOp {
+                    self.emit(body, Instruction::BinOp {
                         dest: field_eq.clone(),
                         op: field_op,
                         lhs: Operand::Var(l_field),
@@ -227,7 +227,7 @@ impl super::LowerCtx {
                 // Empty struct: always equal
                 if field_conds.is_empty() {
                     let dest = self.fresh_temp();
-                    body.push(Instruction::Const {
+                    self.emit(body, Instruction::Const {
                         dest: dest.clone(),
                         value: if op == BinOp::Eq {
                             Constant::Bool(true)
@@ -242,7 +242,7 @@ impl super::LowerCtx {
                 let mut result = field_conds[0].clone();
                 for cond in &field_conds[1..] {
                     let combined = self.fresh_temp();
-                    body.push(Instruction::BinOp {
+                    self.emit(body, Instruction::BinOp {
                         dest: combined.clone(),
                         op: MirBinOp::And,
                         lhs: Operand::Var(result),
@@ -254,7 +254,7 @@ impl super::LowerCtx {
                 // For NotEq: negate the result
                 if op == BinOp::NotEq {
                     let negated = self.fresh_temp();
-                    body.push(Instruction::Not {
+                    self.emit(body, Instruction::Not {
                         dest: negated.clone(),
                         operand: Operand::Var(result),
                     });
@@ -272,14 +272,14 @@ impl super::LowerCtx {
                 let (_, field_ty) = &fields[0];
 
                 let l_field = self.fresh_temp();
-                body.push(Instruction::FieldGet {
+                self.emit(body, Instruction::FieldGet {
                     dest: l_field.clone(),
                     obj: Operand::Var(l.to_string()),
                     type_name: type_name.clone(),
                     field_index: 0,
                 });
                 let r_field = self.fresh_temp();
-                body.push(Instruction::FieldGet {
+                self.emit(body, Instruction::FieldGet {
                     dest: r_field.clone(),
                     obj: Operand::Var(r.to_string()),
                     type_name: type_name.clone(),
@@ -289,7 +289,7 @@ impl super::LowerCtx {
                 let is_float = *field_ty == Ty::Float;
                 let mir_op = super::ast_binop_to_mir(op, is_float);
                 let dest = self.fresh_temp();
-                body.push(Instruction::BinOp {
+                self.emit(body, Instruction::BinOp {
                     dest: dest.clone(),
                     op: mir_op,
                     lhs: Operand::Var(l_field),

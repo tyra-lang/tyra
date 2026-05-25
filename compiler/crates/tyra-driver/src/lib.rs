@@ -223,7 +223,7 @@ pub fn compile_to_ir(source_path: &Path) -> CompileResult {
     }
 
     // MIR lowering
-    let mir = tyra_mir::lower(&ast);
+    let mir = tyra_mir::lower(&ast, &sources);
 
     // LLVM IR generation
     let llvm_ir = tyra_codegen_llvm::emit_llvm_ir(&mir);

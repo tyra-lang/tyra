@@ -5,7 +5,7 @@ use tyra_types::Ty;
 
 use crate::ir::*;
 
-impl super::LowerCtx {
+impl super::LowerCtx<'_> {
     /// Lower a field assignment: `obj.field = val`.
     /// For data types: load the ptr, then GEP+store in-place (§8.6 reference semantics).
     pub(super) fn lower_field_assign(
@@ -14,7 +14,7 @@ impl super::LowerCtx {
         obj_expr: &Expr,
         field: &str,
         val: &str,
-        body: &mut Vec<Instruction>,
+        body: &mut Vec<MirStmt>,
     ) {
         if let Some((type_name, field_defs)) = self.resolve_struct_type(obj_expr) {
             // Field mutation via `=` is only valid on data types (§8.6).
@@ -28,11 +28,11 @@ impl super::LowerCtx {
                 // Data type: obj_name alloca holds a ptr to the heap struct.
                 // Load the ptr, then GEP+store directly — no struct rebuild needed.
                 let ptr = self.fresh_temp();
-                body.push(Instruction::Load {
+                self.emit(body, Instruction::Load {
                     dest: ptr.clone(),
                     source: obj_name.to_string(),
                 });
-                body.push(Instruction::FieldSet {
+                self.emit(body, Instruction::FieldSet {
                     obj: Operand::Var(ptr),
                     type_name: type_name.clone(),
                     field_index: field_idx as u32,
@@ -50,7 +50,7 @@ impl super::LowerCtx {
         type_name: &str,
         field_defs: &[(String, Ty)],
         args: &[Arg],
-        body: &mut Vec<Instruction>,
+        body: &mut Vec<MirStmt>,
     ) -> String {
         // If no args, return the original (value types are immutable, copy is identity)
         if args.is_empty() {
@@ -75,7 +75,7 @@ impl super::LowerCtx {
             } else {
                 // Extract original field value
                 let extracted = self.fresh_temp();
-                body.push(Instruction::FieldGet {
+                self.emit(body, Instruction::FieldGet {
                     dest: extracted.clone(),
                     obj: Operand::Var(obj_val.to_string()),
                     type_name: type_name.to_string(),
@@ -86,7 +86,7 @@ impl super::LowerCtx {
         }
 
         let dest = self.fresh_temp();
-        body.push(Instruction::StructInit {
+        self.emit(body, Instruction::StructInit {
             dest: dest.clone(),
             type_name: type_name.to_string(),
             fields: field_operands,

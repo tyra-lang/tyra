@@ -16,6 +16,7 @@ pub(crate) fn emit_builtin_call(
     dest: &Option<String>,
     fname: &str,
     args: &[Operand],
+    loc: tyra_mir::SourceLoc,
     func: &Function,
     ctx: &EmitCtx,
 ) -> bool {
@@ -26,7 +27,7 @@ pub(crate) fn emit_builtin_call(
             true
         }
         "panic" => {
-            emit_panic_call(out, args, func);
+            emit_panic_call(out, args, loc, func, ctx);
             true
         }
         "sys__args" => {
@@ -540,11 +541,32 @@ fn emit_print_call(
 }
 
 /// §12.1: panic(_ message: String) -> Never
-/// Print message to stdout then abort.
-fn emit_panic_call(out: &mut String, args: &[Operand], func: &Function) {
+/// Print "panic at FILE:LINE:\nMESSAGE\n" to stderr, then abort (ADR 0014).
+fn emit_panic_call(
+    out: &mut String,
+    args: &[Operand],
+    loc: tyra_mir::SourceLoc,
+    func: &Function,
+    ctx: &EmitCtx,
+) {
+    // If we have source location, emit "panic at FILE:LINE:\n" to fd 2 (stderr).
+    if !loc.is_dummy() && (loc.file_id as usize) < ctx.source_files.len() {
+        let file_id = loc.file_id;
+        let line = loc.line;
+        writeln!(
+            out,
+            "  call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.fmt.panic_loc, ptr @.src.{file_id}, i64 {line})"
+        )
+        .unwrap();
+    }
+    // Print the message string followed by a newline to stderr.
     if let Some(arg) = args.first() {
         let val = operand_ref(arg, func);
-        writeln!(out, "  call i32 @puts(ptr {val})").unwrap();
+        writeln!(
+            out,
+            "  call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.fmt.str_ln, ptr {val})"
+        )
+        .unwrap();
     }
     writeln!(out, "  call void @abort()").unwrap();
     writeln!(out, "  unreachable").unwrap();

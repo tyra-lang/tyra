@@ -124,6 +124,20 @@ pub fn emit_llvm_ir(program: &Program) -> String {
         writeln!(out).unwrap();
     }
 
+    // Source file name constants (ADR 0014) — referenced by panic location output.
+    for (idx, path) in program.source_files.iter().enumerate() {
+        let escaped = llvm_escape_string(path);
+        let len = path.len() + 1;
+        writeln!(
+            out,
+            "@.src.{idx} = private unnamed_addr constant [{len} x i8] c\"{escaped}\\00\""
+        )
+        .unwrap();
+    }
+    if !program.source_files.is_empty() {
+        writeln!(out).unwrap();
+    }
+
     // Format strings for print
     writeln!(
         out,
@@ -150,6 +164,19 @@ pub fn emit_llvm_ir(program: &Program) -> String {
         "@.fmt.float_ln = private unnamed_addr constant [4 x i8] c\"%g\\0A\\00\""
     )
     .unwrap();
+    // Panic location format: "panic at %s:%ld:\n" (ADR 0014)
+    // Byte count: "panic at %s:%ld:\n\0" = 9 + 7 + 1 + 1 = 18
+    writeln!(
+        out,
+        "@.fmt.panic_loc = private unnamed_addr constant [18 x i8] c\"panic at %s:%ld:\\0A\\00\""
+    )
+    .unwrap();
+    // "%s\n" for stderr message line
+    writeln!(
+        out,
+        "@.fmt.str_ln = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\""
+    )
+    .unwrap();
     writeln!(out).unwrap();
 
     // External declarations
@@ -157,6 +184,7 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare i32 @puts(ptr)").unwrap();
     writeln!(out, "declare i32 @printf(ptr, ...)").unwrap();
     writeln!(out, "declare i32 @snprintf(ptr, i64, ptr, ...)").unwrap();
+    writeln!(out, "declare i32 @dprintf(i32, ptr, ...)").unwrap();
     // Boehm GC (libgc): tracing conservative collector. See ADR-0007.
     // All heap allocations go through GC_malloc; GC_init is called at @main entry.
     writeln!(out, "declare ptr @GC_malloc(i64)").unwrap();
@@ -311,6 +339,7 @@ pub fn emit_llvm_ir(program: &Program) -> String {
             &mut out,
             func,
             &program.string_constants,
+            &program.source_files,
             &struct_map,
             &fn_sigs,
             &spawn_thunks,
@@ -343,7 +372,8 @@ pub fn emit_llvm_ir(program: &Program) -> String {
 fn collect_spawn_thunks(program: &Program) -> Vec<SpawnThunk> {
     let mut thunks = Vec::new();
     for f in &program.functions {
-        for inst in &f.body {
+        for stmt in &f.body {
+            let inst = &stmt.instr;
             if let Instruction::Spawn {
                 func,
                 arg_types,
@@ -438,6 +468,7 @@ fn emit_function(
     out: &mut String,
     func: &Function,
     strings: &[String],
+    source_files: &[String],
     struct_map: &std::collections::HashMap<String, StructInfo>,
     fn_sigs: &std::collections::HashMap<String, FnSig>,
     spawn_thunks: &std::cell::RefCell<Vec<SpawnThunk>>,
@@ -494,7 +525,8 @@ fn emit_function(
     // MIR guarantees dest names are unique within a function, so name-dedup is
     // safe; the HashSet is a defensive guard against any future duplication.
     let mut hoisted = std::collections::HashSet::new();
-    for inst in &func.body {
+    for stmt in &func.body {
+        let inst = &stmt.instr;
         if let Instruction::Alloca { dest } = inst {
             if hoisted.insert(dest.as_str()) {
                 let llvm_ty = scan
@@ -516,11 +548,13 @@ fn emit_function(
         struct_temps: &scan.struct_temps,
         alloca_llvm_types: &scan.alloca_llvm_types,
         spawn_thunks,
+        source_files,
     };
 
     // Emit instructions, skipping dead code after block terminators.
     let mut block_terminated = false;
-    for inst in &func.body {
+    for stmt in &func.body {
+        let inst = &stmt.instr;
         match inst {
             Instruction::Label(_) => {
                 block_terminated = false;
@@ -530,7 +564,7 @@ fn emit_function(
             _ if block_terminated => continue,
             _ => {}
         }
-        emit_instruction(out, inst, func, strings, &ctx);
+        emit_instruction(out, inst, stmt.loc, func, strings, &ctx);
         match inst {
             Instruction::Return { .. }
             | Instruction::Jump { .. }
@@ -562,6 +596,8 @@ pub(crate) struct EmitCtx<'a> {
     /// Per-site spawn thunks collected during instruction emission and
     /// emitted after all user functions (M9).
     pub(crate) spawn_thunks: &'a std::cell::RefCell<Vec<SpawnThunk>>,
+    /// Source file paths indexed by SourceLoc::file_id, for panic diagnostics (ADR 0014).
+    pub(crate) source_files: &'a [String],
 }
 
 /// Metadata for a synthetic spawn thunk. Codegen emits one per `spawn` site

@@ -10,13 +10,17 @@ use tyra_types::Ty;
 
 use crate::ir::*;
 
-impl super::LowerCtx {
+impl super::LowerCtx<'_> {
     /// Lower a call expression, returning the name of the temporary holding the result.
+    /// `call_loc` is the source location of the *entire* call expression (the
+    /// caller's span), used to tag the result instruction so that e.g. `panic(f(x))`
+    /// attributes the panic instruction to the `panic(...)` line, not `f(x)` (ADR 0014).
     pub(super) fn lower_call(
         &mut self,
         callee: &Expr,
         args: &[Arg],
-        body: &mut Vec<Instruction>,
+        call_loc: crate::ir::SourceLoc,
+        body: &mut Vec<MirStmt>,
     ) -> String {
         // Check for Option/Result constructors: Some(x), Ok(x), Err(e)
         if let ExprKind::Ident(ctor_name) = &callee.kind
@@ -42,7 +46,7 @@ impl super::LowerCtx {
             };
 
             let dest = self.fresh_temp();
-            body.push(Instruction::AdtInit {
+            self.emit_at(body, call_loc, Instruction::AdtInit {
                 dest: dest.clone(),
                 type_name: type_name.clone(),
                 tag,
@@ -123,7 +127,7 @@ impl super::LowerCtx {
             }
 
             let dest = self.fresh_temp();
-            body.push(Instruction::AdtInit {
+            self.emit_at(body, call_loc, Instruction::AdtInit {
                 dest: dest.clone(),
                 type_name: type_name.clone(),
                 tag,
@@ -191,7 +195,7 @@ impl super::LowerCtx {
                 }
             }
             let dest = self.fresh_temp();
-            body.push(Instruction::StructInit {
+            self.emit_at(body, call_loc, Instruction::StructInit {
                 dest: dest.clone(),
                 type_name: name.clone(),
                 fields: field_operands,
@@ -211,7 +215,7 @@ impl super::LowerCtx {
             {
                 let obj_val = self.lower_expr(obj, body);
                 let handle = self.fresh_temp();
-                body.push(Instruction::FieldGet {
+                self.emit(body, Instruction::FieldGet {
                     dest: handle.clone(),
                     obj: Operand::Var(obj_val),
                     type_name: "Map__String__Int".into(),
@@ -222,7 +226,7 @@ impl super::LowerCtx {
                 match method.as_str() {
                     "contains_key" => {
                         let dest = self.fresh_temp();
-                        body.push(Instruction::Call {
+                        self.emit_at(body, call_loc, Instruction::Call {
                             dest: Some(dest.clone()),
                             func: "__map_contains_string_int".into(),
                             args: vec![Operand::Var(handle), Operand::Var(key_val)],
@@ -233,7 +237,7 @@ impl super::LowerCtx {
                         let opt_ty = Ty::Generic("Option".into(), vec![Ty::Int]);
                         self.register_adt_type(&opt_ty);
                         let dest = self.fresh_temp();
-                        body.push(Instruction::MapGetOption {
+                        self.emit_at(body, call_loc, Instruction::MapGetOption {
                             dest: dest.clone(),
                             handle: Operand::Var(handle),
                             key: Operand::Var(key_val),
@@ -256,7 +260,7 @@ impl super::LowerCtx {
             if let Some(_list_ty) = self.infer_list_type(obj) {
                 let obj_val = self.lower_expr(obj, body);
                 let dest = self.fresh_temp();
-                body.push(Instruction::ListLen {
+                self.emit_at(body, call_loc, Instruction::ListLen {
                     dest: dest.clone(),
                     list: Operand::Var(obj_val),
                 });
@@ -279,7 +283,7 @@ impl super::LowerCtx {
                 let option_type_name = option_type.monomorphized_name();
 
                 let dest = self.fresh_temp();
-                body.push(Instruction::ListGetSafe {
+                self.emit_at(body, call_loc, Instruction::ListGetSafe {
                     dest: dest.clone(),
                     list: Operand::Var(obj_val),
                     index: Operand::Var(idx_val),
@@ -336,7 +340,7 @@ impl super::LowerCtx {
 
                 // Extract tag from Option
                 let tag = self.fresh_temp();
-                body.push(Instruction::AdtTag {
+                self.emit(body, Instruction::AdtTag {
                     dest: tag.clone(),
                     obj: Operand::Var(obj_val.clone()),
                     type_name: opt_type_name.clone(),
@@ -344,12 +348,12 @@ impl super::LowerCtx {
 
                 // Check: tag == 0 means Some
                 let zero = self.fresh_temp();
-                body.push(Instruction::Const {
+                self.emit(body, Instruction::Const {
                     dest: zero.clone(),
                     value: Constant::Int(0),
                 });
                 let is_some = self.fresh_temp();
-                body.push(Instruction::BinOp {
+                self.emit(body, Instruction::BinOp {
                     dest: is_some.clone(),
                     op: MirBinOp::EqInt,
                     lhs: Operand::Var(tag),
@@ -360,62 +364,62 @@ impl super::LowerCtx {
                 let none_label = self.fresh_label("ok_or_none");
                 let end_label = self.fresh_label("ok_or_end");
 
-                // Allocate result slot
+                // Allocate result slot (synthetic: no user source line)
                 let result_slot = self.fresh_temp();
-                body.push(Instruction::Alloca {
+                self.emit_synthetic(body, Instruction::Alloca {
                     dest: result_slot.clone(),
                 });
 
-                body.push(Instruction::BranchIf {
+                self.emit_synthetic(body, Instruction::BranchIf {
                     cond: Operand::Var(is_some),
                     true_label: some_label.clone(),
                     false_label: none_label.clone(),
                 });
 
                 // Some path: Ok(payload)
-                body.push(Instruction::Label(some_label));
+                self.emit_synthetic(body, Instruction::Label(some_label));
                 let payload = self.fresh_temp();
-                body.push(Instruction::AdtPayload {
+                self.emit_at(body, call_loc, Instruction::AdtPayload {
                     dest: payload.clone(),
                     obj: Operand::Var(obj_val),
                     type_name: opt_type_name,
                     field_index: 1,
                 });
                 let ok_val = self.fresh_temp();
-                body.push(Instruction::AdtInit {
+                self.emit_at(body, call_loc, Instruction::AdtInit {
                     dest: ok_val.clone(),
                     type_name: result_type_name.clone(),
                     tag: 0,
                     fields: vec![Operand::Var(payload), Operand::Const(Constant::Int(0))],
                 });
-                body.push(Instruction::Store {
+                self.emit_at(body, call_loc, Instruction::Store {
                     dest: result_slot.clone(),
                     value: Operand::Var(ok_val),
                 });
-                body.push(Instruction::Jump {
+                self.emit_synthetic(body, Instruction::Jump {
                     label: end_label.clone(),
                 });
 
                 // None path: Err(err_arg)
-                body.push(Instruction::Label(none_label));
+                self.emit_synthetic(body, Instruction::Label(none_label));
                 let err_val = self.fresh_temp();
-                body.push(Instruction::AdtInit {
+                self.emit_at(body, call_loc, Instruction::AdtInit {
                     dest: err_val.clone(),
                     type_name: result_type_name,
                     tag: 1,
                     fields: vec![Operand::Const(Constant::Int(0)), Operand::Var(err_arg)],
                 });
-                body.push(Instruction::Store {
+                self.emit_at(body, call_loc, Instruction::Store {
                     dest: result_slot.clone(),
                     value: Operand::Var(err_val),
                 });
-                body.push(Instruction::Jump {
+                self.emit_synthetic(body, Instruction::Jump {
                     label: end_label.clone(),
                 });
 
-                body.push(Instruction::Label(end_label));
+                self.emit_synthetic(body, Instruction::Label(end_label));
                 let result_val = self.fresh_temp();
-                body.push(Instruction::Load {
+                self.emit_at(body, call_loc, Instruction::Load {
                     dest: result_val.clone(),
                     source: result_slot,
                 });
@@ -437,7 +441,7 @@ impl super::LowerCtx {
                 .collect();
             let dest = self.fresh_temp();
             let mangled = format!("{obj_val}.ok_or");
-            body.push(Instruction::Call {
+            self.emit_at(body, call_loc, Instruction::Call {
                 dest: Some(dest.clone()),
                 func: mangled,
                 args: arg_operands,
@@ -541,7 +545,7 @@ impl super::LowerCtx {
                     }
                     let dest = self.fresh_temp();
                     let ret_ty = self.fn_return_types.get(&mangled_name).cloned();
-                    body.push(Instruction::Call {
+                    self.emit_at(body, call_loc, Instruction::Call {
                         dest: Some(dest.clone()),
                         func: mangled_name,
                         args: arg_operands,
@@ -573,7 +577,7 @@ impl super::LowerCtx {
                     // TODO: Emit proper diagnostic via tyra-diagnostics.
                     let self_val = self.lower_expr(obj, body);
                     let dest = self.fresh_temp();
-                    body.push(Instruction::Call {
+                    self.emit_at(body, call_loc, Instruction::Call {
                         dest: Some(dest.clone()),
                         func: format!("__unresolved_method_{method}"),
                         args: vec![Operand::Var(self_val)],
@@ -618,7 +622,7 @@ impl super::LowerCtx {
                     if fn_name == "join_all" {
                         let list_ty = Ty::Generic("List".into(), vec![elem_ty.clone()]);
                         self.register_adt_type(&list_ty);
-                        body.push(Instruction::JoinAll {
+                        self.emit_at(body, call_loc, Instruction::JoinAll {
                             dest: dest.clone(),
                             list: Operand::Var(list_temp),
                             elem_type: elem_ty.clone(),
@@ -634,7 +638,7 @@ impl super::LowerCtx {
                         // passes that query type by temp name find a
                         // meaningful string rather than None.
                         let task_ty = Ty::Generic("Task".into(), vec![elem_ty.clone()]);
-                        body.push(Instruction::Select {
+                        self.emit_at(body, call_loc, Instruction::Select {
                             dest: dest.clone(),
                             list: Operand::Var(list_temp),
                             elem_type: elem_ty.clone(),
@@ -711,7 +715,7 @@ impl super::LowerCtx {
                                 let list_ty = Ty::Generic("List".into(), vec![elem_type.clone()]);
                                 self.register_adt_type(&list_ty);
                                 let dest = self.fresh_temp();
-                                body.push(Instruction::ListPush {
+                                self.emit_at(body, call_loc, Instruction::ListPush {
                                     dest: dest.clone(),
                                     list: Operand::Var(list_val),
                                     elem: Operand::Var(elem_val),
@@ -725,7 +729,7 @@ impl super::LowerCtx {
                             "len" if args.len() == 1 => {
                                 let obj_val = self.lower_expr(first, body);
                                 let dest = self.fresh_temp();
-                                body.push(Instruction::ListLen {
+                                self.emit_at(body, call_loc, Instruction::ListLen {
                                     dest: dest.clone(),
                                     list: Operand::Var(obj_val),
                                 });
@@ -746,7 +750,7 @@ impl super::LowerCtx {
                                     Ty::Generic("Option".into(), vec![elem_type.clone()]);
                                 self.register_adt_type(&option_type);
                                 let dest = self.fresh_temp();
-                                body.push(Instruction::ListGetSafe {
+                                self.emit_at(body, call_loc, Instruction::ListGetSafe {
                                     dest: dest.clone(),
                                     list: Operand::Var(obj_val),
                                     index: Operand::Var(idx_val),
@@ -799,7 +803,7 @@ impl super::LowerCtx {
             let a = self.lower_expr(&args[0].value, body);
             let b = self.lower_expr(&args[1].value, body);
             let dest = self.fresh_temp();
-            body.push(Instruction::Call {
+            self.emit_at(body, call_loc, Instruction::Call {
                 dest: Some(dest.clone()),
                 func: concrete,
                 args: vec![Operand::Var(a), Operand::Var(b)],
@@ -851,7 +855,7 @@ impl super::LowerCtx {
                                 }
                             }
                             let dest = self.fresh_temp();
-                            body.push(Instruction::StructInit {
+                            self.emit_at(body, call_loc, Instruction::StructInit {
                                 dest: dest.clone(),
                                 type_name: fn_name.clone(),
                                 fields: field_operands,
@@ -884,7 +888,7 @@ impl super::LowerCtx {
                     let dest = self.fresh_temp();
                     // Track return type from fn_return_types
                     let ret_ty = self.fn_return_types.get(&qualified_name).cloned();
-                    body.push(Instruction::Call {
+                    self.emit_at(body, call_loc, Instruction::Call {
                         dest: Some(dest.clone()),
                         func: qualified_name,
                         args: arg_operands,
@@ -925,11 +929,11 @@ impl super::LowerCtx {
                     StringPart::Lit(s) => {
                         let idx = self.intern_string(s);
                         let str_temp = self.fresh_temp();
-                        body.push(Instruction::Const {
+                        self.emit(body, Instruction::Const {
                             dest: str_temp.clone(),
                             value: Constant::StringRef(idx),
                         });
-                        body.push(Instruction::Call {
+                        self.emit(body, Instruction::Call {
                             dest: None,
                             func: "print".into(),
                             args: vec![Operand::Var(str_temp)],
@@ -937,7 +941,7 @@ impl super::LowerCtx {
                     }
                     StringPart::Expr(e) => {
                         let val = self.lower_expr(e, body);
-                        body.push(Instruction::Call {
+                        self.emit(body, Instruction::Call {
                             dest: None,
                             func: "print".into(),
                             args: vec![Operand::Var(val)],
@@ -949,18 +953,18 @@ impl super::LowerCtx {
             if is_println {
                 let nl_idx = self.intern_string("\n");
                 let nl_temp = self.fresh_temp();
-                body.push(Instruction::Const {
+                self.emit(body, Instruction::Const {
                     dest: nl_temp.clone(),
                     value: Constant::StringRef(nl_idx),
                 });
-                body.push(Instruction::Call {
+                self.emit(body, Instruction::Call {
                     dest: None,
                     func: "print".into(),
                     args: vec![Operand::Var(nl_temp)],
                 });
             }
             let dest = self.fresh_temp();
-            body.push(Instruction::Const {
+            self.emit(body, Instruction::Const {
                 dest: dest.clone(),
                 value: Constant::Unit,
             });
@@ -999,7 +1003,7 @@ impl super::LowerCtx {
                     }
                     let dest = self.fresh_temp();
                     let ret_ty = self.fn_return_types.get(&resolved_fn).cloned();
-                    body.push(Instruction::Call {
+                    self.emit_at(body, call_loc, Instruction::Call {
                         dest: Some(dest.clone()),
                         func: resolved_fn,
                         args: arg_operands,
@@ -1072,7 +1076,7 @@ impl super::LowerCtx {
                     .collect();
                 let dest = self.fresh_temp();
                 let return_type = *ret_box;
-                body.push(Instruction::IndirectCall {
+                self.emit_at(body, call_loc, Instruction::IndirectCall {
                     dest: Some(dest.clone()),
                     fat_ptr,
                     args: arg_operands,
@@ -1105,7 +1109,7 @@ impl super::LowerCtx {
             .collect();
 
         let dest = self.fresh_temp();
-        body.push(Instruction::Call {
+        self.emit_at(body, call_loc, Instruction::Call {
             dest: Some(dest.clone()),
             func: func_name.clone(),
             args: arg_operands,

@@ -12,6 +12,57 @@
 
 use tyra_types::Ty;
 
+/// Source location attached to each MIR instruction.
+/// Derived from the AST Span during lowering; used for DWARF, coverage,
+/// and panic diagnostics (ADR 0014).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SourceLoc {
+    /// Index into Program::source_files.
+    pub file_id: u32,
+    pub line: u32,
+    pub col: u32,
+}
+
+impl SourceLoc {
+    /// A placeholder location for compiler-synthesized instructions that have
+    /// no corresponding source position (alloca hoists, implicit returns, etc.).
+    pub const fn dummy() -> Self {
+        Self { file_id: 0, line: 0, col: 0 }
+    }
+
+    pub fn is_dummy(self) -> bool {
+        self.line == 0
+    }
+}
+
+/// An instruction paired with its source location.
+#[derive(Debug, Clone)]
+pub struct MirStmt {
+    pub loc: SourceLoc,
+    pub instr: Instruction,
+}
+
+impl MirStmt {
+    pub fn new(loc: SourceLoc, instr: Instruction) -> Self {
+        Self { loc, instr }
+    }
+
+    /// Synthesized instruction with no source position (alloca hoists, etc.).
+    pub fn synthetic(instr: Instruction) -> Self {
+        Self { loc: SourceLoc::dummy(), instr }
+    }
+}
+
+/// Per-local-variable metadata collected during lowering.
+/// Used to emit DWARF DILocalVariable entries (ADR 0014 §3).
+#[derive(Debug, Clone)]
+pub struct LocalMeta {
+    pub name: String,
+    pub ty: Ty,
+    /// Name of the alloca slot emitted by codegen (empty for SSA-only temps).
+    pub alloca_name: String,
+}
+
 /// A struct type definition (from value/data types).
 #[derive(Debug, Clone)]
 pub struct StructDef {
@@ -35,6 +86,10 @@ pub struct Program {
     pub string_constants: Vec<String>,
     /// Struct type definitions for value/data types.
     pub struct_defs: Vec<StructDef>,
+    /// Source file paths indexed by SourceLoc::file_id.
+    /// file_id 0 is the primary source file; additional entries come from
+    /// inlined stdlib or multi-file builds (future).
+    pub source_files: Vec<String>,
 }
 
 /// A MIR function.
@@ -43,8 +98,11 @@ pub struct Function {
     pub name: String,
     pub params: Vec<(String, Ty)>,
     pub return_type: Ty,
-    pub body: Vec<Instruction>,
+    /// Instructions with source locations (ADR 0014).
+    pub body: Vec<MirStmt>,
     pub is_main: bool,
+    /// Metadata for local variables / parameters, used for DWARF locals.
+    pub local_metas: Vec<LocalMeta>,
 }
 
 /// An instruction in the MIR.

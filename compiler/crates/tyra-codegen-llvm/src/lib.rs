@@ -25,21 +25,23 @@ mod tests {
                 params: vec![],
                 return_type: tyra_types::Ty::Unit,
                 body: vec![
-                    tyra_mir::Instruction::Const {
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Const {
                         dest: "_t0".into(),
                         value: tyra_mir::Constant::StringRef(0),
-                    },
-                    tyra_mir::Instruction::Call {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Call {
                         dest: Some("_t1".into()),
                         func: "print".into(),
                         args: vec![tyra_mir::Operand::Var("_t0".into())],
-                    },
-                    tyra_mir::Instruction::Return { value: None },
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return { value: None }),
                 ],
                 is_main: true,
+                local_metas: vec![],
             }],
             string_constants: vec!["hello, tyra".into()],
             struct_defs: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -83,20 +85,22 @@ mod tests {
                 ],
                 return_type: tyra_types::Ty::Int,
                 body: vec![
-                    tyra_mir::Instruction::BinOp {
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::BinOp {
                         dest: "_t0".into(),
                         op: tyra_mir::MirBinOp::AddInt,
                         lhs: tyra_mir::Operand::Var("x".into()),
                         rhs: tyra_mir::Operand::Var("y".into()),
-                    },
-                    tyra_mir::Instruction::Return {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return {
                         value: Some(tyra_mir::Operand::Var("_t0".into())),
-                    },
+                    }),
                 ],
                 is_main: false,
+                local_metas: vec![],
             }],
             string_constants: vec![],
             struct_defs: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -112,11 +116,13 @@ mod tests {
                 name: "main".into(),
                 params: vec![],
                 return_type: tyra_types::Ty::Unit,
-                body: vec![tyra_mir::Instruction::Return { value: None }],
+                body: vec![tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return { value: None })],
                 is_main: true,
+                local_metas: vec![],
             }],
             string_constants: vec!["hello".into(), "world".into()],
             struct_defs: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -133,8 +139,9 @@ mod tests {
                 name: "main".into(),
                 params: vec![],
                 return_type: tyra_types::Ty::Unit,
-                body: vec![tyra_mir::Instruction::Return { value: None }],
+                body: vec![tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return { value: None })],
                 is_main: true,
+                local_metas: vec![],
             }],
             string_constants: vec![],
             struct_defs: vec![tyra_mir::StructDef {
@@ -146,6 +153,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![],
             }],
+        source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -160,37 +168,38 @@ mod tests {
                 params: vec![],
                 return_type: tyra_types::Ty::Unit,
                 body: vec![
-                    tyra_mir::Instruction::Const {
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Const {
                         dest: "_t0".into(),
                         value: tyra_mir::Constant::Int(10),
-                    },
-                    tyra_mir::Instruction::Const {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Const {
                         dest: "_t1".into(),
                         value: tyra_mir::Constant::Int(20),
-                    },
-                    tyra_mir::Instruction::StructInit {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::StructInit {
                         dest: "_t2".into(),
                         type_name: "Pair".into(),
                         fields: vec![
                             tyra_mir::Operand::Var("_t0".into()),
                             tyra_mir::Operand::Var("_t1".into()),
                         ],
-                    },
-                    tyra_mir::Instruction::FieldGet {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::FieldGet {
                         dest: "_t3".into(),
                         obj: tyra_mir::Operand::Var("_t2".into()),
                         type_name: "Pair".into(),
                         field_index: 0,
-                    },
-                    tyra_mir::Instruction::FieldGet {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::FieldGet {
                         dest: "_t4".into(),
                         obj: tyra_mir::Operand::Var("_t2".into()),
                         type_name: "Pair".into(),
                         field_index: 1,
-                    },
-                    tyra_mir::Instruction::Return { value: None },
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return { value: None }),
                 ],
                 is_main: true,
+                local_metas: vec![],
             }],
             string_constants: vec![],
             struct_defs: vec![tyra_mir::StructDef {
@@ -202,6 +211,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![],
             }],
+        source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -221,25 +231,26 @@ mod tests {
                 params: vec![],
                 return_type: tyra_types::Ty::Unit,
                 body: vec![
-                    tyra_mir::Instruction::Const {
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Const {
                         dest: "_t0".into(),
                         value: tyra_mir::Constant::Int(10),
-                    },
-                    tyra_mir::Instruction::Const {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Const {
                         dest: "_t1".into(),
                         value: tyra_mir::Constant::Int(20),
-                    },
-                    tyra_mir::Instruction::ListInit {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::ListInit {
                         dest: "_t2".into(),
                         elem_type: tyra_types::Ty::Int,
                         elements: vec![
                             tyra_mir::Operand::Var("_t0".into()),
                             tyra_mir::Operand::Var("_t1".into()),
                         ],
-                    },
-                    tyra_mir::Instruction::Return { value: None },
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return { value: None }),
                 ],
                 is_main: true,
+                local_metas: vec![],
             }],
             string_constants: vec![],
             struct_defs: vec![tyra_mir::StructDef {
@@ -251,6 +262,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![],
             }],
+        source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -269,28 +281,29 @@ mod tests {
                 params: vec![],
                 return_type: tyra_types::Ty::Unit,
                 body: vec![
-                    tyra_mir::Instruction::Const {
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Const {
                         dest: "_t0".into(),
                         value: tyra_mir::Constant::Int(10),
-                    },
-                    tyra_mir::Instruction::ListInit {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::ListInit {
                         dest: "_t1".into(),
                         elem_type: tyra_types::Ty::Int,
                         elements: vec![tyra_mir::Operand::Var("_t0".into())],
-                    },
-                    tyra_mir::Instruction::Const {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Const {
                         dest: "_t2".into(),
                         value: tyra_mir::Constant::Int(0),
-                    },
-                    tyra_mir::Instruction::ListGet {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::ListGet {
                         dest: "_t3".into(),
                         list: tyra_mir::Operand::Var("_t1".into()),
                         index: tyra_mir::Operand::Var("_t2".into()),
                         elem_type: tyra_types::Ty::Int,
-                    },
-                    tyra_mir::Instruction::Return { value: None },
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return { value: None }),
                 ],
                 is_main: true,
+                local_metas: vec![],
             }],
             string_constants: vec![],
             struct_defs: vec![tyra_mir::StructDef {
@@ -302,6 +315,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![],
             }],
+        source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -319,26 +333,28 @@ mod tests {
                 params: vec![],
                 return_type: tyra_types::Ty::Unit,
                 body: vec![
-                    tyra_mir::Instruction::Const {
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Const {
                         dest: "_t0".into(),
                         value: tyra_mir::Constant::StringRef(0),
-                    },
-                    tyra_mir::Instruction::Const {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Const {
                         dest: "_t1".into(),
                         value: tyra_mir::Constant::StringRef(1),
-                    },
-                    tyra_mir::Instruction::BinOp {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::BinOp {
                         dest: "_t2".into(),
                         op: tyra_mir::MirBinOp::EqString,
                         lhs: tyra_mir::Operand::Var("_t0".into()),
                         rhs: tyra_mir::Operand::Var("_t1".into()),
-                    },
-                    tyra_mir::Instruction::Return { value: None },
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return { value: None }),
                 ],
                 is_main: true,
+                local_metas: vec![],
             }],
             string_constants: vec!["hello".into(), "world".into()],
             struct_defs: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -362,29 +378,30 @@ mod tests {
                 return_type: tyra_types::Ty::Unit,
                 body: vec![
                     // _t0 = Some(5)
-                    tyra_mir::Instruction::AdtInit {
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::AdtInit {
                         dest: "_t0".into(),
                         type_name: "Option__Int".into(),
                         tag: 0,
                         fields: vec![tyra_mir::Operand::Const(tyra_mir::Constant::Int(5))],
-                    },
+                    }),
                     // _t1 = Some(99)
-                    tyra_mir::Instruction::AdtInit {
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::AdtInit {
                         dest: "_t1".into(),
                         type_name: "Option__Int".into(),
                         tag: 0,
                         fields: vec![tyra_mir::Operand::Const(tyra_mir::Constant::Int(99))],
-                    },
+                    }),
                     // _t2 = _t0 == _t1
-                    tyra_mir::Instruction::BinOp {
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::BinOp {
                         dest: "_t2".into(),
                         op: tyra_mir::MirBinOp::EqInt,
                         lhs: tyra_mir::Operand::Var("_t0".into()),
                         rhs: tyra_mir::Operand::Var("_t1".into()),
-                    },
-                    tyra_mir::Instruction::Return { value: None },
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return { value: None }),
                 ],
                 is_main: true,
+                local_metas: vec![],
             }],
             string_constants: vec![],
             struct_defs: vec![tyra_mir::StructDef {
@@ -397,6 +414,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![false, false],
             }],
+        source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -423,27 +441,28 @@ mod tests {
                 params: vec![],
                 return_type: tyra_types::Ty::Unit,
                 body: vec![
-                    tyra_mir::Instruction::AdtInit {
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::AdtInit {
                         dest: "_t0".into(),
                         type_name: "Option__String".into(),
                         tag: 0,
                         fields: vec![tyra_mir::Operand::Const(tyra_mir::Constant::StringRef(0))],
-                    },
-                    tyra_mir::Instruction::AdtInit {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::AdtInit {
                         dest: "_t1".into(),
                         type_name: "Option__String".into(),
                         tag: 0,
                         fields: vec![tyra_mir::Operand::Const(tyra_mir::Constant::StringRef(1))],
-                    },
-                    tyra_mir::Instruction::BinOp {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::BinOp {
                         dest: "_t2".into(),
                         op: tyra_mir::MirBinOp::EqInt,
                         lhs: tyra_mir::Operand::Var("_t0".into()),
                         rhs: tyra_mir::Operand::Var("_t1".into()),
-                    },
-                    tyra_mir::Instruction::Return { value: None },
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return { value: None }),
                 ],
                 is_main: true,
+                local_metas: vec![],
             }],
             string_constants: vec!["a".into(), "b".into()],
             struct_defs: vec![tyra_mir::StructDef {
@@ -455,6 +474,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![false, false],
             }],
+        source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -490,27 +510,28 @@ mod tests {
                 params: vec![],
                 return_type: tyra_types::Ty::Unit,
                 body: vec![
-                    tyra_mir::Instruction::AdtInit {
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::AdtInit {
                         dest: "_t0".into(),
                         type_name: "Option__String".into(),
                         tag: 0,
                         fields: vec![tyra_mir::Operand::Const(tyra_mir::Constant::StringRef(0))],
-                    },
-                    tyra_mir::Instruction::AdtInit {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::AdtInit {
                         dest: "_t1".into(),
                         type_name: "Option__String".into(),
                         tag: 0,
                         fields: vec![tyra_mir::Operand::Const(tyra_mir::Constant::StringRef(1))],
-                    },
-                    tyra_mir::Instruction::BinOp {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::BinOp {
                         dest: "_t2".into(),
                         op: tyra_mir::MirBinOp::NeqInt,
                         lhs: tyra_mir::Operand::Var("_t0".into()),
                         rhs: tyra_mir::Operand::Var("_t1".into()),
-                    },
-                    tyra_mir::Instruction::Return { value: None },
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return { value: None }),
                 ],
                 is_main: true,
+                local_metas: vec![],
             }],
             string_constants: vec!["a".into(), "b".into()],
             struct_defs: vec![tyra_mir::StructDef {
@@ -522,6 +543,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![false, false],
             }],
+        source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -553,7 +575,7 @@ mod tests {
                 params: vec![],
                 return_type: tyra_types::Ty::Unit,
                 body: vec![
-                    tyra_mir::Instruction::AdtInit {
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::AdtInit {
                         dest: "_t0".into(),
                         type_name: "Result__Int__String".into(),
                         tag: 1,
@@ -561,8 +583,8 @@ mod tests {
                             tyra_mir::Operand::Const(tyra_mir::Constant::Int(0)),
                             tyra_mir::Operand::Const(tyra_mir::Constant::StringRef(0)),
                         ],
-                    },
-                    tyra_mir::Instruction::AdtInit {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::AdtInit {
                         dest: "_t1".into(),
                         type_name: "Result__Int__String".into(),
                         tag: 1,
@@ -570,16 +592,17 @@ mod tests {
                             tyra_mir::Operand::Const(tyra_mir::Constant::Int(0)),
                             tyra_mir::Operand::Const(tyra_mir::Constant::StringRef(1)),
                         ],
-                    },
-                    tyra_mir::Instruction::BinOp {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::BinOp {
                         dest: "_t2".into(),
                         op: tyra_mir::MirBinOp::EqInt,
                         lhs: tyra_mir::Operand::Var("_t0".into()),
                         rhs: tyra_mir::Operand::Var("_t1".into()),
-                    },
-                    tyra_mir::Instruction::Return { value: None },
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return { value: None }),
                 ],
                 is_main: true,
+                local_metas: vec![],
             }],
             string_constants: vec!["x".into(), "y".into()],
             struct_defs: vec![tyra_mir::StructDef {
@@ -592,6 +615,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![false, false, false],
             }],
+        source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -624,20 +648,22 @@ mod tests {
                 params: vec![],
                 return_type: tyra_types::Ty::Unit,
                 body: vec![
-                    tyra_mir::Instruction::Const {
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Const {
                         dest: "_t0".into(),
                         value: tyra_mir::Constant::StringRef(0),
-                    },
-                    tyra_mir::Instruction::Call {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Call {
                         dest: None,
                         func: "panic".into(),
                         args: vec![tyra_mir::Operand::Var("_t0".into())],
-                    },
+                    }),
                 ],
                 is_main: true,
+                local_metas: vec![],
             }],
             string_constants: vec!["oops".into()],
             struct_defs: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -664,14 +690,15 @@ mod tests {
                 params: vec![],
                 return_type: tyra_types::Ty::Unit,
                 body: vec![
-                    tyra_mir::Instruction::StructInit {
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::StructInit {
                         dest: "user".into(),
                         type_name: "User".into(),
                         fields: vec![tyra_mir::Operand::Const(tyra_mir::Constant::Int(1))],
-                    },
-                    tyra_mir::Instruction::Return { value: None },
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return { value: None }),
                 ],
                 is_main: true,
+                local_metas: vec![],
             }],
             string_constants: vec![],
             struct_defs: vec![tyra_mir::StructDef {
@@ -680,6 +707,7 @@ mod tests {
                 is_data: true,
                 recursive_fields: vec![],
             }],
+        source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -711,42 +739,45 @@ mod tests {
                     params: vec![("x".into(), tyra_types::Ty::Int)],
                     return_type: tyra_types::Ty::Int,
                     body: vec![
-                        tyra_mir::Instruction::BinOp {
+                        tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::BinOp {
                             dest: "_t0".into(),
                             op: tyra_mir::MirBinOp::MulInt,
                             lhs: tyra_mir::Operand::Var("x".into()),
                             rhs: tyra_mir::Operand::Const(tyra_mir::Constant::Int(2)),
-                        },
-                        tyra_mir::Instruction::Return {
+                        }),
+                        tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return {
                             value: Some(tyra_mir::Operand::Var("_t0".into())),
-                        },
+                        }),
                     ],
                     is_main: false,
+                    local_metas: vec![],
                 },
                 tyra_mir::Function {
                     name: "main".into(),
                     params: vec![],
                     return_type: tyra_types::Ty::Unit,
                     body: vec![
-                        tyra_mir::Instruction::Spawn {
+                        tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Spawn {
                             dest: "_t1".into(),
                             func: "double".into(),
                             args: vec![tyra_mir::Operand::Const(tyra_mir::Constant::Int(21))],
                             arg_types: vec![tyra_types::Ty::Int],
                             result_type: tyra_types::Ty::Int,
-                        },
-                        tyra_mir::Instruction::Await {
+                        }),
+                        tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Await {
                             dest: "_t2".into(),
                             task: tyra_mir::Operand::Var("_t1".into()),
                             result_type: tyra_types::Ty::Int,
-                        },
-                        tyra_mir::Instruction::Return { value: None },
+                        }),
+                        tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return { value: None }),
                     ],
                     is_main: true,
+                    local_metas: vec![],
                 },
             ],
             string_constants: vec![],
             struct_defs: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -789,17 +820,18 @@ mod tests {
                 params: vec![("user".into(), tyra_types::Ty::Named("User".into()))],
                 return_type: tyra_types::Ty::Int,
                 body: vec![
-                    tyra_mir::Instruction::FieldGet {
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::FieldGet {
                         dest: "id_val".into(),
                         obj: tyra_mir::Operand::Var("user".into()),
                         type_name: "User".into(),
                         field_index: 0,
-                    },
-                    tyra_mir::Instruction::Return {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return {
                         value: Some(tyra_mir::Operand::Var("id_val".into())),
-                    },
+                    }),
                 ],
                 is_main: false,
+                local_metas: vec![],
             }],
             string_constants: vec![],
             struct_defs: vec![tyra_mir::StructDef {
@@ -808,6 +840,7 @@ mod tests {
                 is_data: true,
                 recursive_fields: vec![],
             }],
+        source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -840,23 +873,25 @@ mod tests {
                 params: vec![("x".into(), tyra_types::Ty::Int)],
                 return_type: tyra_types::Ty::Int,
                 body: vec![
-                    tyra_mir::Instruction::Jump {
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Jump {
                         label: "loop_body".into(),
-                    },
-                    tyra_mir::Instruction::Label("loop_body".into()),
-                    tyra_mir::Instruction::Alloca { dest: "_t0".into() },
-                    tyra_mir::Instruction::Store {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Label("loop_body".into())),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Alloca { dest: "_t0".into() }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Store {
                         dest: "_t0".into(),
                         value: tyra_mir::Operand::Var("x".into()),
-                    },
-                    tyra_mir::Instruction::Jump {
+                    }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Jump {
                         label: "loop_body".into(),
-                    },
+                    }),
                 ],
                 is_main: false,
+                local_metas: vec![],
             }],
             string_constants: vec![],
             struct_defs: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);

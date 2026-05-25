@@ -162,7 +162,8 @@ fn scan_primitive_temps(
         }
     }
 
-    for inst in &func.body {
+    for stmt in &func.body {
+        let inst = &stmt.instr;
         match inst {
             Instruction::Const { dest, value } => match value {
                 Constant::StringRef(_) => {
@@ -474,7 +475,8 @@ fn propagate_types(
     alloca_llvm_types: &mut HashMap<String, String>,
 ) {
     // Initial propagation: alloca types → Load destinations
-    for inst in &func.body {
+    for stmt in &func.body {
+        let inst = &stmt.instr;
         if let Instruction::Load { dest, source } = inst {
             if let Some(ty) = alloca_llvm_types.get(source.as_str()) {
                 match ty.as_str() {
@@ -500,7 +502,8 @@ fn propagate_types(
         let mut changed = false;
         // Re-scan Store instructions: allow upgrading unknown/untyped alloca slots.
         // Removing "first store wins" guard so later Stores can refine the type.
-        for inst in &func.body {
+        for stmt in &func.body {
+        let inst = &stmt.instr;
             if let Instruction::Store { dest, value } = inst {
                 if let Operand::Var(name) = value {
                     let new_ty = if string_temps.contains(name) {
@@ -522,7 +525,8 @@ fn propagate_types(
             }
         }
         // Propagate newly discovered alloca types to Load destinations
-        for inst in &func.body {
+        for stmt in &func.body {
+        let inst = &stmt.instr;
             if let Instruction::Load { dest, source } = inst {
                 if string_temps.contains(dest)
                     || float_temps.contains(dest)
@@ -551,7 +555,8 @@ fn propagate_types(
         }
         // Propagate through Copy instructions (e.g. let name = <match result>).
         // Use independent checks (not else-if) for consistency with the initial scan.
-        for inst in &func.body {
+        for stmt in &func.body {
+        let inst = &stmt.instr;
             if let Instruction::Copy { dest, source } = inst {
                 if string_temps.contains(source.as_str()) && string_temps.insert(dest.clone()) {
                     changed = true;
@@ -607,7 +612,8 @@ fn pre_scan_struct_types(
     }
 
     // Scan instructions
-    for inst in &func.body {
+    for stmt in &func.body {
+        let inst = &stmt.instr;
         match inst {
             Instruction::StructInit {
                 dest, type_name, ..
@@ -863,7 +869,8 @@ fn propagate_struct_types_from_allocas(
         .map(|(k, v)| (v.llvm_name.as_str(), k.as_str()))
         .collect();
 
-    for inst in &func.body {
+    for stmt in &func.body {
+        let inst = &stmt.instr;
         if let Instruction::Load { dest, source } = inst {
             if let Some(llvm_ty) = alloca_llvm_types.get(source.as_str()) {
                 if let Some(&struct_key) = llvm_to_struct_key.get(llvm_ty.as_str()) {
@@ -889,7 +896,8 @@ fn pre_scan_alloca_llvm_types(
 ) -> HashMap<String, String> {
     let mut alloca_llvm_types: HashMap<String, String> = HashMap::new();
 
-    for inst in &func.body {
+    for stmt in &func.body {
+        let inst = &stmt.instr;
         if let Instruction::Store { dest, value } = inst {
             let ty = if let Operand::Var(name) = value {
                 if string_temps.contains(name) {

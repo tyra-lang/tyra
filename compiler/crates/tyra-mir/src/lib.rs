@@ -26,7 +26,7 @@ mod tests {
             "parse errors: {:?}",
             report.diagnostics()
         );
-        lower(&ast)
+        lower(&ast, &sources)
     }
 
     #[test]
@@ -74,7 +74,7 @@ mod tests {
         let has_branch = main
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::BranchIf { .. }));
+            .any(|s| matches!(&s.instr, Instruction::BranchIf { .. }));
         assert!(has_branch);
     }
 
@@ -94,7 +94,7 @@ mod tests {
         let has_return = f
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::Return { value: Some(_) }));
+            .any(|s| matches!(&s.instr, Instruction::Return { value: Some(_) }));
         assert!(has_return);
     }
 
@@ -106,7 +106,7 @@ mod tests {
         let has_jump = main
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::Jump { .. }));
+            .any(|s| matches!(&s.instr, Instruction::Jump { .. }));
         assert!(has_jump);
     }
 
@@ -115,19 +115,16 @@ mod tests {
         let source = "fn f()\n  print(\"hi\")\nend\n";
         let prog = lower_str(source);
         let f = &prog.functions[0];
-        assert!(matches!(
-            f.body.last(),
-            Some(Instruction::Return { value: None })
-        ));
+        assert!(f.body.last().is_some_and(|s| matches!(&s.instr, Instruction::Return { value: None })));
     }
 
     #[test]
     fn float_binop_uses_float_variant() {
         let prog = lower_str("let x = 1.0 + 2.0\n");
         let main = &prog.functions[0];
-        let has_float_add = main.body.iter().any(|i| {
+        let has_float_add = main.body.iter().any(|s| {
             matches!(
-                i,
+                s.instr,
                 Instruction::BinOp {
                     op: MirBinOp::AddFloat,
                     ..
@@ -146,18 +143,18 @@ mod tests {
         let has_branch = f
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::BranchIf { .. }));
+            .any(|s| matches!(&s.instr, Instruction::BranchIf { .. }));
         assert!(has_branch, "expected BranchIf in match lowering");
         // Should have Alloca + Store + Load for match result
         let has_alloca = f
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::Alloca { .. }));
+            .any(|s| matches!(&s.instr, Instruction::Alloca { .. }));
         let has_store = f
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::Store { .. }));
-        let has_load = f.body.iter().any(|i| matches!(i, Instruction::Load { .. }));
+            .any(|s| matches!(&s.instr, Instruction::Store { .. }));
+        let has_load = f.body.iter().any(|s| matches!(&s.instr, Instruction::Load { .. }));
         assert!(has_alloca, "expected Alloca for match result");
         assert!(has_store, "expected Store for match result");
         assert!(has_load, "expected Load for match result");
@@ -169,9 +166,9 @@ mod tests {
         let prog = lower_str(source);
         let main = &prog.functions[0];
         // Color.Red should be Const(Int(0))
-        let has_red_tag = main.body.iter().any(|i| {
+        let has_red_tag = main.body.iter().any(|s| {
             matches!(
-                i,
+                s.instr,
                 Instruction::Const {
                     value: Constant::Int(0),
                     ..
@@ -189,7 +186,7 @@ mod tests {
         let has_branch = f
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::BranchIf { .. }));
+            .any(|s| matches!(&s.instr, Instruction::BranchIf { .. }));
         assert!(has_branch, "expected BranchIf for constructor pattern");
     }
 
@@ -204,7 +201,7 @@ print("value = #{x}")
         let print_calls = main
             .body
             .iter()
-            .filter(|i| matches!(i, Instruction::Call { func, .. } if func == "print"))
+            .filter(|s| matches!(&s.instr, Instruction::Call { func, .. } if func == "print"))
             .count();
         assert!(
             print_calls >= 2,
@@ -223,7 +220,7 @@ println("n=#{x}")
         let print_calls = main
             .body
             .iter()
-            .filter(|i| matches!(i, Instruction::Call { func, .. } if func == "print"))
+            .filter(|s| matches!(&s.instr, Instruction::Call { func, .. } if func == "print"))
             .count();
         assert!(
             print_calls >= 3,
@@ -264,7 +261,7 @@ print("done")
         let has_struct_init = main
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::StructInit { type_name, .. } if type_name == "Pair"));
+            .any(|s| matches!(&s.instr, Instruction::StructInit { type_name, .. } if type_name == "Pair"));
         assert!(
             has_struct_init,
             "expected StructInit for Pair, got: {:?}",
@@ -284,7 +281,7 @@ print("done")
         let field_gets: Vec<_> = main
             .body
             .iter()
-            .filter(|i| matches!(i, Instruction::FieldGet { .. }))
+            .filter(|s| matches!(&s.instr, Instruction::FieldGet { .. }))
             .collect();
         assert_eq!(
             field_gets.len(),
@@ -303,7 +300,7 @@ print("done")
         let struct_inits: Vec<_> = main
             .body
             .iter()
-            .filter(|i| matches!(i, Instruction::StructInit { .. }))
+            .filter(|s| matches!(&s.instr, Instruction::StructInit { .. }))
             .collect();
         assert_eq!(
             struct_inits.len(),
@@ -315,7 +312,7 @@ print("done")
         let has_field_get = main
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::FieldGet { field_index: 1, .. }));
+            .any(|s| matches!(&s.instr, Instruction::FieldGet { field_index: 1, .. }));
         assert!(
             has_field_get,
             "expected FieldGet for second field in copy()"
@@ -352,7 +349,7 @@ print("done")
         let has_call = main
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::Call { func, .. } if func == "Pair__sum"));
+            .any(|s| matches!(&s.instr, Instruction::Call { func, .. } if func == "Pair__sum"));
         assert!(has_call, "expected Call to Pair__sum, got: {:?}", main.body);
     }
 
@@ -364,16 +361,16 @@ print("done")
         let has_alloca = main
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::Alloca { dest } if dest == "x"));
+            .any(|s| matches!(&s.instr, Instruction::Alloca { dest } if dest == "x"));
         let store_count = main
             .body
             .iter()
-            .filter(|i| matches!(i, Instruction::Store { dest, .. } if dest == "x"))
+            .filter(|s| matches!(&s.instr, Instruction::Store { dest, .. } if dest == "x"))
             .count();
         let has_load = main
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::Load { source, .. } if source == "x"));
+            .any(|s| matches!(&s.instr, Instruction::Load { source, .. } if source == "x"));
         assert!(has_alloca, "expected Alloca for mut x");
         assert!(
             store_count >= 2,
@@ -392,13 +389,13 @@ print("done")
         let has_alloca = main
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::Alloca { dest } if dest == "user"));
+            .any(|s| matches!(&s.instr, Instruction::Alloca { dest } if dest == "user"));
         assert!(has_alloca, "expected Alloca for mut user");
         // Should have exactly 1 StructInit (constructor only; mutation uses FieldSet)
         let struct_inits = main
             .body
             .iter()
-            .filter(|i| matches!(i, Instruction::StructInit { .. }))
+            .filter(|s| matches!(&s.instr, Instruction::StructInit { .. }))
             .count();
         assert!(
             struct_inits == 1,
@@ -408,7 +405,7 @@ print("done")
         let field_sets = main
             .body
             .iter()
-            .filter(|i| matches!(i, Instruction::FieldSet { .. }))
+            .filter(|s| matches!(&s.instr, Instruction::FieldSet { .. }))
             .count();
         assert!(
             field_sets == 1,
@@ -424,7 +421,7 @@ print("done")
         let has_format = main
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::StringFormat { .. }));
+            .any(|s| matches!(&s.instr, Instruction::StringFormat { .. }));
         assert!(
             has_format,
             "expected StringFormat instruction for standalone string interpolation"
@@ -440,7 +437,7 @@ print("done")
         let print_calls = main
             .body
             .iter()
-            .filter(|i| matches!(i, Instruction::Call { func, .. } if func == "print"))
+            .filter(|s| matches!(&s.instr, Instruction::Call { func, .. } if func == "print"))
             .count();
         assert!(
             print_calls >= 2,
@@ -450,7 +447,7 @@ print("done")
         let has_format = main
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::StringFormat { .. }));
+            .any(|s| matches!(&s.instr, Instruction::StringFormat { .. }));
         assert!(
             !has_format,
             "print+interp should NOT use StringFormat (segment optimization)"
@@ -479,13 +476,13 @@ end\n";
         let has_adt_tag = get_fn
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::AdtTag { .. }));
+            .any(|s| matches!(&s.instr, Instruction::AdtTag { .. }));
         assert!(has_adt_tag, "expected AdtTag for ok_or() Option tag check");
         // Should have branching for Some/None paths
         let has_branch = get_fn
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::BranchIf { .. }));
+            .any(|s| matches!(&s.instr, Instruction::BranchIf { .. }));
         assert!(
             has_branch,
             "expected BranchIf for ok_or() Some/None dispatch"
@@ -495,7 +492,7 @@ end\n";
             .body
             .iter()
             .filter(|i| {
-                matches!(i, Instruction::AdtInit { type_name, .. }
+                matches!(&i.instr, Instruction::AdtInit { type_name, .. }
                 if type_name.starts_with("Result__"))
             })
             .count();
@@ -550,11 +547,11 @@ end\n";
         let working_pos = work_fn
             .body
             .iter()
-            .position(|i| matches!(i, Instruction::Call { func, .. } if func == "print"));
+            .position(|i| matches!(&i.instr, Instruction::Call { func, .. } if func == "print"));
         let cleanup_pos = work_fn
             .body
             .iter()
-            .rposition(|i| matches!(i, Instruction::Call { func, .. } if func == "cleanup"));
+            .rposition(|i| matches!(&i.instr, Instruction::Call { func, .. } if func == "cleanup"));
         assert!(
             working_pos.is_some() && cleanup_pos.is_some(),
             "expected both print and cleanup calls"
@@ -567,7 +564,7 @@ end\n";
         let return_pos = work_fn
             .body
             .iter()
-            .rposition(|i| matches!(i, Instruction::Return { .. }))
+            .rposition(|i| matches!(&i.instr, Instruction::Return { .. }))
             .unwrap();
         assert!(
             cleanup_pos.unwrap() < return_pos,
@@ -596,7 +593,7 @@ end\n";
         let calls: Vec<&str> = work_fn
             .body
             .iter()
-            .filter_map(|i| match i {
+            .filter_map(|s| match &s.instr {
                 Instruction::Call { func, .. } if func != "print" => Some(func.as_str()),
                 _ => None,
             })
@@ -637,15 +634,15 @@ end\n";
         let fail_label_pos = work_fn
             .body
             .iter()
-            .position(|i| matches!(i, Instruction::Label(l) if l.starts_with("propagate_fail")));
+            .position(|i| matches!(&i.instr, Instruction::Label(l) if l.starts_with("propagate_fail")));
         assert!(fail_label_pos.is_some(), "expected propagate_fail label");
         let after_fail: Vec<_> = work_fn.body[fail_label_pos.unwrap()..].to_vec();
         let cleanup_pos = after_fail
             .iter()
-            .position(|i| matches!(i, Instruction::Call { func, .. } if func == "cleanup"));
+            .position(|i| matches!(&i.instr, Instruction::Call { func, .. } if func == "cleanup"));
         let return_pos = after_fail
             .iter()
-            .position(|i| matches!(i, Instruction::Return { .. }));
+            .position(|i| matches!(&i.instr, Instruction::Return { .. }));
         assert!(
             cleanup_pos.is_some() && return_pos.is_some(),
             "expected cleanup and return after propagate_fail label"
@@ -678,21 +675,23 @@ end\n";
         let work_fn = prog.functions.iter().find(|f| f.name == "work").unwrap();
         // Pre-allocated activation flag alloca at function start.
         let has_flag_alloca = work_fn.body.iter().any(
-            |i| matches!(i, Instruction::Alloca { dest } if dest.starts_with(".defer_active_")),
+            |i| matches!(&i.instr, Instruction::Alloca { dest } if dest.starts_with(".defer_active_")),
         );
         assert!(
             has_flag_alloca,
             "expected .defer_active_N alloca at function entry"
         );
         // Initial store of 0 into the flag (false).
-        let has_flag_init = work_fn.body.iter().any(|i| {
-            matches!(i, Instruction::Store { dest, value: Operand::Const(Constant::Int(0)) }
+        let has_flag_init = work_fn.body.iter().any(|s| {
+            matches!(
+                &s.instr, Instruction::Store { dest, value: Operand::Const(Constant::Int(0)) }
                 if dest.starts_with(".defer_active_"))
         });
         assert!(has_flag_init, "expected store 0 to .defer_active_N");
         // Inside the if body, store 1 into the flag to activate the defer.
-        let has_flag_set = work_fn.body.iter().any(|i| {
-            matches!(i, Instruction::Store { dest, value: Operand::Const(Constant::Int(1)) }
+        let has_flag_set = work_fn.body.iter().any(|s| {
+            matches!(
+                &s.instr, Instruction::Store { dest, value: Operand::Const(Constant::Int(1)) }
                 if dest.starts_with(".defer_active_"))
         });
         assert!(
@@ -705,18 +704,18 @@ end\n";
         // the alloca/store structural asserts above while still emitting
         // the deferred call unconditionally.
         let load_pos = work_fn.body.iter().position(|i| {
-            matches!(i, Instruction::Load { source, .. } if source.starts_with(".defer_active_"))
+            matches!(&i.instr, Instruction::Load { source, .. } if source.starts_with(".defer_active_"))
         });
         assert!(load_pos.is_some(), "expected load of .defer_active_N");
         let load_idx = load_pos.unwrap();
-        let Instruction::Load { dest: load_tmp, .. } = &work_fn.body[load_idx] else {
+        let Instruction::Load { dest: load_tmp, .. } = &work_fn.body[load_idx].instr else {
             unreachable!()
         };
         // Next few instructions should be: Const(0), BinOp Neq, BranchIf(active).
         let cmp = work_fn.body[load_idx + 1..]
             .iter()
             .take(5)
-            .find_map(|i| match i {
+            .find_map(|s| match &s.instr {
                 Instruction::BinOp {
                     dest, op, lhs, rhs, ..
                 } if matches!(op, MirBinOp::NeqInt)
@@ -733,7 +732,7 @@ end\n";
         );
         let cmp_dest = cmp.unwrap();
         let branched_on_flag = work_fn.body.iter().any(
-            |i| matches!(i, Instruction::BranchIf { cond: Operand::Var(c), .. } if c == &cmp_dest),
+            |i| matches!(&i.instr, Instruction::BranchIf { cond: Operand::Var(c), .. } if c == &cmp_dest),
         );
         assert!(
             branched_on_flag,
@@ -766,7 +765,7 @@ end\n";
         let has_into_call = outer_fn
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::Call { func, .. } if func == "InnerErr__into"));
+            .any(|s| matches!(&s.instr, Instruction::Call { func, .. } if func == "InnerErr__into"));
         assert!(
             has_into_call,
             "expected Call to InnerErr__into in ? failure path, got: {:?}",
@@ -792,7 +791,7 @@ end\n";
         let has_into_call = outer_fn
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::Call { func, .. } if func.contains("__into")));
+            .any(|s| matches!(&s.instr, Instruction::Call { func, .. } if func.contains("__into")));
         assert!(
             !has_into_call,
             "should NOT call __into when error types match"
@@ -827,11 +826,11 @@ let b = identity::<String>(\"hello\")\n";
         let calls_int = main
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::Call { func, .. } if func == "identity__Int"));
+            .any(|s| matches!(&s.instr, Instruction::Call { func, .. } if func == "identity__Int"));
         let calls_str = main
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::Call { func, .. } if func == "identity__String"));
+            .any(|s| matches!(&s.instr, Instruction::Call { func, .. } if func == "identity__String"));
         assert!(calls_int, "expected call to identity__Int");
         assert!(calls_str, "expected call to identity__String");
     }
@@ -884,7 +883,7 @@ let b = id::<Int>(2)\n";
         let prog = lower_str(source);
         let main = prog.functions.iter().find(|f| f.is_main).unwrap();
         let has_list_init = main.body.iter().any(
-            |inst| matches!(inst, Instruction::ListInit { elements, .. } if elements.len() == 3),
+            |inst| matches!(&inst.instr, Instruction::ListInit { elements, .. } if elements.len() == 3),
         );
         assert!(has_list_init, "expected ListInit with 3 elements");
     }
@@ -909,7 +908,7 @@ let x = xs[1]\n";
         let has_list_get = main
             .body
             .iter()
-            .any(|inst| matches!(inst, Instruction::ListGet { .. }));
+            .any(|inst| matches!(&inst.instr, Instruction::ListGet { .. }));
         assert!(has_list_get, "expected ListGet instruction");
     }
 
@@ -924,7 +923,7 @@ let y = xs.get(0)\n";
         let has_list_get_safe = main
             .body
             .iter()
-            .any(|inst| matches!(inst, Instruction::ListGetSafe { .. }));
+            .any(|inst| matches!(&inst.instr, Instruction::ListGetSafe { .. }));
         assert!(has_list_get_safe, "expected ListGetSafe instruction");
     }
 
@@ -939,7 +938,7 @@ let n = xs.len()\n";
         let has_list_len = main
             .body
             .iter()
-            .any(|inst| matches!(inst, Instruction::ListLen { .. }));
+            .any(|inst| matches!(&inst.instr, Instruction::ListLen { .. }));
         assert!(has_list_len, "expected ListLen instruction");
     }
 
@@ -990,7 +989,7 @@ let y = xs.get(0)\n";
         assert!(has_outer, "expected struct def List__List__Int");
         let main = prog.functions.iter().find(|f| f.is_main).unwrap();
         // Find the empty ListInit and assert its elem_type is Int.
-        let empty_elem_ty = main.body.iter().find_map(|inst| match inst {
+        let empty_elem_ty = main.body.iter().find_map(|inst| match &inst.instr {
             Instruction::ListInit {
                 elements,
                 elem_type,
@@ -1018,11 +1017,11 @@ end\n";
         let has_branch = main
             .body
             .iter()
-            .any(|inst| matches!(inst, Instruction::BranchIf { .. }));
+            .any(|inst| matches!(&inst.instr, Instruction::BranchIf { .. }));
         let has_list_get = main
             .body
             .iter()
-            .any(|inst| matches!(inst, Instruction::ListGet { .. }));
+            .any(|inst| matches!(&inst.instr, Instruction::ListGet { .. }));
         assert!(has_branch, "expected BranchIf in for-loop");
         assert!(has_list_get, "expected ListGet in for-loop body");
     }
@@ -1040,7 +1039,7 @@ let eq = a == b\n";
         let main = prog.functions.iter().find(|f| f.is_main).unwrap();
         let has_eq_string = main.body.iter().any(|inst| {
             matches!(
-                inst,
+                &inst.instr,
                 Instruction::BinOp {
                     op: MirBinOp::EqString,
                     ..
@@ -1063,11 +1062,11 @@ let cmp = id1 < id2\n";
         let prog = lower_str(source);
         let main = prog.functions.iter().find(|f| f.is_main).unwrap();
         let has_field_get = main.body.iter().any(
-            |inst| matches!(inst, Instruction::FieldGet { type_name, .. } if type_name == "UserId"),
+            |inst| matches!(&inst.instr, Instruction::FieldGet { type_name, .. } if type_name == "UserId"),
         );
         let has_lt_int = main.body.iter().any(|inst| {
             matches!(
-                inst,
+                &inst.instr,
                 Instruction::BinOp {
                     op: MirBinOp::LtInt,
                     ..
@@ -1095,11 +1094,11 @@ let eq = a == b\n";
         let prog = lower_str(source);
         let main = prog.functions.iter().find(|f| f.is_main).unwrap();
         let field_gets = main.body.iter().filter(|inst| {
-            matches!(inst, Instruction::FieldGet { type_name, .. } if type_name == "Pair")
+            matches!(&inst.instr, Instruction::FieldGet { type_name, .. } if type_name == "Pair")
         }).count();
         let has_and = main.body.iter().any(|inst| {
             matches!(
-                inst,
+                &inst.instr,
                 Instruction::BinOp {
                     op: MirBinOp::And,
                     ..
@@ -1128,7 +1127,7 @@ end\n";
         let main = prog.functions.iter().find(|f| f.is_main).unwrap();
         let has_eq_string = main.body.iter().any(|inst| {
             matches!(
-                inst,
+                &inst.instr,
                 Instruction::BinOp {
                     op: MirBinOp::EqString,
                     ..
@@ -1165,7 +1164,7 @@ end\n";
         let payload_count = f
             .body
             .iter()
-            .filter(|inst| matches!(inst, Instruction::AdtPayload { .. }))
+            .filter(|inst| matches!(&inst.instr, Instruction::AdtPayload { .. }))
             .count();
         assert!(
             payload_count >= 2,
@@ -1197,16 +1196,16 @@ end\n";
         let header_idx = f
             .body
             .iter()
-            .position(|i| matches!(i, Instruction::Label(name) if name.starts_with("while_")))
+            .position(|i| matches!(&i.instr, Instruction::Label(name) if name.starts_with("while_")))
             .expect("expected a while_* label");
 
         assert!(
             header_idx > 0,
             "header label cannot be the first instruction"
         );
-        match &f.body[header_idx - 1] {
+        match &f.body[header_idx - 1].instr {
             Instruction::Jump { label } => {
-                let Instruction::Label(header) = &f.body[header_idx] else {
+                let Instruction::Label(header) = &f.body[header_idx].instr else {
                     unreachable!()
                 };
                 assert_eq!(
@@ -1239,7 +1238,7 @@ end
         let has_await = run
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::Await { .. }));
+            .any(|s| matches!(&s.instr, Instruction::Await { .. }));
         assert!(
             has_await,
             "expected an Instruction::Await in run() body — task_result_types\n\
@@ -1277,9 +1276,9 @@ end
         let run = prog.functions.iter().find(|f| f.name == "run").unwrap();
         // The critical assertion: a FieldGet is emitted for u.id. Before
         // the fix, lowering fell through to a bogus Copy `{obj}.{field}`.
-        let has_field_get = run.body.iter().any(|i| {
+        let has_field_get = run.body.iter().any(|s| {
             matches!(
-                i,
+                &s.instr,
                 Instruction::FieldGet { type_name, field_index: 0, .. }
                     if type_name == "User"
             )
@@ -1317,7 +1316,7 @@ end
         let has_list_get = run
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::ListGet { .. }));
+            .any(|s| matches!(&s.instr, Instruction::ListGet { .. }));
         assert!(
             has_list_get,
             "expected ListGet for xs[0] after match-Ok-List<Int> binding;\n\
@@ -1349,7 +1348,7 @@ end
         let format_ref = f
             .body
             .iter()
-            .find_map(|i| match i {
+            .find_map(|s| match &s.instr {
                 Instruction::StringFormat { format_ref, .. } => Some(*format_ref),
                 _ => None,
             })
@@ -1705,7 +1704,7 @@ end
         let has_await = run
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::Await { .. }));
+            .any(|s| matches!(&s.instr, Instruction::Await { .. }));
         assert!(
             has_await,
             "expected Await after reassign; body = {:#?}",
@@ -1735,10 +1734,10 @@ end
         let has_payload = f
             .body
             .iter()
-            .any(|i| matches!(i, Instruction::AdtPayload { .. }));
-        let has_lit_42 = f.body.iter().any(|i| {
+            .any(|s| matches!(&s.instr, Instruction::AdtPayload { .. }));
+        let has_lit_42 = f.body.iter().any(|s| {
             matches!(
-                i,
+                s.instr,
                 Instruction::Const {
                     value: crate::ir::Constant::Int(42),
                     ..
@@ -1788,7 +1787,7 @@ end
         // After Fix A the wildcard `_` is not renamed; no Store { dest: "___pN" }
         // should appear (dest starts with "___p" followed by digits).
         let spurious_wildcard_store = f.body.iter().any(|i| {
-            if let Instruction::Store { dest, .. } = i {
+            if let Instruction::Store { dest, .. } = &i.instr {
                 dest == "_"
                     || (dest.starts_with("___p") && dest[4..].chars().all(|c| c.is_ascii_digit()))
             } else {
@@ -1802,7 +1801,7 @@ end
         );
         // After Fix B the arm-result Store for `fallback` must be emitted.
         let fallback_stored = f.body.iter().any(
-            |i| matches!(i, Instruction::Store { value: Operand::Var(v), .. } if v == "fallback"),
+            |i| matches!(&i.instr, Instruction::Store { value: Operand::Var(v), .. } if v == "fallback"),
         );
         assert!(
             fallback_stored,
@@ -1840,7 +1839,7 @@ end
         let f = prog.functions.iter().find(|f| f.name == "f").unwrap();
         // `fallback` must be stored into the match result slot.
         let fallback_stored = f.body.iter().any(
-            |i| matches!(i, Instruction::Store { value: Operand::Var(v), .. } if v == "fallback"),
+            |i| matches!(&i.instr, Instruction::Store { value: Operand::Var(v), .. } if v == "fallback"),
         );
         assert!(
             fallback_stored,

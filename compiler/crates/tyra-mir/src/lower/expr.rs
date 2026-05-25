@@ -9,13 +9,19 @@ use tyra_types::Ty;
 
 use crate::ir::*;
 
-impl super::LowerCtx {
+impl super::LowerCtx<'_> {
     /// Lower an expression, returning the name of the temporary holding the result.
-    pub(super) fn lower_expr(&mut self, expr: &Expr, body: &mut Vec<Instruction>) -> String {
+    pub(super) fn lower_expr(&mut self, expr: &Expr, body: &mut Vec<MirStmt>) -> String {
+        // Capture this expression's location before lowering children.
+        // Children overwrite `current_loc` during recursion; `my_loc` is
+        // used to tag the *result* instruction for this expression so that
+        // e.g. `a + f(x)` attributes the BinOp to the `+` line, not `f(x)`.
+        let my_loc = self.span_to_loc(expr.span);
+        self.current_loc = my_loc;
         match &expr.kind {
             ExprKind::IntLit(n) => {
                 let dest = self.fresh_temp();
-                body.push(Instruction::Const {
+                self.emit(body, Instruction::Const {
                     dest: dest.clone(),
                     value: Constant::Int(*n),
                 });
@@ -23,7 +29,7 @@ impl super::LowerCtx {
             }
             ExprKind::FloatLit(f) => {
                 let dest = self.fresh_temp();
-                body.push(Instruction::Const {
+                self.emit(body, Instruction::Const {
                     dest: dest.clone(),
                     value: Constant::Float(*f),
                 });
@@ -32,7 +38,7 @@ impl super::LowerCtx {
             ExprKind::StringLit(s) => {
                 let idx = self.intern_string(s);
                 let dest = self.fresh_temp();
-                body.push(Instruction::Const {
+                self.emit(body, Instruction::Const {
                     dest: dest.clone(),
                     value: Constant::StringRef(idx),
                 });
@@ -40,7 +46,7 @@ impl super::LowerCtx {
             }
             ExprKind::BoolLit(b) => {
                 let dest = self.fresh_temp();
-                body.push(Instruction::Const {
+                self.emit(body, Instruction::Const {
                     dest: dest.clone(),
                     value: Constant::Bool(*b),
                 });
@@ -48,7 +54,7 @@ impl super::LowerCtx {
             }
             ExprKind::UnitLit => {
                 let dest = self.fresh_temp();
-                body.push(Instruction::Const {
+                self.emit(body, Instruction::Const {
                     dest: dest.clone(),
                     value: Constant::Unit,
                 });
@@ -77,7 +83,7 @@ impl super::LowerCtx {
                     let type_name = full_type.monomorphized_name();
 
                     let dest = self.fresh_temp();
-                    body.push(Instruction::AdtInit {
+                    self.emit(body, Instruction::AdtInit {
                         dest: dest.clone(),
                         type_name: type_name.clone(),
                         tag: 1,
@@ -93,7 +99,7 @@ impl super::LowerCtx {
                 {
                     // Alloca-backed variable (mutable or pattern-bound): load from alloca
                     let temp = self.fresh_temp();
-                    body.push(Instruction::Load {
+                    self.emit(body, Instruction::Load {
                         dest: temp.clone(),
                         source: name.clone(),
                     });
@@ -153,7 +159,7 @@ impl super::LowerCtx {
                         MirBinOp::NeqString
                     };
                     let dest = self.fresh_temp();
-                    body.push(Instruction::BinOp {
+                    self.emit_at(body, my_loc, Instruction::BinOp {
                         dest: dest.clone(),
                         op: mir_op,
                         lhs: Operand::Var(l),
@@ -171,7 +177,7 @@ impl super::LowerCtx {
                 let dest = self.fresh_temp();
                 let is_float = self.is_float_expr(lhs) || self.is_float_expr(rhs);
                 let mir_op = super::ast_binop_to_mir(*op, is_float);
-                body.push(Instruction::BinOp {
+                self.emit_at(body, my_loc, Instruction::BinOp {
                     dest: dest.clone(),
                     op: mir_op,
                     lhs: Operand::Var(l),
@@ -185,13 +191,13 @@ impl super::LowerCtx {
                 let dest = self.fresh_temp();
                 match op {
                     UnaryOp::Neg => {
-                        body.push(Instruction::Neg {
+                        self.emit_at(body, my_loc, Instruction::Neg {
                             dest: dest.clone(),
                             operand: Operand::Var(val),
                         });
                     }
                     UnaryOp::Not => {
-                        body.push(Instruction::Not {
+                        self.emit_at(body, my_loc, Instruction::Not {
                             dest: dest.clone(),
                             operand: Operand::Var(val),
                         });
@@ -200,7 +206,7 @@ impl super::LowerCtx {
                 dest
             }
 
-            ExprKind::Call(callee, args) => self.lower_call(callee, args, body),
+            ExprKind::Call(callee, args) => self.lower_call(callee, args, my_loc, body),
 
             ExprKind::Assign(lhs, rhs) => {
                 let val = self.lower_expr(rhs, body);
@@ -208,7 +214,7 @@ impl super::LowerCtx {
                     ExprKind::Ident(name) => {
                         if self.mut_vars.contains(name.as_str()) {
                             // Mutable local: store to alloca
-                            body.push(Instruction::Store {
+                            self.emit(body, Instruction::Store {
                                 dest: name.clone(),
                                 value: Operand::Var(val.clone()),
                             });
@@ -226,7 +232,7 @@ impl super::LowerCtx {
                                 self.task_result_types.insert(name.clone(), trt);
                             }
                         } else {
-                            body.push(Instruction::Copy {
+                            self.emit(body, Instruction::Copy {
                                 dest: name.clone(),
                                 source: val.clone(),
                             });
@@ -264,22 +270,22 @@ impl super::LowerCtx {
 
                     // Get length
                     let len = self.fresh_temp();
-                    body.push(Instruction::ListLen {
+                    self.emit(body, Instruction::ListLen {
                         dest: len.clone(),
                         list: Operand::Var(iter_val.clone()),
                     });
 
                     // mut i = 0
                     let idx_var = self.fresh_temp();
-                    body.push(Instruction::Alloca {
+                    self.emit_synthetic(body, Instruction::Alloca {
                         dest: idx_var.clone(),
                     });
                     let zero = self.fresh_temp();
-                    body.push(Instruction::Const {
+                    self.emit(body, Instruction::Const {
                         dest: zero.clone(),
                         value: Constant::Int(0),
                     });
-                    body.push(Instruction::Store {
+                    self.emit(body, Instruction::Store {
                         dest: idx_var.clone(),
                         value: Operand::Var(zero),
                     });
@@ -289,34 +295,34 @@ impl super::LowerCtx {
                     let end_label = self.fresh_label("for_end");
 
                     // Jump into loop header
-                    body.push(Instruction::Jump {
+                    self.emit_synthetic(body, Instruction::Jump {
                         label: loop_label.clone(),
                     });
 
                     // Loop header: check i < len
-                    body.push(Instruction::Label(loop_label.clone()));
+                    self.emit_synthetic(body, Instruction::Label(loop_label.clone()));
                     let cur_idx = self.fresh_temp();
-                    body.push(Instruction::Load {
+                    self.emit(body, Instruction::Load {
                         dest: cur_idx.clone(),
                         source: idx_var.clone(),
                     });
                     let cond = self.fresh_temp();
-                    body.push(Instruction::BinOp {
+                    self.emit(body, Instruction::BinOp {
                         dest: cond.clone(),
                         op: MirBinOp::LtInt,
                         lhs: Operand::Var(cur_idx.clone()),
                         rhs: Operand::Var(len.clone()),
                     });
-                    body.push(Instruction::BranchIf {
+                    self.emit_synthetic(body, Instruction::BranchIf {
                         cond: Operand::Var(cond),
                         true_label: body_label.clone(),
                         false_label: end_label.clone(),
                     });
 
                     // Loop body: binding = list[i]
-                    body.push(Instruction::Label(body_label));
+                    self.emit_synthetic(body, Instruction::Label(body_label));
                     let elem = self.fresh_temp();
-                    body.push(Instruction::ListGet {
+                    self.emit(body, Instruction::ListGet {
                         dest: elem.clone(),
                         list: Operand::Var(iter_val),
                         index: Operand::Var(cur_idx.clone()),
@@ -367,12 +373,12 @@ impl super::LowerCtx {
                     // MIR-level assert at that point.
                     if self.pattern_vars.contains(&f.binding) || self.mut_vars.contains(&f.binding)
                     {
-                        body.push(Instruction::Store {
+                        self.emit(body, Instruction::Store {
                             dest: f.binding.clone(),
                             value: Operand::Var(elem),
                         });
                     } else {
-                        body.push(Instruction::Copy {
+                        self.emit(body, Instruction::Copy {
                             dest: f.binding.clone(),
                             source: elem,
                         });
@@ -392,32 +398,32 @@ impl super::LowerCtx {
                     // Explicit jump to terminate the body block (required by LLVM IR).
                     // Dead code if the body already ended with break/return, which is
                     // handled the same way as while's unconditional back-edge jump.
-                    body.push(Instruction::Jump {
+                    self.emit_synthetic(body, Instruction::Jump {
                         label: continue_label.clone(),
                     });
-                    body.push(Instruction::Label(continue_label));
+                    self.emit_synthetic(body, Instruction::Label(continue_label));
 
                     // Increment: i = i + 1
                     let one = self.fresh_temp();
-                    body.push(Instruction::Const {
+                    self.emit(body, Instruction::Const {
                         dest: one.clone(),
                         value: Constant::Int(1),
                     });
                     let next_idx = self.fresh_temp();
-                    body.push(Instruction::BinOp {
+                    self.emit(body, Instruction::BinOp {
                         dest: next_idx.clone(),
                         op: MirBinOp::AddInt,
                         lhs: Operand::Var(cur_idx),
                         rhs: Operand::Var(one),
                     });
-                    body.push(Instruction::Store {
+                    self.emit(body, Instruction::Store {
                         dest: idx_var,
                         value: Operand::Var(next_idx),
                     });
-                    body.push(Instruction::Jump { label: loop_label });
+                    self.emit_synthetic(body, Instruction::Jump { label: loop_label });
 
                     // End
-                    body.push(Instruction::Label(end_label));
+                    self.emit_synthetic(body, Instruction::Label(end_label));
                 } else {
                     // Non-list iteration: keep current stub behavior.
                     // Same invariant as the list branch: a pre-existing
@@ -427,12 +433,12 @@ impl super::LowerCtx {
                     self.local_binding_names.insert(f.binding.clone());
                     if self.pattern_vars.contains(&f.binding) || self.mut_vars.contains(&f.binding)
                     {
-                        body.push(Instruction::Store {
+                        self.emit(body, Instruction::Store {
                             dest: f.binding.clone(),
                             value: Operand::Var(iter_val),
                         });
                     } else {
-                        body.push(Instruction::Copy {
+                        self.emit(body, Instruction::Copy {
                             dest: f.binding.clone(),
                             source: iter_val,
                         });
@@ -445,18 +451,18 @@ impl super::LowerCtx {
                     }
                     self.loop_head_stack.pop();
                     self.loop_exit_stack.pop();
-                    body.push(Instruction::Jump {
+                    self.emit_synthetic(body, Instruction::Jump {
                         label: stub_continue.clone(),
                     });
-                    body.push(Instruction::Label(stub_continue));
-                    body.push(Instruction::Jump {
+                    self.emit_synthetic(body, Instruction::Label(stub_continue));
+                    self.emit_synthetic(body, Instruction::Jump {
                         label: stub_end.clone(),
                     });
-                    body.push(Instruction::Label(stub_end));
+                    self.emit_synthetic(body, Instruction::Label(stub_end));
                 }
 
                 let dest = self.fresh_temp();
-                body.push(Instruction::Const {
+                self.emit(body, Instruction::Const {
                     dest: dest.clone(),
                     value: Constant::Unit,
                 });
@@ -471,17 +477,17 @@ impl super::LowerCtx {
                 // into the loop header rather than falling through from
                 // the surrounding block (the previous block may end in an
                 // alloca/store sequence with no terminator).
-                body.push(Instruction::Jump {
+                self.emit_synthetic(body, Instruction::Jump {
                     label: loop_label.clone(),
                 });
-                body.push(Instruction::Label(loop_label.clone()));
+                self.emit_synthetic(body, Instruction::Label(loop_label.clone()));
                 let cond = self.lower_expr(&w.condition, body);
-                body.push(Instruction::BranchIf {
+                self.emit_synthetic(body, Instruction::BranchIf {
                     cond: Operand::Var(cond),
                     true_label: format!("{loop_label}_body"),
                     false_label: end_label.clone(),
                 });
-                body.push(Instruction::Label(format!("{loop_label}_body")));
+                self.emit_synthetic(body, Instruction::Label(format!("{loop_label}_body")));
                 self.loop_exit_stack.push(end_label.clone());
                 self.loop_head_stack.push(loop_label.clone());
                 for stmt in &w.body {
@@ -489,11 +495,11 @@ impl super::LowerCtx {
                 }
                 self.loop_head_stack.pop();
                 self.loop_exit_stack.pop();
-                body.push(Instruction::Jump { label: loop_label });
-                body.push(Instruction::Label(end_label));
+                self.emit_synthetic(body, Instruction::Jump { label: loop_label });
+                self.emit_synthetic(body, Instruction::Label(end_label));
 
                 let dest = self.fresh_temp();
-                body.push(Instruction::Const {
+                self.emit(body, Instruction::Const {
                     dest: dest.clone(),
                     value: Constant::Unit,
                 });
@@ -519,7 +525,7 @@ impl super::LowerCtx {
                 let task_temp = self.lower_expr(inner, body);
                 if let Some(result_type) = self.task_result_types.get(&task_temp).cloned() {
                     let dest = self.fresh_temp();
-                    body.push(Instruction::Await {
+                    self.emit(body, Instruction::Await {
                         dest: dest.clone(),
                         task: Operand::Var(task_temp),
                         result_type: result_type.clone(),
@@ -566,7 +572,7 @@ impl super::LowerCtx {
                         .map(|a| Operand::Var(self.lower_expr(&a.value, body)))
                         .collect();
                     let dest = self.fresh_temp();
-                    body.push(Instruction::Spawn {
+                    self.emit(body, Instruction::Spawn {
                         dest: dest.clone(),
                         func: fn_name.clone(),
                         args,
@@ -595,7 +601,7 @@ impl super::LowerCtx {
                         let max_field_count = self.adt_struct_defs[type_name].len() - 1;
                         let fields = vec![Operand::Const(Constant::Int(0)); max_field_count];
                         let dest = self.fresh_temp();
-                        body.push(Instruction::AdtInit {
+                        self.emit(body, Instruction::AdtInit {
                             dest: dest.clone(),
                             type_name: type_name.clone(),
                             tag,
@@ -606,7 +612,7 @@ impl super::LowerCtx {
                     }
                     // Pure unit-only ADT: emit tag constant directly
                     let dest = self.fresh_temp();
-                    body.push(Instruction::Const {
+                    self.emit(body, Instruction::Const {
                         dest: dest.clone(),
                         value: Constant::Int(tag),
                     });
@@ -620,7 +626,7 @@ impl super::LowerCtx {
                     if let Some(idx) = field_defs.iter().position(|(n, _)| n == field) {
                         let field_ty = field_defs[idx].1.clone();
                         let dest = self.fresh_temp();
-                        body.push(Instruction::FieldGet {
+                        self.emit(body, Instruction::FieldGet {
                             dest: dest.clone(),
                             obj: Operand::Var(obj_val),
                             type_name,
@@ -652,7 +658,7 @@ impl super::LowerCtx {
                 // General field access (data types, methods)
                 // TODO: emit proper GEP instruction for data type struct field access
                 let dest = self.fresh_temp();
-                body.push(Instruction::Copy {
+                self.emit(body, Instruction::Copy {
                     dest: dest.clone(),
                     source: format!("{obj_val}.{field}"),
                 });
@@ -672,7 +678,7 @@ impl super::LowerCtx {
                     .unwrap_or(Ty::Int);
 
                 let dest = self.fresh_temp();
-                body.push(Instruction::ListGet {
+                self.emit(body, Instruction::ListGet {
                     dest: dest.clone(),
                     list: Operand::Var(obj_val),
                     index: Operand::Var(idx_val),
@@ -792,7 +798,7 @@ impl super::LowerCtx {
 
                 let dest = self.fresh_temp();
                 let fn_ty = Ty::Fn(param_types.clone(), Box::new(ret_ty.clone()));
-                body.push(Instruction::ClosureBuild {
+                self.emit(body, Instruction::ClosureBuild {
                     dest: dest.clone(),
                     fn_name,
                     env_fields: env_field_operands,
@@ -833,7 +839,7 @@ impl super::LowerCtx {
                             .collect();
 
                         let dest = self.fresh_temp();
-                        body.push(Instruction::Call {
+                        self.emit(body, Instruction::Call {
                             dest: Some(dest.clone()),
                             func: mangled_name,
                             args: arg_operands,
@@ -860,7 +866,7 @@ impl super::LowerCtx {
                         let dest = self.fresh_temp();
                         // Infer return type for type tracking
                         let ret_ty = self.fn_return_types.get(&func_name).cloned();
-                        body.push(Instruction::Call {
+                        self.emit(body, Instruction::Call {
                             dest: Some(dest.clone()),
                             func: func_name,
                             args: arg_operands,
@@ -890,7 +896,7 @@ impl super::LowerCtx {
                 // Fallback: unresolved turbofish — no generic function found
                 eprintln!("warning: unresolved turbofish call (no matching generic function)");
                 let dest = self.fresh_temp();
-                body.push(Instruction::Const {
+                self.emit(body, Instruction::Const {
                     dest: dest.clone(),
                     value: Constant::Unit,
                 });
@@ -943,7 +949,7 @@ impl super::LowerCtx {
                 let type_name = list_type.monomorphized_name();
 
                 let dest = self.fresh_temp();
-                body.push(Instruction::ListInit {
+                self.emit(body, Instruction::ListInit {
                     dest: dest.clone(),
                     elem_type,
                     elements: elem_operands,
@@ -966,7 +972,7 @@ impl super::LowerCtx {
 
                 // Start with an empty handle.
                 let mut handle = self.fresh_temp();
-                body.push(Instruction::Call {
+                self.emit(body, Instruction::Call {
                     dest: Some(handle.clone()),
                     func: "__map_new_string_int".into(),
                     args: vec![],
@@ -977,7 +983,7 @@ impl super::LowerCtx {
                     let k_val = self.lower_expr(k, body);
                     let v_val = self.lower_expr(v, body);
                     let next = self.fresh_temp();
-                    body.push(Instruction::Call {
+                    self.emit(body, Instruction::Call {
                         dest: Some(next.clone()),
                         func: "__map_insert_string_int".into(),
                         args: vec![
@@ -992,7 +998,7 @@ impl super::LowerCtx {
 
                 // Wrap the handle in Map__String__Int { handle }.
                 let dest = self.fresh_temp();
-                body.push(Instruction::StructInit {
+                self.emit(body, Instruction::StructInit {
                     dest: dest.clone(),
                     type_name: "Map__String__Int".into(),
                     fields: vec![Operand::Var(handle)],
@@ -1034,7 +1040,7 @@ impl super::LowerCtx {
 
                 let format_ref = self.intern_string(&format_str);
                 let dest = self.fresh_temp();
-                body.push(Instruction::StringFormat {
+                self.emit(body, Instruction::StringFormat {
                     dest: dest.clone(),
                     format_ref,
                     args: format_args,

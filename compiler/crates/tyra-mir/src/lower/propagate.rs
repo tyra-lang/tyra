@@ -9,13 +9,13 @@ use tyra_types::Ty;
 
 use crate::ir::*;
 
-impl super::LowerCtx {
+impl super::LowerCtx<'_> {
     /// Lower `ExprKind::Propagate(inner)` — the `?` operator.
     ///
     /// Extracts the success payload on the happy path and emits an
     /// early return (with optional `Into<F>` error conversion) on
     /// the failure path.
-    pub(super) fn lower_propagate(&mut self, inner: &Expr, body: &mut Vec<Instruction>) -> String {
+    pub(super) fn lower_propagate(&mut self, inner: &Expr, body: &mut Vec<MirStmt>) -> String {
         // ? operator: extract value on success, early-return on failure
         let inner_val = self.lower_expr(inner, body);
 
@@ -29,7 +29,7 @@ impl super::LowerCtx {
 
         // Extract tag
         let tag = self.fresh_temp();
-        body.push(Instruction::AdtTag {
+        self.emit(body, Instruction::AdtTag {
             dest: tag.clone(),
             obj: Operand::Var(inner_val.clone()),
             type_name: type_name.clone(),
@@ -37,12 +37,12 @@ impl super::LowerCtx {
 
         // Check if failure (tag != 0 means None/Err)
         let zero = self.fresh_temp();
-        body.push(Instruction::Const {
+        self.emit(body, Instruction::Const {
             dest: zero.clone(),
             value: Constant::Int(0),
         });
         let is_ok = self.fresh_temp();
-        body.push(Instruction::BinOp {
+        self.emit(body, Instruction::BinOp {
             dest: is_ok.clone(),
             op: MirBinOp::EqInt,
             lhs: Operand::Var(tag),
@@ -52,14 +52,14 @@ impl super::LowerCtx {
         let ok_label = self.fresh_label("propagate_ok");
         let fail_label = self.fresh_label("propagate_fail");
 
-        body.push(Instruction::BranchIf {
+        self.emit(body, Instruction::BranchIf {
             cond: Operand::Var(is_ok),
             true_label: ok_label.clone(),
             false_label: fail_label.clone(),
         });
 
         // Failure path: return None/Err from current function
-        body.push(Instruction::Label(fail_label));
+        self.emit(body, Instruction::Label(fail_label));
         if inner_type.is_result() {
             // For Result: extract err_value and re-wrap as Err.
             // spec §12.2: If inner error type E != enclosing error type F,
@@ -68,7 +68,7 @@ impl super::LowerCtx {
             self.register_adt_type(ret_type);
             let ret_type_name = ret_type.monomorphized_name();
             let err_val = self.fresh_temp();
-            body.push(Instruction::AdtPayload {
+            self.emit(body, Instruction::AdtPayload {
                 dest: err_val.clone(),
                 obj: Operand::Var(inner_val.clone()),
                 type_name: type_name.clone(),
@@ -85,7 +85,7 @@ impl super::LowerCtx {
                     if let Some(mangled) = self.impl_methods.get(&into_key).cloned() {
                         // Call E__into(err_val) to convert error type
                         let converted = self.fresh_temp();
-                        body.push(Instruction::Call {
+                        self.emit(body, Instruction::Call {
                             dest: Some(converted.clone()),
                             func: mangled,
                             args: vec![Operand::Var(err_val.clone())],
@@ -124,7 +124,7 @@ impl super::LowerCtx {
             };
 
             let ret_err = self.fresh_temp();
-            body.push(Instruction::AdtInit {
+            self.emit(body, Instruction::AdtInit {
                 dest: ret_err.clone(),
                 type_name: ret_type_name,
                 tag: 1,
@@ -135,7 +135,7 @@ impl super::LowerCtx {
             });
             // spec §12.3: emit deferred expressions before early return
             self.emit_deferred(body);
-            body.push(Instruction::Return {
+            self.emit(body, Instruction::Return {
                 value: Some(Operand::Var(ret_err)),
             });
         } else {
@@ -144,7 +144,7 @@ impl super::LowerCtx {
             self.register_adt_type(ret_type);
             let ret_type_name = ret_type.monomorphized_name();
             let none_val = self.fresh_temp();
-            body.push(Instruction::AdtInit {
+            self.emit(body, Instruction::AdtInit {
                 dest: none_val.clone(),
                 type_name: ret_type_name,
                 tag: 1,
@@ -152,15 +152,15 @@ impl super::LowerCtx {
             });
             // spec §12.3: emit deferred expressions before early return
             self.emit_deferred(body);
-            body.push(Instruction::Return {
+            self.emit(body, Instruction::Return {
                 value: Some(Operand::Var(none_val)),
             });
         }
 
         // Success path: extract ok/some payload (field 1)
-        body.push(Instruction::Label(ok_label));
+        self.emit(body, Instruction::Label(ok_label));
         let payload = self.fresh_temp();
-        body.push(Instruction::AdtPayload {
+        self.emit(body, Instruction::AdtPayload {
             dest: payload.clone(),
             obj: Operand::Var(inner_val),
             type_name,

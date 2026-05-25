@@ -10,16 +10,16 @@ use tyra_types::Ty;
 
 use crate::ir::*;
 
-impl super::LowerCtx {
+impl super::LowerCtx<'_> {
     /// Lower a match expression into a chain of conditional branches.
     /// Uses alloca + store + load pattern for the result to avoid SSA dominance issues.
-    pub(super) fn lower_match(&mut self, m: &MatchExpr, body: &mut Vec<Instruction>) -> String {
+    pub(super) fn lower_match(&mut self, m: &MatchExpr, body: &mut Vec<MirStmt>) -> String {
         let subject = self.lower_expr(&m.subject, body);
         let end_label = self.fresh_label("match_end");
 
         // Allocate stack slot for match result
         let result_slot = self.fresh_temp();
-        body.push(Instruction::Alloca {
+        self.emit_synthetic(body, Instruction::Alloca {
             dest: result_slot.clone(),
         });
         let mut result_slot_is_string = false;
@@ -55,24 +55,24 @@ impl super::LowerCtx {
             // Generate pattern test
             match &arm.pattern.kind {
                 PatternKind::Wildcard | PatternKind::Ident(_) => {
-                    body.push(Instruction::Jump {
+                    self.emit_synthetic(body, Instruction::Jump {
                         label: arm_label.clone(),
                     });
                 }
                 PatternKind::IntLit(n) => {
                     let lit = self.fresh_temp();
-                    body.push(Instruction::Const {
+                    self.emit(body, Instruction::Const {
                         dest: lit.clone(),
                         value: Constant::Int(*n),
                     });
                     let cond = self.fresh_temp();
-                    body.push(Instruction::BinOp {
+                    self.emit(body, Instruction::BinOp {
                         dest: cond.clone(),
                         op: MirBinOp::EqInt,
                         lhs: Operand::Var(subject.clone()),
                         rhs: Operand::Var(lit),
                     });
-                    body.push(Instruction::BranchIf {
+                    self.emit_synthetic(body, Instruction::BranchIf {
                         cond: Operand::Var(cond),
                         true_label: arm_label.clone(),
                         false_label: next_label.clone(),
@@ -80,18 +80,18 @@ impl super::LowerCtx {
                 }
                 PatternKind::BoolLit(b) => {
                     let lit = self.fresh_temp();
-                    body.push(Instruction::Const {
+                    self.emit(body, Instruction::Const {
                         dest: lit.clone(),
                         value: Constant::Bool(*b),
                     });
                     let cond = self.fresh_temp();
-                    body.push(Instruction::BinOp {
+                    self.emit(body, Instruction::BinOp {
                         dest: cond.clone(),
                         op: MirBinOp::EqInt,
                         lhs: Operand::Var(subject.clone()),
                         rhs: Operand::Var(lit),
                     });
-                    body.push(Instruction::BranchIf {
+                    self.emit_synthetic(body, Instruction::BranchIf {
                         cond: Operand::Var(cond),
                         true_label: arm_label.clone(),
                         false_label: next_label.clone(),
@@ -101,18 +101,18 @@ impl super::LowerCtx {
                     // §11: match on string literal via strcmp
                     let pat_ref = self.intern_string(s);
                     let pat_temp = self.fresh_temp();
-                    body.push(Instruction::Const {
+                    self.emit(body, Instruction::Const {
                         dest: pat_temp.clone(),
                         value: Constant::StringRef(pat_ref),
                     });
                     let cond = self.fresh_temp();
-                    body.push(Instruction::BinOp {
+                    self.emit(body, Instruction::BinOp {
                         dest: cond.clone(),
                         op: MirBinOp::EqString,
                         lhs: Operand::Var(subject.clone()),
                         rhs: Operand::Var(pat_temp),
                     });
-                    body.push(Instruction::BranchIf {
+                    self.emit_synthetic(body, Instruction::BranchIf {
                         cond: Operand::Var(cond),
                         true_label: arm_label.clone(),
                         false_label: next_label.clone(),
@@ -120,7 +120,7 @@ impl super::LowerCtx {
                 }
                 PatternKind::FloatLit(_) => {
                     // Float pattern matching: deferred (Float has no Eq)
-                    body.push(Instruction::Jump {
+                    self.emit_synthetic(body, Instruction::Jump {
                         label: arm_label.clone(),
                     });
                 }
@@ -207,18 +207,18 @@ impl super::LowerCtx {
                         };
 
                         let tag_val = self.fresh_temp();
-                        body.push(Instruction::AdtTag {
+                        self.emit(body, Instruction::AdtTag {
                             dest: tag_val.clone(),
                             obj: Operand::Var(subject.clone()),
                             type_name: subject_type_name.clone(),
                         });
                         let lit = self.fresh_temp();
-                        body.push(Instruction::Const {
+                        self.emit(body, Instruction::Const {
                             dest: lit.clone(),
                             value: Constant::Int(tag),
                         });
                         let cond = self.fresh_temp();
-                        body.push(Instruction::BinOp {
+                        self.emit(body, Instruction::BinOp {
                             dest: cond.clone(),
                             op: MirBinOp::EqInt,
                             lhs: Operand::Var(tag_val),
@@ -233,17 +233,17 @@ impl super::LowerCtx {
 
                         if has_inner_constructor {
                             let inner_check = self.fresh_label("inner_check");
-                            body.push(Instruction::BranchIf {
+                            self.emit_synthetic(body, Instruction::BranchIf {
                                 cond: Operand::Var(cond),
                                 true_label: inner_check.clone(),
                                 false_label: next_label.clone(),
                             });
 
                             // Inner tag check: extract payload and compare inner variant tag
-                            body.push(Instruction::Label(inner_check));
+                            self.emit_synthetic(body, Instruction::Label(inner_check));
                             let field_index = if variant_name == "Err" { 2 } else { 1 };
                             let payload = self.fresh_temp();
-                            body.push(Instruction::AdtPayload {
+                            self.emit(body, Instruction::AdtPayload {
                                 dest: payload.clone(),
                                 obj: Operand::Var(subject.clone()),
                                 type_name: subject_type_name,
@@ -284,7 +284,7 @@ impl super::LowerCtx {
 
                                     let (tag_subject, payload_for_recurse) = if is_inner_struct {
                                         let inner_tag_val = self.fresh_temp();
-                                        body.push(Instruction::AdtTag {
+                                        self.emit(body, Instruction::AdtTag {
                                             dest: inner_tag_val.clone(),
                                             obj: Operand::Var(payload.clone()),
                                             type_name: itn.clone(),
@@ -295,12 +295,12 @@ impl super::LowerCtx {
                                     };
 
                                     let inner_lit = self.fresh_temp();
-                                    body.push(Instruction::Const {
+                                    self.emit(body, Instruction::Const {
                                         dest: inner_lit.clone(),
                                         value: Constant::Int(expected_tag),
                                     });
                                     let inner_cond = self.fresh_temp();
-                                    body.push(Instruction::BinOp {
+                                    self.emit(body, Instruction::BinOp {
                                         dest: inner_cond.clone(),
                                         op: MirBinOp::EqInt,
                                         lhs: Operand::Var(tag_subject),
@@ -324,12 +324,12 @@ impl super::LowerCtx {
 
                                     if has_deeper {
                                         let inner_ok = self.fresh_label("inner_ok");
-                                        body.push(Instruction::BranchIf {
+                                        self.emit_synthetic(body, Instruction::BranchIf {
                                             cond: Operand::Var(inner_cond),
                                             true_label: inner_ok.clone(),
                                             false_label: next_label.clone(),
                                         });
-                                        body.push(Instruction::Label(inner_ok));
+                                        self.emit_synthetic(body, Instruction::Label(inner_ok));
                                         let inner_fields_cloned = inner_fields_ref.clone();
                                         let inner_variant_clone = inner_variant.clone();
                                         let next_label_clone = next_label.clone();
@@ -341,11 +341,11 @@ impl super::LowerCtx {
                                             &next_label_clone,
                                             body,
                                         );
-                                        body.push(Instruction::Jump {
+                                        self.emit_synthetic(body, Instruction::Jump {
                                             label: arm_label.clone(),
                                         });
                                     } else {
-                                        body.push(Instruction::BranchIf {
+                                        self.emit_synthetic(body, Instruction::BranchIf {
                                             cond: Operand::Var(inner_cond),
                                             true_label: arm_label.clone(),
                                             false_label: next_label.clone(),
@@ -353,7 +353,7 @@ impl super::LowerCtx {
                                     }
                                 } else {
                                     // Could not resolve inner tag — fall through
-                                    body.push(Instruction::Jump {
+                                    self.emit_synthetic(body, Instruction::Jump {
                                         label: arm_label.clone(),
                                     });
                                 }
@@ -372,47 +372,47 @@ impl super::LowerCtx {
                             if let Some(lit_const) = inner_lit_const {
                                 // tag matched → extract payload → compare with literal
                                 let inner_check = self.fresh_label("inner_lit_check");
-                                body.push(Instruction::BranchIf {
+                                self.emit_synthetic(body, Instruction::BranchIf {
                                     cond: Operand::Var(cond),
                                     true_label: inner_check.clone(),
                                     false_label: next_label.clone(),
                                 });
-                                body.push(Instruction::Label(inner_check));
+                                self.emit_synthetic(body, Instruction::Label(inner_check));
                                 let field_index = if variant_name == "Err" { 2 } else { 1 };
                                 let payload = self.fresh_temp();
-                                body.push(Instruction::AdtPayload {
+                                self.emit(body, Instruction::AdtPayload {
                                     dest: payload.clone(),
                                     obj: Operand::Var(subject.clone()),
                                     type_name: subject_type_name,
                                     field_index,
                                 });
                                 let lit_temp = self.fresh_temp();
-                                body.push(Instruction::Const {
+                                self.emit(body, Instruction::Const {
                                     dest: lit_temp.clone(),
                                     value: lit_const,
                                 });
                                 let val_cond = self.fresh_temp();
-                                body.push(Instruction::BinOp {
+                                self.emit(body, Instruction::BinOp {
                                     dest: val_cond.clone(),
                                     op: MirBinOp::EqInt,
                                     lhs: Operand::Var(payload),
                                     rhs: Operand::Var(lit_temp),
                                 });
-                                body.push(Instruction::BranchIf {
+                                self.emit_synthetic(body, Instruction::BranchIf {
                                     cond: Operand::Var(val_cond),
                                     true_label: arm_label.clone(),
                                     false_label: next_label.clone(),
                                 });
                             } else {
                                 // Ident / Wildcard inner — tag match is sufficient
-                                body.push(Instruction::BranchIf {
+                                self.emit_synthetic(body, Instruction::BranchIf {
                                     cond: Operand::Var(cond),
                                     true_label: arm_label.clone(),
                                     false_label: next_label.clone(),
                                 });
                             }
                         } else {
-                            body.push(Instruction::BranchIf {
+                            self.emit_synthetic(body, Instruction::BranchIf {
                                 cond: Operand::Var(cond),
                                 true_label: arm_label.clone(),
                                 false_label: next_label.clone(),
@@ -444,24 +444,24 @@ impl super::LowerCtx {
                                 // Struct-based ADT: extract tag via AdtTag
                                 let stn = subject_type_name.unwrap();
                                 let tag_val = self.fresh_temp();
-                                body.push(Instruction::AdtTag {
+                                self.emit(body, Instruction::AdtTag {
                                     dest: tag_val.clone(),
                                     obj: Operand::Var(subject.clone()),
                                     type_name: stn,
                                 });
                                 let lit = self.fresh_temp();
-                                body.push(Instruction::Const {
+                                self.emit(body, Instruction::Const {
                                     dest: lit.clone(),
                                     value: Constant::Int(tag),
                                 });
                                 let cond = self.fresh_temp();
-                                body.push(Instruction::BinOp {
+                                self.emit(body, Instruction::BinOp {
                                     dest: cond.clone(),
                                     op: MirBinOp::EqInt,
                                     lhs: Operand::Var(tag_val),
                                     rhs: Operand::Var(lit),
                                 });
-                                body.push(Instruction::BranchIf {
+                                self.emit_synthetic(body, Instruction::BranchIf {
                                     cond: Operand::Var(cond),
                                     true_label: arm_label.clone(),
                                     false_label: next_label.clone(),
@@ -469,18 +469,18 @@ impl super::LowerCtx {
                             } else {
                                 // Unit-only ADT: subject is plain integer tag
                                 let lit = self.fresh_temp();
-                                body.push(Instruction::Const {
+                                self.emit(body, Instruction::Const {
                                     dest: lit.clone(),
                                     value: Constant::Int(tag),
                                 });
                                 let cond = self.fresh_temp();
-                                body.push(Instruction::BinOp {
+                                self.emit(body, Instruction::BinOp {
                                     dest: cond.clone(),
                                     op: MirBinOp::EqInt,
                                     lhs: Operand::Var(subject.clone()),
                                     rhs: Operand::Var(lit),
                                 });
-                                body.push(Instruction::BranchIf {
+                                self.emit_synthetic(body, Instruction::BranchIf {
                                     cond: Operand::Var(cond),
                                     true_label: arm_label.clone(),
                                     false_label: next_label.clone(),
@@ -488,7 +488,7 @@ impl super::LowerCtx {
                             }
                         } else {
                             // Unknown constructor — fall through (treat as wildcard)
-                            body.push(Instruction::Jump {
+                            self.emit_synthetic(body, Instruction::Jump {
                                 label: arm_label.clone(),
                             });
                         }
@@ -497,10 +497,10 @@ impl super::LowerCtx {
             }
 
             // Arm body
-            body.push(Instruction::Label(arm_label.clone()));
+            self.emit_synthetic(body, Instruction::Label(arm_label.clone()));
 
             if let PatternKind::Ident(name) = &arm.pattern.kind {
-                body.push(Instruction::Copy {
+                self.emit(body, Instruction::Copy {
                     dest: name.clone(),
                     source: subject.clone(),
                 });
@@ -567,7 +567,7 @@ impl super::LowerCtx {
                     // For Option: Some=field 1. For Result: Ok=field 1, Err=field 2.
                     let field_index = if variant_name == "Err" { 2 } else { 1 };
                     let payload = self.fresh_temp();
-                    body.push(Instruction::AdtPayload {
+                    self.emit(body, Instruction::AdtPayload {
                         dest: payload.clone(),
                         obj: Operand::Var(subject.clone()),
                         type_name: subject_type_name.clone(),
@@ -576,7 +576,7 @@ impl super::LowerCtx {
 
                     // Store into the pre-allocated alloca for this variable
                     let bind_name = &fields[0].field_name;
-                    body.push(Instruction::Store {
+                    self.emit(body, Instruction::Store {
                         dest: bind_name.clone(),
                         value: Operand::Var(payload),
                     });
@@ -654,14 +654,14 @@ impl super::LowerCtx {
                                 }
                                 let field_index = (variant_offset + fi) as u32;
                                 let payload = self.fresh_temp();
-                                body.push(Instruction::AdtPayload {
+                                self.emit(body, Instruction::AdtPayload {
                                     dest: payload.clone(),
                                     obj: Operand::Var(subject.clone()),
                                     type_name: stn.clone(),
                                     field_index,
                                 });
                                 // Store into the pre-allocated alloca for this variable
-                                body.push(Instruction::Store {
+                                self.emit(body, Instruction::Store {
                                     dest: bind_name.clone(),
                                     value: Operand::Var(payload.clone()),
                                 });
@@ -737,29 +737,29 @@ impl super::LowerCtx {
                                 result_slot_generic_type = Some(gt);
                             }
                         }
-                        body.push(Instruction::Store {
+                        self.emit(body, Instruction::Store {
                             dest: result_slot.clone(),
                             value: Operand::Var(last),
                         });
                     }
                 }
 
-                body.push(Instruction::Jump {
+                self.emit_synthetic(body, Instruction::Jump {
                     label: end_label.clone(),
                 });
             }
 
             // Next arm label
             if i + 1 < m.arms.len() {
-                body.push(Instruction::Label(next_label.clone()));
+                self.emit_synthetic(body, Instruction::Label(next_label.clone()));
             }
         }
 
-        body.push(Instruction::Label(end_label));
+        self.emit_synthetic(body, Instruction::Label(end_label));
 
         // Load the result from the alloca'd slot
         let result = self.fresh_temp();
-        body.push(Instruction::Load {
+        self.emit(body, Instruction::Load {
             dest: result.clone(),
             source: result_slot,
         });
@@ -782,7 +782,7 @@ impl super::LowerCtx {
     pub(super) fn pre_alloca_pattern_vars(
         &mut self,
         pattern: &PatternKind,
-        body: &mut Vec<Instruction>,
+        body: &mut Vec<MirStmt>,
     ) {
         match pattern {
             PatternKind::Constructor(_, fields) => {
@@ -790,7 +790,7 @@ impl super::LowerCtx {
                     match &pf.pattern.kind {
                         PatternKind::Ident(name) if name != "_" => {
                             if !self.mut_vars.contains(name) && !self.pattern_vars.contains(name) {
-                                body.push(Instruction::Alloca { dest: name.clone() });
+                                self.emit_synthetic(body, Instruction::Alloca { dest: name.clone() });
                                 self.pattern_vars.insert(name.clone());
                                 self.local_binding_names.insert(name.clone());
                             }
@@ -817,7 +817,7 @@ impl super::LowerCtx {
         variant_name: &str,
         fields: &[PatternField],
         fail_label: &str,
-        body: &mut Vec<Instruction>,
+        body: &mut Vec<MirStmt>,
     ) {
         let vfields: Vec<(String, Ty)> = self
             .adt_variant_fields
@@ -844,7 +844,7 @@ impl super::LowerCtx {
             let field_index = (variant_offset + fi) as u32;
 
             let payload = self.fresh_temp();
-            body.push(Instruction::AdtPayload {
+            self.emit(body, Instruction::AdtPayload {
                 dest: payload.clone(),
                 obj: Operand::Var(subject.to_string()),
                 type_name: type_name.to_string(),
@@ -869,30 +869,30 @@ impl super::LowerCtx {
                                 .copied()
                                 .unwrap_or(0);
                             let tag_val = self.fresh_temp();
-                            body.push(Instruction::AdtTag {
+                            self.emit(body, Instruction::AdtTag {
                                 dest: tag_val.clone(),
                                 obj: Operand::Var(payload.clone()),
                                 type_name: inner_tn.clone(),
                             });
                             let lit = self.fresh_temp();
-                            body.push(Instruction::Const {
+                            self.emit(body, Instruction::Const {
                                 dest: lit.clone(),
                                 value: Constant::Int(inner_tag),
                             });
                             let cond = self.fresh_temp();
-                            body.push(Instruction::BinOp {
+                            self.emit(body, Instruction::BinOp {
                                 dest: cond.clone(),
                                 op: MirBinOp::EqInt,
                                 lhs: Operand::Var(tag_val),
                                 rhs: Operand::Var(lit),
                             });
                             let ok_label = self.fresh_label("nested_ok");
-                            body.push(Instruction::BranchIf {
+                            self.emit_synthetic(body, Instruction::BranchIf {
                                 cond: Operand::Var(cond),
                                 true_label: ok_label.clone(),
                                 false_label: fail_label.to_string(),
                             });
-                            body.push(Instruction::Label(ok_label));
+                            self.emit_synthetic(body, Instruction::Label(ok_label));
                             // Recurse
                             self.lower_ctor_payload_and_vars(
                                 &payload,
@@ -906,7 +906,7 @@ impl super::LowerCtx {
                     }
                 }
                 PatternKind::Ident(var_name) if var_name != "_" => {
-                    body.push(Instruction::Store {
+                    self.emit(body, Instruction::Store {
                         dest: var_name.clone(),
                         value: Operand::Var(payload),
                     });
