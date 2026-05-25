@@ -1337,14 +1337,57 @@ impl<'a> LowerCtx<'a> {
             }
         }
 
+        // Collect local_metas for DWARF locals display (ADR-0014 §4a-ii).
+        // Covers: function parameters (.addr alloca slots) and mut-binding alloca slots.
+        let mut local_metas: Vec<crate::ir::LocalMeta> = Vec::new();
+        for (name, ty) in &params {
+            local_metas.push(crate::ir::LocalMeta {
+                name: name.clone(),
+                ty: ty.clone(),
+                alloca_name: format!("{name}.addr"),
+            });
+        }
+        for s in &body {
+            if let Instruction::Alloca { dest } = &s.instr {
+                if self.mut_vars.contains(dest) {
+                    let ty = self.infer_alloca_type(dest);
+                    local_metas.push(crate::ir::LocalMeta {
+                        name: dest.clone(),
+                        ty,
+                        alloca_name: dest.clone(),
+                    });
+                }
+            }
+        }
+
         Function {
             name: f.name.clone(),
             params,
             return_type,
             body,
             is_main: false,
-            local_metas: vec![],
+            local_metas,
         }
+    }
+
+    /// Infer the Tyra type of an alloca-backed binding from per-function type maps.
+    fn infer_alloca_type(&self, name: &str) -> Ty {
+        if let Some(ty) = self.generic_var_types.get(name) {
+            return ty.clone();
+        }
+        if let Some(type_name) = self.var_types.get(name) {
+            return Ty::Named(type_name.clone());
+        }
+        if self.float_vars.contains(name) {
+            return Ty::Float;
+        }
+        if self.string_vars.contains(name) {
+            return Ty::String;
+        }
+        if self.bool_vars.contains(name) {
+            return Ty::Bool;
+        }
+        Ty::Int
     }
 
     fn lower_stmt(&mut self, stmt: &Stmt, body: &mut Vec<MirStmt>) {

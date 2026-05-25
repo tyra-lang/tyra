@@ -118,20 +118,25 @@ pub fn check_in_memory(
     }
 }
 
-/// Compile a Tyra source file to LLVM IR text.
+/// Compile a Tyra source file to LLVM IR text (debug build, with DWARF).
 pub fn compile_to_ir(source_path: &Path) -> CompileResult {
-    compile_to_ir_impl(source_path, false).0
+    compile_to_ir_impl(source_path, true, false).0
 }
 
 /// Like `compile_to_ir`, but generates coverage-instrumented IR and also
 /// returns the covmap text (`<binary>.tyra-covmap` content).
 fn compile_to_ir_coverage(source_path: &Path) -> (CompileResult, Option<String>) {
-    compile_to_ir_impl(source_path, true)
+    compile_to_ir_impl(source_path, false, true)
 }
 
 /// Core compilation pipeline: parse → resolve → type check → MIR → codegen.
+/// `debug_info = true` emits DWARF metadata for lldb (ADR-0014 §4a).
 /// `coverage = true` uses `emit_llvm_ir_coverage` and returns the covmap text.
-fn compile_to_ir_impl(source_path: &Path, coverage: bool) -> (CompileResult, Option<String>) {
+fn compile_to_ir_impl(
+    source_path: &Path,
+    debug_info: bool,
+    coverage: bool,
+) -> (CompileResult, Option<String>) {
     let mut sources = SourceMap::new();
     let mut report = Report::new();
 
@@ -265,6 +270,17 @@ fn compile_to_ir_impl(source_path: &Path, coverage: bool) -> (CompileResult, Opt
                 llvm_ir: Some(llvm_ir),
             },
             Some(covmap_text),
+        )
+    } else if debug_info {
+        let llvm_ir = tyra_codegen_llvm::emit_llvm_ir_debug(&mir);
+        (
+            CompileResult {
+                success: true,
+                report,
+                sources,
+                llvm_ir: Some(llvm_ir),
+            },
+            None,
         )
     } else {
         let llvm_ir = tyra_codegen_llvm::emit_llvm_ir(&mir);
@@ -1679,7 +1695,12 @@ fn compile_to_binary_opts(
     release: bool,
     static_link: bool,
 ) -> CompileResult {
-    let result = compile_to_ir(source_path);
+    // Debug builds emit DWARF for lldb; release builds skip debug info (ADR-0014 §4a).
+    let result = if release {
+        compile_to_ir_impl(source_path, false, false).0
+    } else {
+        compile_to_ir(source_path) // includes DWARF
+    };
     if !result.success {
         return result;
     }

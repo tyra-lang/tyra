@@ -7,12 +7,13 @@
 mod builtins;
 mod codegen;
 pub mod coverage;
+pub mod dwarf;
 mod helpers;
 mod instr_emit;
 mod list_codegen;
 mod type_scan;
 
-pub use codegen::{emit_llvm_ir, emit_llvm_ir_coverage};
+pub use codegen::{emit_llvm_ir, emit_llvm_ir_coverage, emit_llvm_ir_debug};
 pub use coverage::{CovMap, format_report, merge_covraw, parse_covmap, write_covmap_text};
 
 #[cfg(test)]

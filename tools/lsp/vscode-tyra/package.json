@@ -33,6 +33,67 @@
         "scopeName": "source.tyra",
         "path": "./syntaxes/tyra.tmLanguage.json"
       }
+    ],
+    "breakpoints": [
+      { "language": "tyra" }
+    ],
+    "debuggers": [
+      {
+        "type": "tyra",
+        "label": "Tyra Debug (lldb)",
+        "languages": ["tyra"],
+        "configurationAttributes": {
+          "launch": {
+            "required": ["program"],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Path to the compiled Tyra binary (build with `tyra build`)."
+              },
+              "args": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Command-line arguments passed to the program.",
+                "default": []
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory for the debug session.",
+                "default": "${workspaceFolder}"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Stop at program entry.",
+                "default": false
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "tyra",
+            "request": "launch",
+            "name": "Debug Tyra program",
+            "program": "${workspaceFolder}/out/my_program",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Tyra: Launch (lldb-dap)",
+            "description": "Debug a compiled Tyra binary with lldb.",
+            "body": {
+              "type": "tyra",
+              "request": "launch",
+              "name": "${1:Debug Tyra program}",
+              "program": "${workspaceFolder}/${2:out/program}",
+              "args": [],
+              "cwd": "${workspaceFolder}"
+            }
+          }
+        ]
+      }
     ]
   },
   "scripts": {

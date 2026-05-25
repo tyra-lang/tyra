@@ -16,6 +16,7 @@ use crate::coverage::{
     CovMap, build_cov_map, emit_counter_global, emit_cov_extern, emit_cov_increment,
     emit_cov_init_call, write_covmap_text,
 };
+use crate::dwarf::{DwarfCtx, patch_dbg_on_last_instruction};
 use crate::helpers::{llvm_escape_string, llvm_type_str, target_triple};
 use crate::instr_emit::emit_instruction;
 use crate::type_scan::scan_function_types;
@@ -40,24 +41,36 @@ pub(crate) struct StructInfo {
     pub(crate) recursive_fields: Vec<bool>,
 }
 
-/// Generate LLVM IR text from a MIR program.
-/// Generate LLVM IR text with coverage instrumentation.
+/// Generate LLVM IR text with coverage instrumentation (non-debug build).
 /// Returns `(llvm_ir, covmap_text)`.  The covmap text must be written to
 /// `<output_binary>.tyra-covmap` by the caller (e.g. the driver).
 pub fn emit_llvm_ir_coverage(program: &Program) -> (String, String) {
     let cov_map = build_cov_map(program);
     let covmap_text = write_covmap_text(&cov_map, &program.source_files);
-    let ir = emit_llvm_ir_impl(program, Some(&cov_map));
+    let ir = emit_llvm_ir_impl(program, Some(&cov_map), false);
     (ir, covmap_text)
 }
 
-/// Generate LLVM IR text from a MIR program (non-coverage build).
-pub fn emit_llvm_ir(program: &Program) -> String {
-    emit_llvm_ir_impl(program, None)
+/// Generate LLVM IR text with DWARF debug info (ADR-0014 §4a).
+/// Use for debug (non-release) builds to enable lldb breakpoints and step.
+pub fn emit_llvm_ir_debug(program: &Program) -> String {
+    emit_llvm_ir_impl(program, None, true)
 }
 
-fn emit_llvm_ir_impl(program: &Program, cov_map: Option<&CovMap>) -> String {
+/// Generate LLVM IR text (non-coverage, non-debug build).
+pub fn emit_llvm_ir(program: &Program) -> String {
+    emit_llvm_ir_impl(program, None, false)
+}
+
+fn emit_llvm_ir_impl(program: &Program, cov_map: Option<&CovMap>, emit_dwarf: bool) -> String {
     let mut out = String::new();
+
+    // Build DWARF metadata context if debug info is requested (ADR-0014 §4a).
+    let mut dwarf_ctx: Option<DwarfCtx> = if emit_dwarf {
+        Some(DwarfCtx::build(program))
+    } else {
+        None
+    };
 
     // Build struct info map
     let struct_map: std::collections::HashMap<String, StructInfo> = program
@@ -217,6 +230,10 @@ fn emit_llvm_ir_impl(program: &Program, cov_map: Option<&CovMap>) -> String {
     // Coverage runtime (only declared when coverage is active, but harmless if always present).
     if cov_map.is_some() {
         emit_cov_extern(&mut out);
+    }
+    // DWARF local variable intrinsic (ADR-0014 §4a-ii).
+    if emit_dwarf {
+        writeln!(out, "declare void @llvm.dbg.declare(metadata, metadata, metadata)").unwrap();
     }
     writeln!(out, "declare i32 @puts(ptr)").unwrap();
     writeln!(out, "declare i32 @printf(ptr, ...)").unwrap();
@@ -398,6 +415,7 @@ fn emit_llvm_ir_impl(program: &Program, cov_map: Option<&CovMap>) -> String {
             &fn_sigs,
             &spawn_thunks,
             cov_map,
+            dwarf_ctx.as_mut(),
         );
         writeln!(out).unwrap();
     }
@@ -423,6 +441,12 @@ fn emit_llvm_ir_impl(program: &Program, cov_map: Option<&CovMap>) -> String {
     let elem_types = collect_elem_types(program);
     for k in &elem_types {
         emit_map_eq_hash(&mut out, k);
+    }
+
+    // DWARF metadata section (ADR-0014 §4a) — must come after all function defs.
+    if let Some(dwarf) = dwarf_ctx {
+        writeln!(out).unwrap();
+        out.push_str(&dwarf.emit_metadata());
     }
 
     out
@@ -633,6 +657,7 @@ fn emit_function(
     fn_sigs: &std::collections::HashMap<String, FnSig>,
     spawn_thunks: &std::cell::RefCell<Vec<SpawnThunk>>,
     cov_map: Option<&CovMap>,
+    mut dwarf_ctx: Option<&mut DwarfCtx>,
 ) {
     // Pre-scan: collect type metadata for all SSA temps and alloca slots.
     let scan = scan_function_types(func, struct_map, fn_sigs);
@@ -646,8 +671,23 @@ fn emit_function(
         .map(|(name, ty)| format!("{} %{name}", llvm_type_str(ty, struct_map)))
         .collect();
 
+    // Pre-compute the DISubprogram id for this function (used for !dbg annotations).
+    let sp_id = dwarf_ctx.as_ref().and_then(|d| d.subprogram_id(&func.name));
+
     if func.is_main {
-        writeln!(out, "define i32 @main(i32 %argc, ptr %argv) {{").unwrap();
+        if let Some(sp) = sp_id {
+            writeln!(out, "define i32 @main(i32 %argc, ptr %argv) !dbg !{sp} {{").unwrap();
+        } else {
+            writeln!(out, "define i32 @main(i32 %argc, ptr %argv) {{").unwrap();
+        }
+    } else if let Some(sp) = sp_id {
+        writeln!(
+            out,
+            "define {ret_ty} @{}({}) !dbg !{sp} {{",
+            func.name,
+            params.join(", ")
+        )
+        .unwrap();
     } else {
         writeln!(
             out,
@@ -732,6 +772,40 @@ fn emit_function(
         }
     }
 
+    // DWARF locals (ADR-0014 §4a-ii): emit llvm.dbg.declare after alloca hoisting.
+    // This binds each alloca slot to its DILocalVariable so the debugger can
+    // display variable values by name.
+    if let Some(dwarf) = dwarf_ctx.as_deref_mut() {
+        if let Some(sp) = sp_id {
+            let first_line = func
+                .body
+                .iter()
+                .find(|s| !s.loc.is_dummy())
+                .map(|s| s.loc.line)
+                .unwrap_or(1);
+            let first_file_id = func
+                .body
+                .iter()
+                .find(|s| !s.loc.is_dummy())
+                .map(|s| s.loc.file_id)
+                .unwrap_or(0);
+            for meta in &func.local_metas {
+                if meta.alloca_name.is_empty() {
+                    continue;
+                }
+                let type_id = dwarf.type_node(&meta.ty);
+                let var_id =
+                    dwarf.emit_local_var(&meta.name, sp, first_file_id, first_line, type_id);
+                writeln!(
+                    out,
+                    "  call void @llvm.dbg.declare(metadata ptr %{}, metadata !{var_id}, metadata !DIExpression())",
+                    meta.alloca_name
+                )
+                .unwrap();
+            }
+        }
+    }
+
     // Emit instructions, skipping dead code after block terminators.
     let mut block_terminated = false;
     for (stmt_idx, stmt) in func.body.iter().enumerate() {
@@ -761,7 +835,17 @@ fn emit_function(
             _ if block_terminated => continue,
             _ => {}
         }
+        let prev_len = out.len();
         emit_instruction(out, inst, stmt.loc, func, strings, &ctx);
+        // Attach !dbg to the last LLVM instruction emitted for this MIR stmt.
+        if !stmt.loc.is_dummy() {
+            if let Some(sp) = sp_id {
+                if let Some(dwarf) = dwarf_ctx.as_deref_mut() {
+                    let dbg_id = dwarf.get_or_create_loc(sp, stmt.loc.line);
+                    patch_dbg_on_last_instruction(out, prev_len, dbg_id);
+                }
+            }
+        }
         match inst {
             Instruction::Return { .. }
             | Instruction::Jump { .. }
