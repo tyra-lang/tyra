@@ -1213,7 +1213,39 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 report.add(
                     Diagnostic::error("Float does not have Eq or Hash; Float cannot be a Map key")
                         .with_label(Label::new(expr.span, "Float key not allowed (ADR-0002)"))
-                        .with_note("Use Int, Bool, String, or a value type whose fields all have Hash."),
+                        .with_note("Use Int, Bool, or String as Map key type."),
+                );
+                return Ty::Error;
+            }
+            // v0.6 restriction: Map K and V codegen only supports primitive types.
+            // User-defined struct/ADT keys require recursive eq/hash generation,
+            // and non-primitive V types have boxing/unboxing ABI gaps.
+            // Both are planned for a future release.
+            if !matches!(key_ty, Ty::Int | Ty::Bool | Ty::String | Ty::Error) {
+                report.add(
+                    Diagnostic::error(format!(
+                        "Map key type `{}` is not supported in this version",
+                        key_ty.display_name()
+                    ))
+                    .with_label(Label::new(expr.span, "unsupported key type"))
+                    .with_note(
+                        "Map keys must be Int, Bool, or String. \
+                         User-defined value types as keys are planned for a future release.",
+                    ),
+                );
+                return Ty::Error;
+            }
+            if !matches!(val_ty, Ty::Int | Ty::Bool | Ty::String | Ty::Error) {
+                report.add(
+                    Diagnostic::error(format!(
+                        "Map value type `{}` is not supported in this version",
+                        val_ty.display_name()
+                    ))
+                    .with_label(Label::new(expr.span, "unsupported value type"))
+                    .with_note(
+                        "Map values must be Int, Bool, or String. \
+                         User-defined value types are planned for a future release.",
+                    ),
                 );
                 return Ty::Error;
             }

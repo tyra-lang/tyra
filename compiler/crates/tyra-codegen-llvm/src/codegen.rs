@@ -425,11 +425,13 @@ fn collect_map_key_types_stmt(
 fn emit_map_eq_hash(out: &mut String, k: &str) {
     match k {
         "Int" => {
-            writeln!(out, "define private i1 @tyra_eq_Int(ptr %a, ptr %b) {{").unwrap();
+            // EqFn ABI: returns i32 (matches runtime EqFn = fn(...) -> i32).
+            writeln!(out, "define private i32 @tyra_eq_Int(ptr %a, ptr %b) {{").unwrap();
             writeln!(out, "  %va = load i64, ptr %a").unwrap();
             writeln!(out, "  %vb = load i64, ptr %b").unwrap();
-            writeln!(out, "  %r = icmp eq i64 %va, %vb").unwrap();
-            writeln!(out, "  ret i1 %r").unwrap();
+            writeln!(out, "  %r1 = icmp eq i64 %va, %vb").unwrap();
+            writeln!(out, "  %r = zext i1 %r1 to i32").unwrap();
+            writeln!(out, "  ret i32 %r").unwrap();
             writeln!(out, "}}").unwrap();
             writeln!(out).unwrap();
             writeln!(out, "define private i64 @tyra_hash_Int(ptr %a) {{").unwrap();
@@ -441,11 +443,12 @@ fn emit_map_eq_hash(out: &mut String, k: &str) {
             writeln!(out).unwrap();
         }
         "Bool" => {
-            writeln!(out, "define private i1 @tyra_eq_Bool(ptr %a, ptr %b) {{").unwrap();
+            writeln!(out, "define private i32 @tyra_eq_Bool(ptr %a, ptr %b) {{").unwrap();
             writeln!(out, "  %va = load i8, ptr %a").unwrap();
             writeln!(out, "  %vb = load i8, ptr %b").unwrap();
-            writeln!(out, "  %r = icmp eq i8 %va, %vb").unwrap();
-            writeln!(out, "  ret i1 %r").unwrap();
+            writeln!(out, "  %r1 = icmp eq i8 %va, %vb").unwrap();
+            writeln!(out, "  %r = zext i1 %r1 to i32").unwrap();
+            writeln!(out, "  ret i32 %r").unwrap();
             writeln!(out, "}}").unwrap();
             writeln!(out).unwrap();
             writeln!(out, "define private i64 @tyra_hash_Bool(ptr %a) {{").unwrap();
@@ -456,12 +459,12 @@ fn emit_map_eq_hash(out: &mut String, k: &str) {
             writeln!(out).unwrap();
         }
         "String" => {
-            writeln!(out, "define private i1 @tyra_eq_String(ptr %a, ptr %b) {{").unwrap();
+            writeln!(out, "define private i32 @tyra_eq_String(ptr %a, ptr %b) {{").unwrap();
             writeln!(out, "  %sa = load ptr, ptr %a").unwrap();
             writeln!(out, "  %sb = load ptr, ptr %b").unwrap();
-            writeln!(out, "  %r.i32 = call i32 @tyra_cstr_eq(ptr %sa, ptr %sb)").unwrap();
-            writeln!(out, "  %r = icmp ne i32 %r.i32, 0").unwrap();
-            writeln!(out, "  ret i1 %r").unwrap();
+            // tyra_cstr_eq already returns i32; use it directly.
+            writeln!(out, "  %r = call i32 @tyra_cstr_eq(ptr %sa, ptr %sb)").unwrap();
+            writeln!(out, "  ret i32 %r").unwrap();
             writeln!(out, "}}").unwrap();
             writeln!(out).unwrap();
             writeln!(out, "define private i64 @tyra_hash_String(ptr %a) {{").unwrap();
@@ -472,8 +475,9 @@ fn emit_map_eq_hash(out: &mut String, k: &str) {
             writeln!(out).unwrap();
         }
         _ => {
-            // User-defined value type: placeholder (field-by-field recursion
-            // for struct K types is deferred to Phase 2b-ii).
+            // User-defined key type: eq/hash generation for value structs/ADTs
+            // is not yet implemented. The type checker rejects non-primitive K
+            // before reaching codegen, so this arm is unreachable for valid programs.
         }
     }
 }
