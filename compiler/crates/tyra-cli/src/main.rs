@@ -1368,7 +1368,7 @@ fn synthesize_runner(test_source: &str, test_fns: &[String]) -> String {
     }
     // All-tests (legacy) branch — no argv, or used for backward compat.
     out.push_str("  when None\n");
-    out.push_str(&format!("    println(\"TAP version 14\")\n"));
+    out.push_str("    println(\"TAP version 14\")\n");
     out.push_str(&format!("    println(\"1..{n}\")\n"));
     for (i, name) in test_fns.iter().enumerate() {
         let seq = i + 1;
@@ -1562,15 +1562,20 @@ fn run_test_file_core(test_file: &Path, filter: Option<&str>, timeout: Option<u6
         let outcome =
             tyra_driver::run_binary(&binary_path, &[name.as_str()], timeout);
 
-        // Collect any stderr from the subprocess into diag.
-        if !outcome.stderr.is_empty() {
-            diag.push_str(&outcome.stderr);
-            if !outcome.stderr.ends_with('\n') {
-                diag.push('\n');
-            }
-        }
+        let expects_panic = name.starts_with("test_panics_");
 
         if outcome.timed_out {
+            // Collect stderr for diagnostics (strip sentinel — it's noise here).
+            let stderr_clean = outcome
+                .stderr
+                .lines()
+                .filter(|l| *l != "__TYRA_PANIC__")
+                .collect::<Vec<_>>()
+                .join("\n");
+            if !stderr_clean.is_empty() {
+                diag.push_str(&stderr_clean);
+                diag.push('\n');
+            }
             tap.push_str(&format!(
                 "not ok {seq} - {name} (timeout after {}s)\n",
                 timeout.unwrap_or(0)
@@ -1580,44 +1585,76 @@ fn run_test_file_core(test_file: &Path, filter: Option<&str>, timeout: Option<u6
                 timeout.unwrap_or(0)
             ));
             fail += 1;
-        } else if outcome.exit_code == Some(0) {
-            // Parse the single TAP line the subprocess emitted to get the
-            // test name verbatim (the subprocess always writes seq=1).
-            let stdout = outcome.stdout.trim();
-            if stdout.starts_with("not ok ") {
-                // Unexpected: subprocess exited 0 but emitted "not ok" — treat as fail.
+        } else if expects_panic {
+            // ADR 0012: intentional panic ≡ exit(101) AND stderr contains sentinel.
+            let intentional = outcome.exit_code == Some(101)
+                && outcome.stderr.contains("__TYRA_PANIC__");
+            if intentional {
+                tap.push_str(&format!("ok {seq} - {name}\n"));
+                pass += 1;
+            } else {
                 tap.push_str(&format!("not ok {seq} - {name}\n"));
-                // Forward any diagnostic content.
-                for line in stdout.lines() {
+                let reason = match outcome.exit_code {
+                    Some(0) => "expected panic but test returned normally".to_string(),
+                    Some(102) => {
+                        "process exited with code 102 (OOB), not an intentional panic".to_string()
+                    }
+                    Some(c) => format!("process exited with code {c}, sentinel absent"),
+                    None => {
+                        "process was killed (signal/OOM) — not an intentional panic".to_string()
+                    }
+                };
+                diag.push_str(&format!("# {name}: {reason}\n"));
+                fail += 1;
+            }
+        } else {
+            // Collect any stderr from the subprocess into diag.
+            if !outcome.stderr.is_empty() {
+                diag.push_str(&outcome.stderr);
+                if !outcome.stderr.ends_with('\n') {
+                    diag.push('\n');
+                }
+            }
+
+            if outcome.exit_code == Some(0) {
+                // Parse the single TAP line the subprocess emitted to get the
+                // test name verbatim (the subprocess always writes seq=1).
+                let stdout = outcome.stdout.trim();
+                if stdout.starts_with("not ok ") {
+                    // Unexpected: subprocess exited 0 but emitted "not ok" — treat as fail.
+                    tap.push_str(&format!("not ok {seq} - {name}\n"));
+                    // Forward any diagnostic content.
+                    for line in stdout.lines() {
+                        if line.starts_with("# ") {
+                            tap.push_str(line);
+                            tap.push('\n');
+                        }
+                    }
+                    fail += 1;
+                } else {
+                    tap.push_str(&format!("ok {seq} - {name}\n"));
+                    pass += 1;
+                }
+            } else {
+                // Non-zero exit or None: test failed or crashed.
+                tap.push_str(&format!("not ok {seq} - {name}\n"));
+                // Propagate any diagnostic lines the test printed to stdout.
+                for line in outcome.stdout.lines() {
                     if line.starts_with("# ") {
                         tap.push_str(line);
                         tap.push('\n');
                     }
                 }
-                fail += 1;
-            } else {
-                tap.push_str(&format!("ok {seq} - {name}\n"));
-                pass += 1;
-            }
-        } else {
-            // Non-zero exit or None: test failed or crashed.
-            tap.push_str(&format!("not ok {seq} - {name}\n"));
-            // Propagate any diagnostic lines the test printed to stdout.
-            for line in outcome.stdout.lines() {
-                if line.starts_with("# ") {
-                    tap.push_str(line);
-                    tap.push('\n');
+                if outcome.exit_code.is_none() {
+                    diag.push_str(&format!("# {name}: process could not be started\n"));
+                } else {
+                    diag.push_str(&format!(
+                        "# {name}: exited with code {:?}\n",
+                        outcome.exit_code
+                    ));
                 }
+                fail += 1;
             }
-            if outcome.exit_code.is_none() {
-                diag.push_str(&format!("# {name}: process could not be started\n"));
-            } else {
-                diag.push_str(&format!(
-                    "# {name}: exited with code {:?}\n",
-                    outcome.exit_code
-                ));
-            }
-            fail += 1;
         }
     }
 
@@ -2257,6 +2294,120 @@ mod tests {
         assert!(
             stdout.contains("1 passed") || stdout.contains("ok"),
             "expected passing output:\nstdout={stdout:?}"
+        );
+    }
+
+    // --- panic expectation tests (ADR 0012, require pre-built tyra binary) ---
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn panic_expectation_intentional_panic_passes() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("panic_pass_test.tyra");
+        fs::write(
+            &path,
+            "fn test_panics_boom() -> Result<Unit, String>\n\
+             \x20 panic(\"intentional\")\n\
+             end\n",
+        )
+        .unwrap();
+
+        let output = std::process::Command::new(&tyra)
+            .args(["test", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "test_panics_* that calls panic() must pass:\nstdout={stdout:?}\nstderr={stderr:?}"
+        );
+        assert!(
+            stdout.contains("ok") && stdout.contains("test_panics_boom"),
+            "TAP output must show ok for test_panics_boom:\nstdout={stdout:?}"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn panic_expectation_normal_exit_fails() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("panic_normal_test.tyra");
+        fs::write(
+            &path,
+            "fn test_panics_doesnt_panic() -> Result<Unit, String>\n\
+             \x20 Ok(())\n\
+             end\n",
+        )
+        .unwrap();
+
+        let output = std::process::Command::new(&tyra)
+            .args(["test", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !output.status.success(),
+            "test_panics_* that returns normally must FAIL:\nstdout={stdout:?}\nstderr={stderr:?}"
+        );
+        assert!(
+            stdout.contains("not ok") || stderr.contains("not ok"),
+            "TAP output must show not ok:\nstdout={stdout:?}\nstderr={stderr:?}"
+        );
+        // The diagnostic must explain the failure, not confuse it with a passing panic.
+        let combined = format!("{stdout}{stderr}");
+        assert!(
+            combined.contains("expected panic but test returned normally"),
+            "diagnostic must explain the failure:\n{combined:?}"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn panic_expectation_oob_does_not_pass_as_panic() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("panic_oob_test.tyra");
+        fs::write(
+            &path,
+            "fn test_panics_oob() -> Result<Unit, String>\n\
+             \x20 let xs = [1, 2, 3]\n\
+             \x20 let _ = xs[99]\n\
+             \x20 Ok(())\n\
+             end\n",
+        )
+        .unwrap();
+
+        let output = std::process::Command::new(&tyra)
+            .args(["test", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // OOB → exit(102), no sentinel → must NOT pass as an intentional panic.
+        assert!(
+            !output.status.success(),
+            "test_panics_* with OOB must FAIL (exit 102 ≠ intentional panic):\nstdout={stdout:?}\nstderr={stderr:?}"
+        );
+        let combined = format!("{stdout}{stderr}");
+        assert!(
+            combined.contains("102") || combined.contains("OOB"),
+            "diagnostic must mention exit code 102 or OOB:\n{combined:?}"
         );
     }
 }

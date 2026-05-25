@@ -200,9 +200,9 @@ fn emit_list_get(
     )
     .unwrap();
 
-    // Out-of-bounds: abort
+    // Out-of-bounds: exit(102) — distinct from intentional panic exit(101) (ADR 0012).
     writeln!(out, "{dest}.oob:").unwrap();
-    writeln!(out, "  call void @abort()").unwrap();
+    writeln!(out, "  call void @exit(i32 102)").unwrap();
     writeln!(out, "  unreachable").unwrap();
 
     // In-bounds: GEP + load

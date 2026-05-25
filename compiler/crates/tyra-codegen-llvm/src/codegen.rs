@@ -177,6 +177,14 @@ pub fn emit_llvm_ir(program: &Program) -> String {
         "@.fmt.str_ln = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\""
     )
     .unwrap();
+    // Sentinel written to stderr before exit(101) so the test runner can distinguish
+    // intentional panic() from sys.exit(101) (ADR 0012).
+    // "__TYRA_PANIC__\n\0" = 16 bytes
+    writeln!(
+        out,
+        "@.str.panic_sentinel = private unnamed_addr constant [16 x i8] c\"__TYRA_PANIC__\\0A\\00\""
+    )
+    .unwrap();
     writeln!(out).unwrap();
 
     // External declarations

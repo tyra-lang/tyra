@@ -592,7 +592,14 @@ fn emit_panic_call(
         )
         .unwrap();
     }
-    writeln!(out, "  call void @abort()").unwrap();
+    // Write sentinel to stderr so the test runner can confirm this is intentional panic,
+    // not sys.exit(101) (ADR 0012: 2-stage identification).
+    writeln!(
+        out,
+        "  call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.str.panic_sentinel)"
+    )
+    .unwrap();
+    writeln!(out, "  call void @exit(i32 101)").unwrap();
     writeln!(out, "  unreachable").unwrap();
 }
 

@@ -1,0 +1,19 @@
+# smoke test: panic expectation (ADR 0012)
+#
+# test_panics_intentional  — intentional panic() → must PASS
+# test_panics_oob_must_fail — OOB exit(102) → must FAIL (guards false positive)
+# test_normal_pass         — normal exit(0) for comparison
+
+fn test_panics_intentional() -> Result<Unit, String>
+  panic("intentional boom")
+end
+
+fn test_panics_oob_must_fail() -> Result<Unit, String>
+  let xs = [1, 2, 3]
+  let _ = xs[99]
+  Ok(())
+end
+
+fn test_normal_pass() -> Result<Unit, String>
+  Ok(())
+end

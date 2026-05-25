@@ -640,8 +640,8 @@ mod tests {
     }
 
     #[test]
-    fn panic_emits_puts_abort_unreachable() {
-        // §12.1: panic(msg) → puts(msg) + abort + unreachable
+    fn panic_emits_sentinel_exit101_unreachable() {
+        // §12.1 + ADR 0012: panic(msg) → puts(msg) + sentinel to stderr + exit(101) + unreachable
         let program = tyra_mir::Program {
             functions: vec![tyra_mir::Function {
                 name: "main".into(),
@@ -672,12 +672,20 @@ mod tests {
             "expected puts call for panic message"
         );
         assert!(
-            ir.contains("call void @abort()"),
-            "expected abort after panic"
+            ir.contains("@.str.panic_sentinel"),
+            "expected sentinel global written to stderr"
+        );
+        assert!(
+            ir.contains("call void @exit(i32 101)"),
+            "expected exit(101) after panic (ADR 0012)"
+        );
+        assert!(
+            !ir.contains("call void @abort()"),
+            "panic must NOT use abort() — must use exit(101)"
         );
         assert!(
             ir.contains("unreachable"),
-            "expected unreachable after abort"
+            "expected unreachable after exit"
         );
     }
 
