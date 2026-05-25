@@ -670,25 +670,9 @@ fn register_prelude(env: &mut TypeEnv) {
         "__float_is_infinite".to_string(),
         Ty::Fn(vec![Ty::Float], Box::new(Ty::Bool)),
     );
-    // §17.3.6 Map intrinsics (Map<String, Int> only). The "handle" is a
-    // raw pointer; we surface it as Ty::String here since v0.1 has no
-    // dedicated Ty::Ptr (mirrors the List<T> data-pointer convention).
-    env.define(
-        "__map_new_string_int".to_string(),
-        Ty::Fn(vec![], Box::new(Ty::String)),
-    );
-    env.define(
-        "__map_insert_string_int".to_string(),
-        Ty::Fn(vec![Ty::String, Ty::String, Ty::Int], Box::new(Ty::String)),
-    );
-    env.define(
-        "__map_get_string_int".to_string(),
-        Ty::Fn(vec![Ty::String, Ty::String], Box::new(Ty::Int)),
-    );
-    env.define(
-        "__map_contains_string_int".to_string(),
-        Ty::Fn(vec![Ty::String, Ty::String], Box::new(Ty::Bool)),
-    );
+    // §17.3.6 Map<K,V> generic intrinsics are synthesized by MIR lowering and
+    // are never visible in the type-checker environment (ADR-0015).  The old
+    // hardcoded __map_*_string_int entries are removed.
 
     // §17.3.5: list stdlib intrinsics (List<Int> only). See stdlib/list.tyra.
     let list_int = Ty::Generic("List".into(), vec![Ty::Int]);
@@ -1211,12 +1195,11 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             }
         }
         ExprKind::MapLit(entries) => {
-            // v0.1 supports `Map<String, Int>` only — the runtime backs it
-            // with a linked-list-of-(key, value) (see runtime/src/stdlib_map.rs).
-            // Other K / V combinations are tracked in §22 as deferred.
+            // §17.3.6 Generic Map<K,V> (ADR-0015): any K with Eq+Hash, any V.
             if entries.is_empty() {
-                // Empty literal needs a type annotation to disambiguate.
-                // Without a binding hint, fall back to Map<String, Int>.
+                // Empty literal: no key/value to infer from.
+                // Fall back to Map<String,Int> until full bidirectional
+                // inference lands (planned for a later pass).
                 return Ty::Generic("Map".into(), vec![Ty::String, Ty::Int]);
             }
             let key_ty = infer_expr(&entries[0].0, env, report);
@@ -1225,19 +1208,41 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 infer_expr(k, env, report);
                 infer_expr(v, env, report);
             }
-            if !matches!(key_ty, Ty::String | Ty::Error) || !matches!(val_ty, Ty::Int | Ty::Error) {
+            // Float has no Eq/Hash (ADR-0002); reject as key.
+            if matches!(key_ty, Ty::Float) {
                 report.add(
-                    Diagnostic::error(format!(
-                        "map literals are restricted to `Map<String, Int>` in v0.1, \
-                         got `Map<{}, {}>`",
-                        key_ty.display_name(),
-                        val_ty.display_name()
-                    ))
-                    .with_label(Label::new(expr.span, "unsupported key/value type")),
+                    Diagnostic::error("Float does not have Eq or Hash; Float cannot be a Map key")
+                        .with_label(Label::new(expr.span, "Float key not allowed (ADR-0002)"))
+                        .with_note("Use Int, Bool, String, or a value type whose fields all have Hash."),
                 );
                 return Ty::Error;
             }
-            Ty::Generic("Map".into(), vec![Ty::String, Ty::Int])
+            // Check K: Eq + Hash using the existing ability system.
+            if !matches!(key_ty, Ty::Error) {
+                for (ability, ability_name) in
+                    [(Ability::Eq, "Eq"), (Ability::Hash, "Hash")]
+                {
+                    if !env.ty_has_ability(&key_ty, ability) {
+                        report.add(
+                            Diagnostic::error(format!(
+                                "type `{}` does not have {}; it cannot be a Map key",
+                                key_ty.display_name(),
+                                ability_name
+                            ))
+                            .with_label(Label::new(
+                                expr.span,
+                                format!("missing {ability_name} ability"),
+                            ))
+                            .with_note(
+                                "Map keys require Eq + Hash. Check for Float fields \
+                                 or mut fields that block auto-derivation.",
+                            ),
+                        );
+                        return Ty::Error;
+                    }
+                }
+            }
+            Ty::Generic("Map".into(), vec![key_ty, val_ty])
         }
 
         // Identifier lookup

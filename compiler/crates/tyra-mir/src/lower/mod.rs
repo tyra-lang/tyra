@@ -381,28 +381,14 @@ pub fn lower(file: &SourceFile, sources: &tyra_diagnostics::SourceMap) -> Progra
         .insert("__float_is_infinite".into(), Ty::Bool);
     ctx.fn_param_types
         .insert("__float_is_infinite".into(), vec![Ty::Float]);
-    // §17.3.6 Map<String, Int> intrinsics (handle = ptr surfaced as
-    // Ty::String).
-    ctx.fn_return_types
-        .insert("__map_new_string_int".into(), Ty::String);
-    ctx.fn_param_types
-        .insert("__map_new_string_int".into(), vec![]);
-    ctx.fn_return_types
-        .insert("__map_insert_string_int".into(), Ty::String);
-    ctx.fn_param_types.insert(
-        "__map_insert_string_int".into(),
-        vec![Ty::String, Ty::String, Ty::Int],
-    );
-    ctx.fn_return_types
-        .insert("__map_get_string_int".into(), Ty::Int);
-    ctx.fn_param_types
-        .insert("__map_get_string_int".into(), vec![Ty::String, Ty::String]);
-    ctx.fn_return_types
-        .insert("__map_contains_string_int".into(), Ty::Bool);
-    ctx.fn_param_types.insert(
-        "__map_contains_string_int".into(),
-        vec![Ty::String, Ty::String],
-    );
+    // §17.3.6 Map<K,V> generic intrinsics (ADR-0015).
+    // Register common K/V combos upfront; additional combos are registered
+    // lazily via register_map_intrinsics() when a MapLit is lowered.
+    for k in &["String", "Int", "Bool"] {
+        for v in &["String", "Int", "Bool"] {
+            ctx.register_map_intrinsics(k, v);
+        }
+    }
 
     // §17.3.5: list stdlib intrinsics (List<Int> only).
     let list_int = Ty::Generic("List".into(), vec![Ty::Int]);
@@ -860,6 +846,23 @@ impl<'a> LowerCtx<'a> {
         let t = format!("_t{}", self.temp_counter);
         self.temp_counter += 1;
         t
+    }
+
+    /// Register fn_return_types / fn_param_types for a Map<K,V> combination.
+    /// The handle is a raw pointer surfaced as Ty::String (ptr convention).
+    pub(super) fn register_map_intrinsics(&mut self, k: &str, v: &str) {
+        let new_fn = format!("__map_new__{k}__{v}");
+        let insert_fn = format!("__map_insert__{k}__{v}");
+        let contains_fn = format!("__map_contains__{k}");
+        // new: () -> ptr (String = ptr hack)
+        self.fn_return_types.insert(new_fn.clone(), Ty::String);
+        self.fn_param_types.insert(new_fn, vec![]);
+        // insert: (ptr, K, V) -> ptr
+        self.fn_return_types.insert(insert_fn.clone(), Ty::String);
+        self.fn_param_types.insert(insert_fn, vec![Ty::String, Ty::String, Ty::String]);
+        // contains: (ptr, K) -> Bool
+        self.fn_return_types.insert(contains_fn.clone(), Ty::Bool);
+        self.fn_param_types.insert(contains_fn, vec![Ty::String, Ty::String]);
     }
 
     /// If the last instruction in `body` is an `AdtPayload { field_index: 1 }`

@@ -342,66 +342,64 @@ pub(crate) fn emit_builtin_call(
             writeln!(out, "  %{d} = trunc i32 %{d}.i32 to i1").unwrap();
             true
         }
-        // §17.3.6 Map<String, Int> intrinsics — handle is a ptr.
-        "__map_new_string_int" => {
+        // §17.3.6 Map<K,V> generic intrinsics (ADR-0015).
+        // Names: __map_new__K__V, __map_insert__K__V, __map_contains__K
+        // Boxing strategy:
+        //   Int  key/val → GC_malloc(8) + store i64
+        //   Bool key/val → GC_malloc(8) + store i8 (zero-extended to 8 bytes)
+        //   String key/val → GC_malloc(8) + store ptr
+        _ if fname.starts_with("__map_new__") => {
+            // Parse K and V from the name suffix.
+            let suffix = fname.strip_prefix("__map_new__").unwrap_or("");
+            let parts: Vec<&str> = suffix.splitn(2, "__").collect();
+            let k = parts.first().copied().unwrap_or("String");
             let d = dest.as_deref().unwrap_or("_map");
-            writeln!(out, "  %{d} = call ptr @tyra_map_new_string_int()").unwrap();
+            // Call tyra_map_new with compiler-emitted eq/hash function addresses.
+            writeln!(
+                out,
+                "  %{d} = call ptr @tyra_map_new(ptr @tyra_eq_{k}, ptr @tyra_hash_{k})"
+            )
+            .unwrap();
             true
         }
-        "__map_insert_string_int" => {
+        _ if fname.starts_with("__map_insert__") => {
+            let suffix = fname.strip_prefix("__map_insert__").unwrap_or("");
+            let parts: Vec<&str> = suffix.splitn(2, "__").collect();
+            let k = parts.first().copied().unwrap_or("String");
+            let v = parts.get(1).copied().unwrap_or("Int");
             let d = dest.as_deref().unwrap_or("_map_ins");
-            let m = args
-                .first()
-                .map(|a| operand_ref(a, func))
-                .unwrap_or_else(|| "null".into());
-            let k = args
-                .get(1)
-                .map(|a| operand_ref(a, func))
-                .unwrap_or_else(|| "null".into());
-            let v = args
-                .get(2)
-                .map(|a| operand_ref(a, func))
-                .unwrap_or_else(|| "0".into());
+            let m = args.first().map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            let k_val = args.get(1).map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            let v_val = args.get(2).map(|a| operand_ref(a, func)).unwrap_or_else(|| "0".into());
+            // Box key.
+            emit_box_value(out, &format!("{d}.kbox"), k_val.as_str(), k, d);
+            // Box value.
+            emit_box_value(out, &format!("{d}.vbox"), v_val.as_str(), v, d);
             writeln!(
                 out,
-                "  %{d} = call ptr @tyra_map_insert_string_int(ptr {m}, ptr {k}, i64 {v})"
+                "  %{d} = call ptr @tyra_map_insert(ptr {m}, ptr %{d}.kbox, ptr %{d}.vbox)"
             )
             .unwrap();
             true
         }
-        "__map_get_string_int" => {
-            let d = dest.as_deref().unwrap_or("_map_get");
-            let m = args
-                .first()
-                .map(|a| operand_ref(a, func))
-                .unwrap_or_else(|| "null".into());
-            let k = args
-                .get(1)
-                .map(|a| operand_ref(a, func))
-                .unwrap_or_else(|| "null".into());
-            writeln!(
-                out,
-                "  %{d} = call i64 @tyra_map_get_string_int(ptr {m}, ptr {k})"
-            )
-            .unwrap();
-            true
-        }
-        "__map_contains_string_int" => {
+        _ if fname.starts_with("__map_contains__") => {
+            let k = fname.strip_prefix("__map_contains__").unwrap_or("String");
             let d = dest.as_deref().unwrap_or("_map_has");
-            let m = args
-                .first()
-                .map(|a| operand_ref(a, func))
-                .unwrap_or_else(|| "null".into());
-            let k = args
-                .get(1)
-                .map(|a| operand_ref(a, func))
-                .unwrap_or_else(|| "null".into());
+            let m = args.first().map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            let k_val = args.get(1).map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            emit_box_value(out, &format!("{d}.kbox"), k_val.as_str(), k, d);
             writeln!(
                 out,
-                "  %{d}.i32 = call i32 @tyra_map_contains_string_int(ptr {m}, ptr {k})"
+                "  %{d}.i32 = call i32 @tyra_map_contains(ptr {m}, ptr %{d}.kbox)"
             )
             .unwrap();
             writeln!(out, "  %{d} = icmp ne i32 %{d}.i32, 0").unwrap();
+            true
+        }
+        _ if fname == "__map_len" => {
+            let d = dest.as_deref().unwrap_or("_map_len");
+            let m = args.first().map(|a| operand_ref(a, func)).unwrap_or_else(|| "null".into());
+            writeln!(out, "  %{d} = call i64 @tyra_map_len(ptr {m})").unwrap();
             true
         }
         // §17.3.5: list stdlib intrinsics (List<Int> only).
@@ -1441,6 +1439,32 @@ fn option_int_llvm_ty(ctx: &EmitCtx) -> String {
         info.llvm_name.clone()
     } else {
         "%struct.Option__Int".into()
+    }
+}
+
+/// Box a value into a GC_malloc'd 8-byte slot and return the slot as `ptr`.
+/// `box_dest` is the name for the alloca/slot temp (without `%`).
+/// `val_ref` is the LLVM value reference (e.g. `%_t3` or `42`).
+/// `ty_name` is the Tyra type name: "Int", "Bool", "String".
+/// `unique_prefix` is used to avoid name clashes for multiple boxes in one BB.
+fn emit_box_value(out: &mut String, box_dest: &str, val_ref: &str, ty_name: &str, unique_prefix: &str) {
+    let _ = unique_prefix; // currently unused; kept for future disambiguation
+    match ty_name {
+        "Int" => {
+            writeln!(out, "  %{box_dest} = call ptr @GC_malloc(i64 8)").unwrap();
+            writeln!(out, "  store i64 {val_ref}, ptr %{box_dest}").unwrap();
+        }
+        "Bool" => {
+            writeln!(out, "  %{box_dest} = call ptr @GC_malloc(i64 8)").unwrap();
+            // Bool is i1 in LLVM; zero-extend to i8 before storing.
+            writeln!(out, "  %{box_dest}.i8 = zext i1 {val_ref} to i8").unwrap();
+            writeln!(out, "  store i8 %{box_dest}.i8, ptr %{box_dest}").unwrap();
+        }
+        "String" | _ => {
+            // String (and unknown types): the value is already a ptr; store ptr.
+            writeln!(out, "  %{box_dest} = call ptr @GC_malloc(i64 8)").unwrap();
+            writeln!(out, "  store ptr {val_ref}, ptr %{box_dest}").unwrap();
+        }
     }
 }
 

@@ -774,42 +774,83 @@ pub(crate) fn emit_instruction(
             emit_list_instruction(out, inst, func, ctx);
         }
 
-        Instruction::MapGetOption { dest, handle, key } => {
+        Instruction::MapGetOption {
+            dest,
+            handle,
+            key,
+            key_ty,
+            val_ty,
+        } => {
+            use tyra_types::Ty;
             let h = operand_ref(handle, func);
             let k = operand_ref(key, func);
-            let opt_ty = "Option__Int";
-            let opt_llvm = if let Some(info) = ctx.struct_map.get(opt_ty) {
+            let k_name = key_ty.monomorphized_name();
+            let v_name = val_ty.monomorphized_name();
+            let opt_struct = format!("Option__{v_name}");
+            let opt_llvm = if let Some(info) = ctx.struct_map.get(&opt_struct) {
                 info.llvm_name.clone()
             } else {
-                "%struct.Option__Int".into()
+                format!("%struct.{opt_struct}")
             };
-            // raw = call __map_get_string_int(handle, key)
+
+            // Box the key for the generic map_get call.
+            match key_ty {
+                Ty::Int => {
+                    writeln!(out, "  %{dest}.kbox = call ptr @GC_malloc(i64 8)").unwrap();
+                    writeln!(out, "  store i64 {k}, ptr %{dest}.kbox").unwrap();
+                }
+                Ty::Bool => {
+                    writeln!(out, "  %{dest}.kbox = call ptr @GC_malloc(i64 8)").unwrap();
+                    writeln!(out, "  %{dest}.ki8 = zext i1 {k} to i8").unwrap();
+                    writeln!(out, "  store i8 %{dest}.ki8, ptr %{dest}.kbox").unwrap();
+                }
+                _ => {
+                    // String and named types: value is already a ptr.
+                    writeln!(out, "  %{dest}.kbox = call ptr @GC_malloc(i64 8)").unwrap();
+                    writeln!(out, "  store ptr {k}, ptr %{dest}.kbox").unwrap();
+                }
+            }
+            let _ = k_name; // used in emit_map_eq_hash; not needed here
+
+            // vbox = tyra_map_get(handle, kbox) — null = not found.
             writeln!(
                 out,
-                "  %{dest}.raw = call i64 @tyra_map_get_string_int(ptr {h}, ptr {k})"
+                "  %{dest}.vbox = call ptr @tyra_map_get(ptr {h}, ptr %{dest}.kbox)"
             )
             .unwrap();
-            // present = call __map_get_present()  (i32 → i1)
+            writeln!(out, "  %{dest}.present = icmp ne ptr %{dest}.vbox, null").unwrap();
+
+            // Null-safe unbox: use @.tyra_zero_slot as fallback so we never
+            // dereference null even in the not-found branch.
             writeln!(
                 out,
-                "  %{dest}.present.i32 = call i32 @tyra_map_get_present()"
+                "  %{dest}.safe = select i1 %{dest}.present, ptr %{dest}.vbox, ptr @.tyra_zero_slot"
             )
             .unwrap();
+
+            // Load value from box depending on V type.
+            let (val_llvm_ty, val_load_instr, val_zero) = match val_ty {
+                Ty::Bool => ("i1", "load i8, ptr", "0"),
+                Ty::Float => ("double", "load double, ptr", "0.0"),
+                Ty::String => ("ptr", "load ptr, ptr", "null"),
+                _ => ("i64", "load i64, ptr", "0"), // Int and named int-like
+            };
             writeln!(
                 out,
-                "  %{dest}.present = icmp ne i32 %{dest}.present.i32, 0"
+                "  %{dest}.rawval = {val_load_instr} %{dest}.safe"
             )
             .unwrap();
-            // tag = present ? 0 (Some) : 1 (None) — Option layout is {i8, i64}.
+
+            // tag = present ? 0 (Some) : 1 (None)
             writeln!(out, "  %{dest}.tag = select i1 %{dest}.present, i8 0, i8 1").unwrap();
-            // value = present ? raw : 0  (zero out the unused payload for None
-            // so Hash/Eq derivations behave deterministically)
+            // value = present ? rawval : zero
             writeln!(
                 out,
-                "  %{dest}.val = select i1 %{dest}.present, i64 %{dest}.raw, i64 0"
+                "  %{dest}.val = select i1 %{dest}.present, {val_llvm_ty} %{dest}.rawval, {val_llvm_ty} {val_zero}"
             )
             .unwrap();
-            // Build Option<Int>.
+
+            // Build Option<V> = { tag: i8, value: val_llvm_ty }
             writeln!(
                 out,
                 "  %{dest}.s0 = insertvalue {opt_llvm} undef, i8 %{dest}.tag, 0"
@@ -817,7 +858,7 @@ pub(crate) fn emit_instruction(
             .unwrap();
             writeln!(
                 out,
-                "  %{dest} = insertvalue {opt_llvm} %{dest}.s0, i64 %{dest}.val, 1"
+                "  %{dest} = insertvalue {opt_llvm} %{dest}.s0, {val_llvm_ty} %{dest}.val, 1"
             )
             .unwrap();
         }

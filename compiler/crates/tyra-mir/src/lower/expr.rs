@@ -962,19 +962,30 @@ impl super::LowerCtx<'_> {
             }
 
             ExprKind::MapLit(entries) => {
-                // §17.3.6 v0.1: Map<String, Int> only. Build via
-                //   handle = __map_new_string_int()
-                //   handle = __map_insert_string_int(handle, k, v)  (×N)
-                //   wrap in Map__String__Int { handle }
-                // Type checker has already rejected non-(String, Int) shapes.
-                let map_ty = Ty::Generic("Map".into(), vec![Ty::String, Ty::Int]);
-                self.register_adt_type(&map_ty);
+                // §17.3.6 Generic Map<K,V> (ADR-0015).
+                // Infer K and V from the first entry; empty literal falls back
+                // to Map<String,Int> until full bidirectional inference lands.
+                let (key_ty, val_ty) = entries
+                    .first()
+                    .and_then(|(k, v)| {
+                        let kt = self.infer_expr_type(k)?;
+                        let vt = self.infer_expr_type(v)?;
+                        Some((kt, vt))
+                    })
+                    .unwrap_or((Ty::String, Ty::Int));
 
-                // Start with an empty handle.
+                let map_ty =
+                    Ty::Generic("Map".into(), vec![key_ty.clone(), val_ty.clone()]);
+                self.register_adt_type(&map_ty);
+                let map_struct = map_ty.monomorphized_name();
+                let k_name = key_ty.monomorphized_name();
+                let v_name = val_ty.monomorphized_name();
+
+                // handle = __map_new__K__V()
                 let mut handle = self.fresh_temp();
                 self.emit(body, Instruction::Call {
                     dest: Some(handle.clone()),
-                    func: "__map_new_string_int".into(),
+                    func: format!("__map_new__{k_name}__{v_name}"),
                     args: vec![],
                 });
                 self.string_vars.insert(handle.clone()); // ptr-typed
@@ -985,7 +996,7 @@ impl super::LowerCtx<'_> {
                     let next = self.fresh_temp();
                     self.emit(body, Instruction::Call {
                         dest: Some(next.clone()),
-                        func: "__map_insert_string_int".into(),
+                        func: format!("__map_insert__{k_name}__{v_name}"),
                         args: vec![
                             Operand::Var(handle.clone()),
                             Operand::Var(k_val),
@@ -996,15 +1007,14 @@ impl super::LowerCtx<'_> {
                     handle = next;
                 }
 
-                // Wrap the handle in Map__String__Int { handle }.
+                // Wrap in Map__K__V { handle }.
                 let dest = self.fresh_temp();
                 self.emit(body, Instruction::StructInit {
                     dest: dest.clone(),
-                    type_name: "Map__String__Int".into(),
+                    type_name: map_struct.clone(),
                     fields: vec![Operand::Var(handle)],
                 });
-                self.var_types
-                    .insert(dest.clone(), "Map__String__Int".into());
+                self.var_types.insert(dest.clone(), map_struct);
                 self.generic_var_types.insert(dest.clone(), map_ty);
                 dest
             }

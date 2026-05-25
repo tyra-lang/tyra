@@ -276,15 +276,16 @@ pub enum Instruction {
         elem_type: Ty,
     },
 
-    /// `dest = map_get_option(handle, key)` — call `__map_get_string_int`,
-    /// then construct `Option<Int>` based on the runtime presence flag
-    /// (`__map_get_present`). Tag is 0 for Some, 1 for None.
-    /// Codegen emits a 4-step sequence (call, presence, select, struct).
-    /// Used for `m.get(k)` on `Map<String, Int>` — see §17.3.6.
+    /// `dest = map_get_option(handle, key)` — call `tyra_map_get`, check for
+    /// null, and construct `Option<V>`.  Tag is 0 for Some, 1 for None.
+    /// `val_ty` carries the concrete V type so codegen knows how to unbox.
+    /// `key_ty` carries the concrete K type so codegen knows the boxing width.
     MapGetOption {
         dest: String,
         handle: Operand,
         key: Operand,
+        key_ty: Ty,
+        val_ty: Ty,
     },
 
     /// `dest = spawn func(args...)` — submit a task to the async runtime (§14.4, M9).

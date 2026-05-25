@@ -203,56 +203,67 @@ impl super::LowerCtx<'_> {
             return dest;
         }
 
-        // §17.3.6 Map<String, Int> method dispatch.
-        // - m.get(k)         → Option<Int> via MapGetOption (uses runtime
-        //                      presence flag to disambiguate `0 / Some(0)` /
-        //                      `i64::MIN / None`).
+        // §17.3.6 Map<K, V> method dispatch (generic — ADR-0015).
+        // - m.get(k)          → Option<V> via MapGetOption (null-ptr check)
         // - m.contains_key(k) → Bool
+        // - m.len()           → Int  (handled below in the general .len() arm)
         if let ExprKind::FieldAccess(obj, method) = &callee.kind {
             if matches!(method.as_str(), "get" | "contains_key")
                 && args.len() == 1
-                && self.infer_map_type(obj).is_some()
             {
-                let obj_val = self.lower_expr(obj, body);
-                let handle = self.fresh_temp();
-                self.emit(body, Instruction::FieldGet {
-                    dest: handle.clone(),
-                    obj: Operand::Var(obj_val),
-                    type_name: "Map__String__Int".into(),
-                    field_index: 0,
-                });
-                self.string_vars.insert(handle.clone());
-                let key_val = self.lower_expr(&args[0].value, body);
-                match method.as_str() {
-                    "contains_key" => {
-                        let dest = self.fresh_temp();
-                        self.emit_at(body, call_loc, Instruction::Call {
-                            dest: Some(dest.clone()),
-                            func: "__map_contains_string_int".into(),
-                            args: vec![Operand::Var(handle), Operand::Var(key_val)],
-                        });
-                        return dest;
+                if let Some(map_ty) = self.infer_map_type(obj) {
+                    let (key_ty, val_ty) = match &map_ty {
+                        Ty::Generic(_, args) if args.len() == 2 => {
+                            (args[0].clone(), args[1].clone())
+                        }
+                        _ => (Ty::String, Ty::Int), // fallback (should not occur)
+                    };
+                    let map_struct = map_ty.monomorphized_name();
+                    let obj_val = self.lower_expr(obj, body);
+                    let handle = self.fresh_temp();
+                    self.emit(body, Instruction::FieldGet {
+                        dest: handle.clone(),
+                        obj: Operand::Var(obj_val),
+                        type_name: map_struct,
+                        field_index: 0,
+                    });
+                    self.string_vars.insert(handle.clone());
+                    let key_val = self.lower_expr(&args[0].value, body);
+                    let k_name = key_ty.monomorphized_name();
+                    match method.as_str() {
+                        "contains_key" => {
+                            let dest = self.fresh_temp();
+                            self.emit_at(body, call_loc, Instruction::Call {
+                                dest: Some(dest.clone()),
+                                func: format!("__map_contains__{k_name}"),
+                                args: vec![Operand::Var(handle), Operand::Var(key_val)],
+                            });
+                            return dest;
+                        }
+                        "get" => {
+                            let opt_ty =
+                                Ty::Generic("Option".into(), vec![val_ty.clone()]);
+                            self.register_adt_type(&opt_ty);
+                            let dest = self.fresh_temp();
+                            self.emit_at(body, call_loc, Instruction::MapGetOption {
+                                dest: dest.clone(),
+                                handle: Operand::Var(handle),
+                                key: Operand::Var(key_val),
+                                key_ty,
+                                val_ty,
+                            });
+                            self.generic_var_types.insert(dest.clone(), opt_ty.clone());
+                            self.var_types
+                                .insert(dest.clone(), opt_ty.monomorphized_name());
+                            return dest;
+                        }
+                        _ => {}
                     }
-                    "get" => {
-                        let opt_ty = Ty::Generic("Option".into(), vec![Ty::Int]);
-                        self.register_adt_type(&opt_ty);
-                        let dest = self.fresh_temp();
-                        self.emit_at(body, call_loc, Instruction::MapGetOption {
-                            dest: dest.clone(),
-                            handle: Operand::Var(handle),
-                            key: Operand::Var(key_val),
-                        });
-                        self.generic_var_types.insert(dest.clone(), opt_ty.clone());
-                        self.var_types
-                            .insert(dest.clone(), opt_ty.monomorphized_name());
-                        return dest;
-                    }
-                    _ => {}
                 }
             }
         }
 
-        // Check for .len() on List<T> (spec §11)
+        // Check for .len() on List<T> (spec §11) or Map<K,V> (ADR-0015)
         if let ExprKind::FieldAccess(obj, method) = &callee.kind
             && method == "len"
             && args.is_empty()
@@ -263,6 +274,25 @@ impl super::LowerCtx<'_> {
                 self.emit_at(body, call_loc, Instruction::ListLen {
                     dest: dest.clone(),
                     list: Operand::Var(obj_val),
+                });
+                return dest;
+            }
+            if let Some(map_ty) = self.infer_map_type(obj) {
+                let map_struct = map_ty.monomorphized_name();
+                let obj_val = self.lower_expr(obj, body);
+                let handle = self.fresh_temp();
+                self.emit(body, Instruction::FieldGet {
+                    dest: handle.clone(),
+                    obj: Operand::Var(obj_val),
+                    type_name: map_struct,
+                    field_index: 0,
+                });
+                self.string_vars.insert(handle.clone());
+                let dest = self.fresh_temp();
+                self.emit_at(body, call_loc, Instruction::Call {
+                    dest: Some(dest.clone()),
+                    func: "__map_len".to_string(),
+                    args: vec![Operand::Var(handle)],
                 });
                 return dest;
             }

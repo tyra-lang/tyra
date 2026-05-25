@@ -217,11 +217,11 @@ pub const PRELUDE_FUNCTIONS: &[&str] = &[
     "__float_to_int",
     "__float_is_nan",
     "__float_is_infinite",
-    // §17.3.6 (v0.1, Map<String, Int> only). See runtime/src/stdlib_map.rs.
-    "__map_new_string_int",
-    "__map_insert_string_int",
-    "__map_get_string_int",
-    "__map_contains_string_int",
+    // §17.3.6 Map<K,V> generic intrinsics (ADR-0015).
+    // These are synthesized by MIR lowering — never appear in Tyra source —
+    // so they do not need to be prelude-visible.  The old hardcoded
+    // __map_*_string_int names are removed; all map ops now go through the
+    // generic path emitted by MapLit lowering and method dispatch in call.rs.
     // §17.3.5: list stdlib backing (List<Int> only; LLVM-only, no runtime C ABI).
     "__list_int_push",
     "__list_int_sum",

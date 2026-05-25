@@ -1,0 +1,72 @@
+fn test_map_int_int() -> Result<Unit, String>
+  let m = {1: 10, 2: 20, 3: 30}
+  if m.len() != 3
+    return Err("expected len 3, got #{m.len()}")
+  end
+  let v = m.get(2)
+  match v
+  when Some(x)
+    if x != 20
+      return Err("expected 20, got #{x}")
+    end
+  when None
+    return Err("expected Some(20), got None")
+  end
+  if m.contains_key(3) != true
+    return Err("contains_key(3) should be true")
+  end
+  if m.contains_key(99) != false
+    return Err("contains_key(99) should be false")
+  end
+  Ok(())
+end
+
+fn test_map_string_int() -> Result<Unit, String>
+  let m = {"apple": 1, "banana": 2, "cherry": 3}
+  let v = m.get("banana")
+  match v
+  when Some(x)
+    if x != 2
+      return Err("expected 2, got #{x}")
+    end
+  when None
+    return Err("expected Some(2), got None")
+  end
+  Ok(())
+end
+
+fn test_map_int_string() -> Result<Unit, String>
+  let m = {1: "one", 2: "two", 3: "three"}
+  let v = m.get(1)
+  match v
+  when Some(s)
+    if s != "one"
+      return Err("expected 'one', got #{s}")
+    end
+  when None
+    return Err("expected Some, got None")
+  end
+  Ok(())
+end
+
+fn main() -> Int
+  match test_map_int_int()
+  when Ok(_)
+    print("map_int_int: OK")
+  when Err(e)
+    print("map_int_int: FAIL #{e}")
+  end
+  match test_map_string_int()
+  when Ok(_)
+    print("map_string_int: OK")
+  when Err(e)
+    print("map_string_int: FAIL #{e}")
+  end
+  match test_map_int_string()
+  when Ok(_)
+    print("map_int_string: OK")
+  when Err(e)
+    print("map_int_string: FAIL #{e}")
+  end
+  0
+end

@@ -290,15 +290,16 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare i64 @tyra_float_to_int(double)").unwrap();
     writeln!(out, "declare i32 @tyra_float_is_nan(double)").unwrap();
     writeln!(out, "declare i32 @tyra_float_is_infinite(double)").unwrap();
-    writeln!(out, "declare ptr @tyra_map_new_string_int()").unwrap();
-    writeln!(
-        out,
-        "declare ptr @tyra_map_insert_string_int(ptr, ptr, i64)"
-    )
-    .unwrap();
-    writeln!(out, "declare i64 @tyra_map_get_string_int(ptr, ptr)").unwrap();
-    writeln!(out, "declare i32 @tyra_map_contains_string_int(ptr, ptr)").unwrap();
-    writeln!(out, "declare i32 @tyra_map_get_present()").unwrap();
+    // §17.3.6 Map<K,V> generic runtime (ADR-0015).
+    writeln!(out, "declare ptr @tyra_map_new(ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_map_insert(ptr, ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_map_get(ptr, ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_map_contains(ptr, ptr)").unwrap();
+    writeln!(out, "declare i64 @tyra_map_len(ptr)").unwrap();
+    writeln!(out, "declare i64 @tyra_hash_cstr(ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_cstr_eq(ptr, ptr)").unwrap();
+    // Zero-slot for null-safe map-get unboxing (read-only; never written).
+    writeln!(out, "@.tyra_zero_slot = private unnamed_addr constant i64 0").unwrap();
     writeln!(out, "declare void @abort()").unwrap();
     writeln!(out, "declare void @exit(i32)").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();
@@ -378,7 +379,103 @@ pub fn emit_llvm_ir(program: &Program) -> String {
         writeln!(&mut out).unwrap();
     }
 
+    // Emit compiler-generated eq/hash functions for every K type used in Map
+    // literals or map method calls in this program.
+    let map_key_types = collect_map_key_types(program);
+    for k in &map_key_types {
+        emit_map_eq_hash(&mut out, k);
+    }
+
     out
+}
+
+/// Collect the set of K type names used in Map<K,_> intrinsic calls.
+fn collect_map_key_types(program: &Program) -> std::collections::HashSet<String> {
+    let mut keys = std::collections::HashSet::new();
+    for func in &program.functions {
+        for stmt in &func.body {
+            collect_map_key_types_stmt(stmt, &mut keys);
+        }
+    }
+    keys
+}
+
+fn collect_map_key_types_stmt(
+    stmt: &MirStmt,
+    keys: &mut std::collections::HashSet<String>,
+) {
+    let instr = &stmt.instr;
+    if let Instruction::Call { func, .. } = instr {
+        // Match __map_new__K__V  or  __map_insert__K__V  or  __map_contains__K
+        if let Some(rest) = func.strip_prefix("__map_new__") {
+            // rest = "K__V"
+            if let Some(k) = rest.split("__").next() {
+                keys.insert(k.to_string());
+            }
+        } else if let Some(rest) = func.strip_prefix("__map_contains__") {
+            keys.insert(rest.to_string());
+        }
+    }
+    if let Instruction::MapGetOption { key_ty, .. } = instr {
+        keys.insert(key_ty.monomorphized_name());
+    }
+}
+
+/// Emit `@tyra_eq_<K>` and `@tyra_hash_<K>` as private LLVM functions.
+fn emit_map_eq_hash(out: &mut String, k: &str) {
+    match k {
+        "Int" => {
+            writeln!(out, "define private i1 @tyra_eq_Int(ptr %a, ptr %b) {{").unwrap();
+            writeln!(out, "  %va = load i64, ptr %a").unwrap();
+            writeln!(out, "  %vb = load i64, ptr %b").unwrap();
+            writeln!(out, "  %r = icmp eq i64 %va, %vb").unwrap();
+            writeln!(out, "  ret i1 %r").unwrap();
+            writeln!(out, "}}").unwrap();
+            writeln!(out).unwrap();
+            writeln!(out, "define private i64 @tyra_hash_Int(ptr %a) {{").unwrap();
+            writeln!(out, "  %v = load i64, ptr %a").unwrap();
+            // Knuth multiplicative hash (odd 64-bit constant).
+            writeln!(out, "  %h = mul i64 %v, -3932073806218323177").unwrap();
+            writeln!(out, "  ret i64 %h").unwrap();
+            writeln!(out, "}}").unwrap();
+            writeln!(out).unwrap();
+        }
+        "Bool" => {
+            writeln!(out, "define private i1 @tyra_eq_Bool(ptr %a, ptr %b) {{").unwrap();
+            writeln!(out, "  %va = load i8, ptr %a").unwrap();
+            writeln!(out, "  %vb = load i8, ptr %b").unwrap();
+            writeln!(out, "  %r = icmp eq i8 %va, %vb").unwrap();
+            writeln!(out, "  ret i1 %r").unwrap();
+            writeln!(out, "}}").unwrap();
+            writeln!(out).unwrap();
+            writeln!(out, "define private i64 @tyra_hash_Bool(ptr %a) {{").unwrap();
+            writeln!(out, "  %v = load i8, ptr %a").unwrap();
+            writeln!(out, "  %h = zext i8 %v to i64").unwrap();
+            writeln!(out, "  ret i64 %h").unwrap();
+            writeln!(out, "}}").unwrap();
+            writeln!(out).unwrap();
+        }
+        "String" => {
+            writeln!(out, "define private i1 @tyra_eq_String(ptr %a, ptr %b) {{").unwrap();
+            writeln!(out, "  %sa = load ptr, ptr %a").unwrap();
+            writeln!(out, "  %sb = load ptr, ptr %b").unwrap();
+            writeln!(out, "  %r.i32 = call i32 @tyra_cstr_eq(ptr %sa, ptr %sb)").unwrap();
+            writeln!(out, "  %r = icmp ne i32 %r.i32, 0").unwrap();
+            writeln!(out, "  ret i1 %r").unwrap();
+            writeln!(out, "}}").unwrap();
+            writeln!(out).unwrap();
+            writeln!(out, "define private i64 @tyra_hash_String(ptr %a) {{").unwrap();
+            writeln!(out, "  %sp = load ptr, ptr %a").unwrap();
+            writeln!(out, "  %h = call i64 @tyra_hash_cstr(ptr %sp)").unwrap();
+            writeln!(out, "  ret i64 %h").unwrap();
+            writeln!(out, "}}").unwrap();
+            writeln!(out).unwrap();
+        }
+        _ => {
+            // User-defined value type: placeholder (field-by-field recursion
+            // for struct K types is deferred to Phase 2b-ii).
+        }
+    }
 }
 
 /// Walk every instruction in program order and return a SpawnThunk descriptor

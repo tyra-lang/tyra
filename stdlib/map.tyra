@@ -1,0 +1,19 @@
+# stdlib/map.tyra — Generic Map<K,V> (§17.3.6, ADR-0015).
+#
+# Map<K,V> is a built-in open-addressing hash table.
+# K must satisfy the Eq + Hash ability constraints; V is unconstrained.
+# Float keys are not permitted (Float is not Hash).
+#
+# v0.6 API:
+#   Map literal:   {k1: v1, k2: v2, ...}  — infers K,V from elements
+#   m.get(k)       -> Option<V>            — None if absent
+#   m.contains_key(k) -> Bool
+#   m.len()        -> Int
+#
+# All operations are non-mutating from the language's perspective.
+# The underlying GC_malloc'd table is managed by Boehm GC (ADR-0007).
+#
+# This module currently has no exported functions — all Map operations are
+# accessed via method-call syntax on Map<K,V> values.  The module exists to
+# document the built-in API and reserve the `map` namespace for future
+# additions (e.g., map.from_pairs, map.keys, map.values).

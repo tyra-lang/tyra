@@ -56,8 +56,8 @@ pub use stdlib_io::{tyra_io_eof, tyra_io_read_line, tyra_io_read_to_end};
 
 mod stdlib_map;
 pub use stdlib_map::{
-    tyra_map_contains_string_int, tyra_map_get_present, tyra_map_get_string_int,
-    tyra_map_insert_string_int, tyra_map_new_string_int,
+    tyra_cstr_eq, tyra_hash_cstr, tyra_map_contains, tyra_map_get, tyra_map_insert,
+    tyra_map_len, tyra_map_new,
 };
 
 mod stdlib_string;
