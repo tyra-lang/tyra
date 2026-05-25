@@ -137,6 +137,10 @@ fn visit_item_defs(item: &Item, map: &mut HashMap<Span, DefKind>) {
         }
         Item::Import(_) => {}
         Item::Stmt(s) => visit_stmt_defs(s, map),
+        Item::TestDef(td) => {
+            map.insert(td.span, DefKind::Function);
+            visit_stmts_defs(&td.body, map);
+        }
     }
 }
 
@@ -494,6 +498,9 @@ fn visit_item_tokens(
         Item::Import(_) => {}
         Item::Stmt(s) => {
             visit_stmt_tokens(s, def_index, def_kind_map, source_id, sources, out);
+        }
+        Item::TestDef(td) => {
+            visit_stmts_tokens(&td.body, def_index, def_kind_map, source_id, sources, out);
         }
     }
 }

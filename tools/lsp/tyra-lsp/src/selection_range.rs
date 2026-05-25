@@ -45,6 +45,7 @@ fn item_span(item: &Item) -> Span {
         Item::ImplDef(im) => im.span,
         Item::Import(imp) => imp.span,
         Item::Stmt(s) => stmt_span(s),
+        Item::TestDef(td) => td.span,
     }
 }
 

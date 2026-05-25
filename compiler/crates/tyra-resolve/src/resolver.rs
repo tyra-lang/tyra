@@ -108,6 +108,7 @@ fn collect_sym_item(
             record(local, CompletionKind::Module, out, seen);
         }
         Item::Stmt(s) => collect_sym_stmt(s, out, seen),
+        Item::TestDef(_) => unreachable!("TestDef must be desugared before name resolution"),
     }
 }
 
@@ -432,8 +433,9 @@ fn collect_top_level(items: &[Item], scopes: &mut ScopeStack, report: &mut Repor
                     report,
                 );
             }
-            Item::ImplDef(_) | Item::Stmt(_) => {
-                // impl and statements don't introduce top-level names
+            Item::ImplDef(_) | Item::Stmt(_) | Item::TestDef(_) => {
+                // impl and statements don't introduce top-level names;
+                // TestDef is desugared before this pass and never appears here
             }
         }
     }
@@ -459,8 +461,9 @@ fn resolve_item(
             }
         }
         Item::Stmt(s) => resolve_stmt(s, scopes, def_index, report),
-        // Type definitions are fully handled in pass 1
+        // Type definitions are fully handled in pass 1; TestDef is desugared before this pass
         Item::ValueDef(_) | Item::DataDef(_) | Item::TypeDef(_) | Item::Import(_) => {}
+        Item::TestDef(_) => unreachable!("TestDef must be desugared before name resolution"),
     }
 }
 

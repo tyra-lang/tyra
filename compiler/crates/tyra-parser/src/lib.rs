@@ -63,6 +63,19 @@ fn parse_item(ts: &mut TokenStream, report: &mut Report) -> Item {
         );
     }
 
+    // Contextual keyword: `test "name" [panics] ... end` (ADR 0013).
+    // `test` stays as Ident in the lexer; detected by 2-token lookahead.
+    // `export` and `async` are invalid on test blocks.
+    if !is_export
+        && !is_async
+        && matches!(ts.peek(), TokenKind::Ident(kw) if kw == "test")
+        && matches!(ts.peek_second(), TokenKind::String(_))
+    {
+        let testdef = decl::parse_test_def(ts, report);
+        ts.skip_newlines();
+        return Item::TestDef(testdef);
+    }
+
     match ts.peek() {
         TokenKind::Fn => {
             let func = decl::parse_fn_def(ts, report, is_async, is_export);

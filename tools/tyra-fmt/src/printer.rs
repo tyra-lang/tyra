@@ -231,7 +231,21 @@ impl<'src> Printer<'src> {
             Item::ImplDef(i) => self.print_impl_def(i),
             Item::Import(i) => self.print_import(i),
             Item::Stmt(s) => self.print_stmt(s),
+            Item::TestDef(td) => self.print_test_def(td),
         }
+    }
+
+    fn print_test_def(&mut self, td: &TestDef) {
+        let indent = self.indent_str();
+        let modifier = if td.expects_panic { " panics" } else { "" };
+        self.out
+            .push_str(&format!("{indent}test {:?}{modifier}\n", td.name));
+        self.indent += 1;
+        for stmt in &td.body {
+            self.print_stmt(stmt);
+        }
+        self.indent -= 1;
+        self.out.push_str(&format!("{indent}end\n"));
     }
 
     fn print_fn(&mut self, f: &FnDef) {
@@ -1077,6 +1091,7 @@ fn item_span(item: &Item) -> Span {
         Item::ImplDef(i) => i.span,
         Item::Import(i) => i.span,
         Item::Stmt(s) => stmt_span(s),
+        Item::TestDef(td) => td.span,
     }
 }
 

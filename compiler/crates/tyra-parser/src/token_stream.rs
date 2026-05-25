@@ -237,6 +237,18 @@ impl TokenStream {
         (&self.tokens[idx].kind, idx)
     }
 
+    /// Peek at the token AFTER the current logical token, skipping newlines.
+    /// Used for 2-token lookahead (e.g., contextual keyword detection).
+    pub fn peek_second(&self) -> &TokenKind {
+        let (_, first_idx) = self.peek_skip_newlines();
+        let mut i = first_idx + 1;
+        while i < self.tokens.len() && self.tokens[i].kind == TokenKind::Newline {
+            i += 1;
+        }
+        let idx = i.min(self.tokens.len().saturating_sub(1));
+        &self.tokens[idx].kind
+    }
+
     /// Peek past any newline tokens to see what follows.
     /// Used for lookahead without consuming tokens (e.g., ADT detection).
     pub fn peek_past_newlines(&self) -> &TokenKind {

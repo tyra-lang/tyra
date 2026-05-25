@@ -2410,4 +2410,102 @@ mod tests {
             "diagnostic must mention exit code 102 or OOB:\n{combined:?}"
         );
     }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn test_name_block_passes() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("named_test.tyra");
+        fs::write(
+            &path,
+            "test \"adds two numbers\"\n\
+             \x20 let x = 1\n\
+             \x20 let y = 2\n\
+             \x20 if x + y != 3\n\
+             \x20   return Err(\"expected 3\")\n\
+             \x20 end\n\
+             end\n",
+        )
+        .unwrap();
+
+        let output = std::process::Command::new(&tyra)
+            .args(["test", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "test \"name\" block should pass:\nstdout={stdout:?}\nstderr={stderr:?}"
+        );
+        assert!(
+            stdout.contains("test__adds_two_numbers"),
+            "TAP output must contain desugared name:\n{stdout:?}"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn test_name_panics_block_passes_on_intentional_panic() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("panics_named_test.tyra");
+        fs::write(
+            &path,
+            "test \"panics correctly\" panics\n\
+             \x20 panic(\"intentional\")\n\
+             end\n",
+        )
+        .unwrap();
+
+        let output = std::process::Command::new(&tyra)
+            .args(["test", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "test \"name\" panics block should pass when panic occurs:\nstdout={stdout:?}\nstderr={stderr:?}"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn test_contextual_keyword_variable_named_test() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test_var_test.tyra");
+        fs::write(
+            &path,
+            "fn main() -> Int\n\
+             \x20 let test = 42\n\
+             \x20 test\n\
+             end\n",
+        )
+        .unwrap();
+
+        let output = std::process::Command::new(&tyra)
+            .args(["run", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "variable named `test` must still compile and run (contextual keyword regression):\nstderr={stderr:?}"
+        );
+    }
 }

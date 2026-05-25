@@ -72,6 +72,7 @@ pub fn check_in_memory(
     }
 
     auto_import_stdlib(&mut ast);
+    desugar_test_blocks(&mut ast);
     rename_pattern_bindings(&mut ast);
     rename_let_shadows(&mut ast);
 
@@ -170,6 +171,7 @@ pub fn compile_to_ir(source_path: &Path) -> CompileResult {
     // are harmless) and converts a 5-error-per-run hot spot into an
     // auto-corrected program.
     auto_import_stdlib(&mut ast);
+    desugar_test_blocks(&mut ast);
 
     // Alpha-rename match-pattern bindings to globally unique names. Two
     // sibling `when Some(v)` arms that bind values of different types
@@ -1501,6 +1503,87 @@ fn stmt_span(s: &tyra_ast::Stmt) -> tyra_ast::Span {
         Stmt::Break(b) => b.span,
         Stmt::Continue(c) => c.span,
     }
+}
+
+/// Desugar `test "name" [panics] ... end` blocks (ADR 0013) into regular `fn` definitions.
+///
+/// Each `Item::TestDef` is converted to an `Item::FnDef` with:
+/// - Name: `test__<sanitized>` or `test_panics__<sanitized>` (double underscore prefix).
+/// - Return type: `Result<Unit, String>` (matching synthesize_runner's expectation).
+/// - Body: the original stmts followed by a synthetic `Ok(())` as the implicit return.
+///
+/// Call this after import resolution but before name resolution so that
+/// the resolver, type-checker, MIR, and codegen never see `Item::TestDef`.
+fn desugar_test_blocks(ast: &mut tyra_ast::SourceFile) {
+    use tyra_ast::{Arg, Expr, ExprKind, ExprStmt, FnDef, Item, Stmt, TestDef, TypeExpr, TypeExprKind};
+
+    fn sanitize(name: &str) -> String {
+        name.chars()
+            .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+            .collect()
+    }
+
+    fn make_ok_unit(span: tyra_diagnostics::Span) -> Stmt {
+        Stmt::Expr(ExprStmt {
+            expr: Expr {
+                kind: ExprKind::Call(
+                    Box::new(Expr { kind: ExprKind::Ident("Ok".into()), span }),
+                    vec![Arg {
+                        label: None,
+                        value: Expr { kind: ExprKind::UnitLit, span },
+                        span,
+                    }],
+                ),
+                span,
+            },
+            span,
+        })
+    }
+
+    fn desugar(td: TestDef) -> FnDef {
+        let suffix = sanitize(&td.name);
+        let fn_name = if td.expects_panic {
+            format!("test_panics__{suffix}")
+        } else {
+            format!("test__{suffix}")
+        };
+
+        let span = td.span;
+        let result_ty = TypeExpr {
+            kind: TypeExprKind::Generic(
+                "Result".into(),
+                vec![
+                    TypeExpr { kind: TypeExprKind::Named("Unit".into()), span },
+                    TypeExpr { kind: TypeExprKind::Named("String".into()), span },
+                ],
+            ),
+            span,
+        };
+
+        let mut body = td.body;
+        body.push(make_ok_unit(span));
+
+        FnDef {
+            name: fn_name,
+            type_params: vec![],
+            self_param: None,
+            params: vec![],
+            return_type: Some(result_ty),
+            body,
+            is_async: false,
+            is_export: false,
+            span,
+        }
+    }
+
+    let items = std::mem::take(&mut ast.items);
+    ast.items = items
+        .into_iter()
+        .map(|item| match item {
+            Item::TestDef(td) => Item::FnDef(desugar(td)),
+            other => other,
+        })
+        .collect();
 }
 
 /// Compile a Tyra source file to a native binary (debug, `-O0`).

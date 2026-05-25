@@ -142,6 +142,13 @@ fn item_to_symbol(item: &Item, sources: &SourceMap) -> Option<DocumentSymbol> {
         )),
         // Import and other stmts (return, defer, break, expr) are not outline-relevant.
         Item::Import(_) | Item::Stmt(_) => None,
+        Item::TestDef(td) => Some(make_symbol(
+            format!("test {:?}", td.name),
+            SymbolKind::FUNCTION,
+            td.span,
+            sources,
+            vec![],
+        )),
     }
 }
 

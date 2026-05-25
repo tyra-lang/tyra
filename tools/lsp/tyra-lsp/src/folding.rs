@@ -80,6 +80,10 @@ fn visit_item(item: &Item, sources: &SourceMap, out: &mut Vec<FoldingRange>) {
             visit_stmt(s, sources, out);
         }
         Item::Import(_) => {}
+        Item::TestDef(td) => {
+            push_span(td.span, None, sources, out);
+            visit_stmts(&td.body, sources, out);
+        }
     }
 }
 

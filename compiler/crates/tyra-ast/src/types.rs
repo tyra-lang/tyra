@@ -41,6 +41,19 @@ pub enum Item {
     Import(ImportDecl),
     /// Executable statement at top level (§6.1)
     Stmt(Stmt),
+    /// Test block (ADR 0013): `test "name" [panics] ... end`
+    /// Desugared to `Item::FnDef` by the driver before name resolution.
+    TestDef(TestDef),
+}
+
+/// A named test block (ADR 0013): `test "name" [panics] ... end`.
+/// `test` and `panics` are contextual keywords — they remain as `Ident` in the lexer.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TestDef {
+    pub name: String,
+    pub expects_panic: bool,
+    pub body: Vec<Stmt>,
+    pub span: Span,
 }
 
 // ============================================================================

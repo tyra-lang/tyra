@@ -286,6 +286,51 @@ pub fn parse_import(ts: &mut TokenStream, report: &mut Report) -> ImportDecl {
     }
 }
 
+/// Parse a `test "name" [panics] ... end` block (ADR 0013).
+/// `test` and `panics` are contextual keywords — the caller has already
+/// confirmed that the current token is `Ident("test")` followed by a string.
+pub fn parse_test_def(ts: &mut TokenStream, report: &mut Report) -> TestDef {
+    let start_span = ts.peek_span();
+    ts.advance(); // consume Ident("test")
+
+    // Consume the string name literal
+    let name = match ts.peek().clone() {
+        TokenKind::String(s) => {
+            ts.advance();
+            s
+        }
+        _ => {
+            let tok = ts.peek_token().clone();
+            report.add(
+                tyra_diagnostics::Diagnostic::error("expected string literal after `test`")
+                    .with_code("E0100")
+                    .with_label(tyra_diagnostics::Label::new(tok.span, "expected string")),
+            );
+            String::new()
+        }
+    };
+
+    // Optional `panics` modifier (contextual keyword — stays as Ident)
+    let expects_panic = if matches!(ts.peek(), TokenKind::Ident(kw) if kw == "panics") {
+        ts.advance();
+        true
+    } else {
+        false
+    };
+
+    ts.expect_newline_or_eof(report);
+    let body = parse_body(ts, report);
+    let end_span = ts.peek_span();
+    ts.expect(&TokenKind::End, report);
+
+    TestDef {
+        name,
+        expects_panic,
+        body,
+        span: start_span.merge(end_span),
+    }
+}
+
 // -- Internal helpers --
 
 /// Parse function parameters: `_ x: Int, name: String, to target: Point`
