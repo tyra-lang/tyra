@@ -1022,6 +1022,7 @@ fn check_fn(f: &FnDef, env: &mut TypeEnv, self_ty: Option<&Ty>, report: &mut Rep
     env.push();
     for param in &f.params {
         let ty = Ty::from_type_expr(&param.type_annotation);
+        check_supported_map_ty(&ty, param.span, report);
         env.record_type(param.span, ty.clone());
         env.define(param.name.clone(), ty);
     }
@@ -1038,6 +1039,9 @@ fn check_fn(f: &FnDef, env: &mut TypeEnv, self_ty: Option<&Ty>, report: &mut Rep
         .as_ref()
         .map(Ty::from_type_expr)
         .unwrap_or(Ty::Unit);
+    if let Some(ret_te) = &f.return_type {
+        check_supported_map_ty(&declared_ret, ret_te.span, report);
+    }
 
     // Push return type context so Stmt::Return and `?` can access it.
     env.push_return_type(declared_ret.clone());
@@ -1093,6 +1097,7 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
             // type checks to see the concrete element type.
             let binding_ty = if let Some(annotation) = &s.type_annotation {
                 let expected = Ty::from_type_expr(annotation);
+                check_supported_map_ty(&expected, s.span, report);
                 check_type_match(&expected, &value_ty, s.span, report);
                 expected
             } else {
@@ -1106,6 +1111,7 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
             // Same annotation-takes-precedence logic as Stmt::Let above.
             let binding_ty = if let Some(annotation) = &s.type_annotation {
                 let expected = Ty::from_type_expr(annotation);
+                check_supported_map_ty(&expected, s.span, report);
                 check_type_match(&expected, &value_ty, s.span, report);
                 expected
             } else {
@@ -2233,6 +2239,52 @@ fn check_trait_method_call(
                 "add `impl Stringable for ...` or call the method on a type that implements it.",
             ),
         );
+    }
+}
+
+/// Validate that all Map<K,V> types reachable from `ty` use supported K/V.
+/// Must be called whenever a Ty is derived from a user-written type annotation
+/// (Stmt::Let, Stmt::Mut, fn params, fn return type) so that unsupported types
+/// are caught before MIR lowering / codegen.
+fn check_supported_map_ty(ty: &Ty, span: Span, report: &mut Report) {
+    match ty {
+        Ty::Generic(name, args) if name == "Map" && args.len() == 2 => {
+            let key_ty = &args[0];
+            let val_ty = &args[1];
+            if !matches!(key_ty, Ty::Int | Ty::Bool | Ty::String | Ty::Error) {
+                report.add(
+                    Diagnostic::error(format!(
+                        "Map key type `{}` is not supported in this version",
+                        key_ty.display_name()
+                    ))
+                    .with_label(Label::new(span, "unsupported key type"))
+                    .with_note(
+                        "Map keys must be Int, Bool, or String. \
+                         User-defined value types as keys are planned for a future release.",
+                    ),
+                );
+            }
+            if !matches!(val_ty, Ty::Int | Ty::Bool | Ty::String | Ty::Error) {
+                report.add(
+                    Diagnostic::error(format!(
+                        "Map value type `{}` is not supported in this version",
+                        val_ty.display_name()
+                    ))
+                    .with_label(Label::new(span, "unsupported value type"))
+                    .with_note(
+                        "Map values must be Int, Bool, or String. \
+                         User-defined value types are planned for a future release.",
+                    ),
+                );
+            }
+        }
+        // Walk through Option/Result/List wrappers to catch e.g. Option<Map<K,V>>.
+        Ty::Generic(_, args) => {
+            for arg in args {
+                check_supported_map_ty(arg, span, report);
+            }
+        }
+        _ => {}
     }
 }
 
