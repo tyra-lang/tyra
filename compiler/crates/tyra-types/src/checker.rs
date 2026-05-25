@@ -967,8 +967,46 @@ fn check_item(item: &Item, env: &mut TypeEnv, report: &mut Report) {
                 env.imported_modules.insert(local, canonical);
             }
         }
-        // TypeDef/TraitDef bodies are registered in collect_top_level_types;
-        // no further per-item checks yet.
+        // Validate that field types in value/data/ADT/trait definitions do not
+        // use unsupported Map<K,V> key/value types.
+        Item::ValueDef(v) => {
+            for f in &v.fields {
+                let ty = Ty::from_type_expr(&f.type_annotation);
+                check_supported_map_ty(&ty, f.span, report);
+            }
+        }
+        Item::DataDef(d) => {
+            for f in &d.fields {
+                let ty = Ty::from_type_expr(&f.type_annotation);
+                check_supported_map_ty(&ty, f.span, report);
+            }
+        }
+        Item::TypeDef(t) => match &t.kind {
+            TypeDefKind::Alias(te) => {
+                let ty = Ty::from_type_expr(te);
+                check_supported_map_ty(&ty, t.span, report);
+            }
+            TypeDefKind::Adt(variants) => {
+                for v in variants {
+                    for f in &v.fields {
+                        let ty = Ty::from_type_expr(&f.type_annotation);
+                        check_supported_map_ty(&ty, f.span, report);
+                    }
+                }
+            }
+        },
+        Item::TraitDef(t) => {
+            for method in &t.methods {
+                for param in &method.params {
+                    let ty = Ty::from_type_expr(&param.type_annotation);
+                    check_supported_map_ty(&ty, param.span, report);
+                }
+                if let Some(ret_te) = &method.return_type {
+                    let ty = Ty::from_type_expr(ret_te);
+                    check_supported_map_ty(&ty, ret_te.span, report);
+                }
+            }
+        }
         _ => {}
     }
 }
