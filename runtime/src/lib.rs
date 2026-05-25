@@ -56,8 +56,8 @@ pub use stdlib_io::{tyra_io_eof, tyra_io_read_line, tyra_io_read_to_end};
 
 mod stdlib_map;
 pub use stdlib_map::{
-    tyra_cstr_eq, tyra_hash_cstr, tyra_map_contains, tyra_map_get, tyra_map_insert,
-    tyra_map_len, tyra_map_new,
+    tyra_cstr_eq, tyra_hash_cstr, tyra_map_contains, tyra_map_get, tyra_map_insert, tyra_map_len,
+    tyra_map_new,
 };
 
 mod stdlib_set;
@@ -83,6 +83,8 @@ pub mod stdlib_time;
 pub use stdlib_time::{tyra_time_monotonic_millis, tyra_time_now_unix};
 
 pub mod stdlib_log;
+
+mod cov;
 pub use stdlib_log::{tyra_log_error, tyra_log_info, tyra_log_warn};
 
 /// Thunk signature emitted by codegen for each `spawn` site.

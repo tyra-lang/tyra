@@ -51,24 +51,3 @@ fn test_set_empty() -> Result<Unit, String>
   Ok(())
 end
 
-fn main() -> Int
-  match test_set_int()
-  when Ok(_)
-    print("set_int: OK")
-  when Err(e)
-    print("set_int: FAIL #{e}")
-  end
-  match test_set_string()
-  when Ok(_)
-    print("set_string: OK")
-  when Err(e)
-    print("set_string: FAIL #{e}")
-  end
-  match test_set_empty()
-  when Ok(_)
-    print("set_empty: OK")
-  when Err(e)
-    print("set_empty: FAIL #{e}")
-  end
-  0
-end

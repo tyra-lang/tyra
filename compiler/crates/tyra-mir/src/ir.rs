@@ -27,7 +27,11 @@ impl SourceLoc {
     /// A placeholder location for compiler-synthesized instructions that have
     /// no corresponding source position (alloca hoists, implicit returns, etc.).
     pub const fn dummy() -> Self {
-        Self { file_id: 0, line: 0, col: 0 }
+        Self {
+            file_id: 0,
+            line: 0,
+            col: 0,
+        }
     }
 
     pub fn is_dummy(self) -> bool {
@@ -49,7 +53,10 @@ impl MirStmt {
 
     /// Synthesized instruction with no source position (alloca hoists, etc.).
     pub fn synthetic(instr: Instruction) -> Self {
-        Self { loc: SourceLoc::dummy(), instr }
+        Self {
+            loc: SourceLoc::dummy(),
+            instr,
+        }
     }
 }
 

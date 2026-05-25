@@ -49,24 +49,3 @@ fn test_map_int_string() -> Result<Unit, String>
   Ok(())
 end
 
-fn main() -> Int
-  match test_map_int_int()
-  when Ok(_)
-    print("map_int_int: OK")
-  when Err(e)
-    print("map_int_int: FAIL #{e}")
-  end
-  match test_map_string_int()
-  when Ok(_)
-    print("map_string_int: OK")
-  when Err(e)
-    print("map_string_int: FAIL #{e}")
-  end
-  match test_map_int_string()
-  when Ok(_)
-    print("map_int_string: OK")
-  when Err(e)
-    print("map_int_string: FAIL #{e}")
-  end
-  0
-end

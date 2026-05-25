@@ -505,7 +505,7 @@ fn propagate_types(
         // Re-scan Store instructions: allow upgrading unknown/untyped alloca slots.
         // Removing "first store wins" guard so later Stores can refine the type.
         for stmt in &func.body {
-        let inst = &stmt.instr;
+            let inst = &stmt.instr;
             if let Instruction::Store { dest, value } = inst {
                 if let Operand::Var(name) = value {
                     let new_ty = if string_temps.contains(name) {
@@ -528,7 +528,7 @@ fn propagate_types(
         }
         // Propagate newly discovered alloca types to Load destinations
         for stmt in &func.body {
-        let inst = &stmt.instr;
+            let inst = &stmt.instr;
             if let Instruction::Load { dest, source } = inst {
                 if string_temps.contains(dest)
                     || float_temps.contains(dest)
@@ -558,7 +558,7 @@ fn propagate_types(
         // Propagate through Copy instructions (e.g. let name = <match result>).
         // Use independent checks (not else-if) for consistency with the initial scan.
         for stmt in &func.body {
-        let inst = &stmt.instr;
+            let inst = &stmt.instr;
             if let Instruction::Copy { dest, source } = inst {
                 if string_temps.contains(source.as_str()) && string_temps.insert(dest.clone()) {
                     changed = true;

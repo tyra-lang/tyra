@@ -115,7 +115,11 @@ mod tests {
         let source = "fn f()\n  print(\"hi\")\nend\n";
         let prog = lower_str(source);
         let f = &prog.functions[0];
-        assert!(f.body.last().is_some_and(|s| matches!(&s.instr, Instruction::Return { value: None })));
+        assert!(
+            f.body
+                .last()
+                .is_some_and(|s| matches!(&s.instr, Instruction::Return { value: None }))
+        );
     }
 
     #[test]
@@ -154,7 +158,10 @@ mod tests {
             .body
             .iter()
             .any(|s| matches!(&s.instr, Instruction::Store { .. }));
-        let has_load = f.body.iter().any(|s| matches!(&s.instr, Instruction::Load { .. }));
+        let has_load = f
+            .body
+            .iter()
+            .any(|s| matches!(&s.instr, Instruction::Load { .. }));
         assert!(has_alloca, "expected Alloca for match result");
         assert!(has_store, "expected Store for match result");
         assert!(has_load, "expected Load for match result");
@@ -631,10 +638,9 @@ end\n";
         let work_fn = prog.functions.iter().find(|f| f.name == "work").unwrap();
         // In the ? failure path, cleanup should be called before Return
         // Find the propagate_fail label and check that cleanup comes before Return
-        let fail_label_pos = work_fn
-            .body
-            .iter()
-            .position(|i| matches!(&i.instr, Instruction::Label(l) if l.starts_with("propagate_fail")));
+        let fail_label_pos = work_fn.body.iter().position(
+            |i| matches!(&i.instr, Instruction::Label(l) if l.starts_with("propagate_fail")),
+        );
         assert!(fail_label_pos.is_some(), "expected propagate_fail label");
         let after_fail: Vec<_> = work_fn.body[fail_label_pos.unwrap()..].to_vec();
         let cleanup_pos = after_fail
@@ -762,10 +768,9 @@ end\n";
         let prog = lower_str(source);
         let outer_fn = prog.functions.iter().find(|f| f.name == "outer").unwrap();
         // The ? operator failure path should call InnerErr__into
-        let has_into_call = outer_fn
-            .body
-            .iter()
-            .any(|s| matches!(&s.instr, Instruction::Call { func, .. } if func == "InnerErr__into"));
+        let has_into_call = outer_fn.body.iter().any(
+            |s| matches!(&s.instr, Instruction::Call { func, .. } if func == "InnerErr__into"),
+        );
         assert!(
             has_into_call,
             "expected Call to InnerErr__into in ? failure path, got: {:?}",
@@ -827,10 +832,9 @@ let b = identity::<String>(\"hello\")\n";
             .body
             .iter()
             .any(|s| matches!(&s.instr, Instruction::Call { func, .. } if func == "identity__Int"));
-        let calls_str = main
-            .body
-            .iter()
-            .any(|s| matches!(&s.instr, Instruction::Call { func, .. } if func == "identity__String"));
+        let calls_str = main.body.iter().any(
+            |s| matches!(&s.instr, Instruction::Call { func, .. } if func == "identity__String"),
+        );
         assert!(calls_int, "expected call to identity__Int");
         assert!(calls_str, "expected call to identity__String");
     }
@@ -1196,7 +1200,9 @@ end\n";
         let header_idx = f
             .body
             .iter()
-            .position(|i| matches!(&i.instr, Instruction::Label(name) if name.starts_with("while_")))
+            .position(
+                |i| matches!(&i.instr, Instruction::Label(name) if name.starts_with("while_")),
+            )
             .expect("expected a while_* label");
 
         assert!(
@@ -1859,9 +1865,10 @@ end
         let source = "let x = 0\npanic(\"boom\")\n";
         let prog = lower_str(source);
         let main = &prog.functions[0];
-        let panic_stmt = main.body.iter().find(|s| {
-            matches!(&s.instr, Instruction::Call { func, .. } if func == "panic")
-        });
+        let panic_stmt = main
+            .body
+            .iter()
+            .find(|s| matches!(&s.instr, Instruction::Call { func, .. } if func == "panic"));
         let stmt = panic_stmt.expect("expected a Call to panic in MIR");
         assert_eq!(
             stmt.loc.line, 2,
@@ -1886,9 +1893,10 @@ end
         let source = "fn f() -> Int\n  if true\n    panic(\"inner\")\n  else\n    0\n  end\nend\n";
         let prog = lower_str(source);
         let f = prog.functions.iter().find(|f| f.name == "f").unwrap();
-        let panic_stmt = f.body.iter().find(|s| {
-            matches!(&s.instr, Instruction::Call { func, .. } if func == "panic")
-        });
+        let panic_stmt = f
+            .body
+            .iter()
+            .find(|s| matches!(&s.instr, Instruction::Call { func, .. } if func == "panic"));
         let stmt = panic_stmt.expect("expected a Call to panic in MIR body of f");
         assert_eq!(
             stmt.loc.line, 3,

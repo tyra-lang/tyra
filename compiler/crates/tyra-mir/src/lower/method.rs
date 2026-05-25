@@ -28,16 +28,22 @@ impl super::LowerCtx<'_> {
                 // Data type: obj_name alloca holds a ptr to the heap struct.
                 // Load the ptr, then GEP+store directly — no struct rebuild needed.
                 let ptr = self.fresh_temp();
-                self.emit(body, Instruction::Load {
-                    dest: ptr.clone(),
-                    source: obj_name.to_string(),
-                });
-                self.emit(body, Instruction::FieldSet {
-                    obj: Operand::Var(ptr),
-                    type_name: type_name.clone(),
-                    field_index: field_idx as u32,
-                    value: Operand::Var(val.to_string()),
-                });
+                self.emit(
+                    body,
+                    Instruction::Load {
+                        dest: ptr.clone(),
+                        source: obj_name.to_string(),
+                    },
+                );
+                self.emit(
+                    body,
+                    Instruction::FieldSet {
+                        obj: Operand::Var(ptr),
+                        type_name: type_name.clone(),
+                        field_index: field_idx as u32,
+                        value: Operand::Var(val.to_string()),
+                    },
+                );
             }
         }
     }
@@ -75,22 +81,28 @@ impl super::LowerCtx<'_> {
             } else {
                 // Extract original field value
                 let extracted = self.fresh_temp();
-                self.emit(body, Instruction::FieldGet {
-                    dest: extracted.clone(),
-                    obj: Operand::Var(obj_val.to_string()),
-                    type_name: type_name.to_string(),
-                    field_index: i as u32,
-                });
+                self.emit(
+                    body,
+                    Instruction::FieldGet {
+                        dest: extracted.clone(),
+                        obj: Operand::Var(obj_val.to_string()),
+                        type_name: type_name.to_string(),
+                        field_index: i as u32,
+                    },
+                );
                 field_operands.push(Operand::Var(extracted));
             }
         }
 
         let dest = self.fresh_temp();
-        self.emit(body, Instruction::StructInit {
-            dest: dest.clone(),
-            type_name: type_name.to_string(),
-            fields: field_operands,
-        });
+        self.emit(
+            body,
+            Instruction::StructInit {
+                dest: dest.clone(),
+                type_name: type_name.to_string(),
+                fields: field_operands,
+            },
+        );
         dest
     }
 }

@@ -1026,6 +1026,7 @@ version = "0.5.0"
 dependencies = [
  "tempfile",
  "tyra-ast",
+ "tyra-codegen-llvm",
  "tyra-diagnostics",
  "tyra-driver",
  "tyra-fmt",

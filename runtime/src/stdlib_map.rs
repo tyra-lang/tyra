@@ -194,6 +194,7 @@ pub unsafe extern "C" fn tyra_map_len(map: *const TyraMap) -> i64 {
 
 /// FNV-1a hash of a null-terminated C string.
 #[unsafe(no_mangle)]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn tyra_hash_cstr(s: *const c_char) -> i64 {
     if s.is_null() {
         return 0;

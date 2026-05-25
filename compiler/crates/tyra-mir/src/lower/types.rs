@@ -196,45 +196,57 @@ impl super::LowerCtx<'_> {
                 let mut field_conds = Vec::new();
                 for (i, (_, field_ty)) in fields.iter().enumerate() {
                     let l_field = self.fresh_temp();
-                    self.emit(body, Instruction::FieldGet {
-                        dest: l_field.clone(),
-                        obj: Operand::Var(l.to_string()),
-                        type_name: type_name.clone(),
-                        field_index: i as u32,
-                    });
+                    self.emit(
+                        body,
+                        Instruction::FieldGet {
+                            dest: l_field.clone(),
+                            obj: Operand::Var(l.to_string()),
+                            type_name: type_name.clone(),
+                            field_index: i as u32,
+                        },
+                    );
                     let r_field = self.fresh_temp();
-                    self.emit(body, Instruction::FieldGet {
-                        dest: r_field.clone(),
-                        obj: Operand::Var(r.to_string()),
-                        type_name: type_name.clone(),
-                        field_index: i as u32,
-                    });
+                    self.emit(
+                        body,
+                        Instruction::FieldGet {
+                            dest: r_field.clone(),
+                            obj: Operand::Var(r.to_string()),
+                            type_name: type_name.clone(),
+                            field_index: i as u32,
+                        },
+                    );
                     let field_eq = self.fresh_temp();
                     let field_op = if *field_ty == Ty::String {
                         MirBinOp::EqString
                     } else {
                         MirBinOp::EqInt
                     };
-                    self.emit(body, Instruction::BinOp {
-                        dest: field_eq.clone(),
-                        op: field_op,
-                        lhs: Operand::Var(l_field),
-                        rhs: Operand::Var(r_field),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::BinOp {
+                            dest: field_eq.clone(),
+                            op: field_op,
+                            lhs: Operand::Var(l_field),
+                            rhs: Operand::Var(r_field),
+                        },
+                    );
                     field_conds.push(field_eq);
                 }
 
                 // Empty struct: always equal
                 if field_conds.is_empty() {
                     let dest = self.fresh_temp();
-                    self.emit(body, Instruction::Const {
-                        dest: dest.clone(),
-                        value: if op == BinOp::Eq {
-                            Constant::Bool(true)
-                        } else {
-                            Constant::Bool(false)
+                    self.emit(
+                        body,
+                        Instruction::Const {
+                            dest: dest.clone(),
+                            value: if op == BinOp::Eq {
+                                Constant::Bool(true)
+                            } else {
+                                Constant::Bool(false)
+                            },
                         },
-                    });
+                    );
                     return Some(dest);
                 }
 
@@ -242,22 +254,28 @@ impl super::LowerCtx<'_> {
                 let mut result = field_conds[0].clone();
                 for cond in &field_conds[1..] {
                     let combined = self.fresh_temp();
-                    self.emit(body, Instruction::BinOp {
-                        dest: combined.clone(),
-                        op: MirBinOp::And,
-                        lhs: Operand::Var(result),
-                        rhs: Operand::Var(cond.clone()),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::BinOp {
+                            dest: combined.clone(),
+                            op: MirBinOp::And,
+                            lhs: Operand::Var(result),
+                            rhs: Operand::Var(cond.clone()),
+                        },
+                    );
                     result = combined;
                 }
 
                 // For NotEq: negate the result
                 if op == BinOp::NotEq {
                     let negated = self.fresh_temp();
-                    self.emit(body, Instruction::Not {
-                        dest: negated.clone(),
-                        operand: Operand::Var(result),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::Not {
+                            dest: negated.clone(),
+                            operand: Operand::Var(result),
+                        },
+                    );
                     result = negated;
                 }
 
@@ -272,29 +290,38 @@ impl super::LowerCtx<'_> {
                 let (_, field_ty) = &fields[0];
 
                 let l_field = self.fresh_temp();
-                self.emit(body, Instruction::FieldGet {
-                    dest: l_field.clone(),
-                    obj: Operand::Var(l.to_string()),
-                    type_name: type_name.clone(),
-                    field_index: 0,
-                });
+                self.emit(
+                    body,
+                    Instruction::FieldGet {
+                        dest: l_field.clone(),
+                        obj: Operand::Var(l.to_string()),
+                        type_name: type_name.clone(),
+                        field_index: 0,
+                    },
+                );
                 let r_field = self.fresh_temp();
-                self.emit(body, Instruction::FieldGet {
-                    dest: r_field.clone(),
-                    obj: Operand::Var(r.to_string()),
-                    type_name: type_name.clone(),
-                    field_index: 0,
-                });
+                self.emit(
+                    body,
+                    Instruction::FieldGet {
+                        dest: r_field.clone(),
+                        obj: Operand::Var(r.to_string()),
+                        type_name: type_name.clone(),
+                        field_index: 0,
+                    },
+                );
 
                 let is_float = *field_ty == Ty::Float;
                 let mir_op = super::ast_binop_to_mir(op, is_float);
                 let dest = self.fresh_temp();
-                self.emit(body, Instruction::BinOp {
-                    dest: dest.clone(),
-                    op: mir_op,
-                    lhs: Operand::Var(l_field),
-                    rhs: Operand::Var(r_field),
-                });
+                self.emit(
+                    body,
+                    Instruction::BinOp {
+                        dest: dest.clone(),
+                        op: mir_op,
+                        lhs: Operand::Var(l_field),
+                        rhs: Operand::Var(r_field),
+                    },
+                );
                 Some(dest)
             }
 
@@ -529,6 +556,22 @@ impl super::LowerCtx<'_> {
                     if variant == "copy" {
                         return self.infer_expr_type(obj);
                     }
+                    // set.new() — return Set<T> inferred from context so
+                    // Some(set.new()) in `-> Option<Set<T>>` builds the
+                    // correct Option__Set__T struct, not Option__Int.
+                    if let ExprKind::Ident(mod_name) = &obj.kind
+                        && mod_name == "set"
+                        && variant == "new"
+                    {
+                        let set_ty = self
+                            .binding_type_hint
+                            .as_ref()
+                            .and_then(|h| peel_to_set(h))
+                            .or_else(|| peel_to_set(&self.current_fn_return_type))
+                            .cloned()
+                            .unwrap_or_else(|| Ty::Generic("Set".into(), vec![Ty::Int]));
+                        return Some(set_ty);
+                    }
                     // Module-qualified function call: `string.substring(...)`,
                     // `list.get(...)`, etc. Same logic as call_returns_type
                     // above — without this, the constructor inference at
@@ -594,4 +637,21 @@ impl super::LowerCtx<'_> {
             _ => None,
         }
     }
+}
+
+/// Walk through Option/Result/List wrappers to extract an inner `Set<T>` type.
+/// Returns `Some(&Set<T>)` if found, `None` otherwise.
+fn peel_to_set(ty: &Ty) -> Option<&Ty> {
+    if ty.is_set() {
+        return Some(ty);
+    }
+    if let Ty::Generic(name, args) = ty {
+        match name.as_str() {
+            "Option" if args.len() == 1 => return peel_to_set(&args[0]),
+            "Result" if args.len() == 2 => return peel_to_set(&args[0]),
+            "List" if args.len() == 1 => return peel_to_set(&args[0]),
+            _ => {}
+        }
+    }
+    None
 }

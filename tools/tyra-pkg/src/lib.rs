@@ -644,15 +644,12 @@ pub fn run_show(project_root: &Path, dep_name: &str) -> Result<String, PkgError>
             dep.rev.clone()
         } else {
             let expected_source = format!("git+{url}");
-            load_lockfile(project_root)
-                .ok()
-                .flatten()
-                .and_then(|lf| {
-                    lf.packages
-                        .into_iter()
-                        .find(|p| p.source == expected_source)
-                        .and_then(|p| p.rev)
-                })
+            load_lockfile(project_root).ok().flatten().and_then(|lf| {
+                lf.packages
+                    .into_iter()
+                    .find(|p| p.source == expected_source)
+                    .and_then(|p| p.rev)
+            })
         };
 
         out.push_str(&format!("  source:  git {url}\n"));
@@ -665,7 +662,10 @@ pub fn run_show(project_root: &Path, dep_name: &str) -> Result<String, PkgError>
             let cache = cache_dir_for(dep_name, url, rev);
             let synced = cache.join("Tyra.toml").is_file();
             out.push_str(&format!("  cache:   {}\n", cache.display()));
-            out.push_str(&format!("  synced:  {}\n", if synced { "yes" } else { "no" }));
+            out.push_str(&format!(
+                "  synced:  {}\n",
+                if synced { "yes" } else { "no" }
+            ));
         } else {
             out.push_str("  synced:  no (not yet synced)\n");
         }
@@ -710,15 +710,12 @@ pub fn run_show_json(project_root: &Path, dep_name: &str) -> Result<String, PkgE
             dep.rev.clone()
         } else {
             let expected_source = format!("git+{url}");
-            load_lockfile(project_root)
-                .ok()
-                .flatten()
-                .and_then(|lf| {
-                    lf.packages
-                        .into_iter()
-                        .find(|p| p.source == expected_source)
-                        .and_then(|p| p.rev)
-                })
+            load_lockfile(project_root).ok().flatten().and_then(|lf| {
+                lf.packages
+                    .into_iter()
+                    .find(|p| p.source == expected_source)
+                    .and_then(|p| p.rev)
+            })
         };
         let rev_str = resolved_rev.as_deref().unwrap_or("?");
         let (cache_str, synced) = if let Some(rev) = &resolved_rev {
@@ -989,7 +986,10 @@ fn collect_path_dep_sources(
     for dep in manifest.dependencies.values() {
         if let Some(rel) = &dep.path {
             let child_root = normalize_path(&dep_root.join(rel));
-            let source = format!("path+{}", path_relative_to(&child_root, original_root).display());
+            let source = format!(
+                "path+{}",
+                path_relative_to(&child_root, original_root).display()
+            );
             if out.insert(source) {
                 collect_path_dep_sources(&child_root, original_root, out, depth + 1)?;
             }

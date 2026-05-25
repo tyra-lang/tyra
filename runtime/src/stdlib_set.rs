@@ -226,7 +226,11 @@ mod tests {
         }
         assert_eq!(unsafe { tyra_set_len(cur) }, 32);
         for i in 0..32i64 {
-            assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i)) }, 1, "key {i} missing");
+            assert_eq!(
+                unsafe { tyra_set_contains(cur, box_i64(i)) },
+                1,
+                "key {i} missing"
+            );
         }
         assert_eq!(unsafe { tyra_set_contains(cur, box_i64(999)) }, 0);
     }

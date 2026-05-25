@@ -21,43 +21,58 @@ impl super::LowerCtx<'_> {
         match &expr.kind {
             ExprKind::IntLit(n) => {
                 let dest = self.fresh_temp();
-                self.emit(body, Instruction::Const {
-                    dest: dest.clone(),
-                    value: Constant::Int(*n),
-                });
+                self.emit(
+                    body,
+                    Instruction::Const {
+                        dest: dest.clone(),
+                        value: Constant::Int(*n),
+                    },
+                );
                 dest
             }
             ExprKind::FloatLit(f) => {
                 let dest = self.fresh_temp();
-                self.emit(body, Instruction::Const {
-                    dest: dest.clone(),
-                    value: Constant::Float(*f),
-                });
+                self.emit(
+                    body,
+                    Instruction::Const {
+                        dest: dest.clone(),
+                        value: Constant::Float(*f),
+                    },
+                );
                 dest
             }
             ExprKind::StringLit(s) => {
                 let idx = self.intern_string(s);
                 let dest = self.fresh_temp();
-                self.emit(body, Instruction::Const {
-                    dest: dest.clone(),
-                    value: Constant::StringRef(idx),
-                });
+                self.emit(
+                    body,
+                    Instruction::Const {
+                        dest: dest.clone(),
+                        value: Constant::StringRef(idx),
+                    },
+                );
                 dest
             }
             ExprKind::BoolLit(b) => {
                 let dest = self.fresh_temp();
-                self.emit(body, Instruction::Const {
-                    dest: dest.clone(),
-                    value: Constant::Bool(*b),
-                });
+                self.emit(
+                    body,
+                    Instruction::Const {
+                        dest: dest.clone(),
+                        value: Constant::Bool(*b),
+                    },
+                );
                 dest
             }
             ExprKind::UnitLit => {
                 let dest = self.fresh_temp();
-                self.emit(body, Instruction::Const {
-                    dest: dest.clone(),
-                    value: Constant::Unit,
-                });
+                self.emit(
+                    body,
+                    Instruction::Const {
+                        dest: dest.clone(),
+                        value: Constant::Unit,
+                    },
+                );
                 dest
             }
 
@@ -83,12 +98,15 @@ impl super::LowerCtx<'_> {
                     let type_name = full_type.monomorphized_name();
 
                     let dest = self.fresh_temp();
-                    self.emit(body, Instruction::AdtInit {
-                        dest: dest.clone(),
-                        type_name: type_name.clone(),
-                        tag: 1,
-                        fields: vec![],
-                    });
+                    self.emit(
+                        body,
+                        Instruction::AdtInit {
+                            dest: dest.clone(),
+                            type_name: type_name.clone(),
+                            tag: 1,
+                            fields: vec![],
+                        },
+                    );
                     self.generic_var_types.insert(dest.clone(), full_type);
                     self.var_types.insert(dest.clone(), type_name);
                     return dest;
@@ -99,10 +117,13 @@ impl super::LowerCtx<'_> {
                 {
                     // Alloca-backed variable (mutable or pattern-bound): load from alloca
                     let temp = self.fresh_temp();
-                    self.emit(body, Instruction::Load {
-                        dest: temp.clone(),
-                        source: name.clone(),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::Load {
+                            dest: temp.clone(),
+                            source: name.clone(),
+                        },
+                    );
                     // Propagate string/float tracking through load
                     if self.string_vars.contains(name.as_str()) {
                         self.string_vars.insert(temp.clone());
@@ -159,12 +180,16 @@ impl super::LowerCtx<'_> {
                         MirBinOp::NeqString
                     };
                     let dest = self.fresh_temp();
-                    self.emit_at(body, my_loc, Instruction::BinOp {
-                        dest: dest.clone(),
-                        op: mir_op,
-                        lhs: Operand::Var(l),
-                        rhs: Operand::Var(r),
-                    });
+                    self.emit_at(
+                        body,
+                        my_loc,
+                        Instruction::BinOp {
+                            dest: dest.clone(),
+                            op: mir_op,
+                            lhs: Operand::Var(l),
+                            rhs: Operand::Var(r),
+                        },
+                    );
                     return dest;
                 }
 
@@ -177,12 +202,16 @@ impl super::LowerCtx<'_> {
                 let dest = self.fresh_temp();
                 let is_float = self.is_float_expr(lhs) || self.is_float_expr(rhs);
                 let mir_op = super::ast_binop_to_mir(*op, is_float);
-                self.emit_at(body, my_loc, Instruction::BinOp {
-                    dest: dest.clone(),
-                    op: mir_op,
-                    lhs: Operand::Var(l),
-                    rhs: Operand::Var(r),
-                });
+                self.emit_at(
+                    body,
+                    my_loc,
+                    Instruction::BinOp {
+                        dest: dest.clone(),
+                        op: mir_op,
+                        lhs: Operand::Var(l),
+                        rhs: Operand::Var(r),
+                    },
+                );
                 dest
             }
 
@@ -191,16 +220,24 @@ impl super::LowerCtx<'_> {
                 let dest = self.fresh_temp();
                 match op {
                     UnaryOp::Neg => {
-                        self.emit_at(body, my_loc, Instruction::Neg {
-                            dest: dest.clone(),
-                            operand: Operand::Var(val),
-                        });
+                        self.emit_at(
+                            body,
+                            my_loc,
+                            Instruction::Neg {
+                                dest: dest.clone(),
+                                operand: Operand::Var(val),
+                            },
+                        );
                     }
                     UnaryOp::Not => {
-                        self.emit_at(body, my_loc, Instruction::Not {
-                            dest: dest.clone(),
-                            operand: Operand::Var(val),
-                        });
+                        self.emit_at(
+                            body,
+                            my_loc,
+                            Instruction::Not {
+                                dest: dest.clone(),
+                                operand: Operand::Var(val),
+                            },
+                        );
                     }
                 }
                 dest
@@ -214,10 +251,13 @@ impl super::LowerCtx<'_> {
                     ExprKind::Ident(name) => {
                         if self.mut_vars.contains(name.as_str()) {
                             // Mutable local: store to alloca
-                            self.emit(body, Instruction::Store {
-                                dest: name.clone(),
-                                value: Operand::Var(val.clone()),
-                            });
+                            self.emit(
+                                body,
+                                Instruction::Store {
+                                    dest: name.clone(),
+                                    value: Operand::Var(val.clone()),
+                                },
+                            );
                             // Propagate string/float type on reassignment
                             if self.string_vars.contains(&val) {
                                 self.string_vars.insert(name.clone());
@@ -232,10 +272,13 @@ impl super::LowerCtx<'_> {
                                 self.task_result_types.insert(name.clone(), trt);
                             }
                         } else {
-                            self.emit(body, Instruction::Copy {
-                                dest: name.clone(),
-                                source: val.clone(),
-                            });
+                            self.emit(
+                                body,
+                                Instruction::Copy {
+                                    dest: name.clone(),
+                                    source: val.clone(),
+                                },
+                            );
                         }
                     }
                     ExprKind::FieldAccess(obj, field) => {
@@ -270,64 +313,91 @@ impl super::LowerCtx<'_> {
 
                     // Get length
                     let len = self.fresh_temp();
-                    self.emit(body, Instruction::ListLen {
-                        dest: len.clone(),
-                        list: Operand::Var(iter_val.clone()),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::ListLen {
+                            dest: len.clone(),
+                            list: Operand::Var(iter_val.clone()),
+                        },
+                    );
 
                     // mut i = 0
                     let idx_var = self.fresh_temp();
-                    self.emit_synthetic(body, Instruction::Alloca {
-                        dest: idx_var.clone(),
-                    });
+                    self.emit_synthetic(
+                        body,
+                        Instruction::Alloca {
+                            dest: idx_var.clone(),
+                        },
+                    );
                     let zero = self.fresh_temp();
-                    self.emit(body, Instruction::Const {
-                        dest: zero.clone(),
-                        value: Constant::Int(0),
-                    });
-                    self.emit(body, Instruction::Store {
-                        dest: idx_var.clone(),
-                        value: Operand::Var(zero),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::Const {
+                            dest: zero.clone(),
+                            value: Constant::Int(0),
+                        },
+                    );
+                    self.emit(
+                        body,
+                        Instruction::Store {
+                            dest: idx_var.clone(),
+                            value: Operand::Var(zero),
+                        },
+                    );
 
                     let loop_label = self.fresh_label("for");
                     let body_label = format!("{loop_label}_body");
                     let end_label = self.fresh_label("for_end");
 
                     // Jump into loop header
-                    self.emit_synthetic(body, Instruction::Jump {
-                        label: loop_label.clone(),
-                    });
+                    self.emit_synthetic(
+                        body,
+                        Instruction::Jump {
+                            label: loop_label.clone(),
+                        },
+                    );
 
                     // Loop header: check i < len
                     self.emit_synthetic(body, Instruction::Label(loop_label.clone()));
                     let cur_idx = self.fresh_temp();
-                    self.emit(body, Instruction::Load {
-                        dest: cur_idx.clone(),
-                        source: idx_var.clone(),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::Load {
+                            dest: cur_idx.clone(),
+                            source: idx_var.clone(),
+                        },
+                    );
                     let cond = self.fresh_temp();
-                    self.emit(body, Instruction::BinOp {
-                        dest: cond.clone(),
-                        op: MirBinOp::LtInt,
-                        lhs: Operand::Var(cur_idx.clone()),
-                        rhs: Operand::Var(len.clone()),
-                    });
-                    self.emit_synthetic(body, Instruction::BranchIf {
-                        cond: Operand::Var(cond),
-                        true_label: body_label.clone(),
-                        false_label: end_label.clone(),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::BinOp {
+                            dest: cond.clone(),
+                            op: MirBinOp::LtInt,
+                            lhs: Operand::Var(cur_idx.clone()),
+                            rhs: Operand::Var(len.clone()),
+                        },
+                    );
+                    self.emit_synthetic(
+                        body,
+                        Instruction::BranchIf {
+                            cond: Operand::Var(cond),
+                            true_label: body_label.clone(),
+                            false_label: end_label.clone(),
+                        },
+                    );
 
                     // Loop body: binding = list[i]
                     self.emit_synthetic(body, Instruction::Label(body_label));
                     let elem = self.fresh_temp();
-                    self.emit(body, Instruction::ListGet {
-                        dest: elem.clone(),
-                        list: Operand::Var(iter_val),
-                        index: Operand::Var(cur_idx.clone()),
-                        elem_type: elem_type.clone(),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::ListGet {
+                            dest: elem.clone(),
+                            list: Operand::Var(iter_val),
+                            index: Operand::Var(cur_idx.clone()),
+                            elem_type: elem_type.clone(),
+                        },
+                    );
                     // Record the for-loop induction variable as a local
                     // binding regardless of its element type. The type-
                     // keyed maps below only track String / Float / Named /
@@ -373,15 +443,21 @@ impl super::LowerCtx<'_> {
                     // MIR-level assert at that point.
                     if self.pattern_vars.contains(&f.binding) || self.mut_vars.contains(&f.binding)
                     {
-                        self.emit(body, Instruction::Store {
-                            dest: f.binding.clone(),
-                            value: Operand::Var(elem),
-                        });
+                        self.emit(
+                            body,
+                            Instruction::Store {
+                                dest: f.binding.clone(),
+                                value: Operand::Var(elem),
+                            },
+                        );
                     } else {
-                        self.emit(body, Instruction::Copy {
-                            dest: f.binding.clone(),
-                            source: elem,
-                        });
+                        self.emit(
+                            body,
+                            Instruction::Copy {
+                                dest: f.binding.clone(),
+                                source: elem,
+                            },
+                        );
                     }
 
                     // User's loop body.
@@ -398,28 +474,40 @@ impl super::LowerCtx<'_> {
                     // Explicit jump to terminate the body block (required by LLVM IR).
                     // Dead code if the body already ended with break/return, which is
                     // handled the same way as while's unconditional back-edge jump.
-                    self.emit_synthetic(body, Instruction::Jump {
-                        label: continue_label.clone(),
-                    });
+                    self.emit_synthetic(
+                        body,
+                        Instruction::Jump {
+                            label: continue_label.clone(),
+                        },
+                    );
                     self.emit_synthetic(body, Instruction::Label(continue_label));
 
                     // Increment: i = i + 1
                     let one = self.fresh_temp();
-                    self.emit(body, Instruction::Const {
-                        dest: one.clone(),
-                        value: Constant::Int(1),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::Const {
+                            dest: one.clone(),
+                            value: Constant::Int(1),
+                        },
+                    );
                     let next_idx = self.fresh_temp();
-                    self.emit(body, Instruction::BinOp {
-                        dest: next_idx.clone(),
-                        op: MirBinOp::AddInt,
-                        lhs: Operand::Var(cur_idx),
-                        rhs: Operand::Var(one),
-                    });
-                    self.emit(body, Instruction::Store {
-                        dest: idx_var,
-                        value: Operand::Var(next_idx),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::BinOp {
+                            dest: next_idx.clone(),
+                            op: MirBinOp::AddInt,
+                            lhs: Operand::Var(cur_idx),
+                            rhs: Operand::Var(one),
+                        },
+                    );
+                    self.emit(
+                        body,
+                        Instruction::Store {
+                            dest: idx_var,
+                            value: Operand::Var(next_idx),
+                        },
+                    );
                     self.emit_synthetic(body, Instruction::Jump { label: loop_label });
 
                     // End
@@ -433,15 +521,21 @@ impl super::LowerCtx<'_> {
                     self.local_binding_names.insert(f.binding.clone());
                     if self.pattern_vars.contains(&f.binding) || self.mut_vars.contains(&f.binding)
                     {
-                        self.emit(body, Instruction::Store {
-                            dest: f.binding.clone(),
-                            value: Operand::Var(iter_val),
-                        });
+                        self.emit(
+                            body,
+                            Instruction::Store {
+                                dest: f.binding.clone(),
+                                value: Operand::Var(iter_val),
+                            },
+                        );
                     } else {
-                        self.emit(body, Instruction::Copy {
-                            dest: f.binding.clone(),
-                            source: iter_val,
-                        });
+                        self.emit(
+                            body,
+                            Instruction::Copy {
+                                dest: f.binding.clone(),
+                                source: iter_val,
+                            },
+                        );
                     }
                     let stub_continue = self.fresh_label("for_continue");
                     self.loop_exit_stack.push(stub_end.clone());
@@ -451,21 +545,30 @@ impl super::LowerCtx<'_> {
                     }
                     self.loop_head_stack.pop();
                     self.loop_exit_stack.pop();
-                    self.emit_synthetic(body, Instruction::Jump {
-                        label: stub_continue.clone(),
-                    });
+                    self.emit_synthetic(
+                        body,
+                        Instruction::Jump {
+                            label: stub_continue.clone(),
+                        },
+                    );
                     self.emit_synthetic(body, Instruction::Label(stub_continue));
-                    self.emit_synthetic(body, Instruction::Jump {
-                        label: stub_end.clone(),
-                    });
+                    self.emit_synthetic(
+                        body,
+                        Instruction::Jump {
+                            label: stub_end.clone(),
+                        },
+                    );
                     self.emit_synthetic(body, Instruction::Label(stub_end));
                 }
 
                 let dest = self.fresh_temp();
-                self.emit(body, Instruction::Const {
-                    dest: dest.clone(),
-                    value: Constant::Unit,
-                });
+                self.emit(
+                    body,
+                    Instruction::Const {
+                        dest: dest.clone(),
+                        value: Constant::Unit,
+                    },
+                );
                 dest
             }
 
@@ -477,16 +580,22 @@ impl super::LowerCtx<'_> {
                 // into the loop header rather than falling through from
                 // the surrounding block (the previous block may end in an
                 // alloca/store sequence with no terminator).
-                self.emit_synthetic(body, Instruction::Jump {
-                    label: loop_label.clone(),
-                });
+                self.emit_synthetic(
+                    body,
+                    Instruction::Jump {
+                        label: loop_label.clone(),
+                    },
+                );
                 self.emit_synthetic(body, Instruction::Label(loop_label.clone()));
                 let cond = self.lower_expr(&w.condition, body);
-                self.emit_synthetic(body, Instruction::BranchIf {
-                    cond: Operand::Var(cond),
-                    true_label: format!("{loop_label}_body"),
-                    false_label: end_label.clone(),
-                });
+                self.emit_synthetic(
+                    body,
+                    Instruction::BranchIf {
+                        cond: Operand::Var(cond),
+                        true_label: format!("{loop_label}_body"),
+                        false_label: end_label.clone(),
+                    },
+                );
                 self.emit_synthetic(body, Instruction::Label(format!("{loop_label}_body")));
                 self.loop_exit_stack.push(end_label.clone());
                 self.loop_head_stack.push(loop_label.clone());
@@ -499,10 +608,13 @@ impl super::LowerCtx<'_> {
                 self.emit_synthetic(body, Instruction::Label(end_label));
 
                 let dest = self.fresh_temp();
-                self.emit(body, Instruction::Const {
-                    dest: dest.clone(),
-                    value: Constant::Unit,
-                });
+                self.emit(
+                    body,
+                    Instruction::Const {
+                        dest: dest.clone(),
+                        value: Constant::Unit,
+                    },
+                );
                 dest
             }
 
@@ -525,11 +637,14 @@ impl super::LowerCtx<'_> {
                 let task_temp = self.lower_expr(inner, body);
                 if let Some(result_type) = self.task_result_types.get(&task_temp).cloned() {
                     let dest = self.fresh_temp();
-                    self.emit(body, Instruction::Await {
-                        dest: dest.clone(),
-                        task: Operand::Var(task_temp),
-                        result_type: result_type.clone(),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::Await {
+                            dest: dest.clone(),
+                            task: Operand::Var(task_temp),
+                            result_type: result_type.clone(),
+                        },
+                    );
                     // Re-register the unboxed value with the underlying type
                     // so downstream propagate/match see the true ADT.
                     if matches!(&result_type, Ty::Generic(_, _)) {
@@ -572,13 +687,16 @@ impl super::LowerCtx<'_> {
                         .map(|a| Operand::Var(self.lower_expr(&a.value, body)))
                         .collect();
                     let dest = self.fresh_temp();
-                    self.emit(body, Instruction::Spawn {
-                        dest: dest.clone(),
-                        func: fn_name.clone(),
-                        args,
-                        arg_types,
-                        result_type: result_type.clone(),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::Spawn {
+                            dest: dest.clone(),
+                            func: fn_name.clone(),
+                            args,
+                            arg_types,
+                            result_type: result_type.clone(),
+                        },
+                    );
                     // Track the Task<T> result type separately from
                     // generic_var_types so downstream ?/match/list ops still
                     // see the underlying T when the task is eventually
@@ -601,21 +719,27 @@ impl super::LowerCtx<'_> {
                         let max_field_count = self.adt_struct_defs[type_name].len() - 1;
                         let fields = vec![Operand::Const(Constant::Int(0)); max_field_count];
                         let dest = self.fresh_temp();
-                        self.emit(body, Instruction::AdtInit {
-                            dest: dest.clone(),
-                            type_name: type_name.clone(),
-                            tag,
-                            fields,
-                        });
+                        self.emit(
+                            body,
+                            Instruction::AdtInit {
+                                dest: dest.clone(),
+                                type_name: type_name.clone(),
+                                tag,
+                                fields,
+                            },
+                        );
                         self.var_types.insert(dest.clone(), type_name.clone());
                         return dest;
                     }
                     // Pure unit-only ADT: emit tag constant directly
                     let dest = self.fresh_temp();
-                    self.emit(body, Instruction::Const {
-                        dest: dest.clone(),
-                        value: Constant::Int(tag),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::Const {
+                            dest: dest.clone(),
+                            value: Constant::Int(tag),
+                        },
+                    );
                     return dest;
                 }
 
@@ -626,12 +750,15 @@ impl super::LowerCtx<'_> {
                     if let Some(idx) = field_defs.iter().position(|(n, _)| n == field) {
                         let field_ty = field_defs[idx].1.clone();
                         let dest = self.fresh_temp();
-                        self.emit(body, Instruction::FieldGet {
-                            dest: dest.clone(),
-                            obj: Operand::Var(obj_val),
-                            type_name,
-                            field_index: idx as u32,
-                        });
+                        self.emit(
+                            body,
+                            Instruction::FieldGet {
+                                dest: dest.clone(),
+                                obj: Operand::Var(obj_val),
+                                type_name,
+                                field_index: idx as u32,
+                            },
+                        );
                         // Track field type so downstream callers can infer it correctly
                         match &field_ty {
                             Ty::String => {
@@ -658,10 +785,13 @@ impl super::LowerCtx<'_> {
                 // General field access (data types, methods)
                 // TODO: emit proper GEP instruction for data type struct field access
                 let dest = self.fresh_temp();
-                self.emit(body, Instruction::Copy {
-                    dest: dest.clone(),
-                    source: format!("{obj_val}.{field}"),
-                });
+                self.emit(
+                    body,
+                    Instruction::Copy {
+                        dest: dest.clone(),
+                        source: format!("{obj_val}.{field}"),
+                    },
+                );
                 dest
             }
 
@@ -678,12 +808,15 @@ impl super::LowerCtx<'_> {
                     .unwrap_or(Ty::Int);
 
                 let dest = self.fresh_temp();
-                self.emit(body, Instruction::ListGet {
-                    dest: dest.clone(),
-                    list: Operand::Var(obj_val),
-                    index: Operand::Var(idx_val),
-                    elem_type: elem_type.clone(),
-                });
+                self.emit(
+                    body,
+                    Instruction::ListGet {
+                        dest: dest.clone(),
+                        list: Operand::Var(obj_val),
+                        index: Operand::Var(idx_val),
+                        elem_type: elem_type.clone(),
+                    },
+                );
 
                 // Propagate element type to the result temp
                 match &elem_type {
@@ -798,18 +931,21 @@ impl super::LowerCtx<'_> {
 
                 let dest = self.fresh_temp();
                 let fn_ty = Ty::Fn(param_types.clone(), Box::new(ret_ty.clone()));
-                self.emit(body, Instruction::ClosureBuild {
-                    dest: dest.clone(),
-                    fn_name,
-                    env_fields: env_field_operands,
-                    env_struct_name: if captures.is_empty() {
-                        String::new()
-                    } else {
-                        env_struct_name
+                self.emit(
+                    body,
+                    Instruction::ClosureBuild {
+                        dest: dest.clone(),
+                        fn_name,
+                        env_fields: env_field_operands,
+                        env_struct_name: if captures.is_empty() {
+                            String::new()
+                        } else {
+                            env_struct_name
+                        },
+                        param_types,
+                        return_type: ret_ty,
                     },
-                    param_types,
-                    return_type: ret_ty,
-                });
+                );
                 self.closure_vars.insert(dest.clone());
                 self.closure_fn_types.insert(dest.clone(), fn_ty);
                 dest
@@ -839,11 +975,14 @@ impl super::LowerCtx<'_> {
                             .collect();
 
                         let dest = self.fresh_temp();
-                        self.emit(body, Instruction::Call {
-                            dest: Some(dest.clone()),
-                            func: mangled_name,
-                            args: arg_operands,
-                        });
+                        self.emit(
+                            body,
+                            Instruction::Call {
+                                dest: Some(dest.clone()),
+                                func: mangled_name,
+                                args: arg_operands,
+                            },
+                        );
                         self.generic_var_types.insert(dest.clone(), ret_ty.clone());
                         self.var_types
                             .insert(dest.clone(), ret_ty.monomorphized_name());
@@ -866,11 +1005,14 @@ impl super::LowerCtx<'_> {
                         let dest = self.fresh_temp();
                         // Infer return type for type tracking
                         let ret_ty = self.fn_return_types.get(&func_name).cloned();
-                        self.emit(body, Instruction::Call {
-                            dest: Some(dest.clone()),
-                            func: func_name,
-                            args: arg_operands,
-                        });
+                        self.emit(
+                            body,
+                            Instruction::Call {
+                                dest: Some(dest.clone()),
+                                func: func_name,
+                                args: arg_operands,
+                            },
+                        );
                         // Track result type
                         if let Some(ref ty) = ret_ty {
                             match ty {
@@ -896,10 +1038,13 @@ impl super::LowerCtx<'_> {
                 // Fallback: unresolved turbofish — no generic function found
                 eprintln!("warning: unresolved turbofish call (no matching generic function)");
                 let dest = self.fresh_temp();
-                self.emit(body, Instruction::Const {
-                    dest: dest.clone(),
-                    value: Constant::Unit,
-                });
+                self.emit(
+                    body,
+                    Instruction::Const {
+                        dest: dest.clone(),
+                        value: Constant::Unit,
+                    },
+                );
                 dest
             }
 
@@ -949,11 +1094,14 @@ impl super::LowerCtx<'_> {
                 let type_name = list_type.monomorphized_name();
 
                 let dest = self.fresh_temp();
-                self.emit(body, Instruction::ListInit {
-                    dest: dest.clone(),
-                    elem_type,
-                    elements: elem_operands,
-                });
+                self.emit(
+                    body,
+                    Instruction::ListInit {
+                        dest: dest.clone(),
+                        elem_type,
+                        elements: elem_operands,
+                    },
+                );
 
                 // Track as a generic type for downstream use
                 self.generic_var_types.insert(dest.clone(), list_type);
@@ -974,8 +1122,7 @@ impl super::LowerCtx<'_> {
                     })
                     .unwrap_or((Ty::String, Ty::Int));
 
-                let map_ty =
-                    Ty::Generic("Map".into(), vec![key_ty.clone(), val_ty.clone()]);
+                let map_ty = Ty::Generic("Map".into(), vec![key_ty.clone(), val_ty.clone()]);
                 self.register_adt_type(&map_ty);
                 let map_struct = map_ty.monomorphized_name();
                 let k_name = key_ty.monomorphized_name();
@@ -983,37 +1130,46 @@ impl super::LowerCtx<'_> {
 
                 // handle = __map_new__K__V()
                 let mut handle = self.fresh_temp();
-                self.emit(body, Instruction::Call {
-                    dest: Some(handle.clone()),
-                    func: format!("__map_new__{k_name}__{v_name}"),
-                    args: vec![],
-                });
+                self.emit(
+                    body,
+                    Instruction::Call {
+                        dest: Some(handle.clone()),
+                        func: format!("__map_new__{k_name}__{v_name}"),
+                        args: vec![],
+                    },
+                );
                 self.string_vars.insert(handle.clone()); // ptr-typed
 
                 for (k, v) in entries {
                     let k_val = self.lower_expr(k, body);
                     let v_val = self.lower_expr(v, body);
                     let next = self.fresh_temp();
-                    self.emit(body, Instruction::Call {
-                        dest: Some(next.clone()),
-                        func: format!("__map_insert__{k_name}__{v_name}"),
-                        args: vec![
-                            Operand::Var(handle.clone()),
-                            Operand::Var(k_val),
-                            Operand::Var(v_val),
-                        ],
-                    });
+                    self.emit(
+                        body,
+                        Instruction::Call {
+                            dest: Some(next.clone()),
+                            func: format!("__map_insert__{k_name}__{v_name}"),
+                            args: vec![
+                                Operand::Var(handle.clone()),
+                                Operand::Var(k_val),
+                                Operand::Var(v_val),
+                            ],
+                        },
+                    );
                     self.string_vars.insert(next.clone());
                     handle = next;
                 }
 
                 // Wrap in Map__K__V { handle }.
                 let dest = self.fresh_temp();
-                self.emit(body, Instruction::StructInit {
-                    dest: dest.clone(),
-                    type_name: map_struct.clone(),
-                    fields: vec![Operand::Var(handle)],
-                });
+                self.emit(
+                    body,
+                    Instruction::StructInit {
+                        dest: dest.clone(),
+                        type_name: map_struct.clone(),
+                        fields: vec![Operand::Var(handle)],
+                    },
+                );
                 self.var_types.insert(dest.clone(), map_struct);
                 self.generic_var_types.insert(dest.clone(), map_ty);
                 dest
@@ -1050,11 +1206,14 @@ impl super::LowerCtx<'_> {
 
                 let format_ref = self.intern_string(&format_str);
                 let dest = self.fresh_temp();
-                self.emit(body, Instruction::StringFormat {
-                    dest: dest.clone(),
-                    format_ref,
-                    args: format_args,
-                });
+                self.emit(
+                    body,
+                    Instruction::StringFormat {
+                        dest: dest.clone(),
+                        format_ref,
+                        args: format_args,
+                    },
+                );
                 dest
             }
         }

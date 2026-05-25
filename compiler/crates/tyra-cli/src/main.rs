@@ -175,7 +175,9 @@ fn main() {
                 eprintln!("error: --static is only supported on musl Linux (Alpine or similar).");
                 eprintln!("       detected clang target: {triple}");
                 eprintln!("       glibc static linking is known to break getaddrinfo and NSS.");
-                eprintln!("       recommended environment: Alpine Linux (apk add gc-dev clang llvm musl-dev)");
+                eprintln!(
+                    "       recommended environment: Alpine Linux (apk add gc-dev clang llvm musl-dev)"
+                );
                 eprintln!("       Build with the musl-compiled tyra binary (e.g. on Alpine) to");
                 eprintln!("       produce a static output. See README § Platform support.");
                 process::exit(1);
@@ -184,9 +186,7 @@ fn main() {
                 (true, true) => {
                     tyra_driver::compile_to_binary_static_release(&source_path, &output_path)
                 }
-                (true, false) => {
-                    tyra_driver::compile_to_binary_static(&source_path, &output_path)
-                }
+                (true, false) => tyra_driver::compile_to_binary_static(&source_path, &output_path),
                 (false, true) => tyra_driver::compile_to_binary_release(&source_path, &output_path),
                 (false, false) => tyra_driver::compile_to_binary(&source_path, &output_path),
             };
@@ -383,6 +383,7 @@ fn main() {
             let mut filter: Option<String> = None;
             let mut list_mode = false;
             let mut junit = false;
+            let mut coverage = false;
             let mut timeout_secs: Option<u64> = None;
             let mut jobs: usize = std::thread::available_parallelism()
                 .map(|n| n.get())
@@ -398,6 +399,7 @@ fn main() {
                         }));
                     }
                     "--list" => list_mode = true,
+                    "--coverage" => coverage = true,
                     "--format" => match rest.next().map(String::as_str) {
                         Some("tap") => {}
                         Some("junit") => junit = true,
@@ -439,7 +441,7 @@ fn main() {
                     other if other.starts_with("--") => {
                         eprintln!("error: unknown flag `{other}` for `tyra test`");
                         eprintln!(
-                            "usage: tyra test [--filter <pattern>] [--list] [--format tap|junit] [--timeout <secs>] [--jobs <n>] [path]"
+                            "usage: tyra test [--filter <pattern>] [--list] [--format tap|junit] [--coverage] [--timeout <secs>] [--jobs <n>] [path]"
                         );
                         process::exit(1);
                     }
@@ -485,6 +487,9 @@ fn main() {
                 for test_file in &test_files {
                     list_test_fns(test_file, filter.as_deref());
                 }
+            } else if coverage {
+                // Coverage mode: run sequentially so TYRA_COV_DIR can be set safely.
+                run_tests_coverage(&test_files, filter.as_deref(), timeout_secs);
             } else {
                 // Run test files in parallel chunks of `jobs` (deterministic output order).
                 let results: Vec<FileTestOut> =
@@ -1420,6 +1425,353 @@ impl FileTestOut {
     }
 }
 
+/// Run all test files with coverage instrumentation, then print a merged
+/// coverage report.  Runs sequentially (no parallelism) so that
+/// `TYRA_COV_DIR` can be set safely in the process environment.
+///
+/// Branch coverage is not reported (see ADR 0014).
+fn run_tests_coverage(test_files: &[PathBuf], filter: Option<&str>, timeout: Option<u64>) {
+    let cov_root = std::env::temp_dir().join(format!("tyra_cov_{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&cov_root);
+
+    let mut total_pass: usize = 0;
+    let mut total_fail: usize = 0;
+
+    for (file_idx, test_file) in test_files.iter().enumerate() {
+        // Per-file covraw directory keyed by loop index, not file_stem.
+        // Using file_stem would collide when two test files share the same name
+        // but live in different directories (e.g. foo/math_test.tyra and
+        // bar/math_test.tyra), causing cross-file covraw contamination.
+        let covraw_dir = cov_root.join(format!("{file_idx}"));
+        let _ = std::fs::create_dir_all(&covraw_dir);
+
+        // Set TYRA_COV_DIR so child processes write their covraw here.
+        // SAFETY: single-threaded at this point (sequential loop).
+        unsafe { std::env::set_var("TYRA_COV_DIR", &covraw_dir) };
+
+        let out = run_test_file_coverage(test_file, filter, timeout);
+
+        eprint!("{}", out.diag);
+        if !out.header.is_empty() {
+            eprintln!("{}", out.header);
+        }
+        print!("{}", out.tap);
+        if !out.timing.is_empty() {
+            println!("{}", out.timing);
+        }
+        total_pass += out.pass;
+        total_fail += out.fail;
+
+        // Read covmap and merge covraw files for this test file's binary.
+        if let Some(covmap_path) = out.covmap_path {
+            match std::fs::read_to_string(&covmap_path) {
+                Ok(covmap_text) => {
+                    if let Some(parsed) = tyra_codegen_llvm::parse_covmap(&covmap_text) {
+                        match tyra_codegen_llvm::merge_covraw(&covraw_dir, parsed.n) {
+                            Some(counters) => {
+                                let report = tyra_codegen_llvm::format_report(&parsed, &counters);
+                                eprintln!("\n--- Coverage: {} ---", test_file.display());
+                                eprint!("{report}");
+                            }
+                            None => {
+                                eprintln!(
+                                    "warning: no covraw data found for {}",
+                                    test_file.display()
+                                );
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!(
+                        "warning: cannot read covmap for {}: {e}",
+                        test_file.display()
+                    );
+                }
+            }
+        }
+    }
+
+    // Restore env
+    unsafe { std::env::remove_var("TYRA_COV_DIR") };
+    // Clean up temp dir
+    let _ = std::fs::remove_dir_all(&cov_root);
+
+    eprintln!("\n{} passed, {} failed", total_pass, total_fail);
+    if total_fail > 0 {
+        process::exit(1);
+    }
+}
+
+/// Coverage-instrumented variant of run_test_file_core.
+/// Compiles with `compile_to_binary_coverage` and records covmap path.
+struct CovFileTestOut {
+    inner: FileTestOut,
+    covmap_path: Option<PathBuf>,
+}
+
+impl std::ops::Deref for CovFileTestOut {
+    type Target = FileTestOut;
+    fn deref(&self) -> &FileTestOut {
+        &self.inner
+    }
+}
+
+fn run_test_file_coverage(
+    test_file: &Path,
+    filter: Option<&str>,
+    timeout: Option<u64>,
+) -> CovFileTestOut {
+    let mut diag = String::new();
+
+    let source = match std::fs::read_to_string(test_file) {
+        Ok(s) => s,
+        Err(e) => {
+            let msg = format!("error: cannot read {}: {e}\n", test_file.display());
+            return CovFileTestOut {
+                inner: FileTestOut::error(test_file, msg),
+                covmap_path: None,
+            };
+        }
+    };
+
+    let dir = test_file.parent().unwrap_or(Path::new("."));
+    let workspace_dir = if dir.as_os_str().is_empty() {
+        Some(Path::new("."))
+    } else {
+        Some(dir)
+    };
+
+    let check = tyra_driver::check_in_memory(
+        test_file.to_string_lossy().into_owned(),
+        source.clone(),
+        workspace_dir,
+    );
+    if check.report.has_errors() {
+        let rendered = check.report.render(&check.sources);
+        diag.push_str(&rendered);
+        return CovFileTestOut {
+            inner: FileTestOut::error(test_file, diag),
+            covmap_path: None,
+        };
+    }
+
+    // Validate: test files must not define fn main or top-level statements.
+    // Mirrors the same check in run_test_file_core so --coverage behaves identically.
+    let has_main = check.ast.items.iter().any(|item| {
+        if let tyra_ast::Item::FnDef(f) = item {
+            f.name == "main"
+        } else {
+            false
+        }
+    });
+    let has_top_stmts = check
+        .ast
+        .items
+        .iter()
+        .any(|item| matches!(item, tyra_ast::Item::Stmt(_)));
+    if has_main || has_top_stmts {
+        let msg = format!(
+            "error[E0216]: {}: *_test.tyra files must not contain fn main or top-level executable statements\n",
+            test_file.display()
+        );
+        diag.push_str(&msg);
+        return CovFileTestOut {
+            inner: FileTestOut::error(test_file, diag),
+            covmap_path: None,
+        };
+    }
+
+    let all_fns = find_test_fns(&check.ast);
+    let test_fns: Vec<String> = if let Some(pat) = filter {
+        all_fns.into_iter().filter(|n| n.contains(pat)).collect()
+    } else {
+        all_fns
+    };
+
+    if test_fns.is_empty() {
+        let warn = format!(
+            "warning: no test_* functions found in {}\n",
+            test_file.display()
+        );
+        diag.push_str(&warn);
+        return CovFileTestOut {
+            inner: FileTestOut {
+                path: test_file.display().to_string(),
+                pass: 0,
+                fail: 0,
+                header: String::new(),
+                tap: String::new(),
+                timing: String::new(),
+                diag,
+                elapsed: 0.0,
+            },
+            covmap_path: None,
+        };
+    }
+
+    let header = format!("\n# {}", test_file.display());
+    let run_id = RUN_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let runner_name = format!(
+        "__tyra_test_runner_cov_{}_{}.tyra",
+        std::process::id(),
+        run_id
+    );
+    let runner_path = dir.join(&runner_name);
+    let runner_source = synthesize_runner(&source, &test_fns);
+    if let Err(e) = std::fs::write(&runner_path, &runner_source) {
+        diag.push_str(&format!("error: cannot write runner: {e}\n"));
+        return CovFileTestOut {
+            inner: FileTestOut::error(test_file, diag),
+            covmap_path: None,
+        };
+    }
+
+    let tmp_dir = std::env::temp_dir();
+    let bin_id = RUN_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let binary_path = tmp_dir.join(format!("tyra_test_cov_{}_{}", std::process::id(), bin_id));
+
+    let t0 = std::time::Instant::now();
+    let compile = tyra_driver::compile_to_binary_coverage(&runner_path, &binary_path);
+    let _ = std::fs::remove_file(&runner_path);
+
+    let covmap_path = binary_path.with_extension("tyra-covmap");
+    // Replace the synthesized runner filename in the covmap with the original
+    // test file's base name so the report shows the user's file, not the temp runner.
+    if let Ok(text) = std::fs::read_to_string(&covmap_path) {
+        let orig_name = test_file.file_name().unwrap_or_default().to_string_lossy();
+        let runner_base = runner_path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy();
+        let _ = std::fs::write(
+            &covmap_path,
+            text.replace(runner_base.as_ref(), orig_name.as_ref()),
+        );
+    }
+    let covmap_path = if covmap_path.exists() {
+        Some(covmap_path)
+    } else {
+        None
+    };
+
+    if compile.report.has_errors() {
+        diag.push_str(&compile.report.render(&compile.sources));
+        let elapsed = t0.elapsed().as_secs_f64();
+        let filename = test_file.file_name().unwrap_or_default().to_string_lossy();
+        let synthetic_tap = format!("TAP version 14\n1..1\nnot ok 1 - {filename}: compile error\n");
+        return CovFileTestOut {
+            inner: FileTestOut {
+                path: test_file.display().to_string(),
+                pass: 0,
+                fail: 1,
+                header,
+                tap: synthetic_tap,
+                timing: String::new(),
+                diag,
+                elapsed,
+            },
+            covmap_path,
+        };
+    }
+
+    let _guard = TempBinary(binary_path.clone());
+
+    let n = test_fns.len();
+    let mut tap = format!("TAP version 14\n1..{n}\n");
+    let mut pass = 0usize;
+    let mut fail = 0usize;
+
+    for (i, name) in test_fns.iter().enumerate() {
+        let seq = i + 1;
+        let outcome = tyra_driver::run_binary(&binary_path, &[name.as_str()], timeout);
+        let expects_panic = name.starts_with("test_panics_");
+
+        if outcome.timed_out {
+            let stderr_clean = outcome
+                .stderr
+                .lines()
+                .filter(|l| *l != "__TYRA_PANIC__")
+                .collect::<Vec<_>>()
+                .join("\n");
+            if !stderr_clean.is_empty() {
+                diag.push_str(&stderr_clean);
+                diag.push('\n');
+            }
+            tap.push_str(&format!(
+                "not ok {seq} - {name} (timeout after {}s)\n",
+                timeout.unwrap_or(0)
+            ));
+            diag.push_str(&format!(
+                "# {name}: timed out after {}s\n",
+                timeout.unwrap_or(0)
+            ));
+            fail += 1;
+        } else if expects_panic {
+            let intentional =
+                outcome.exit_code == Some(101) && outcome.stderr.contains("__TYRA_PANIC__");
+            if intentional {
+                tap.push_str(&format!("ok {seq} - {name}\n"));
+                pass += 1;
+            } else {
+                tap.push_str(&format!("not ok {seq} - {name}\n"));
+                let reason = match outcome.exit_code {
+                    Some(0) => "expected panic but test returned normally".to_string(),
+                    Some(102) => {
+                        "process exited with code 102 (OOB), not an intentional panic".to_string()
+                    }
+                    Some(c) => format!("process exited with code {c}, sentinel absent"),
+                    None => {
+                        "process was killed (signal/OOM) — not an intentional panic".to_string()
+                    }
+                };
+                diag.push_str(&format!("# {name}: {reason}\n"));
+                fail += 1;
+            }
+        } else if outcome.exit_code == Some(0) {
+            tap.push_str(&format!("ok {seq} - {name}\n"));
+            pass += 1;
+        } else {
+            tap.push_str(&format!("not ok {seq} - {name}\n"));
+            // Propagate diagnostic lines the test printed to stdout (e.g. assert
+            // failure messages from synthesize_runner's `# #{__runner_msg}` lines).
+            // Mirrors run_test_file_core's non-zero exit handling so failure
+            // reasons are not silently dropped in --coverage mode.
+            for line in outcome.stdout.lines() {
+                if line.starts_with("# ") {
+                    tap.push_str(line);
+                    tap.push('\n');
+                }
+            }
+            if !outcome.stderr.is_empty() {
+                diag.push_str(&outcome.stderr);
+                if !outcome.stderr.ends_with('\n') {
+                    diag.push('\n');
+                }
+            }
+            if outcome.exit_code.is_none() {
+                diag.push_str(&format!("# {name}: process could not be started\n"));
+            }
+            fail += 1;
+        }
+    }
+
+    let elapsed = t0.elapsed().as_secs_f64();
+    CovFileTestOut {
+        inner: FileTestOut {
+            path: test_file.display().to_string(),
+            pass,
+            fail,
+            header,
+            tap,
+            timing: String::new(),
+            diag,
+            elapsed,
+        },
+        covmap_path,
+    }
+}
+
 /// Run one `*_test.tyra` file, buffering all output.
 /// `timeout` is the per-binary execution timeout in seconds (None = unlimited).
 fn run_test_file_core(test_file: &Path, filter: Option<&str>, timeout: Option<u64>) -> FileTestOut {
@@ -1519,11 +1871,7 @@ fn run_test_file_core(test_file: &Path, filter: Option<&str>, timeout: Option<u6
     // Compile once; keep the binary for per-test subprocess dispatch.
     let tmp_dir = std::env::temp_dir();
     let bin_id = RUN_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let binary_path = tmp_dir.join(format!(
-        "tyra_test_{}_{}",
-        std::process::id(),
-        bin_id
-    ));
+    let binary_path = tmp_dir.join(format!("tyra_test_{}_{}", std::process::id(), bin_id));
 
     let t0 = std::time::Instant::now();
     let compile = tyra_driver::compile_to_binary(&runner_path, &binary_path);
@@ -1533,9 +1881,8 @@ fn run_test_file_core(test_file: &Path, filter: Option<&str>, timeout: Option<u6
         diag.push_str(&compile.report.render(&compile.sources));
         let elapsed = t0.elapsed().as_secs_f64();
         let filename = test_file.file_name().unwrap_or_default().to_string_lossy();
-        let synthetic_tap = format!(
-            "TAP version 14\n1..1\nnot ok 1 - {filename}: compile error\n",
-        );
+        let synthetic_tap =
+            format!("TAP version 14\n1..1\nnot ok 1 - {filename}: compile error\n",);
         return FileTestOut {
             path: test_file.display().to_string(),
             pass: 0,
@@ -1559,8 +1906,7 @@ fn run_test_file_core(test_file: &Path, filter: Option<&str>, timeout: Option<u6
 
     for (i, name) in test_fns.iter().enumerate() {
         let seq = i + 1;
-        let outcome =
-            tyra_driver::run_binary(&binary_path, &[name.as_str()], timeout);
+        let outcome = tyra_driver::run_binary(&binary_path, &[name.as_str()], timeout);
 
         let expects_panic = name.starts_with("test_panics_");
 
@@ -1587,8 +1933,8 @@ fn run_test_file_core(test_file: &Path, filter: Option<&str>, timeout: Option<u6
             fail += 1;
         } else if expects_panic {
             // ADR 0012: intentional panic ≡ exit(101) AND stderr contains sentinel.
-            let intentional = outcome.exit_code == Some(101)
-                && outcome.stderr.contains("__TYRA_PANIC__");
+            let intentional =
+                outcome.exit_code == Some(101) && outcome.stderr.contains("__TYRA_PANIC__");
             if intentional {
                 tap.push_str(&format!("ok {seq} - {name}\n"));
                 pass += 1;
@@ -2018,7 +2364,11 @@ mod tests {
 
         let results = run_test_files_parallel(&files, None, None, 4);
 
-        assert_eq!(results.len(), files.len(), "result count must equal input count");
+        assert_eq!(
+            results.len(),
+            files.len(),
+            "result count must equal input count"
+        );
         for (i, (res, file)) in results.iter().zip(files.iter()).enumerate() {
             let got = std::path::Path::new(&res.path)
                 .file_name()
@@ -2042,7 +2392,10 @@ mod tests {
 
         assert_eq!(seq.len(), par.len());
         for (s, p) in seq.iter().zip(par.iter()) {
-            assert_eq!(s.path, p.path, "path order must be identical for jobs=1 vs jobs=N");
+            assert_eq!(
+                s.path, p.path,
+                "path order must be identical for jobs=1 vs jobs=N"
+            );
         }
     }
 
@@ -2069,8 +2422,17 @@ mod tests {
         // 5 files, jobs=2 → ceil(5/2)=3 chunks: [2,2,1].
         // Output must still be in original order.
         let dir = tempfile::tempdir().unwrap();
-        let names = ["f1_test.tyra", "f2_test.tyra", "f3_test.tyra", "f4_test.tyra", "f5_test.tyra"];
-        let files: Vec<PathBuf> = names.iter().map(|n| write_no_test_file(dir.path(), n)).collect();
+        let names = [
+            "f1_test.tyra",
+            "f2_test.tyra",
+            "f3_test.tyra",
+            "f4_test.tyra",
+            "f5_test.tyra",
+        ];
+        let files: Vec<PathBuf> = names
+            .iter()
+            .map(|n| write_no_test_file(dir.path(), n))
+            .collect();
 
         let results = run_test_files_parallel(&files, None, None, 2);
 
@@ -2123,7 +2485,8 @@ mod tests {
 
     #[test]
     fn parse_tap_normal_pass_and_fail() {
-        let tap = "TAP version 14\n1..2\nok 1 - test_pass\nnot ok 2 - test_fail\n# expected 1 got 2\n";
+        let tap =
+            "TAP version 14\n1..2\nok 1 - test_pass\nnot ok 2 - test_fail\n# expected 1 got 2\n";
         let records = parse_tap_to_records(tap);
         assert_eq!(records.len(), 2);
         assert!(records[0].passed);
@@ -2163,7 +2526,10 @@ mod tests {
         {
             records[0].failure_msg = diag.trim().to_string();
         }
-        assert_eq!(records[0].failure_msg, "error[E0308]: type mismatch: expected Int, found String");
+        assert_eq!(
+            records[0].failure_msg,
+            "error[E0308]: type mismatch: expected Int, found String"
+        );
     }
 
     #[test]
@@ -2183,14 +2549,24 @@ mod tests {
         {
             records[0].failure_msg = diag.trim().to_string();
         }
-        assert!(records[0].failure_msg.is_empty(), "diag must not be attributed to test_a");
-        assert!(records[1].failure_msg.is_empty(), "diag must not be attributed to test_b");
+        assert!(
+            records[0].failure_msg.is_empty(),
+            "diag must not be attributed to test_a"
+        );
+        assert!(
+            records[1].failure_msg.is_empty(),
+            "diag must not be attributed to test_b"
+        );
     }
 
     #[test]
     fn render_junit_xml_pass_and_fail() {
         let records = vec![
-            TestRecord { name: "test_ok".to_string(), passed: true, failure_msg: String::new() },
+            TestRecord {
+                name: "test_ok".to_string(),
+                passed: true,
+                failure_msg: String::new(),
+            },
             TestRecord {
                 name: "test_fail".to_string(),
                 passed: false,

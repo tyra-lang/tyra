@@ -813,7 +813,12 @@ impl<'a> LowerCtx<'a> {
     /// Use for the "result" instruction of a non-leaf expression, so the location
     /// of the outer expression (not its last child) is recorded (ADR 0014).
     #[inline]
-    pub(crate) fn emit_at(&self, body: &mut Vec<MirStmt>, loc: crate::ir::SourceLoc, instr: Instruction) {
+    pub(crate) fn emit_at(
+        &self,
+        body: &mut Vec<MirStmt>,
+        loc: crate::ir::SourceLoc,
+        instr: Instruction,
+    ) {
         body.push(MirStmt::new(loc, instr));
     }
 
@@ -833,7 +838,8 @@ impl<'a> LowerCtx<'a> {
             Entry::Occupied(e) => *e.get(),
             Entry::Vacant(e) => {
                 let id = self.source_files.len() as u32;
-                self.source_files.push(self.source_map.name(span.source).to_owned());
+                self.source_files
+                    .push(self.source_map.name(span.source).to_owned());
                 e.insert(id);
                 id
             }
@@ -859,10 +865,12 @@ impl<'a> LowerCtx<'a> {
         self.fn_param_types.insert(new_fn, vec![]);
         // insert: (ptr, K, V) -> ptr
         self.fn_return_types.insert(insert_fn.clone(), Ty::String);
-        self.fn_param_types.insert(insert_fn, vec![Ty::String, Ty::String, Ty::String]);
+        self.fn_param_types
+            .insert(insert_fn, vec![Ty::String, Ty::String, Ty::String]);
         // contains: (ptr, K) -> Bool
         self.fn_return_types.insert(contains_fn.clone(), Ty::Bool);
-        self.fn_param_types.insert(contains_fn, vec![Ty::String, Ty::String]);
+        self.fn_param_types
+            .insert(contains_fn, vec![Ty::String, Ty::String]);
     }
 
     /// If the last instruction in `body` is an `AdtPayload { field_index: 1 }`
@@ -895,15 +903,18 @@ impl<'a> LowerCtx<'a> {
             let ret_type_name = return_type.monomorphized_name();
             self.register_adt_type(return_type);
             let ok_temp = self.fresh_temp();
-            self.emit(body, Instruction::AdtInit {
-                dest: ok_temp.clone(),
-                type_name: ret_type_name,
-                tag: 0,
-                fields: vec![
-                    Operand::Var(temp),
-                    Operand::Const(Constant::Int(0)), // zero-placeholder for err field
-                ],
-            });
+            self.emit(
+                body,
+                Instruction::AdtInit {
+                    dest: ok_temp.clone(),
+                    type_name: ret_type_name,
+                    tag: 0,
+                    fields: vec![
+                        Operand::Var(temp),
+                        Operand::Const(Constant::Int(0)), // zero-placeholder for err field
+                    ],
+                },
+            );
             ok_temp
         } else {
             temp
@@ -1018,12 +1029,15 @@ impl<'a> LowerCtx<'a> {
         // __closure_env_N is registered with is_data=true.
         if !captures.is_empty() {
             for (i, cap_name) in captures.iter().enumerate() {
-                self.emit(&mut body, Instruction::FieldGet {
-                    dest: cap_name.clone(),
-                    obj: Operand::Var("__env".into()),
-                    type_name: env_struct_name.to_string(),
-                    field_index: i as u32,
-                });
+                self.emit(
+                    &mut body,
+                    Instruction::FieldGet {
+                        dest: cap_name.clone(),
+                        obj: Operand::Var("__env".into()),
+                        type_name: env_struct_name.to_string(),
+                        field_index: i as u32,
+                    },
+                );
                 // Restore the capture's type in the lifted function's type maps.
                 if saved_float_vars.contains(cap_name.as_str()) {
                     self.float_vars.insert(cap_name.clone());
@@ -1056,21 +1070,30 @@ impl<'a> LowerCtx<'a> {
 
         // Ensure the function ends with a Return that carries the value when needed.
         // Mirrors lower_fn: capture last temp BEFORE emitting defers (spec §12.3).
-        if !body.last().is_some_and(|s| matches!(s.instr, Instruction::Return { .. })) {
+        if !body
+            .last()
+            .is_some_and(|s| matches!(s.instr, Instruction::Return { .. }))
+        {
             let pre_defer_last_temp = self.last_temp_name(&body);
             self.emit_deferred(&mut body);
             if ret_ty == Ty::Unit {
                 self.emit(&mut body, Instruction::Return { value: None });
             } else if let Some(last_temp) = pre_defer_last_temp {
                 let ret_val = self.maybe_wrap_ok_for_return(last_temp, &ret_ty, &mut body);
-                self.emit(&mut body, Instruction::Return {
-                    value: Some(Operand::Var(ret_val)),
-                });
+                self.emit(
+                    &mut body,
+                    Instruction::Return {
+                        value: Some(Operand::Var(ret_val)),
+                    },
+                );
             } else if let Some(expr_val) = last_expr_result {
                 let ret_val = self.maybe_wrap_ok_for_return(expr_val, &ret_ty, &mut body);
-                self.emit(&mut body, Instruction::Return {
-                    value: Some(Operand::Var(ret_val)),
-                });
+                self.emit(
+                    &mut body,
+                    Instruction::Return {
+                        value: Some(Operand::Var(ret_val)),
+                    },
+                );
             } else {
                 self.emit(&mut body, Instruction::Return { value: None });
             }
@@ -1248,13 +1271,19 @@ impl<'a> LowerCtx<'a> {
         self.defer_flag_count = defer_count;
         for idx in 0..defer_count {
             let flag_name = format!(".defer_active_{idx}");
-            self.emit(&mut body, Instruction::Alloca {
-                dest: flag_name.clone(),
-            });
-            self.emit(&mut body, Instruction::Store {
-                dest: flag_name,
-                value: Operand::Const(Constant::Int(0)),
-            });
+            self.emit(
+                &mut body,
+                Instruction::Alloca {
+                    dest: flag_name.clone(),
+                },
+            );
+            self.emit(
+                &mut body,
+                Instruction::Store {
+                    dest: flag_name,
+                    value: Operand::Const(Constant::Int(0)),
+                },
+            );
         }
         self.next_defer_index = 0;
 
@@ -1273,7 +1302,10 @@ impl<'a> LowerCtx<'a> {
         }
 
         // If last instruction isn't a return, add implicit return
-        if !body.last().is_some_and(|s| matches!(s.instr, Instruction::Return { .. })) {
+        if !body
+            .last()
+            .is_some_and(|s| matches!(s.instr, Instruction::Return { .. }))
+        {
             // Capture last temp BEFORE emitting defers so defer calls don't
             // overwrite the return value (spec §12.3).
             let pre_defer_last_temp = self.last_temp_name(&body);
@@ -1285,15 +1317,21 @@ impl<'a> LowerCtx<'a> {
                 // If fn returns Result<T,E> but the tail temp is T (extracted by ?),
                 // wrap it in Ok(T) so the return type matches.
                 let ret_val = self.maybe_wrap_ok_for_return(last_temp, &return_type, &mut body);
-                self.emit(&mut body, Instruction::Return {
-                    value: Some(Operand::Var(ret_val)),
-                });
+                self.emit(
+                    &mut body,
+                    Instruction::Return {
+                        value: Some(Operand::Var(ret_val)),
+                    },
+                );
             } else if let Some(expr_val) = last_expr_result {
                 // Last expression was a simple variable reference (no instruction generated)
                 let ret_val = self.maybe_wrap_ok_for_return(expr_val, &return_type, &mut body);
-                self.emit(&mut body, Instruction::Return {
-                    value: Some(Operand::Var(ret_val)),
-                });
+                self.emit(
+                    &mut body,
+                    Instruction::Return {
+                        value: Some(Operand::Var(ret_val)),
+                    },
+                );
             } else {
                 self.emit(&mut body, Instruction::Return { value: None });
             }
@@ -1406,15 +1444,21 @@ impl<'a> LowerCtx<'a> {
                 // lookups already Load from the alloca for pattern_vars /
                 // mut_vars (see lower/expr.rs:82).
                 if self.pattern_vars.contains(&s.name) || self.mut_vars.contains(&s.name) {
-                    self.emit(body, Instruction::Store {
-                        dest: s.name.clone(),
-                        value: Operand::Var(val),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::Store {
+                            dest: s.name.clone(),
+                            value: Operand::Var(val),
+                        },
+                    );
                 } else {
-                    self.emit(body, Instruction::Copy {
-                        dest: s.name.clone(),
-                        source: val,
-                    });
+                    self.emit(
+                        body,
+                        Instruction::Copy {
+                            dest: s.name.clone(),
+                            source: val,
+                        },
+                    );
                 }
             }
             Stmt::Mut(s) => {
@@ -1497,14 +1541,20 @@ impl<'a> LowerCtx<'a> {
                     self.pattern_vars.contains(&s.name) || self.mut_vars.contains(&s.name);
                 self.mut_vars.insert(s.name.clone());
                 if !already_slotted {
-                    self.emit_synthetic(body, Instruction::Alloca {
-                        dest: s.name.clone(),
-                    });
+                    self.emit_synthetic(
+                        body,
+                        Instruction::Alloca {
+                            dest: s.name.clone(),
+                        },
+                    );
                 }
-                self.emit(body, Instruction::Store {
-                    dest: s.name.clone(),
-                    value: Operand::Var(val),
-                });
+                self.emit(
+                    body,
+                    Instruction::Store {
+                        dest: s.name.clone(),
+                        value: Operand::Var(val),
+                    },
+                );
             }
             Stmt::Return(s) => {
                 let value = s.value.as_ref().map(|v| {
@@ -1537,10 +1587,13 @@ impl<'a> LowerCtx<'a> {
                 );
                 self.next_defer_index += 1;
                 let flag_name = format!(".defer_active_{idx}");
-                self.emit(body, Instruction::Store {
-                    dest: flag_name.clone(),
-                    value: Operand::Const(Constant::Int(1)),
-                });
+                self.emit(
+                    body,
+                    Instruction::Store {
+                        dest: flag_name.clone(),
+                        value: Operand::Const(Constant::Int(1)),
+                    },
+                );
                 self.deferred_exprs.push((flag_name, d.expr.clone()));
             }
             Stmt::Break(_) => {
@@ -1586,11 +1639,7 @@ impl<'a> LowerCtx<'a> {
     /// - `BlockTail::Fallback` — no trailing `Stmt::Expr` (block ends on
     ///   a Let/Mut/Defer/Return, or is empty). Caller may fall back to
     ///   `last_temp_in_range` if it cares about value-shaped arms.
-    fn lower_block_collect_tail(
-        &mut self,
-        stmts: &[Stmt],
-        body: &mut Vec<MirStmt>,
-    ) -> BlockTail {
+    fn lower_block_collect_tail(&mut self, stmts: &[Stmt], body: &mut Vec<MirStmt>) -> BlockTail {
         let mut tail = BlockTail::Fallback;
         for (i, stmt) in stmts.iter().enumerate() {
             if i + 1 == stmts.len() {
@@ -1618,15 +1667,21 @@ impl<'a> LowerCtx<'a> {
 
         // Allocate result slot (like match)
         let result_slot = self.fresh_temp();
-        self.emit_synthetic(body, Instruction::Alloca {
-            dest: result_slot.clone(),
-        });
+        self.emit_synthetic(
+            body,
+            Instruction::Alloca {
+                dest: result_slot.clone(),
+            },
+        );
 
-        self.emit_synthetic(body, Instruction::BranchIf {
-            cond: Operand::Var(cond),
-            true_label: then_label.clone(),
-            false_label: else_label.clone(),
-        });
+        self.emit_synthetic(
+            body,
+            Instruction::BranchIf {
+                cond: Operand::Var(cond),
+                true_label: then_label.clone(),
+                false_label: else_label.clone(),
+            },
+        );
 
         // Then branch
         self.emit_synthetic(body, Instruction::Label(then_label));
@@ -1640,15 +1695,21 @@ impl<'a> LowerCtx<'a> {
                     BlockTail::Fallback => self.last_temp_in_range(body, then_start),
                 };
                 if let Some(last) = last {
-                    self.emit(body, Instruction::Store {
-                        dest: result_slot.clone(),
-                        value: Operand::Var(last),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::Store {
+                            dest: result_slot.clone(),
+                            value: Operand::Var(last),
+                        },
+                    );
                 }
             }
-            self.emit_synthetic(body, Instruction::Jump {
-                label: end_label.clone(),
-            });
+            self.emit_synthetic(
+                body,
+                Instruction::Jump {
+                    label: end_label.clone(),
+                },
+            );
         }
 
         // Else branch
@@ -1667,24 +1728,33 @@ impl<'a> LowerCtx<'a> {
                     BlockTail::Fallback => self.last_temp_in_range(body, else_start),
                 };
                 if let Some(last) = last {
-                    self.emit(body, Instruction::Store {
-                        dest: result_slot.clone(),
-                        value: Operand::Var(last),
-                    });
+                    self.emit(
+                        body,
+                        Instruction::Store {
+                            dest: result_slot.clone(),
+                            value: Operand::Var(last),
+                        },
+                    );
                 }
             }
-            self.emit_synthetic(body, Instruction::Jump {
-                label: end_label.clone(),
-            });
+            self.emit_synthetic(
+                body,
+                Instruction::Jump {
+                    label: end_label.clone(),
+                },
+            );
         }
 
         self.emit_synthetic(body, Instruction::Label(end_label));
 
         let result = self.fresh_temp();
-        self.emit(body, Instruction::Load {
-            dest: result.clone(),
-            source: result_slot,
-        });
+        self.emit(
+            body,
+            Instruction::Load {
+                dest: result.clone(),
+                source: result_slot,
+            },
+        );
         result
     }
 
@@ -1700,34 +1770,49 @@ impl<'a> LowerCtx<'a> {
             // Runtime check: only execute this deferred expression if its
             // activation flag was set to true by a reached `defer` stmt.
             let tmp = self.fresh_temp();
-            self.emit(body, Instruction::Load {
-                dest: tmp.clone(),
-                source: flag.clone(),
-            });
+            self.emit(
+                body,
+                Instruction::Load {
+                    dest: tmp.clone(),
+                    source: flag.clone(),
+                },
+            );
             let zero = self.fresh_temp();
-            self.emit(body, Instruction::Const {
-                dest: zero.clone(),
-                value: Constant::Int(0),
-            });
+            self.emit(
+                body,
+                Instruction::Const {
+                    dest: zero.clone(),
+                    value: Constant::Int(0),
+                },
+            );
             let active = self.fresh_temp();
-            self.emit(body, Instruction::BinOp {
-                dest: active.clone(),
-                op: MirBinOp::NeqInt,
-                lhs: Operand::Var(tmp),
-                rhs: Operand::Var(zero),
-            });
+            self.emit(
+                body,
+                Instruction::BinOp {
+                    dest: active.clone(),
+                    op: MirBinOp::NeqInt,
+                    lhs: Operand::Var(tmp),
+                    rhs: Operand::Var(zero),
+                },
+            );
             let then_lbl = self.fresh_label("defer_run");
             let skip_lbl = self.fresh_label("defer_skip");
-            self.emit_synthetic(body, Instruction::BranchIf {
-                cond: Operand::Var(active),
-                true_label: then_lbl.clone(),
-                false_label: skip_lbl.clone(),
-            });
+            self.emit_synthetic(
+                body,
+                Instruction::BranchIf {
+                    cond: Operand::Var(active),
+                    true_label: then_lbl.clone(),
+                    false_label: skip_lbl.clone(),
+                },
+            );
             self.emit_synthetic(body, Instruction::Label(then_lbl));
             self.lower_expr(expr, body);
-            self.emit_synthetic(body, Instruction::Jump {
-                label: skip_lbl.clone(),
-            });
+            self.emit_synthetic(
+                body,
+                Instruction::Jump {
+                    label: skip_lbl.clone(),
+                },
+            );
             self.emit_synthetic(body, Instruction::Label(skip_lbl));
         }
     }

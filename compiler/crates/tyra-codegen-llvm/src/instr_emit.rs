@@ -835,11 +835,7 @@ pub(crate) fn emit_instruction(
                 Ty::String => ("ptr", "load ptr, ptr", "null"),
                 _ => ("i64", "load i64, ptr", "0"), // Int and named int-like
             };
-            writeln!(
-                out,
-                "  %{dest}.rawval = {val_load_instr} %{dest}.safe"
-            )
-            .unwrap();
+            writeln!(out, "  %{dest}.rawval = {val_load_instr} %{dest}.safe").unwrap();
 
             // tag = present ? 0 (Some) : 1 (None)
             writeln!(out, "  %{dest}.tag = select i1 %{dest}.present, i8 0, i8 1").unwrap();

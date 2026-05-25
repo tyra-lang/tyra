@@ -610,7 +610,10 @@ mod tests {
         let from = cs("hello");
         let to = cs("hi");
         let p = unsafe { tyra_string_replace(s.as_ptr(), from.as_ptr(), to.as_ptr()) };
-        assert_eq!(unsafe { CStr::from_ptr(p) }.to_str().unwrap(), "hi world hi");
+        assert_eq!(
+            unsafe { CStr::from_ptr(p) }.to_str().unwrap(),
+            "hi world hi"
+        );
         // No match → unchanged.
         let p2 = unsafe { tyra_string_replace(s.as_ptr(), cs("xyz").as_ptr(), to.as_ptr()) };
         assert_eq!(
@@ -618,9 +621,8 @@ mod tests {
             "hello world hello"
         );
         // Empty input → empty output.
-        let p3 = unsafe {
-            tyra_string_replace(cs("").as_ptr(), cs("x").as_ptr(), cs("y").as_ptr())
-        };
+        let p3 =
+            unsafe { tyra_string_replace(cs("").as_ptr(), cs("x").as_ptr(), cs("y").as_ptr()) };
         assert_eq!(unsafe { CStr::from_ptr(p3) }.to_str().unwrap(), "");
     }
 

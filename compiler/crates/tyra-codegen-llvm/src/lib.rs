@@ -6,12 +6,14 @@
 
 mod builtins;
 mod codegen;
+pub mod coverage;
 mod helpers;
 mod instr_emit;
 mod list_codegen;
 mod type_scan;
 
-pub use codegen::emit_llvm_ir;
+pub use codegen::{emit_llvm_ir, emit_llvm_ir_coverage};
+pub use coverage::{CovMap, format_report, merge_covraw, parse_covmap, write_covmap_text};
 
 #[cfg(test)]
 mod tests {
@@ -116,7 +118,9 @@ mod tests {
                 name: "main".into(),
                 params: vec![],
                 return_type: tyra_types::Ty::Unit,
-                body: vec![tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return { value: None })],
+                body: vec![tyra_mir::MirStmt::synthetic(
+                    tyra_mir::Instruction::Return { value: None },
+                )],
                 is_main: true,
                 local_metas: vec![],
             }],
@@ -139,7 +143,9 @@ mod tests {
                 name: "main".into(),
                 params: vec![],
                 return_type: tyra_types::Ty::Unit,
-                body: vec![tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Return { value: None })],
+                body: vec![tyra_mir::MirStmt::synthetic(
+                    tyra_mir::Instruction::Return { value: None },
+                )],
                 is_main: true,
                 local_metas: vec![],
             }],
@@ -153,7 +159,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![],
             }],
-        source_files: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -211,7 +217,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![],
             }],
-        source_files: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -262,7 +268,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![],
             }],
-        source_files: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -315,7 +321,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![],
             }],
-        source_files: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -414,7 +420,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![false, false],
             }],
-        source_files: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -474,7 +480,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![false, false],
             }],
-        source_files: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -543,7 +549,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![false, false],
             }],
-        source_files: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -615,7 +621,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![false, false, false],
             }],
-        source_files: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -715,7 +721,7 @@ mod tests {
                 is_data: true,
                 recursive_fields: vec![],
             }],
-        source_files: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -848,7 +854,7 @@ mod tests {
                 is_data: true,
                 recursive_fields: vec![],
             }],
-        source_files: vec![],
+            source_files: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -885,7 +891,9 @@ mod tests {
                         label: "loop_body".into(),
                     }),
                     tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Label("loop_body".into())),
-                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Alloca { dest: "_t0".into() }),
+                    tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Alloca {
+                        dest: "_t0".into(),
+                    }),
                     tyra_mir::MirStmt::synthetic(tyra_mir::Instruction::Store {
                         dest: "_t0".into(),
                         value: tyra_mir::Operand::Var("x".into()),

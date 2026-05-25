@@ -1320,9 +1320,7 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             }
             // Check K: Eq + Hash using the existing ability system.
             if !matches!(key_ty, Ty::Error) {
-                for (ability, ability_name) in
-                    [(Ability::Eq, "Eq"), (Ability::Hash, "Hash")]
-                {
+                for (ability, ability_name) in [(Ability::Eq, "Eq"), (Ability::Hash, "Hash")] {
                     if !env.ty_has_ability(&key_ty, ability) {
                         report.add(
                             Diagnostic::error(format!(
@@ -1440,16 +1438,24 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             if let ExprKind::FieldAccess(obj, method) = &callee.kind {
                 // set.new() — resolve T from the closest available type context.
                 // Priority: let/mut binding annotation → enclosing return type → error.
+                // Peels through Option/Result wrappers so `Some(set.new())` in a
+                // `-> Option<Set<Int>>` function resolves correctly.
                 if let ExprKind::Ident(mod_name) = &obj.kind
                     && mod_name == "set"
                     && method == "new"
                     && args.is_empty()
                 {
-                    if let Some(hint) = env.binding_type_hint.as_ref().filter(|t| t.is_set()) {
-                        return hint.clone();
+                    if let Some(set_ty) = env
+                        .binding_type_hint
+                        .as_ref()
+                        .and_then(|t| peel_to_set(t))
+                    {
+                        return set_ty.clone();
                     }
-                    if let Some(ret_ty) = env.current_return_type().filter(|t| t.is_set()) {
-                        return ret_ty.clone();
+                    if let Some(set_ty) =
+                        env.current_return_type().and_then(|t| peel_to_set(t))
+                    {
+                        return set_ty.clone();
                     }
                     report.add(
                         Diagnostic::error(
@@ -2412,6 +2418,26 @@ fn check_supported_map_ty(ty: &Ty, span: Span, report: &mut Report) {
         }
         _ => {}
     }
+}
+
+/// Walk through Option/Result/List wrappers to extract an inner `Set<T>` type.
+/// Returns `Some(Set<T>)` if found, `None` otherwise.
+fn peel_to_set(ty: &Ty) -> Option<&Ty> {
+    if ty.is_set() {
+        return Some(ty);
+    }
+    if let Ty::Generic(name, args) = ty {
+        match name.as_str() {
+            // Option<Set<T>> → peel the first arg
+            "Option" if args.len() == 1 => return peel_to_set(&args[0]),
+            // Result<Set<T>, E> → peel the first arg (Ok type)
+            "Result" if args.len() == 2 => return peel_to_set(&args[0]),
+            // List<Set<T>> → peel the element (unlikely but consistent)
+            "List" if args.len() == 1 => return peel_to_set(&args[0]),
+            _ => {}
+        }
+    }
+    None
 }
 
 fn check_type_match(expected: &Ty, actual: &Ty, span: Span, report: &mut Report) {

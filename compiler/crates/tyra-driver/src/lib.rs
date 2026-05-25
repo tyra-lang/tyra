@@ -120,6 +120,18 @@ pub fn check_in_memory(
 
 /// Compile a Tyra source file to LLVM IR text.
 pub fn compile_to_ir(source_path: &Path) -> CompileResult {
+    compile_to_ir_impl(source_path, false).0
+}
+
+/// Like `compile_to_ir`, but generates coverage-instrumented IR and also
+/// returns the covmap text (`<binary>.tyra-covmap` content).
+fn compile_to_ir_coverage(source_path: &Path) -> (CompileResult, Option<String>) {
+    compile_to_ir_impl(source_path, true)
+}
+
+/// Core compilation pipeline: parse → resolve → type check → MIR → codegen.
+/// `coverage = true` uses `emit_llvm_ir_coverage` and returns the covmap text.
+fn compile_to_ir_impl(source_path: &Path, coverage: bool) -> (CompileResult, Option<String>) {
     let mut sources = SourceMap::new();
     let mut report = Report::new();
 
@@ -134,12 +146,15 @@ pub fn compile_to_ir(source_path: &Path) -> CompileResult {
                 ))
                 .with_code("E0001"),
             );
-            return CompileResult {
-                success: false,
-                report,
-                sources,
-                llvm_ir: None,
-            };
+            return (
+                CompileResult {
+                    success: false,
+                    report,
+                    sources,
+                    llvm_ir: None,
+                },
+                None,
+            );
         }
     };
 
@@ -155,12 +170,15 @@ pub fn compile_to_ir(source_path: &Path) -> CompileResult {
     // Parse
     let mut ast = tyra_parser::parse(source_id, &sources, &mut report);
     if report.has_errors() {
-        return CompileResult {
-            success: false,
-            report,
-            sources,
-            llvm_ir: None,
-        };
+        return (
+            CompileResult {
+                success: false,
+                report,
+                sources,
+                llvm_ir: None,
+            },
+            None,
+        );
     }
 
     // Auto-import obvious stdlib modules (string / list / io) when the
@@ -194,47 +212,71 @@ pub fn compile_to_ir(source_path: &Path) -> CompileResult {
     let main_dir = source_path.parent().unwrap_or(Path::new("."));
     resolve_imports(&mut ast, main_dir, &mut sources, &mut report);
     if report.has_errors() {
-        return CompileResult {
-            success: false,
-            report,
-            sources,
-            llvm_ir: None,
-        };
+        return (
+            CompileResult {
+                success: false,
+                report,
+                sources,
+                llvm_ir: None,
+            },
+            None,
+        );
     }
 
     // Name resolution
     let _ = tyra_resolve::resolve(&ast, &mut report);
     if report.has_errors() {
-        return CompileResult {
-            success: false,
-            report,
-            sources,
-            llvm_ir: None,
-        };
+        return (
+            CompileResult {
+                success: false,
+                report,
+                sources,
+                llvm_ir: None,
+            },
+            None,
+        );
     }
 
     // Type checking
     let _ = tyra_types::check(&ast, &mut report);
     if report.has_errors() {
-        return CompileResult {
-            success: false,
-            report,
-            sources,
-            llvm_ir: None,
-        };
+        return (
+            CompileResult {
+                success: false,
+                report,
+                sources,
+                llvm_ir: None,
+            },
+            None,
+        );
     }
 
     // MIR lowering
     let mir = tyra_mir::lower(&ast, &sources);
 
     // LLVM IR generation
-    let llvm_ir = tyra_codegen_llvm::emit_llvm_ir(&mir);
-
-    CompileResult {
-        success: true,
-        report,
-        sources,
-        llvm_ir: Some(llvm_ir),
+    if coverage {
+        let (llvm_ir, covmap_text) = tyra_codegen_llvm::emit_llvm_ir_coverage(&mir);
+        (
+            CompileResult {
+                success: true,
+                report,
+                sources,
+                llvm_ir: Some(llvm_ir),
+            },
+            Some(covmap_text),
+        )
+    } else {
+        let llvm_ir = tyra_codegen_llvm::emit_llvm_ir(&mir);
+        (
+            CompileResult {
+                success: true,
+                report,
+                sources,
+                llvm_ir: Some(llvm_ir),
+            },
+            None,
+        )
     }
 }
 
@@ -1515,11 +1557,19 @@ fn stmt_span(s: &tyra_ast::Stmt) -> tyra_ast::Span {
 /// Call this after import resolution but before name resolution so that
 /// the resolver, type-checker, MIR, and codegen never see `Item::TestDef`.
 fn desugar_test_blocks(ast: &mut tyra_ast::SourceFile) {
-    use tyra_ast::{Arg, Expr, ExprKind, ExprStmt, FnDef, Item, Stmt, TestDef, TypeExpr, TypeExprKind};
+    use tyra_ast::{
+        Arg, Expr, ExprKind, ExprStmt, FnDef, Item, Stmt, TestDef, TypeExpr, TypeExprKind,
+    };
 
     fn sanitize(name: &str) -> String {
         name.chars()
-            .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect()
     }
 
@@ -1527,10 +1577,16 @@ fn desugar_test_blocks(ast: &mut tyra_ast::SourceFile) {
         Stmt::Expr(ExprStmt {
             expr: Expr {
                 kind: ExprKind::Call(
-                    Box::new(Expr { kind: ExprKind::Ident("Ok".into()), span }),
+                    Box::new(Expr {
+                        kind: ExprKind::Ident("Ok".into()),
+                        span,
+                    }),
                     vec![Arg {
                         label: None,
-                        value: Expr { kind: ExprKind::UnitLit, span },
+                        value: Expr {
+                            kind: ExprKind::UnitLit,
+                            span,
+                        },
                         span,
                     }],
                 ),
@@ -1553,8 +1609,14 @@ fn desugar_test_blocks(ast: &mut tyra_ast::SourceFile) {
             kind: TypeExprKind::Generic(
                 "Result".into(),
                 vec![
-                    TypeExpr { kind: TypeExprKind::Named("Unit".into()), span },
-                    TypeExpr { kind: TypeExprKind::Named("String".into()), span },
+                    TypeExpr {
+                        kind: TypeExprKind::Named("Unit".into()),
+                        span,
+                    },
+                    TypeExpr {
+                        kind: TypeExprKind::Named("String".into()),
+                        span,
+                    },
                 ],
             ),
             span,
@@ -1782,6 +1844,136 @@ fn compile_to_binary_opts(
     }
 }
 
+/// Compile a Tyra source file to a binary with coverage instrumentation.
+///
+/// Writes `<output_path>.tyra-covmap` alongside the binary.  Run the binary
+/// with `TYRA_COV_DIR=<dir>` to get per-process `.covraw` counter files;
+/// merge them and produce a report with `tyra_codegen_llvm::merge_covraw` +
+/// `format_report`.
+pub fn compile_to_binary_coverage(source_path: &Path, output_path: &Path) -> CompileResult {
+    let (result, covmap_opt) = compile_to_ir_coverage(source_path);
+    if !result.success {
+        return result;
+    }
+
+    let covmap_text = covmap_opt.unwrap_or_default();
+    let covmap_path = output_path.with_extension("tyra-covmap");
+    if let Err(e) = std::fs::write(&covmap_path, &covmap_text) {
+        let mut report = result.report;
+        report.add(
+            tyra_diagnostics::Diagnostic::error(format!(
+                "cannot write covmap `{}`: {e}",
+                covmap_path.display()
+            ))
+            .with_code("E0001"),
+        );
+        return CompileResult {
+            success: false,
+            report,
+            sources: result.sources,
+            llvm_ir: None,
+        };
+    }
+
+    let llvm_ir = result.llvm_ir.as_ref().unwrap();
+    let ir_path = output_path.with_extension("ll");
+    if let Err(e) = std::fs::write(&ir_path, llvm_ir) {
+        let mut report = result.report;
+        report.add(
+            tyra_diagnostics::Diagnostic::error(format!(
+                "cannot write IR `{}`: {e}",
+                ir_path.display()
+            ))
+            .with_code("E0001"),
+        );
+        return CompileResult {
+            success: false,
+            report,
+            sources: result.sources,
+            llvm_ir: None,
+        };
+    }
+
+    // Build clang args (debug, not static — coverage binaries are always -O0).
+    let mut clang_args: Vec<String> = vec![
+        ir_path.to_str().unwrap().into(),
+        "-o".into(),
+        output_path.to_str().unwrap().into(),
+        "-O0".into(),
+    ];
+    for prefix in ["/opt/homebrew/opt/bdw-gc", "/usr/local/opt/bdw-gc"] {
+        let lib_dir = format!("{prefix}/lib");
+        if std::path::Path::new(&lib_dir).is_dir() {
+            clang_args.push(format!("-L{lib_dir}"));
+            break;
+        }
+    }
+    let runtime_lib_path = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|d| d.join("libtyra_runtime.a")));
+    match runtime_lib_path.as_ref() {
+        Some(p) if p.exists() => {
+            clang_args.push(p.to_string_lossy().into_owned());
+        }
+        _ => {
+            let _ = std::fs::remove_file(&ir_path);
+            let mut report = result.report;
+            report.add(
+                tyra_diagnostics::Diagnostic::error(
+                    "Tyra runtime staticlib not found for coverage build.",
+                )
+                .with_code("E0001"),
+            );
+            return CompileResult {
+                success: false,
+                report,
+                sources: result.sources,
+                llvm_ir: None,
+            };
+        }
+    }
+    clang_args.push("-lgc".into());
+    if cfg!(target_os = "linux") {
+        clang_args.push("-lpthread".into());
+        clang_args.push("-ldl".into());
+        clang_args.push("-lm".into());
+    }
+
+    let clang_result = Command::new("clang").args(&clang_args).output();
+    let _ = std::fs::remove_file(&ir_path);
+
+    match clang_result {
+        Ok(out) if out.status.success() => result,
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let mut report = result.report;
+            report.add(
+                tyra_diagnostics::Diagnostic::error(format!("clang failed: {stderr}"))
+                    .with_code("E0500"),
+            );
+            CompileResult {
+                success: false,
+                report,
+                sources: result.sources,
+                llvm_ir: None,
+            }
+        }
+        Err(e) => {
+            let mut report = result.report;
+            report.add(
+                tyra_diagnostics::Diagnostic::error(format!("cannot run clang: {e}"))
+                    .with_code("E0500"),
+            );
+            CompileResult {
+                success: false,
+                report,
+                sources: result.sources,
+                llvm_ir: None,
+            }
+        }
+    }
+}
+
 /// Result of running a pre-compiled binary.
 pub struct RunOutcome {
     pub stdout: String,
@@ -1857,12 +2049,8 @@ pub fn run_binary(binary_path: &Path, args: &[&str], timeout_secs: Option<u64>) 
         }
     };
 
-    let stdout = stdout_drain
-        .and_then(|h| h.join().ok())
-        .unwrap_or_default();
-    let stderr = stderr_drain
-        .and_then(|h| h.join().ok())
-        .unwrap_or_default();
+    let stdout = stdout_drain.and_then(|h| h.join().ok()).unwrap_or_default();
+    let stderr = stderr_drain.and_then(|h| h.join().ok()).unwrap_or_default();
 
     RunOutcome {
         stdout,

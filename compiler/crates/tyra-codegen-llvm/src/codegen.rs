@@ -12,6 +12,10 @@ use std::fmt::Write;
 use tyra_mir::*;
 use tyra_types::Ty;
 
+use crate::coverage::{
+    CovMap, build_cov_map, emit_counter_global, emit_cov_extern, emit_cov_increment,
+    emit_cov_init_call, write_covmap_text,
+};
 use crate::helpers::{llvm_escape_string, llvm_type_str, target_triple};
 use crate::instr_emit::emit_instruction;
 use crate::type_scan::scan_function_types;
@@ -37,7 +41,22 @@ pub(crate) struct StructInfo {
 }
 
 /// Generate LLVM IR text from a MIR program.
+/// Generate LLVM IR text with coverage instrumentation.
+/// Returns `(llvm_ir, covmap_text)`.  The covmap text must be written to
+/// `<output_binary>.tyra-covmap` by the caller (e.g. the driver).
+pub fn emit_llvm_ir_coverage(program: &Program) -> (String, String) {
+    let cov_map = build_cov_map(program);
+    let covmap_text = write_covmap_text(&cov_map, &program.source_files);
+    let ir = emit_llvm_ir_impl(program, Some(&cov_map));
+    (ir, covmap_text)
+}
+
+/// Generate LLVM IR text from a MIR program (non-coverage build).
 pub fn emit_llvm_ir(program: &Program) -> String {
+    emit_llvm_ir_impl(program, None)
+}
+
+fn emit_llvm_ir_impl(program: &Program, cov_map: Option<&CovMap>) -> String {
     let mut out = String::new();
 
     // Build struct info map
@@ -61,6 +80,12 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "; Tyra compiler output").unwrap();
     writeln!(out, "target triple = \"{}\"", target_triple()).unwrap();
     writeln!(out).unwrap();
+
+    // Coverage: counter global array (must appear before any function that uses it).
+    if let Some(cm) = cov_map {
+        emit_counter_global(&mut out, cm.n);
+        writeln!(out).unwrap();
+    }
 
     // Globals for sys.args() (argc/argv captured at main entry)
     writeln!(out, "@.tyra.argc = internal global i32 0").unwrap();
@@ -189,6 +214,10 @@ pub fn emit_llvm_ir(program: &Program) -> String {
 
     // External declarations
     writeln!(out, "; External declarations").unwrap();
+    // Coverage runtime (only declared when coverage is active, but harmless if always present).
+    if cov_map.is_some() {
+        emit_cov_extern(&mut out);
+    }
     writeln!(out, "declare i32 @puts(ptr)").unwrap();
     writeln!(out, "declare i32 @printf(ptr, ...)").unwrap();
     writeln!(out, "declare i32 @snprintf(ptr, i64, ptr, ...)").unwrap();
@@ -304,7 +333,11 @@ pub fn emit_llvm_ir(program: &Program) -> String {
     writeln!(out, "declare i32 @tyra_set_contains(ptr, ptr)").unwrap();
     writeln!(out, "declare i64 @tyra_set_len(ptr)").unwrap();
     // Zero-slot for null-safe map-get unboxing (read-only; never written).
-    writeln!(out, "@.tyra_zero_slot = private unnamed_addr constant i64 0").unwrap();
+    writeln!(
+        out,
+        "@.tyra_zero_slot = private unnamed_addr constant i64 0"
+    )
+    .unwrap();
     writeln!(out, "declare void @abort()").unwrap();
     writeln!(out, "declare void @exit(i32)").unwrap();
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();
@@ -364,6 +397,7 @@ pub fn emit_llvm_ir(program: &Program) -> String {
             &struct_map,
             &fn_sigs,
             &spawn_thunks,
+            cov_map,
         );
         writeln!(out).unwrap();
     }
@@ -406,10 +440,7 @@ fn collect_elem_types(program: &Program) -> std::collections::HashSet<String> {
     keys
 }
 
-fn collect_elem_types_stmt(
-    stmt: &MirStmt,
-    keys: &mut std::collections::HashSet<String>,
-) {
+fn collect_elem_types_stmt(stmt: &MirStmt, keys: &mut std::collections::HashSet<String>) {
     let instr = &stmt.instr;
     if let Instruction::Call { func, .. } = instr {
         // Map: __map_new__K__V  or  __map_insert__K__V  or  __map_contains__K
@@ -592,6 +623,7 @@ pub(crate) struct FnSig {
     pub(crate) return_type: Ty,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn emit_function(
     out: &mut String,
     func: &Function,
@@ -600,6 +632,7 @@ fn emit_function(
     struct_map: &std::collections::HashMap<String, StructInfo>,
     fn_sigs: &std::collections::HashMap<String, FnSig>,
     spawn_thunks: &std::cell::RefCell<Vec<SpawnThunk>>,
+    cov_map: Option<&CovMap>,
 ) {
     // Pre-scan: collect type metadata for all SSA temps and alloca slots.
     let scan = scan_function_types(func, struct_map, fn_sigs);
@@ -635,6 +668,10 @@ fn emit_function(
         writeln!(out, "  call void @tyra_rt_init()").unwrap();
         writeln!(out, "  store i32 %argc, ptr @.tyra.argc").unwrap();
         writeln!(out, "  store ptr %argv, ptr @.tyra.argv").unwrap();
+        // Coverage: register counter array with the runtime atexit flusher.
+        if let Some(cm) = cov_map {
+            emit_cov_init_call(out, cm.n);
+        }
     }
 
     // Allocate parameter copies for mutation support
@@ -679,13 +716,45 @@ fn emit_function(
         source_files,
     };
 
+    // Coverage: counter id used for unique SSA temp names within this function.
+    let mut cov_id: u32 = 0;
+
+    // Coverage: increment the entry-block counter (the "entry:" label is
+    // already emitted above; this increment goes right after alloca hoisting).
+    if let Some(cm) = cov_map {
+        if let Some(&entry_idx) = cm.fn_entry_ctr.get(&func.name) {
+            // Use the counter index directly (counter_for map lookup not needed here).
+            let _ = entry_idx; // suppress unused warning
+            // Find the first non-dummy loc to look up in counter_for.
+            if let Some(first_stmt) = func.body.iter().find(|s| !s.loc.is_dummy()) {
+                emit_cov_increment(out, first_stmt.loc, cm, &mut cov_id);
+            }
+        }
+    }
+
     // Emit instructions, skipping dead code after block terminators.
     let mut block_terminated = false;
-    for stmt in &func.body {
+    for (stmt_idx, stmt) in func.body.iter().enumerate() {
         let inst = &stmt.instr;
         match inst {
             Instruction::Label(_) => {
                 block_terminated = false;
+                // Emit the label itself.
+                emit_instruction(out, inst, stmt.loc, func, strings, &ctx);
+                // Coverage: increment the BB-entry counter immediately after the label.
+                if let Some(cm) = cov_map {
+                    let loc = if !stmt.loc.is_dummy() {
+                        stmt.loc
+                    } else {
+                        func.body[stmt_idx + 1..]
+                            .iter()
+                            .find(|s| !s.loc.is_dummy())
+                            .map(|s| s.loc)
+                            .unwrap_or_else(tyra_mir::SourceLoc::dummy)
+                    };
+                    emit_cov_increment(out, loc, cm, &mut cov_id);
+                }
+                continue;
             }
             // Alloca slots were already emitted in the entry block above.
             Instruction::Alloca { .. } => continue,
