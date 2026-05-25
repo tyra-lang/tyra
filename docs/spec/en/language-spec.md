@@ -1220,14 +1220,16 @@ These modules are practically important but do not affect language semantics. Th
 
 - `string` — string operations (len, trim, contains, starts_with, etc.; v0.1 API frozen in §17.3.4)
 - `list` — `List<Int>` operations (push, sum, max, min, contains, index_of; v0.1 API frozen in §17.3.5, generic `List<T>` deferred to §22)
+- `Map<K, V>` — arbitrary `K: Eq + Hash`, arbitrary `V`; fully generalized in v0.6.0 (§17.3.6)
+- `Set<T>` — arbitrary `T: Eq + Hash`; added in v0.6.0 (§17.3.7)
 - `collections` — methods on `List`, `Map`, `Set` (sort_by, min_by, max_by, map, filter, etc.)
 - `float` — Float comparison functions (eq, approx_eq, is_nan, etc.; see ADR-0002)
 - `json` — JSON parsing (v0.1 API frozen in §17.3)
 - `http` — HTTP server and client (v0.1 API frozen in §17.3)
 - `fs` — file system operations (v0.1 API frozen in §17.3)
-- `time` — time and duration
+- `time` — time and duration (added in v0.6.0: §17.3.8)
+- `log` — logging (added in v0.6.0: §17.3.9)
 - `test` — testing framework
-- `log` — logging
 
 Principles:
 
@@ -1801,11 +1803,11 @@ The following are postponed for later specification:
 - structured concurrency
 - Module-level initialization semantics (`let`/`mut` at module scope)
 - Extended `string` API (replace, join, char_at, regex) — `split` and `split_whitespace` are frozen in §17.3.4; everything else is a later release
-- Extended `list` API — generic `List<T>`, `map` / `filter` / `fold`, and `List<String>` are implemented in v0.4.0 (§17.3.5). Further collection extensions (`Map`, `Set`, etc.) are deferred to later releases
-- Extended `Map` API (arbitrary K / V, `put` / `remove` / iteration, hash-table backing) — only `Map<String, Int>` literals plus `get` / `contains_key` are frozen in §17.3.6; everything else is a later release
-- `Set<T>` in full (literal syntax, operations, hash-table backing) — later release
-- `test "name"` language syntax — specified in a separate ADR (see ADR-0008)
-- `assert.panics` — requires per-test process isolation; later release
+- Extended `list` API — generic `List<T>`, `map` / `filter` / `fold`, and `List<String>` are implemented in v0.4.0 (§17.3.5). `sort_by` and other additional operations are a later release
+- `Map<K,V>` — fully generalized in v0.6.0 (§17.3.6). `remove` / iteration are a later release
+- `Set<T>` — added in v0.6.0 (§17.3.7). Set-literal syntax and `union`/`intersection` are a later release
+- `test "name"` language syntax — implemented in v0.6.0 (ADR-0013)
+- `assert.panics` — implemented as runner-native panic expectation in v0.6.0 (ADR-0012); callable stdlib API is not provided
 - Generic `assert.eq<T>` — overloads for `Int` / `String` / `Bool` are implemented in v0.4.0; full generics via ability constraints are a later release
 
 ---

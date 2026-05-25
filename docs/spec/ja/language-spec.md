@@ -1214,15 +1214,16 @@ ADT バリアント:
 
 - `string` — 文字列操作 (len, trim, contains, starts_with 等。§17.3.4 で v0.1 API 凍結)
 - `list` — `List<Int>` の操作 (push, sum, max, min, contains, index_of。§17.3.5 で v0.1 API 凍結、`List<T>` 全般は §22 で延期)
-- `Map<K, V>` — リテラル `{"k": v, ...}` と最小参照 API (`get` / `contains_key`)。§17.3.6 で **`Map<String, Int>` のみ** 凍結。任意の K / V とハッシュテーブル化は §22 で延期。
+- `Map<K, V>` — 任意 `K: Eq + Hash`, 任意 `V`。v0.6.0 で完全一般化（§17.3.6）。
+- `Set<T>` — 任意 `T: Eq + Hash`。v0.6.0 で新設（§17.3.7）。
 - `collections` — `List`, `Map`, `Set` のメソッド (sort_by, min_by, max_by, map, filter 等)
 - `float` — Float の比較関数 (eq, approx_eq, is_nan 等。ADR-0002 参照)
 - `json` — JSON パース (§17.3 で v0.1 API 凍結)
 - `http` — HTTP サーバ・クライアント (§17.3 で v0.1 API 凍結)
 - `fs` — ファイルシステム操作 (§17.3 で v0.1 API 凍結)
-- `time` — 時刻・期間
+- `time` — 時刻・期間（v0.6.0 で新設: §17.3.8）
+- `log` — ロギング（v0.6.0 で新設: §17.3.9）
 - `test` — テストフレームワーク
-- `log` — ロギング
 
 原則:
 
@@ -1481,11 +1482,9 @@ export fn index_of(_ list: List<Int>, _ x: Int) -> Option<Int>
   で行い、C ABI ランタイムは経由しない。`List<Int>` のレイアウト
   (`{ptr data, i64 len}`) はコンパイラ専有のため、これが安全に可能。
 
-#### 17.3.6 map
+#### 17.3.6 map (v0.6.0 — 完全一般化, ADR-0015)
 
-`Map<K, V>` リテラル `{"key": value, ...}` と最小限の参照 API を
-v0.1 では **`Map<String, Int>` のみ** で凍結する。他の K / V 組み合わせは
-§22 「Map 拡張 API」として延期する。
+`Map<K, V>` は v0.6.0 で任意の `K: Eq + Hash`, 任意の `V` に完全一般化された。
 
 ```tyra
 let table: Map<String, Int> = {"one": 1, "two": 2}
@@ -1496,21 +1495,67 @@ when None
   println("absent")
 end
 table.contains_key("two")  # Bool
+
+let m: Map<Int, Bool> = {}   # 期待型から K=Int, V=Bool を推論
 ```
 
-- `m.get(k: String) -> Option<Int>`: 線形走査でキーを検索し、見つかれば
-  `Some(value)`、なければ `None`。値が `i64::MIN` であっても正しく
-  `Some(i64::MIN)` を返す (ランタイム thread-local の "present" フラグで
-  判定するためセンチネルの曖昧性なし)。
-- `m.contains_key(k: String) -> Bool`: 線形走査の存在確認。
-- 同一キーが複数ある場合、ソース順で**後**に書かれた値が `get` の対象
-  (リテラルは末尾から先頭へリンクリストを構築する)。
-- `m.put(k, v)` / `m.remove(k)` / イテレーションは v0.1 範囲外。書き換えが
-  必要な場合は新しいマップリテラルを作って再束縛する。
-- 実装は C ABI ランタイム (`runtime/src/stdlib_map.rs`) のリンクリスト
-  ベース。ハッシュテーブル化は v0.2 以降。
+- `m.get(k: K) -> Option<V>`: キーを検索し `Some(value)` / `None`。
+- `m.contains_key(k: K) -> Bool`: 存在確認。
+- `m.put(k: K, v: V) -> Unit`: 挿入/上書き。
+- `m.len() -> Int`: エントリ数。
+- 空リテラル `{}` は期待型から `K`/`V` を双方向推論する。期待型のない `{}` は型エラー。
+- `Float` および `mut` フィールドを持つ型はキーに使用できない（`Hash` ability 不充足）。
+- ランタイム: box 化 erased-value ABI + compiler 生成の `eq`/`hash` 関数ポインタ。
 - 内部レイアウトは `Map<K, V> = { handle: ptr }` の単一 ptr ラッパー。
-  `handle` フィールドはユーザコードからは隠蔽されている。
+
+#### 17.3.7 set (v0.6.0 — 新設, ADR-0015)
+
+`Set<T>` は v0.6.0 で任意の `T: Eq + Hash` に対応する新規コレクション。
+
+```tyra
+import set
+
+let s = set.new[Int]()
+set.insert(s, 1)
+set.insert(s, 2)
+set.insert(s, 1)       # 冪等
+set.contains(s, 2)     # Bool: true
+set.len(s)             # Int: 2
+```
+
+- `set.new() -> Set<T>`: 空の集合を生成（`T` は文脈推論）。
+- `set.insert(s: Set<T>, v: T) -> Unit`: 要素を追加（重複は無視）。
+- `set.contains(s: Set<T>, v: T) -> Bool`: 要素の存在確認。
+- `set.len(s: Set<T>) -> Int`: 要素数。
+- `Float` および `mut` フィールドを持つ型は使用できない（`Hash` ability 不充足）。
+- セットリテラル構文はない（`{}` が `Map` と衝突するため）。
+- ランタイム: `Map<K,V>` と同じ box 化単一汎用表 + compiler 生成 fn ポインタ。
+
+#### 17.3.8 time (v0.6.0 — 新設)
+
+```tyra
+import time
+
+let unix = time.now_unix()          # Int (Unix epoch 秒)
+let ms   = time.monotonic_millis()  # Int (モノトニッククロック・ミリ秒)
+```
+
+- `time.now_unix() -> Int`: Unix epoch 秒（符号付き 64 bit）。
+- `time.monotonic_millis() -> Int`: プロセス起動からのモノトニッククロック（ミリ秒）。
+
+#### 17.3.9 log (v0.6.0 — 新設)
+
+```tyra
+import log
+
+log.info("server started")
+log.warn("retrying connection")
+log.error("fatal: #{msg}")
+```
+
+- `log.info(_ msg: String) -> Unit`: INFO レベルで stderr に出力。
+- `log.warn(_ msg: String) -> Unit`: WARN レベルで stderr に出力。
+- `log.error(_ msg: String) -> Unit`: ERROR レベルで stderr に出力。
 
 ---
 
@@ -1812,11 +1857,11 @@ end
 - structured concurrency
 - モジュールレベルの初期化セマンティクス (`let`/`mut` のモジュールスコープ)
 - `string` の拡張 API (char_at, 正規表現) — `split` / `split_whitespace` / `replace` / `join` は §17.3.4 に凍結済み、それ以外は後続リリース以降
-- `list` の拡張 API — ジェネリック `List<T>`、`map` / `filter` / `fold`、`List<String>` は v0.4.0 で実装済み (§17.3.5)。`Map` / `Set` 等のその他コレクション拡張は後続リリース以降
-- `Map` の拡張 API (任意の K / V、`put` / `remove` / イテレーション、ハッシュテーブル化) — §17.3.6 で `Map<String, Int>` リテラル + `get` / `contains_key` のみ凍結。それ以外は後続リリース以降
-- `Set<T>` 全般（リテラル構文、操作 API、ハッシュ実装）— 後続リリース以降
-- `test "name"` 言語構文 — 別 ADR にて規定（ADR-0008 参照）
-- `assert.panics` — per-test プロセス分離は v0.5.0 で実装済み。panic を segfault / timeout と区別するシグナル設計は別 ADR にて規定（後続リリース以降）
+- `list` の拡張 API — ジェネリック `List<T>`、`map` / `filter` / `fold`、`List<String>` は v0.4.0 で実装済み (§17.3.5)。`sort_by` 等の追加 API は後続リリース以降
+- `Map<K,V>` — v0.6.0 で完全一般化済み (§17.3.6)。`remove` / イテレーションは後続リリース以降
+- `Set<T>` — v0.6.0 で新設済み (§17.3.7)。セットリテラル構文・`union`/`intersection` 等の集合演算は後続リリース以降
+- `test "name"` 言語構文 — v0.6.0 で実装済み (ADR-0013)
+- `assert.panics` — v0.6.0 でランナネイティブの panic expectation として実装済み (ADR-0012)。callable な stdlib API は提供しない（非提供）
 - ジェネリック `assert.eq<T>` — `Int` / `String` / `Bool` 向け overload は v0.4.0 で実装済み。任意型への完全ジェネリック化 (ability constraint) は後続リリース以降
 
 ---

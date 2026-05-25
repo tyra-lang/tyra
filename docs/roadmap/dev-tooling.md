@@ -86,15 +86,23 @@ and related developer experience tooling.
   Implementation: compile-once + `sys.args()` argv dispatch per test.
   New public API in `tyra-driver`: `RunOutcome` and `run_binary`.
 
-## Near-term (v0.5+)
+## Shipped in v0.6.0 (2026-05-25)
 
-- `test "name"` language syntax (requires separate ADR)
-- `assert.panics` — per-test isolation (prerequisite) is now shipped; stdlib API TBD
+- **`test "name"` language syntax** (ADR-0013): contextual-keyword item syntax with optional `panics` modifier; body lowers to `Result<Unit, String>`
+- **Panic expectation** (ADR-0012): runner-native; `exit(101)` + `__TYRA_PANIC__` sentinel identifies intentional panics; OOB = `exit(102)`; no false-pass from segfault/OOM
+- **`tyra test --coverage`** (ADR-0014): Tyra-native line/function coverage; mmap'd per-test `.covraw` files merged by parent; branch coverage out of scope
+- **`time` and `log` stdlib modules**: `now_unix`, `monotonic_millis`, `log.info/warn/error`
+- **Generic `Map<K,V>` and `Set<T>`** (ADR-0015): full generalization with boxed erased-value ABI + compiler-emitted `eq`/`hash` fn pointers
+- **DAP debugger** (ADR-0014 Phase 4): DWARF in LLVM IR text, `lldb-dap` adapter, VS Code `debuggers`/`breakpoints` contributions
+
+## Near-term (v0.6+)
+
+- Type-checker ergonomics / E0308 diagnostic improvements (highest-leverage AI-audibility improvement)
 - Full registry-backed SemVer resolver and package registry (`tyra publish`)
 
 ## Long-term
 
 - VS Code test explorer integration via LSP test protocol
-- DAP debugger integration
-- Coverage reporting (`tyra test --coverage`)
+- inkwell migration (replaces hand-written LLVM IR text)
+- Branch coverage
 - Cross-compilation support

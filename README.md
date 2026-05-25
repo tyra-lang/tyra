@@ -2,7 +2,7 @@
 
 A statically-typed, AI-friendly programming language for backend services, CLI tools, and business applications.
 
-> **v0.5.0** — adds cross-OS CI gate (Linux glibc + macOS arm64 + Alpine musl), `tyra build --static` (musl static binary), `string.replace`/`string.join`, and per-test process isolation. [See known limitations](#known-limitations) before using in production.
+> **v0.6.0** — generic `Map<K,V>` and `Set<T>`, `time`/`log` stdlib, `test "name"` syntax with `panics` modifier, `tyra test --coverage`, and the DAP debugger (DWARF + lldb-dap + VS Code). [See known limitations](#known-limitations) before using in production.
 
 ---
 
@@ -125,19 +125,22 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 
 ## Status
 
-**Stable in v0.5.0** — supported and tested:
+**Stable in v0.6.0** — supported and tested:
 
 | Component | Notes |
 | --- | --- |
-| Language specification v0.4 | ✅ Complete |
+| Language specification v0.6 | ✅ Complete |
 | Lexer, Parser, Type checker | ✅ Complete |
 | LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 (glibc + musl) |
-| Standard library: string, list, fs, io, float, json, assert | ✅ Complete |
+| Standard library: string, list, fs, io, float, json, assert, time, log | ✅ Complete |
 | `tyra check / run / build` CLI (zero-arg project mode, `--release`) | ✅ Complete |
 | `tyra build --static` — static single binary (musl) | ✅ Complete (v0.5.0+) |
 | `tyra fmt [--check] [--stdin] <file\|dir>` — formatter + 100-col wrapping | ✅ Complete |
 | `tyra test [--filter] [--list] [--format tap\|junit] [--timeout] [--jobs N]` | ✅ Complete |
+| `tyra test --coverage` — line/function coverage reporting | ✅ Complete (v0.6.0+) |
 | Per-test process isolation in `tyra test` | ✅ Complete (v0.5.0+) |
+| Panic expectation (`test_panics_*` / `test "name" panics`) | ✅ Complete (v0.6.0+) |
+| `test "name" [panics] <body> end` language syntax | ✅ Complete (v0.6.0+) |
 | `continue` statement | ✅ Complete |
 | `tyra new <name> [--lib] [--vcs none]` — project scaffolding | ✅ Complete |
 | `tyra mod init/add/update/remove/show/tree/sync/clean [--locked]` | ✅ Complete |
@@ -145,10 +148,13 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | `tyra bench <dir>` — general-purpose wall-clock microbenchmark runner | ✅ Complete |
 | Lambda / closures (spec §9.4, ADR 0011) | ✅ Complete |
 | Generic `List<T>` + `map`/`filter`/`fold` | ✅ Complete |
+| Generic `Map<K,V>` — arbitrary `K: Eq + Hash`, arbitrary `V` | ✅ Complete (v0.6.0+) |
+| Generic `Set<T>` — arbitrary `T: Eq + Hash` | ✅ Complete (v0.6.0+) |
 | Generic `assert.eq` / `assert.ne` (Int, String, Bool) | ✅ Complete |
 | `string.replace` / `string.join` | ✅ Complete (v0.5.0+) |
 | `Tyra.lock` + floating `branch` constraints + transitive dep resolution | ✅ Complete |
 | LSP server (`tyra-lsp`) + VS Code extension | ✅ Development install |
+| DAP debugger (DWARF + lldb-dap + VS Code breakpoints/locals) | ✅ Complete (v0.6.0+) |
 | Static conformance corpus (19 programs + error cases) | ✅ CI-gated |
 
 ## Platform support
@@ -190,8 +196,6 @@ tyra build --static myprogram.tyra
 | Component | Notes |
 | --- | --- |
 | Registry (`tyra publish`), full registry-backed resolver | ⏳ Future |
-| `assert.panics` | ⏳ Needs panic-semantics ADR |
-| `test "name"` language syntax | ⏳ Separate ADR |
 | Pre-built binaries (homebrew, apt) | ⏳ Later |
 | VS Code Marketplace publication | ⏳ Later |
 
@@ -279,7 +283,7 @@ The compiler always declares which spec version it implements:
 
 ```console
 $ tyra --version
-tyra 0.5.0
+tyra 0.6.0
 implementing language spec 0.4
 ```
 

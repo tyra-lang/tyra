@@ -7,6 +7,69 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ---
 
+## [0.6.0] - 2026-05-25
+
+### Stable
+
+**`time` and `log` stdlib modules (ADR-0014 Phase 2a)**
+- `import time`: `now_unix() -> Int`, `monotonic_millis() -> Int`
+- `import log`: `info(_ msg: String) -> Unit`, `warn`, `error` (writes to stderr)
+
+**Generic `Map<K,V>` — full generalization (ADR-0015)**
+- `Map<K,V>` now supports arbitrary `K: Eq + Hash` and `V`; hardcoded `Map<String,Int>` removed
+- Empty-literal `{}` infers `K`/`V` from context (bidirectional type propagation); bare `{}` without expected type is a type error with a clear diagnostic
+- Runtime: boxed erased-value ABI + compiler-emitted `eq`/`hash` function pointers for arbitrary key types (prims, `value` structs, ADTs)
+- `Float` and `mut`-field types correctly rejected as keys (`Hash` ability not satisfied)
+
+**Generic `Set<T>` — new collection (ADR-0015)**
+- `import set`: `set.new() -> Set<T>`, `set.insert`, `set.contains`, `set.len`
+- Requires `T: Eq + Hash`; same boxed runtime ABI as `Map<K,V>`
+- `Float`/`mut`-field types rejected at compile time
+
+**Panic expectation in `tyra test` (ADR-0012)**
+- Tests named `test_panics_*` or annotated `test "name" panics` are expected to call `panic()`
+- Intentional panics identified by `exit(101)` + stderr sentinel `__TYRA_PANIC__`; OOB = `exit(102)`; OOM/segfault stay as `None` (no false-pass)
+- Pass = `exit(101)` + sentinel; normal return = fail; OOB/killed = fail
+
+**`test "name"` language syntax (ADR-0013)**
+- New item syntax: `test "<name>" [panics] <body> end`
+- `test` and `panics` are true contextual keywords (lexer unchanged; no backwards incompatibility)
+- Body lowers to a hidden `Result<Unit, String>` function; `end` inserts implicit `Ok(())`; `?` for early `Err` return
+- Test discovery handles `test "name"` blocks alongside `test_*` functions; TAP/JUnit output shows the string name
+
+**Coverage reporting — `tyra test --coverage` (ADR-0014)**
+- Reports line and function coverage; branch coverage is explicitly out of scope
+- Counters are `(file, line)` keyed; each basic-block entry that introduces a new source line increments the counter — no false-uncovered from multi-BB lines
+- Per-test subprocesses write counters to mmap'd `.covraw` files; parent merges all files after test run
+- Abnormal exits (panic, OOB abort) retain mmap'd counters; `SIGKILL` timeout is best-effort
+
+**DAP debugger — DWARF + lldb-dap + VS Code (ADR-0014 Phase 4)**
+- Non-release builds (`tyra run`, `tyra build` without `--release`) emit full DWARF debug info in the generated LLVM IR: `DICompileUnit`, `DIFile`, `DISubprogram`, `DILocation` per instruction, `DILocalVariable` + `llvm.dbg.declare` for locals and parameters
+- `tyra build --release` omits DWARF
+- VS Code extension: `breakpoints` and `debuggers` contributions added; `TyraDapDescriptorFactory` discovers `lldb-dap` from `LLDB_DAP_PATH` env or Xcode/Homebrew LLVM candidates
+- Line breakpoints, step, and local variable display work via `lldb-dap`
+
+**Span threading through MIR (ADR-0014 Phase 1)**
+- `Instruction` now carries `SourceLoc { file_id, line, col }` throughout MIR lowering
+- Panic messages include the source line of the `panic()` call
+- `Function.local_metas` populated with params and `mut`-binding alloca slots for DWARF locals
+
+### Known Limitations
+
+- DWARF locals accurate only at `-O0` (debug builds); release builds have no debug info
+- Complex types (closures, GC-boxed recursive ADTs) show simplified DWARF representations
+- `tyra test --coverage` with `--timeout` and `SIGKILL`: last increments in a killed test may not be visible (best-effort)
+- `Set<T>` constructor is `set.new()` (no set-literal syntax to avoid ambiguity with map `{}`)
+
+### Not in This Release
+
+- `tyra publish` / package registry
+- Branch coverage
+- inkwell migration (deferred — separate release scope)
+- Type-checker ergonomics / E0308 diagnostic improvements
+
+---
+
 ## [0.5.0] - 2026-05-23
 
 ### Stable
