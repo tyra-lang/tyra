@@ -1013,6 +1013,14 @@ fn check_item(item: &Item, env: &mut TypeEnv, report: &mut Report) {
 
 /// §8.7: verify that an `impl Trait for Type` implements every required method.
 fn check_impl(i: &ImplDef, env: &mut TypeEnv, report: &mut Report) {
+    // Validate user-written type positions in the impl header.
+    let target_ty = Ty::from_type_expr(&i.target_type);
+    check_supported_map_ty(&target_ty, i.span, report);
+    for arg in &i.trait_type_args {
+        let ty = Ty::from_type_expr(arg);
+        check_supported_map_ty(&ty, arg.span, report);
+    }
+
     let Some(required) = env.trait_methods(&i.trait_name).cloned() else {
         // Trait not registered — either unknown trait (resolver should have caught
         // this) or an external trait (Into, Eq, Hash, Ord, Debug are auto/external).
