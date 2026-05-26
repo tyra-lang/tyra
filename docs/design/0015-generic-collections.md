@@ -1,7 +1,7 @@
 # ADR 0015: Generic collections — `Map<K,V>` and `Set<T>`
 
-- **Status**: Proposed
-- **Date**: 2026-05-25
+- **Status**: Accepted
+- **Date**: 2026-05-26
 - **Spec sections affected**: §17.3.6 (map), 新規 §17.3.x (set), §8.4（ability constraints）
 
 ## Context
@@ -55,10 +55,10 @@ ability の定義・導出規則の新設ではない（型述語は再利用、
 型システム・パーサ・ランタイム・intrinsic を全部新規に構築する。
 
 構築方法: `set` モジュール + intrinsic（リテラル構文は回避してパーサ変更を最小化）:
-- `set.new() -> Set<T>`
-- `set.insert(s: Set<T>, x: T) -> Set<T>`
-- `set.contains(s: Set<T>, x: T) -> Bool`
-- `set.len(s: Set<T>) -> Int`
+- `set.new() -> Set<T>`（構築; 空集合。`T` を推論できる文脈では型注釈省略可）
+- `s.insert(x: T) -> Set<T>`（メソッド形式; 非破壊的。重複は冪等）
+- `s.contains(x: T) -> Bool`（メソッド形式）
+- `s.len() -> Int`（メソッド形式）
 
 `stdlib/set.tyra`（新規）+ 5 層配線（resolve / types / mir / codegen / type_scan）。
 
@@ -119,7 +119,7 @@ define i64 @tyra_hash_<ty>(i8* %a) { ... }
 ### B. Set リテラル `{1, 2, 3}` 構文
 
 `MapLit` との衝突をパーサで解消する必要がある。複雑化のため却下。
-`set.new()` + `set.insert()` で代替。
+`set.new()` + `s.insert(x)` メソッド形式で代替。
 
 ### C. Map は String,Int 維持し V のみ任意
 

@@ -1,7 +1,7 @@
 # ADR 0013: `test "name"` language syntax
 
-- **Status**: Proposed
-- **Date**: 2026-05-25
+- **Status**: Accepted
+- **Date**: 2026-05-26
 - **Spec sections affected**: 新規（テスト構文）; §（lexer/parser 文法）
 
 ## Context

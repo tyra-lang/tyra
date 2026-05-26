@@ -1,12 +1,12 @@
 # Collections
 
-Tyra's v0.1 standard library provides `List<T>` via the `list` module, string utilities via the `string` module, and `Map<String, Int>` with minimal accessors. Broader `Map<K, V>` support is planned for a future release.
+Tyra's standard library provides `List<T>` via the `list` module, string utilities via the `string` module, `Map<K, V>` for key-value lookups, and `Set<T>` for membership testing.
 
 ## `List<T>`
 
 A `List<T>` is an ordered, immutable sequence. All list operations return new lists — the original is never modified.
 
-> **NOTE:** In v0.1, the `list` module's operations (`list.len`, `list.get`, etc.) work on `List<Int>`. `List<String>` is returned by string splitting functions and can be iterated with `for`, but does not yet support those module functions. Full generic list support is planned for a future release.
+> **NOTE:** `list.get`, `list.sum`, `list.max`, and `list.min` operate on `List<Int>`. `List<String>` from `string.split` supports `list.len`, `list.push`, and `for` iteration.
 
 ### List Literals
 
@@ -230,7 +230,7 @@ let hello = string.substring(s, 0, 5)
 print("#{hello}\n")
 ```
 
-> **NOTE:** Indexing is byte-based in v0.1. Slicing inside a multi-byte UTF-8 character returns an empty string.
+> **NOTE:** Indexing is byte-based. Slicing inside a multi-byte UTF-8 character returns an empty string.
 
 ## Building a List Incrementally
 
@@ -260,38 +260,101 @@ print("count: #{list.len(numbers)}\n")
 print("sum:   #{list.sum(numbers)}\n")
 ```
 
-## `Map<String, Int>`
+## `Map<K, V>`
 
-A `Map<String, Int>` stores key-value pairs where keys are strings and values are integers. In v0.1, only this combination is supported; broader `Map<K, V>` is planned for a future release.
+A `Map<K, V>` stores key-value pairs. Keys must support equality and hashing (`Eq + Hash`); values can be any type. Primitive types (`Int`, `Bool`, `String`) satisfy `Eq + Hash` automatically; `Float` does not.
 
 ### Map Literals
 
+Build a map with a literal. The type is inferred from the elements:
+
 ```tyra
-let table: Map<String, Int> = {"one": 1, "two": 2}
+let scores: Map<String, Int> = {"alice": 92, "bob": 85}
+let flags: Map<String, Bool> = {"debug": true, "verbose": false}
+let table: Map<Int, Int> = {1: 100, 2: 200}
+```
+
+An empty map literal requires an explicit type annotation:
+
+```tyra
+let empty: Map<String, Int> = {}
 ```
 
 ### `.get` — Safe Lookup
 
-`map.get` returns `Option<Int>` — it never panics on missing keys:
+`.get` returns `Option<V>` — it never panics on missing keys:
 
 ```tyra
-match table.get("one")
+let scores: Map<String, Int> = {"alice": 92, "bob": 85}
+
+match scores.get("alice")
 when Some(n)
-  print("got: #{n}\n")
+  print("score: #{n}\n")
 when None
-  print("absent\n")
+  print("not found\n")
 end
 ```
 
 ### `.contains_key` — Existence Check
 
 ```tyra
-if table.contains_key("two")
-  print("two is present\n")
+if scores.contains_key("bob")
+  print("bob is present\n")
 end
 ```
 
-> **NOTE:** `put` / `remove` / iteration are not available in v0.1. To "modify" a map, build a new literal and rebind it. For more complex keyed data, use ADTs or lists of pairs (see [Types and ADTs](06-types-and-adt.md)).
+### `.len` — Size
+
+```tyra
+print("entries: #{scores.len()}\n")
+```
+
+> **NOTE:** Maps are immutable — there is no `insert` or `remove` method. To build a map with all entries known at once, use a literal. For dynamic keyed data, use a list of value types (see [Types and ADTs](06-types-and-adt.md)).
+
+## `Set<T>`
+
+A `Set<T>` is an unordered collection of unique elements. Elements must support `Eq + Hash`; primitive types satisfy this automatically.
+
+### Creating a Set
+
+Import the `set` module and call `set.new()`. A type annotation is required when the element type cannot be inferred from context:
+
+```tyra
+import set
+
+let s: Set<Int> = set.new()
+```
+
+### `.insert` — Adding Elements
+
+`.insert` returns a **new** set with the element added (the original is unchanged). Inserting a duplicate has no effect:
+
+```tyra
+import set
+
+let s: Set<Int> = set.new()
+let s1 = s.insert(1)
+let s2 = s1.insert(2)
+let s3 = s2.insert(1)   # duplicate — no change
+
+print("size: #{s3.len()}\n")   # 2
+```
+
+### `.contains` — Membership Test
+
+```tyra
+if s3.contains(2)
+  print("2 is in the set\n")
+end
+```
+
+### `.len` — Size
+
+```tyra
+print("size: #{s3.len()}\n")
+```
+
+> **NOTE:** `Float` does not have `Eq` and cannot be used as a `Set` element. For custom `value` types, `Eq` and `Hash` are derived automatically if all fields are hashable.
 
 ## Next Steps
 

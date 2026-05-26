@@ -1,8 +1,8 @@
 # Tyra Project Strategy
 
-- **Version**: 1.2
+- **Version**: 1.3
 - **Status**: Active
-- **Last updated**: 2026-05-23
+- **Last updated**: 2026-05-26
 - **Owner**: Project lead
 - **Review cadence**: Every 3 months, or after any major spec change
 

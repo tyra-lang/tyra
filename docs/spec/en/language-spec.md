@@ -2,7 +2,7 @@
 
 - **Version**: 0.4
 - **Status**: Stable
-- **Last updated**: 2026-05-22
+- **Last updated**: 2026-05-26
 
 > This is the English translation of the Tyra Language Specification.
 > The Japanese version (`docs/spec/ja/language-spec.md`) is the **authoritative source**.

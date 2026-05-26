@@ -1,7 +1,7 @@
 # ADR 0014: Source-location threading and debug info (DWARF)
 
-- **Status**: Proposed
-- **Date**: 2026-05-25
+- **Status**: Accepted
+- **Date**: 2026-05-26
 - **Spec sections affected**: なし（実装内部）; ツール: デバッガ / coverage
 
 ## Context

@@ -1,7 +1,7 @@
 # ADR 0012: Panic semantics and panic-expectation signaling
 
-- **Status**: Proposed
-- **Date**: 2026-05-25
+- **Status**: Accepted
+- **Date**: 2026-05-26
 - **Spec sections affected**: §（パニック/異常終了の記述）; テストランナ動作
 
 ## Context

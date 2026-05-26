@@ -70,7 +70,7 @@ ADRs are numbered sequentially: `0001`, `0002`, etc. Numbers are never reused. I
 | [0009](0009-project-manifest.md) | Project manifest and package namespace (v0.3) | Accepted | 2026-05-19 |
 | [0010](0010-dependency-resolution.md) | Import resolution and dependency lookup (v0.3) | Accepted | 2026-05-19 |
 | [0011](0011-closure-representation.md) | Closure representation and lambda C ABI (v0.4) | Accepted | 2026-05-21 |
-| [0012](0012-panic-semantics.md) | Panic semantics and panic-expectation signaling (v0.6) | Proposed | 2026-05-25 |
-| [0013](0013-test-name-syntax.md) | `test "name"` language syntax (v0.6) | Proposed | 2026-05-25 |
-| [0014](0014-source-location-and-debug-info.md) | Source-location threading and debug info / DWARF (v0.6) | Proposed | 2026-05-25 |
-| [0015](0015-generic-collections.md) | Generic collections — `Map<K,V>` and `Set<T>` (v0.6) | Proposed | 2026-05-25 |
+| [0012](0012-panic-semantics.md) | Panic semantics and panic-expectation signaling (v0.6) | Accepted | 2026-05-26 |
+| [0013](0013-test-name-syntax.md) | `test "name"` language syntax (v0.6) | Accepted | 2026-05-26 |
+| [0014](0014-source-location-and-debug-info.md) | Source-location threading and debug info / DWARF (v0.6) | Accepted | 2026-05-26 |
+| [0015](0015-generic-collections.md) | Generic collections — `Map<K,V>` and `Set<T>` (v0.6) | Accepted | 2026-05-26 |

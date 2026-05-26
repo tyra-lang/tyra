@@ -184,7 +184,7 @@ end
 ```
 
 Key patterns used here:
-- `string.split` returns a `List<String>` — since `list.get` works on `List<Int>` only in v0.1, we iterate with `for` and track the field index manually
+- `string.split` returns a `List<String>` — since `list.get` works on `List<Int>` only, we iterate with `for` and track the field index manually
 - `.ok_or(error)?` converts `Option` to `Result` and propagates errors with `?`
 - The last expression `Ok(student)` is the return value — no `return` keyword needed
 
@@ -256,7 +256,7 @@ Here are some ideas to practice what you have learned:
 
 You have covered the core of Tyra. For deeper topics:
 
-- **Standard library reference** — see the source files in `stdlib/` for the complete v0.1 API
+- **Standard library reference** — see the source files in `stdlib/` and [Collections](04-collections.md) for the full API
 - **Error handling patterns** — see [Error Handling](05-error-handling.md) for `Into`, `defer`, and `panic`
 - **Type system** — see [Types and ADTs](06-types-and-adt.md) for `impl`, `Stringable`, and abilities
 - **Language specification** — see `docs/spec/ja/language-spec.md` for the full language reference

@@ -22,7 +22,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - `Float` and `mut`-field types correctly rejected as keys (`Hash` ability not satisfied)
 
 **Generic `Set<T>` — new collection (ADR-0015)**
-- `import set`: `set.new() -> Set<T>`, `set.insert`, `set.contains`, `set.len`
+- `import set`: `set.new() -> Set<T>`; method API: `s.insert(x) -> Set<T>`, `s.contains(x) -> Bool`, `s.len() -> Int`
 - Requires `T: Eq + Hash`; same boxed runtime ABI as `Map<K,V>`
 - `Float`/`mut`-field types rejected at compile time
 
