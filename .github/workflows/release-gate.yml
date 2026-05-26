@@ -129,6 +129,25 @@ jobs:
             exit 1
           }
 
+      - name: Smoke test (test "name" syntax)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_syntax_smoke_test.tyra 2>&1)
+          echo "$output"
+          echo "$output" | grep -qE '^ok ' || { echo "FAIL: named test syntax smoke tests not passing"; exit 1; }
+
+      - name: Smoke test (test "name" non-ASCII)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_non_ascii_smoke_test.tyra 2>&1)
+          echo "$output"
+          echo "$output" | grep -qE '^ok ' || { echo "FAIL: non-ASCII named test smoke tests not passing"; exit 1; }
+
+      - name: Smoke test (test "name" panics modifier)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_panics_block_smoke_test.tyra 2>&1)
+          echo "$output"
+          ok_count=$(echo "$output" | grep -cE '^ok ' || true)
+          [ "$ok_count" -ge 2 ] || { echo "FAIL: expected at least 2 passing named tests, got $ok_count"; exit 1; }
+
   release-gate-macos:
     name: build + test + corpus + smoke (macos-15 arm64)
     runs-on: macos-15
@@ -222,6 +241,25 @@ jobs:
             echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1
           }
+
+      - name: Smoke test (test "name" syntax)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_syntax_smoke_test.tyra 2>&1)
+          echo "$output"
+          echo "$output" | grep -qE '^ok ' || { echo "FAIL: named test syntax smoke tests not passing"; exit 1; }
+
+      - name: Smoke test (test "name" non-ASCII)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_non_ascii_smoke_test.tyra 2>&1)
+          echo "$output"
+          echo "$output" | grep -qE '^ok ' || { echo "FAIL: non-ASCII named test smoke tests not passing"; exit 1; }
+
+      - name: Smoke test (test "name" panics modifier)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_panics_block_smoke_test.tyra 2>&1)
+          echo "$output"
+          ok_count=$(echo "$output" | grep -cE '^ok ' || true)
+          [ "$ok_count" -ge 2 ] || { echo "FAIL: expected at least 2 passing named tests, got $ok_count"; exit 1; }
 
   release-gate-alpine:
     name: build + test + corpus + smoke (alpine musl)
@@ -355,6 +393,25 @@ jobs:
             echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1
           }
+
+      - name: Smoke test (test "name" syntax)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_syntax_smoke_test.tyra 2>&1)
+          echo "$output"
+          echo "$output" | grep -qE '^ok ' || { echo "FAIL: named test syntax smoke tests not passing"; exit 1; }
+
+      - name: Smoke test (test "name" non-ASCII)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_non_ascii_smoke_test.tyra 2>&1)
+          echo "$output"
+          echo "$output" | grep -qE '^ok ' || { echo "FAIL: non-ASCII named test smoke tests not passing"; exit 1; }
+
+      - name: Smoke test (test "name" panics modifier)
+        run: |
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_panics_block_smoke_test.tyra 2>&1)
+          echo "$output"
+          ok_count=$(echo "$output" | grep -cE '^ok ' || true)
+          [ "$ok_count" -ge 2 ] || { echo "FAIL: expected at least 2 passing named tests, got $ok_count"; exit 1; }
 
   release-gate-windows:
     name: check only (windows tracking)

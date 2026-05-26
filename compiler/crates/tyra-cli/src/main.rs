@@ -2890,4 +2890,86 @@ mod tests {
             "variable named `test` must still compile and run (contextual keyword regression):\nstderr={stderr:?}"
         );
     }
+
+    // --- smoke file E2E tests (bench/smoke/*.tyra, require pre-built tyra binary) ---
+
+    fn smoke_path(name: &str) -> std::path::PathBuf {
+        // Locate bench/smoke/ relative to the workspace root (two levels up from this crate).
+        let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        manifest.join("../../..").join("bench/smoke").join(name)
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn smoke_test_name_syntax_all_pass() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let path = smoke_path("test_name_syntax_smoke_test.tyra");
+        let output = std::process::Command::new(&tyra)
+            .args(["test", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "test_name_syntax_smoke_test: all named tests must pass\nstdout={stdout:?}\nstderr={stderr:?}"
+        );
+        assert!(
+            stdout.contains("ok") && !stdout.contains("not ok"),
+            "TAP output must contain only passing tests:\n{stdout:?}"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn smoke_test_name_non_ascii_all_pass() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let path = smoke_path("test_name_non_ascii_smoke_test.tyra");
+        let output = std::process::Command::new(&tyra)
+            .args(["test", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "test_name_non_ascii_smoke_test: non-ASCII named tests must pass\nstdout={stdout:?}\nstderr={stderr:?}"
+        );
+        assert!(
+            stdout.contains("ok") && !stdout.contains("not ok"),
+            "TAP output must contain only passing tests:\n{stdout:?}"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn smoke_test_name_panics_block_pass() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let path = smoke_path("test_name_panics_block_smoke_test.tyra");
+        let output = std::process::Command::new(&tyra)
+            .args(["test", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "test_name_panics_block_smoke_test: panics block + normal block must both pass\nstdout={stdout:?}\nstderr={stderr:?}"
+        );
+        // Both the panics-expecting test and the normal test must appear as ok.
+        let ok_count = stdout.lines().filter(|l| l.starts_with("ok ")).count();
+        assert!(
+            ok_count >= 2,
+            "expected at least 2 passing tests, got {ok_count}:\n{stdout:?}"
+        );
+    }
 }
