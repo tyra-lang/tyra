@@ -1,0 +1,19 @@
+# smoke test: test "name" block with non-ASCII names (ADR 0013)
+#
+# Non-ASCII characters in the name are sanitized to '_' by desugar_test_blocks.
+# Names that differ only in non-ASCII chars would collide after sanitization, so
+# we include distinct ASCII prefixes to guarantee unique desugared identifiers.
+#
+# Desugared names:
+#   "jp: 日本語テスト名"  -> test__jp_______
+#   "kr: 한국어테스트"    -> test__kr_______
+#
+# Both blocks must PASS.
+
+test "jp: 日本語テスト名"
+  Ok(())
+end
+
+test "kr: 한국어테스트"
+  Ok(())
+end

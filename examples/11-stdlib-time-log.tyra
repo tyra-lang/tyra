@@ -1,0 +1,33 @@
+# 11-stdlib-time-log.tyra
+# Practical usage of the time and log stdlib modules (v0.6.0+).
+# SPEC_REF: §17.3.8 — time.now_unix, time.monotonic_millis
+# SPEC_REF: §17.3.9 — log.info, log.warn, log.error
+
+import time
+import log
+
+fn measure_ms(label: String) -> Int
+  let start = time.monotonic_millis()
+  # Simulate work: sum 1..1000
+  let mut total = 0
+  let mut i = 1
+  while i <= 1000
+    total = total + i
+    i = i + 1
+  end
+  let elapsed = time.monotonic_millis() - start
+  log.info("#{label}: sum=#{total}, elapsed=#{elapsed}ms")
+  elapsed
+end
+
+fn main() -> Unit
+  let unix = time.now_unix()
+  log.info("server started at unix=#{unix}")
+
+  let ms = measure_ms("loop-1000")
+  if ms > 1000
+    log.warn("loop took #{ms}ms — unexpectedly slow")
+  end
+
+  log.info("done")
+end

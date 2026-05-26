@@ -1,0 +1,18 @@
+# smoke test: test "name" panics block syntax (ADR 0013 + ADR 0012)
+#
+# Verifies that test "name" panics ... end blocks:
+#   - desugar to test_panics__<sanitized> function names
+#   - PASS when the body calls panic() (exit 101 + __TYRA_PANIC__ sentinel)
+#   - FAIL when the body exits normally (no panic) — but we don't test that
+#     failure path here; it's covered by panic_expect_smoke_test.tyra
+#
+# test_panics__named_intentional_panic must PASS.
+# test__named_no_panic must PASS (plain test alongside panics test).
+
+test "named intentional panic" panics
+  panic("intentional boom for named panics block")
+end
+
+test "named no panic"
+  Ok(())
+end

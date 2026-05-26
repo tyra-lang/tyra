@@ -1293,13 +1293,13 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             if !matches!(key_ty, Ty::Int | Ty::Bool | Ty::String | Ty::Error) {
                 report.add(
                     Diagnostic::error(format!(
-                        "Map key type `{}` is not supported in this version",
+                        "Map key type `{}` requires Eq + Hash, which is not yet supported for this type",
                         key_ty.display_name()
                     ))
                     .with_label(Label::new(expr.span, "unsupported key type"))
                     .with_note(
-                        "Map keys must be Int, Bool, or String. \
-                         User-defined value types as keys are planned for a future release.",
+                        "Supported Map key types: Int, Bool, String. \
+                         Support for user-defined value types (with Eq + Hash) is planned for a future release.",
                     ),
                 );
                 return Ty::Error;
@@ -1459,10 +1459,14 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     }
                     report.add(
                         Diagnostic::error(
-                            "cannot infer Set element type: add a type annotation, e.g. `let s: Set<Int> = set.new()`".to_string(),
+                            "cannot infer Set element type".to_string(),
                         )
                         .with_code("E0308")
-                        .with_label(Label::new(expr.span, "element type unknown")),
+                        .with_label(Label::new(expr.span, "element type unknown"))
+                        .with_note(
+                            "add a type annotation: `let s: Set<Int> = set.new()` \
+                             (supported element types: Int, Bool, String)",
+                        ),
                     );
                     return Ty::Error;
                 }
@@ -2370,13 +2374,13 @@ fn check_supported_map_ty(ty: &Ty, span: Span, report: &mut Report) {
             if !matches!(key_ty, Ty::Int | Ty::Bool | Ty::String | Ty::Error) {
                 report.add(
                     Diagnostic::error(format!(
-                        "Map key type `{}` is not supported in this version",
+                        "Map key type `{}` requires Eq + Hash, which is not yet supported for this type",
                         key_ty.display_name()
                     ))
                     .with_label(Label::new(span, "unsupported key type"))
                     .with_note(
-                        "Map keys must be Int, Bool, or String. \
-                         User-defined value types as keys are planned for a future release.",
+                        "Supported Map key types: Int, Bool, String. \
+                         Support for user-defined value types (with Eq + Hash) is planned for a future release.",
                     ),
                 );
             }
@@ -2399,13 +2403,13 @@ fn check_supported_map_ty(ty: &Ty, span: Span, report: &mut Report) {
             if !matches!(elem_ty, Ty::Int | Ty::Bool | Ty::String | Ty::Error) {
                 report.add(
                     Diagnostic::error(format!(
-                        "Set element type `{}` is not supported in this version",
+                        "Set element type `{}` requires Eq + Hash, which is not yet supported for this type",
                         elem_ty.display_name()
                     ))
                     .with_label(Label::new(span, "unsupported element type"))
                     .with_note(
-                        "Set elements must be Int, Bool, or String. \
-                         User-defined value types are planned for a future release.",
+                        "Supported Set element types: Int, Bool, String. \
+                         Support for user-defined value types (with Eq + Hash) is planned for a future release.",
                     ),
                 );
             }

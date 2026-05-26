@@ -488,6 +488,12 @@ fn main() {
                     list_test_fns(test_file, filter.as_deref());
                 }
             } else if coverage {
+                if junit {
+                    eprintln!(
+                        "note: --format junit is not available with --coverage; \
+                         TAP output will be used"
+                    );
+                }
                 // Coverage mode: run sequentially so TYRA_COV_DIR can be set safely.
                 run_tests_coverage(&test_files, filter.as_deref(), timeout_secs);
             } else {
@@ -1470,12 +1476,12 @@ fn run_tests_coverage(test_files: &[PathBuf], filter: Option<&str>, timeout: Opt
                         match tyra_codegen_llvm::merge_covraw(&covraw_dir, parsed.n) {
                             Some(counters) => {
                                 let report = tyra_codegen_llvm::format_report(&parsed, &counters);
-                                eprintln!("\n--- Coverage: {} ---", test_file.display());
+                                eprintln!("\n# coverage: {}", test_file.display());
                                 eprint!("{report}");
                             }
                             None => {
                                 eprintln!(
-                                    "warning: no covraw data found for {}",
+                                    "# coverage: {} — no data (all tests may have been killed)",
                                     test_file.display()
                                 );
                             }
@@ -1497,7 +1503,7 @@ fn run_tests_coverage(test_files: &[PathBuf], filter: Option<&str>, timeout: Opt
     // Clean up temp dir
     let _ = std::fs::remove_dir_all(&cov_root);
 
-    eprintln!("\n{} passed, {} failed", total_pass, total_fail);
+    eprintln!("\n# results: {} passed, {} failed", total_pass, total_fail);
     if total_fail > 0 {
         process::exit(1);
     }

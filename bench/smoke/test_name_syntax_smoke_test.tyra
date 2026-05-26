@@ -1,0 +1,24 @@
+# smoke test: test "name" block syntax (ADR 0013)
+#
+# Verifies that test "name" ... end blocks:
+#   - desugar to test__<sanitized> function names discoverable by find_test_fns
+#   - pass when the body returns Ok(())
+#   - work with names that contain spaces and punctuation
+#
+# All three blocks must PASS.
+
+import assert
+
+test "basic named test passes"
+  Ok(())
+end
+
+test "named test with arithmetic"
+  assert.eq(2 + 2, 4)?
+  Ok(())
+end
+
+test "named test with string comparison"
+  assert.eq_str("hello", "hello")?
+  Ok(())
+end

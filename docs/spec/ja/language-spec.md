@@ -1505,8 +1505,15 @@ let m: Map<Int, Bool> = {}   # 期待型から K=Int, V=Bool を推論
 - `m.len() -> Int`: エントリ数。
 - 空リテラル `{}` は期待型から `K`/`V` を双方向推論する。期待型のない `{}` は型エラー。
 - `Float` および `mut` フィールドを持つ型はキーに使用できない（`Hash` ability 不充足）。
+  コンパイラは「`Map key type X requires Eq + Hash, which is not yet supported`」と診断する。
 - ランタイム: box 化 erased-value ABI + compiler 生成の `eq`/`hash` 関数ポインタ。
 - 内部レイアウトは `Map<K, V> = { handle: ptr }` の単一 ptr ラッパー。
+
+**v0.6.0 に含まれない操作**:
+- `m.remove(k)` — キー削除（後続リリース）
+- `for k, v in m` — イテレーション（後続リリース）
+- ユーザー定義 `value` 型のキー（Eq + Hash 自動生成は後続リリース）
+- Map 同士のマージ・差分演算
 
 #### 17.3.7 set (v0.6.0 — 新設, ADR-0015)
 
@@ -1523,13 +1530,21 @@ set.contains(s, 2)     # Bool: true
 set.len(s)             # Int: 2
 ```
 
-- `set.new() -> Set<T>`: 空の集合を生成（`T` は文脈推論）。
-- `set.insert(s: Set<T>, v: T) -> Unit`: 要素を追加（重複は無視）。
+- `set.new() -> Set<T>`: 空の集合を生成（`T` は文脈推論、または `let s: Set<Int> = set.new()` で注釈）。
+- `set.insert(s: Set<T>, v: T) -> Unit`: 要素を追加（重複は冪等）。
 - `set.contains(s: Set<T>, v: T) -> Bool`: 要素の存在確認。
 - `set.len(s: Set<T>) -> Int`: 要素数。
 - `Float` および `mut` フィールドを持つ型は使用できない（`Hash` ability 不充足）。
-- セットリテラル構文はない（`{}` が `Map` と衝突するため）。
+  コンパイラは「`Set element type X requires Eq + Hash, which is not yet supported`」と診断する。
+- セットリテラル構文はない（`{}` が `Map` と衝突するため、`set.new()` + `set.insert()` で構築する）。
 - ランタイム: `Map<K,V>` と同じ box 化単一汎用表 + compiler 生成 fn ポインタ。
+
+**v0.6.0 に含まれない操作**:
+- `set.remove(s, v)` — 要素削除（後続リリース）
+- `for v in s` — イテレーション（後続リリース）
+- `set.union` / `set.intersection` / `set.difference` — 集合演算（後続リリース）
+- ユーザー定義 `value` 型の要素（Eq + Hash 自動生成は後続リリース）
+- セットリテラル構文（`{}` と衝突するため非提供。将来も変更しない可能性がある）
 
 #### 17.3.8 time (v0.6.0 — 新設)
 
