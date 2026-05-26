@@ -36,12 +36,12 @@ For descriptive names (including spaces and non-ASCII), use the `test "name"`
 block syntax:
 
 ```tyra
-test "adds two integers" do
+test "adds two integers"
   assert.eq(1 + 2, 3)?
   Ok(())
 end
 
-test "日本語テスト名" do
+test "日本語テスト名"
   assert.eq("hello", "hello")?
   Ok(())
 end

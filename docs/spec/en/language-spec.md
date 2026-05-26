@@ -1503,6 +1503,90 @@ export fn index_of(_ list: List<Int>, _ x: Int) -> Option<Int>
   inline `GC_malloc` + loops); no runtime C ABI is involved. Safe because
   the `List<Int>` layout (`{ptr data, i64 len}`) is compiler-owned.
 
+#### 17.3.6 map (v0.6.0 — fully generalized, ADR-0015)
+
+`Map<K, V>` is fully generalized in v0.6.0 for arbitrary `K: Eq + Hash` and arbitrary `V`.
+
+```tyra
+let table: Map<String, Int> = {"one": 1, "two": 2}
+match table.get("one")
+when Some(n)
+  println("got #{n}")
+when None
+  println("absent")
+end
+table.contains_key("two")   # Bool
+
+let m: Map<Int, Bool> = {}  # bidirectional inference from expected type
+```
+
+- `m.get(k: K) -> Option<V>`: look up a key; returns `Some(value)` or `None`.
+- `m.contains_key(k: K) -> Bool`: membership test.
+- `m.len() -> Int`: entry count.
+- There is no insert/update method. Add entries via map literals `{k: v, ...}`
+  (`m.insert` is planned for a later release).
+- Empty literal `{}` is typed by bidirectional inference from the expected type;
+  a bare `{}` with no expected type is a compile error.
+- `Float` and types with `mut` fields cannot be keys (`Hash` ability unsatisfied).
+
+**Not in v0.6.0**: `m.remove(k)`, `for k, v in m` iteration, user-defined value
+types as keys (Eq + Hash codegen for structs), map merge/diff operations.
+
+#### 17.3.7 set (v0.6.0 — new, ADR-0015)
+
+`Set<T>` is a new generic collection for arbitrary `T: Eq + Hash`.
+
+```tyra
+import set
+
+let s: Set<Int> = set.new()  # explicit annotation required at construction
+let s = s.insert(1)           # returns a new Set<Int>; idempotent
+let s = s.insert(2)
+let s = s.insert(1)           # duplicate — len unchanged
+s.contains(2)                 # Bool: true
+s.len()                       # Int: 2
+```
+
+- `set.new() -> Set<T>`: create an empty set. `T` must be inferable from context,
+  or supply an explicit annotation (`let s: Set<Int> = set.new()`).
+- `s.insert(v: T) -> Set<T>`: add an element and return the updated set (idempotent).
+- `s.contains(v: T) -> Bool`: membership test.
+- `s.len() -> Int`: element count.
+- No set-literal syntax (`{}` conflicts with map literals; use `set.new()` + `.insert()`).
+- `Float` and types with `mut` fields cannot be elements (`Hash` ability unsatisfied).
+
+**Not in v0.6.0**: `s.remove(v)`, iteration, set operations (union/intersection/diff),
+user-defined value types as elements.
+
+#### 17.3.8 time (v0.6.0)
+
+```tyra
+import time
+
+let unix = time.now_unix()          # Int — seconds since Unix epoch
+let ms   = time.monotonic_millis()  # Int — milliseconds since process start
+```
+
+- `time.now_unix() -> Int`: wall-clock Unix timestamp (seconds).
+- `time.monotonic_millis() -> Int`: monotonic elapsed milliseconds; suitable for
+  measuring durations, not wall time.
+
+#### 17.3.9 log (v0.6.0)
+
+```tyra
+import log
+
+log.info("server started")
+log.warn("retry #{n}")
+log.error("connection refused: #{addr}")
+```
+
+- `log.info(_ msg: String) -> Unit`: informational message → **stderr**.
+- `log.warn(_ msg: String) -> Unit`: warning → **stderr**.
+- `log.error(_ msg: String) -> Unit`: error → **stderr**.
+- All three functions write to **stderr** (not stdout). No timestamps or
+  structured fields are added in v0.6.0.
+
 ---
 
 ## 18. Toolchain

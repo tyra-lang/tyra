@@ -1501,8 +1501,8 @@ let m: Map<Int, Bool> = {}   # 期待型から K=Int, V=Bool を推論
 
 - `m.get(k: K) -> Option<V>`: キーを検索し `Some(value)` / `None`。
 - `m.contains_key(k: K) -> Bool`: 存在確認。
-- `m.put(k: K, v: V) -> Unit`: 挿入/上書き。
 - `m.len() -> Int`: エントリ数。
+- 挿入・更新メソッドはない。エントリの追加はリテラル `{k: v, ...}` で行う（後続リリースで `m.insert` を追加予定）。
 - 空リテラル `{}` は期待型から `K`/`V` を双方向推論する。期待型のない `{}` は型エラー。
 - `Float` および `mut` フィールドを持つ型はキーに使用できない（`Hash` ability 不充足）。
   コンパイラは「`Map key type X requires Eq + Hash, which is not yet supported`」と診断する。
@@ -1522,21 +1522,22 @@ let m: Map<Int, Bool> = {}   # 期待型から K=Int, V=Bool を推論
 ```tyra
 import set
 
-let s = set.new[Int]()
-set.insert(s, 1)
-set.insert(s, 2)
-set.insert(s, 1)       # 冪等
-set.contains(s, 2)     # Bool: true
-set.len(s)             # Int: 2
+let s: Set<Int> = set.new()    # 型注釈が必要（T を推論できる位置なら省略可）
+let s = s.insert(1)             # 新しい Set<Int> を返す（冪等）
+let s = s.insert(2)
+let s = s.insert(1)             # 重複は冪等 — len は変わらない
+s.contains(2)                   # Bool: true
+s.len()                         # Int: 2
 ```
 
-- `set.new() -> Set<T>`: 空の集合を生成（`T` は文脈推論、または `let s: Set<Int> = set.new()` で注釈）。
-- `set.insert(s: Set<T>, v: T) -> Unit`: 要素を追加（重複は冪等）。
-- `set.contains(s: Set<T>, v: T) -> Bool`: 要素の存在確認。
-- `set.len(s: Set<T>) -> Int`: 要素数。
+- `set.new() -> Set<T>`: 空の集合を生成。`T` を推論できる文脈では型注釈を省略できるが、
+  裸の `set.new()` には `let s: Set<Int> = set.new()` のように明示注釈が必要。
+- `s.insert(v: T) -> Set<T>`: 要素を追加し新しい Set を返す（重複は冪等）。言語の観点では非破壊的。
+- `s.contains(v: T) -> Bool`: 要素の存在確認。
+- `s.len() -> Int`: 要素数。
 - `Float` および `mut` フィールドを持つ型は使用できない（`Hash` ability 不充足）。
   コンパイラは「`Set element type X requires Eq + Hash, which is not yet supported`」と診断する。
-- セットリテラル構文はない（`{}` が `Map` と衝突するため、`set.new()` + `set.insert()` で構築する）。
+- セットリテラル構文はない（`{}` が `Map` と衝突するため、`set.new()` + `.insert()` で構築する）。
 - ランタイム: `Map<K,V>` と同じ box 化単一汎用表 + compiler 生成 fn ポインタ。
 
 **v0.6.0 に含まれない操作**:
