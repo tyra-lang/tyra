@@ -6,6 +6,8 @@ Tyra includes a built-in test runner. No third-party framework is required.
 
 ## Writing tests
 
+### Named test functions (`test_*`)
+
 Create a file named `*_test.tyra` (for example `math_test.tyra`) alongside your
 source files. Inside, write functions whose names start with `test_` and return
 `Result<Unit, String>`:
@@ -27,6 +29,40 @@ end
 
 Use `?` to propagate a failure immediately. A test passes when it returns
 `Ok(())` and fails when it returns `Err(message)`.
+
+### Named test blocks (`test "name"`) — v0.6.0+
+
+For descriptive names (including spaces and non-ASCII), use the `test "name"`
+block syntax:
+
+```tyra
+test "adds two integers" do
+  assert.eq(1 + 2, 3)?
+  Ok(())
+end
+
+test "日本語テスト名" do
+  assert.eq("hello", "hello")?
+  Ok(())
+end
+```
+
+The body has the same `Result<Unit, String>` semantics as `test_*` functions.
+The closing `end` implies `Ok(())`.
+
+To assert that a test **must** panic, add the `panics` modifier:
+
+```tyra
+test "panics on bad index" panics
+  panic("out of bounds")
+end
+```
+
+The runner expects exit(101) + the `__TYRA_PANIC__` sentinel on stderr. A test
+marked `panics` that returns normally counts as a failure.
+
+Both `test_*` functions and `test "name"` blocks coexist in the same file and
+are discovered automatically by `tyra test`.
 
 ---
 
@@ -175,6 +211,49 @@ are present.
 
 ---
 
+## Coverage reporting — v0.6.0+
+
+Run the test suite with line and function coverage instrumentation:
+
+```bash
+tyra test --coverage
+tyra test --coverage src/
+tyra test --coverage math_test.tyra
+```
+
+After all tests complete the runner prints a per-file coverage report to stderr,
+followed by a merged summary:
+
+```
+# coverage: math_test.tyra
+lines:     6/7  (85%)
+functions: 2/3  (66%)
+
+# results: 2 passed, 0 failed
+```
+
+A line is counted as **covered** if it was executed by at least one test.
+Function coverage counts functions whose first line was reached.
+Branch coverage is **not** reported (see Known Limitations below).
+
+**`--format junit` is not compatible with `--coverage`.**
+When both flags are supplied, `--coverage` takes precedence and TAP output is
+used; a note is printed to stderr:
+
+```
+note: --format junit is not available with --coverage; TAP output will be used
+```
+
+### Known Limitations
+
+| Limitation | Notes |
+|---|---|
+| Branch coverage | Not reported. Only line and function coverage. |
+| `SIGKILL` (timeout) | Increments written before the kill are preserved on a best-effort basis; the last few may be lost. |
+| Parallel (`--jobs N`) | Sequential execution is used automatically under `--coverage`; `--jobs` is silently ignored. |
+
+---
+
 ## Assertion helpers
 
 Import `assert` to get typed assertion functions:
@@ -210,3 +289,5 @@ passes, regardless of any ignored assertion results.
 - Explore the [language specification](../spec/ja/language-spec.md) for the full
   `assert` API reference (§17, stdlib)
 - See [ADR-0008](../design/0008-test-runner.md) for the test runner design rationale
+- See [ADR-0012](../design/0012-panic-semantics.md) for the panic expectation signal design
+- Set up breakpoints and step through tests with the [DAP debugger](10-debugging.md)
