@@ -60,7 +60,8 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - Complex types (closures, GC-boxed recursive ADTs) show simplified DWARF representations
 - `tyra test --coverage` with `--timeout` and `SIGKILL`: last increments in a killed test may not be visible (best-effort)
 - `Set<T>` constructor is `set.new()` (no set-literal syntax to avoid ambiguity with map `{}`)
-- `Map<K,V>` and `Set<T>` are immutable — no `insert`, `remove`, or iteration; build maps via literals and sets via chained `.insert()` calls
+- `Map<K,V>` is immutable — no `insert`, `remove`, or iteration; all entries must be specified in a literal
+- `Set<T>` has no `remove` or iteration; grow a set via chained `s.insert(x)` calls (each returns a new `Set<T>`)
 
 ### Not in This Release
 
