@@ -789,6 +789,7 @@ fn emit_function(
                 .find(|s| !s.loc.is_dummy())
                 .map(|s| s.loc.file_id)
                 .unwrap_or(0);
+            let decl_loc = dwarf.get_or_create_loc(sp, first_line);
             for meta in &func.local_metas {
                 if meta.alloca_name.is_empty() {
                     continue;
@@ -798,7 +799,7 @@ fn emit_function(
                     dwarf.emit_local_var(&meta.name, sp, first_file_id, first_line, type_id);
                 writeln!(
                     out,
-                    "  call void @llvm.dbg.declare(metadata ptr %{}, metadata !{var_id}, metadata !DIExpression())",
+                    "  call void @llvm.dbg.declare(metadata ptr %{}, metadata !{var_id}, metadata !DIExpression()), !dbg !{decl_loc}",
                     meta.alloca_name
                 )
                 .unwrap();

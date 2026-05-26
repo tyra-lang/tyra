@@ -1737,6 +1737,10 @@ fn compile_to_binary_opts(
         output_path.to_str().unwrap().into(),
         opt_flag.into(),
     ];
+    // Preserve DWARF metadata from the IR in debug builds (ADR-0014 §4a).
+    if !release {
+        clang_args.push("-gdwarf-4".into());
+    }
     // libgc: probe common install prefixes. Homebrew on Apple Silicon and
     // Intel place libgc under different roots; Linux package managers use
     // the default search path.
