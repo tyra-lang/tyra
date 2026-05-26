@@ -149,6 +149,7 @@ jobs:
           echo "$output"
           ok_count=$(echo "$output" | grep -cE '^ok ' || true)
           [ "$ok_count" -ge 2 ] || { echo "FAIL: expected at least 2 passing named tests, got $ok_count"; exit 1; }
+          echo "$output" | grep -qE '^not ok ' && { echo "FAIL: test-name panics smoke tests have failures"; exit 1; } || true
 
   release-gate-macos:
     name: build + test + corpus + smoke (macos-15 arm64)
@@ -264,6 +265,7 @@ jobs:
           echo "$output"
           ok_count=$(echo "$output" | grep -cE '^ok ' || true)
           [ "$ok_count" -ge 2 ] || { echo "FAIL: expected at least 2 passing named tests, got $ok_count"; exit 1; }
+          echo "$output" | grep -qE '^not ok ' && { echo "FAIL: test-name panics smoke tests have failures"; exit 1; } || true
 
   release-gate-alpine:
     name: build + test + corpus + smoke (alpine musl)
@@ -418,6 +420,7 @@ jobs:
           echo "$output"
           ok_count=$(echo "$output" | grep -cE '^ok ' || true)
           [ "$ok_count" -ge 2 ] || { echo "FAIL: expected at least 2 passing named tests, got $ok_count"; exit 1; }
+          echo "$output" | grep -qE '^not ok ' && { echo "FAIL: test-name panics smoke tests have failures"; exit 1; } || true
 
   release-gate-windows:
     name: check only (windows tracking)

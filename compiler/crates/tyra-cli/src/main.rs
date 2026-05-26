@@ -2971,5 +2971,9 @@ mod tests {
             ok_count >= 2,
             "expected at least 2 passing tests, got {ok_count}:\n{stdout:?}"
         );
+        assert!(
+            !stdout.contains("not ok "),
+            "test_name_panics_block_smoke_test: unexpected failure line in output\nstdout={stdout:?}\nstderr={stderr:?}"
+        );
     }
 }
