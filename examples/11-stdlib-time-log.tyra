@@ -9,8 +9,8 @@ import log
 fn measure_ms(label: String) -> Int
   let start = time.monotonic_millis()
   # Simulate work: sum 1..1000
-  let mut total = 0
-  let mut i = 1
+  mut total = 0
+  mut i = 1
   while i <= 1000
     total = total + i
     i = i + 1

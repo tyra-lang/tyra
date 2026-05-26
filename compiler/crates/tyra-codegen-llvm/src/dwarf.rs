@@ -171,11 +171,11 @@ impl DwarfCtx {
                 "!DIBasicType(name: \"Float\", size: 64, encoding: DW_ATE_float)".into()
             }
             Ty::String => {
-                "!DIDerivedType(tag: DW_TAG_pointer_type, name: \"String\", size: 64)".into()
+                "!DIDerivedType(tag: DW_TAG_pointer_type, name: \"String\", size: 64, baseType: null)".into()
             }
             Ty::Unit => "!DIBasicType(name: \"Unit\", size: 0)".into(),
             _ => format!(
-                "!DIDerivedType(tag: DW_TAG_pointer_type, name: \"{key}\", size: 64)"
+                "!DIDerivedType(tag: DW_TAG_pointer_type, name: \"{key}\", size: 64, baseType: null)"
             ),
         };
         let id = self.next_id;

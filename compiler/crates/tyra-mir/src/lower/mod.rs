@@ -1078,16 +1078,18 @@ impl<'a> LowerCtx<'a> {
             self.emit_deferred(&mut body);
             if ret_ty == Ty::Unit {
                 self.emit(&mut body, Instruction::Return { value: None });
-            } else if let Some(last_temp) = pre_defer_last_temp {
-                let ret_val = self.maybe_wrap_ok_for_return(last_temp, &ret_ty, &mut body);
+            } else if let Some(expr_val) = last_expr_result {
+                // Prioritize last_expr_result: last_temp_name may pick up a
+                // void-return call dest that is never defined in LLVM IR.
+                let ret_val = self.maybe_wrap_ok_for_return(expr_val, &ret_ty, &mut body);
                 self.emit(
                     &mut body,
                     Instruction::Return {
                         value: Some(Operand::Var(ret_val)),
                     },
                 );
-            } else if let Some(expr_val) = last_expr_result {
-                let ret_val = self.maybe_wrap_ok_for_return(expr_val, &ret_ty, &mut body);
+            } else if let Some(last_temp) = pre_defer_last_temp {
+                let ret_val = self.maybe_wrap_ok_for_return(last_temp, &ret_ty, &mut body);
                 self.emit(
                     &mut body,
                     Instruction::Return {
@@ -1313,19 +1315,23 @@ impl<'a> LowerCtx<'a> {
             self.emit_deferred(&mut body);
             if return_type == Ty::Unit {
                 self.emit(&mut body, Instruction::Return { value: None });
-            } else if let Some(last_temp) = pre_defer_last_temp {
-                // If fn returns Result<T,E> but the tail temp is T (extracted by ?),
-                // wrap it in Ok(T) so the return type matches.
-                let ret_val = self.maybe_wrap_ok_for_return(last_temp, &return_type, &mut body);
+            } else if let Some(expr_val) = last_expr_result {
+                // The last statement was an expression — use its result directly.
+                // This takes priority over pre_defer_last_temp because last_temp_name
+                // may pick up the dest of a void-return call (e.g. a Unit fn call
+                // before a simple variable reference), yielding an undefined SSA value.
+                let ret_val = self.maybe_wrap_ok_for_return(expr_val, &return_type, &mut body);
                 self.emit(
                     &mut body,
                     Instruction::Return {
                         value: Some(Operand::Var(ret_val)),
                     },
                 );
-            } else if let Some(expr_val) = last_expr_result {
-                // Last expression was a simple variable reference (no instruction generated)
-                let ret_val = self.maybe_wrap_ok_for_return(expr_val, &return_type, &mut body);
+            } else if let Some(last_temp) = pre_defer_last_temp {
+                // Fallback: last statement was not an expression (e.g. `let x = f()`).
+                // If fn returns Result<T,E> but the tail temp is T (extracted by ?),
+                // wrap it in Ok(T) so the return type matches.
+                let ret_val = self.maybe_wrap_ok_for_return(last_temp, &return_type, &mut body);
                 self.emit(
                     &mut body,
                     Instruction::Return {
@@ -1947,16 +1953,27 @@ pub(crate) fn is_unit_call_expr(
     let ExprKind::Call(callee, _args) = &expr.kind else {
         return false;
     };
-    let ExprKind::Ident(fname) = &callee.kind else {
-        return false;
-    };
-    if matches!(
-        fname.as_str(),
-        "print" | "println" | "eprint" | "eprintln" | "panic"
-    ) {
-        return true;
+    match &callee.kind {
+        ExprKind::Ident(fname) => {
+            if matches!(
+                fname.as_str(),
+                "print" | "println" | "eprint" | "eprintln" | "panic"
+            ) {
+                return true;
+            }
+            matches!(fn_return_types.get(fname), Some(Ty::Unit))
+        }
+        // module.fn(args) — qualified name is "{module}__{fn}".
+        ExprKind::FieldAccess(obj, method) => {
+            if let ExprKind::Ident(module) = &obj.kind {
+                let qualified = format!("{module}__{method}");
+                matches!(fn_return_types.get(&qualified), Some(Ty::Unit))
+            } else {
+                false
+            }
+        }
+        _ => false,
     }
-    matches!(fn_return_types.get(fname), Some(Ty::Unit))
 }
 
 pub(crate) fn ast_binop_to_mir(op: BinOp, is_float: bool) -> MirBinOp {
