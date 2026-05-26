@@ -845,18 +845,18 @@ end
 Standard collections (design target):
 
 - `List<T>`
-- `Map<K, V>` — only `Map<String, Int>` is implemented in v0.1 (§17.3.6)
-- `Set<T>` — not implemented in v0.1 (§22)
+- `Map<K, V>` — fully generalized in v0.6.0 for arbitrary `K: Eq + Hash` / arbitrary `V` (§17.3.6)
+- `Set<T>` — added in v0.6.0 for arbitrary `T: Eq + Hash` (§17.3.7)
 
 Literals:
 
 ```tyra
 let nums = [1, 2, 3]
-let scores: Map<String, Int> = {"alice": 92, "bob": 85}  # available in v0.1
-# let user_by_id = {1: "mika", 2: "jun"}                 # Map<Int, String> — v0.2+
+let scores: Map<String, Int> = {"alice": 92, "bob": 85}
+let by_id: Map<Int, String> = {1: "mika", 2: "jun"}   # v0.6.0+
 ```
 
-- Map literal keys may be arbitrary expressions (full `Map<K, V>` implementation; v0.1 supports `Map<String, Int>` only)
+- Map literal keys may be arbitrary expressions (`K: Eq + Hash` required)
 - The key type `K` of `Map<K, V>` must satisfy `Hash`
 - Indexing uses `items[index]`
 - `items[index]` panics on out-of-bounds access
@@ -868,10 +868,10 @@ let y = items.get(0)       # returns Option<T>
 let z = items.get(0)?      # Option early return (when the enclosing function returns Option)
 ```
 
-> **v0.1 frozen scope**:
-> - `List<T>`: generic `[]` / `.get(index)` / `for` are available in v0.1. The `list` module functions (`list.push` / `sum` / `max` / `min` / `contains` / `index_of`) are frozen for **`List<Int>` only** (§17.3.5). `List<String>` and other element types can be iterated with `for` but the `list.*` functions do not apply.
-> - `Map<K, V>`: v0.1 freezes **`Map<String, Int>` literals and `.get(k)` / `.contains_key(k)` only** (§17.3.6). Arbitrary K / V, `put` / `remove` / iteration are deferred to §22.
-> - `Set<T>`: not implemented in v0.1 (see §22).
+> **Implementation scope notes**:
+> - `List<T>`: generic `[]` / `.get(index)` / `for` are available. The `list` module functions (`list.push` / `sum` / `max` / `min` / `contains` / `index_of`) are frozen for **`List<Int>` only** (§17.3.5). `List<String>` and other element types can be iterated with `for` but the `list.*` functions do not apply.
+> - `Map<K, V>`: fully generalized in v0.6.0 for arbitrary K / V (§17.3.6). `remove` / iteration are a later release.
+> - `Set<T>`: added in v0.6.0 (§17.3.7). Set-literal syntax and set operations are a later release.
 
 ---
 

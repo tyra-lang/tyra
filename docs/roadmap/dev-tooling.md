@@ -90,7 +90,7 @@ and related developer experience tooling.
 
 - **`test "name"` language syntax** (ADR-0013): contextual-keyword item syntax with optional `panics` modifier; body lowers to `Result<Unit, String>`
 - **Panic expectation** (ADR-0012): runner-native; `exit(101)` + `__TYRA_PANIC__` sentinel identifies intentional panics; OOB = `exit(102)`; no false-pass from segfault/OOM
-- **`tyra test --coverage`** (ADR-0014): Tyra-native line/function coverage; mmap'd per-test `.covraw` files merged by parent; branch coverage out of scope
+- **`tyra test --coverage`** (ADR-0014): Tyra-native line/function coverage; per-test `.covraw` files written via atexit handler, merged by parent; branch coverage out of scope
 - **`time` and `log` stdlib modules**: `now_unix`, `monotonic_millis`, `log.info/warn/error`
 - **Generic `Map<K,V>` and `Set<T>`** (ADR-0015): full generalization with boxed erased-value ABI + compiler-emitted `eq`/`hash` fn pointers
 - **DAP debugger** (ADR-0014 Phase 4): DWARF in LLVM IR text, `lldb-dap` adapter, VS Code `debuggers`/`breakpoints` contributions

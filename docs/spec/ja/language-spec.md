@@ -839,18 +839,18 @@ end
 標準コレクション（設計ターゲット）:
 
 - `List<T>`
-- `Map<K, V>` — v0.1 では `Map<String, Int>` のみ実装（§17.3.6）
-- `Set<T>` — v0.1 では未実装（§22）
+- `Map<K, V>` — v0.6.0 で任意の `K: Eq + Hash` / 任意 `V` に完全一般化（§17.3.6）
+- `Set<T>` — v0.6.0 で任意の `T: Eq + Hash` として新設（§17.3.7）
 
 リテラル:
 
 ```tyra
 let nums = [1, 2, 3]
-let scores: Map<String, Int> = {"alice": 92, "bob": 85}  # v0.1 で利用可能
-# let user_by_id = {1: "mika", 2: "jun"}                 # Map<Int, String> — v0.2 以降
+let scores: Map<String, Int> = {"alice": 92, "bob": 85}
+let by_id: Map<Int, String> = {1: "mika", 2: "jun"}   # v0.6.0 以降
 ```
 
-- map literal のキーは任意の式を許可する（full `Map<K, V>` 実装時。v0.1 では `Map<String, Int>` のみ）
+- map literal のキーは任意の式を許可する（`K: Eq + Hash` 要件）
 - `Map<K, V>` のキー型 `K` は `Hash` を満たさなければならない
 - index 構文は `items[index]` とする
 - `items[index]` は境界外アクセス時に panic する
@@ -862,10 +862,10 @@ let y = items.get(0)       # Option<T> を返す
 let z = items.get(0)?      # Option 早期 return (関数戻り値が Option の場合)
 ```
 
-> **v0.1 凍結スコープ**:
+> **実装スコープメモ**:
 > - `List<T>`: `[]` / `.get(index)` / `for` の generic サポートは v0.1 で利用可能。`list` モジュール関数（`list.push` / `sum` / `max` / `min` / `contains` / `index_of`）は **`List<Int>` 専用** で凍結（§17.3.5）。`List<String>` などは `for` で走査可だが `list.*` 関数は使えない。
-> - `Map<K, V>`: v0.1 では **`Map<String, Int>` リテラルと `.get(k)` / `.contains_key(k)` のみ** 凍結（§17.3.6）。任意の K / V、`put` / `remove` / イテレーションは §22 で保留。
-> - `Set<T>`: v0.1 では未実装（§22 参照）。
+> - `Map<K, V>`: v0.6.0 で任意 K / V に完全一般化（§17.3.6）。`remove` / イテレーションは後続リリース以降。
+> - `Set<T>`: v0.6.0 で新設（§17.3.7）。セットリテラル構文・集合演算は後続リリース以降。
 
 ---
 

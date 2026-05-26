@@ -40,8 +40,8 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 **Coverage reporting — `tyra test --coverage` (ADR-0014)**
 - Reports line and function coverage; branch coverage is explicitly out of scope
 - Counters are `(file, line)` keyed; each basic-block entry that introduces a new source line increments the counter — no false-uncovered from multi-BB lines
-- Per-test subprocesses write counters to mmap'd `.covraw` files; parent merges all files after test run
-- Abnormal exits (panic, OOB abort) retain mmap'd counters; `SIGKILL` timeout is best-effort
+- Per-test subprocesses write counters to `$TYRA_COV_DIR/<pid>.covraw` via an `atexit` handler; parent merges all files after test run
+- Normal exits and panics/OOB aborts flush counters (atexit runs); `SIGKILL` timeout is best-effort (atexit may not run)
 
 **DAP debugger — DWARF + lldb-dap + VS Code (ADR-0014 Phase 4)**
 - Non-release builds (`tyra run`, `tyra build` without `--release`) emit full DWARF debug info in the generated LLVM IR: `DICompileUnit`, `DIFile`, `DISubprogram`, `DILocation` per instruction, `DILocalVariable` + `llvm.dbg.declare` for locals and parameters
