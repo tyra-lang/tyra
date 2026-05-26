@@ -134,12 +134,14 @@ jobs:
           output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_syntax_smoke_test.tyra 2>&1)
           echo "$output"
           echo "$output" | grep -qE '^ok ' || { echo "FAIL: named test syntax smoke tests not passing"; exit 1; }
+          echo "$output" | grep -qE '^not ok ' && { echo "FAIL: named test syntax smoke tests have failures"; exit 1; } || true
 
       - name: Smoke test (test "name" non-ASCII)
         run: |
           output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_non_ascii_smoke_test.tyra 2>&1)
           echo "$output"
           echo "$output" | grep -qE '^ok ' || { echo "FAIL: non-ASCII named test smoke tests not passing"; exit 1; }
+          echo "$output" | grep -qE '^not ok ' && { echo "FAIL: non-ASCII named test smoke tests have failures"; exit 1; } || true
 
       - name: Smoke test (test "name" panics modifier)
         run: |
@@ -247,12 +249,14 @@ jobs:
           output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_syntax_smoke_test.tyra 2>&1)
           echo "$output"
           echo "$output" | grep -qE '^ok ' || { echo "FAIL: named test syntax smoke tests not passing"; exit 1; }
+          echo "$output" | grep -qE '^not ok ' && { echo "FAIL: named test syntax smoke tests have failures"; exit 1; } || true
 
       - name: Smoke test (test "name" non-ASCII)
         run: |
           output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_non_ascii_smoke_test.tyra 2>&1)
           echo "$output"
           echo "$output" | grep -qE '^ok ' || { echo "FAIL: non-ASCII named test smoke tests not passing"; exit 1; }
+          echo "$output" | grep -qE '^not ok ' && { echo "FAIL: non-ASCII named test smoke tests have failures"; exit 1; } || true
 
       - name: Smoke test (test "name" panics modifier)
         run: |
@@ -399,12 +403,14 @@ jobs:
           output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_syntax_smoke_test.tyra 2>&1)
           echo "$output"
           echo "$output" | grep -qE '^ok ' || { echo "FAIL: named test syntax smoke tests not passing"; exit 1; }
+          echo "$output" | grep -qE '^not ok ' && { echo "FAIL: named test syntax smoke tests have failures"; exit 1; } || true
 
       - name: Smoke test (test "name" non-ASCII)
         run: |
           output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_non_ascii_smoke_test.tyra 2>&1)
           echo "$output"
           echo "$output" | grep -qE '^ok ' || { echo "FAIL: non-ASCII named test smoke tests not passing"; exit 1; }
+          echo "$output" | grep -qE '^not ok ' && { echo "FAIL: non-ASCII named test smoke tests have failures"; exit 1; } || true
 
       - name: Smoke test (test "name" panics modifier)
         run: |
