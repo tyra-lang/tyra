@@ -1,0 +1,24 @@
+# coverage_smoke_test.tyra
+# Used by the ignored E2E test in tyra-cli to verify that
+# 'tyra test --coverage' produces a coverage report.
+# All tests here must pass so that status.success() == true.
+
+import assert
+
+fn add(_ a: Int, _ b: Int) -> Int
+  a + b
+end
+
+fn uncovered_fn(_ x: Int) -> Int
+  x * 2
+end
+
+fn test_add_basic() -> Result<Unit, String>
+  assert.eq(add(1, 2), 3)?
+  Ok(())
+end
+
+fn test_add_zero() -> Result<Unit, String>
+  assert.eq(add(0, 0), 0)?
+  Ok(())
+end

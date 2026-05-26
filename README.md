@@ -210,10 +210,13 @@ tyra build --static myprogram.tyra
 
 - **[Getting Started](docs/getting-started/README.md)** — installation, hello world, testing, and project lifecycle
   - [Project Lifecycle](docs/getting-started/09-project-lifecycle.md) — `tyra new`, `tyra mod`, dependencies, builds
+  - [Debugging](docs/getting-started/10-debugging.md) — DAP debugger, VS Code breakpoints, lldb-dap setup
 - **[Language Specification (Japanese)](docs/spec/ja/language-spec.md)** — the authoritative source of truth
 - **[Language Specification (English)](docs/spec/en/language-spec.md)** — translation, may lag behind
 - **[Design Decisions](docs/design/)** — architecture decision records explaining *why*
 - **[RFCs](docs/rfcs/)** — proposed changes for future versions
+- **[Examples](examples/)** — runnable programs demonstrating stdlib features
+  - [examples/11-stdlib-time-log.tyra](examples/11-stdlib-time-log.tyra) — `time.now_unix`, `time.monotonic_millis`, `log.info/warn/error`
 
 ## Goals
 

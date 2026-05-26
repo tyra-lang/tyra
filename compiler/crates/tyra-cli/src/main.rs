@@ -2976,4 +2976,37 @@ mod tests {
             "test_name_panics_block_smoke_test: unexpected failure line in output\nstdout={stdout:?}\nstderr={stderr:?}"
         );
     }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn smoke_test_coverage_report() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let path = smoke_path("coverage_smoke_test.tyra");
+        let output = std::process::Command::new(&tyra)
+            .args(["test", "--coverage", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let combined = format!("{stdout}{stderr}");
+        assert!(
+            output.status.success(),
+            "coverage_smoke_test: all tests must pass\nstdout={stdout:?}\nstderr={stderr:?}"
+        );
+        assert!(
+            !stdout.contains("not ok "),
+            "coverage_smoke_test: unexpected failure in TAP output\nstdout={stdout:?}"
+        );
+        assert!(
+            combined.contains("# coverage:"),
+            "coverage_smoke_test: expected '# coverage:' header in output\ncombined={combined:?}"
+        );
+        assert!(
+            combined.contains('%'),
+            "coverage_smoke_test: expected coverage percentage in output\ncombined={combined:?}"
+        );
+    }
 }
