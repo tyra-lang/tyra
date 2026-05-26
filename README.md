@@ -284,7 +284,7 @@ The compiler always declares which spec version it implements:
 ```console
 $ tyra --version
 tyra 0.6.0
-implementing language spec 0.4
+implementing language spec 0.6
 ```
 
 While Tyra is at v0.x, **breaking changes are allowed in MINOR version bumps**. After v1.0, breaking changes will use the Edition model (similar to Rust editions).
