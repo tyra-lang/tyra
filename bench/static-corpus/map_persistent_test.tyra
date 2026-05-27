@@ -1,0 +1,28 @@
+# bench/static-corpus/map_persistent_test.tyra
+# Tests HAMT immutability: inserting into m1 to get m2 does not affect m1.
+# SPEC_REF: §17.3.6 (ADR-0015) — Map persistent semantics (v0.7.0)
+import assert
+
+fn test_map_insert_persistent() -> Result<Unit, String>
+  let m: Map<String, Int> = {}
+  let m1 = m.insert("a", 1)
+  let m2 = m1.insert("b", 2)
+  assert.eq(m1.contains_key("b"), false)?
+  assert.eq(m1.len(), 1)?
+  assert.eq(m2.len(), 2)?
+  assert.eq(m2.contains_key("a"), true)?
+  assert.eq(m2.contains_key("b"), true)?
+  Ok(())
+end
+
+fn test_map_remove_persistent() -> Result<Unit, String>
+  let m: Map<String, Int> = {}
+  let m1 = m.insert("x", 10)
+  let m1 = m1.insert("y", 20)
+  let m2 = m1.remove("x")
+  assert.eq(m1.contains_key("x"), true)?
+  assert.eq(m2.contains_key("x"), false)?
+  assert.eq(m1.len(), 2)?
+  assert.eq(m2.len(), 1)?
+  Ok(())
+end

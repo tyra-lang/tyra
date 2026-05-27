@@ -1,0 +1,12 @@
+# 22-set-remove.tyra
+# Exercises: Set<Int> with .insert() and .remove()
+# SPEC_REF: §17.3.x (ADR-0015) — Set persistent semantics (v0.7.0)
+
+fn main() -> Int
+  let s: Set<Int> = set.new()
+  let s = s.insert(1)
+  let s = s.insert(2)
+  let s = s.insert(3)
+  let s2 = s.remove(2)
+  0
+end

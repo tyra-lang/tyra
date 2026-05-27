@@ -1,0 +1,12 @@
+# 21-map-persistent.tyra
+# Exercises: Map<String,Int> with chained .insert() calls and one .remove()
+# SPEC_REF: §17.3.6 (ADR-0015) — Map persistent semantics (v0.7.0)
+
+fn main() -> Int
+  let m: Map<String, Int> = {}
+  let m = m.insert("a", 1)
+  let m = m.insert("b", 2)
+  let m = m.insert("c", 3)
+  let m2 = m.remove("b")
+  0
+end
