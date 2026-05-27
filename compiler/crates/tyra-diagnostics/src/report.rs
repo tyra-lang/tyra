@@ -1,14 +1,20 @@
 // Report collects diagnostics during a compilation pass and renders them.
 // This is the primary interface for emitting errors.
 
-use crate::{Diagnostic, Level, SourceMap};
+use std::collections::HashSet;
+
+use crate::{Diagnostic, Level, SourceMap, Span};
 
 /// Collects diagnostics and tracks whether any errors occurred.
+/// Duplicate diagnostics — identified by the same primary-label span and error
+/// code — are silently discarded to prevent cascade floods.
 #[derive(Debug)]
 pub struct Report {
     diagnostics: Vec<Diagnostic>,
     error_count: u32,
     warning_count: u32,
+    /// Tracks (primary span, code) pairs that have already been emitted.
+    seen: HashSet<(Span, String)>,
 }
 
 impl Report {
@@ -17,10 +23,20 @@ impl Report {
             diagnostics: Vec::new(),
             error_count: 0,
             warning_count: 0,
+            seen: HashSet::new(),
         }
     }
 
     pub fn add(&mut self, diag: Diagnostic) {
+        // Deduplicate on (primary_span, code).  A diagnostic without a primary
+        // label or without a code is never deduplicated (always emitted).
+        if let (Some(label), Some(code)) = (diag.labels.first(), &diag.code) {
+            let key = (label.span, code.clone());
+            if !self.seen.insert(key) {
+                // Already emitted an identical (span, code) pair — discard.
+                return;
+            }
+        }
         match diag.level {
             Level::Error => self.error_count += 1,
             Level::Warning => self.warning_count += 1,
@@ -177,5 +193,62 @@ mod tests {
         let sources = SourceMap::new();
         assert!(!report.has_errors());
         assert_eq!(report.render(&sources), "");
+    }
+
+    #[test]
+    fn dedup_same_span_and_code() {
+        use crate::SourceId;
+        let src = SourceId::test(0);
+        let span = Span::new(src, 10, 20);
+
+        let mut report = Report::new();
+        // Add same (span, code) twice — second should be dropped.
+        report.add(
+            Diagnostic::error("first")
+                .with_code("E0308")
+                .with_label(Label::new(span, "mismatch")),
+        );
+        report.add(
+            Diagnostic::error("duplicate")
+                .with_code("E0308")
+                .with_label(Label::new(span, "mismatch again")),
+        );
+        assert_eq!(report.error_count(), 1);
+        assert_eq!(report.diagnostics().len(), 1);
+        assert_eq!(report.diagnostics()[0].message, "first");
+    }
+
+    #[test]
+    fn dedup_different_code_same_span() {
+        use crate::SourceId;
+        let src = SourceId::test(0);
+        let span = Span::new(src, 10, 20);
+
+        let mut report = Report::new();
+        report.add(
+            Diagnostic::error("e1")
+                .with_code("E0308")
+                .with_label(Label::new(span, "a")),
+        );
+        // Different code at same span → NOT deduplicated.
+        report.add(
+            Diagnostic::error("e2")
+                .with_code("E0301")
+                .with_label(Label::new(span, "b")),
+        );
+        assert_eq!(report.error_count(), 2);
+    }
+
+    #[test]
+    fn dedup_no_code_always_emitted() {
+        use crate::SourceId;
+        let src = SourceId::test(0);
+        let span = Span::new(src, 10, 20);
+
+        let mut report = Report::new();
+        // Diagnostics without a code are never deduplicated.
+        report.add(Diagnostic::error("a").with_label(Label::new(span, "x")));
+        report.add(Diagnostic::error("b").with_label(Label::new(span, "y")));
+        assert_eq!(report.error_count(), 2);
     }
 }

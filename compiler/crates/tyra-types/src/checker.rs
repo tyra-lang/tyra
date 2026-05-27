@@ -1476,6 +1476,42 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 let obj_ty = infer_expr(obj, env, report);
                 check_trait_method_call(&obj_ty, method, expr.span, env, report);
 
+                // Map<K,V> method dispatch (ADR-0015, v0.7.0).
+                if let Ty::Generic(name, type_args) = &obj_ty
+                    && name == "Map"
+                    && type_args.len() == 2
+                {
+                    let key_ty = type_args[0].clone();
+                    let val_ty = type_args[1].clone();
+                    match method.as_str() {
+                        "insert" if args.len() == 2 => {
+                            let arg_k = infer_expr(&args[0].value, env, report);
+                            let arg_v = infer_expr(&args[1].value, env, report);
+                            check_type_match(&key_ty, &arg_k, args[0].span, None, env, report);
+                            check_type_match(&val_ty, &arg_v, args[1].span, None, env, report);
+                            return obj_ty.clone();
+                        }
+                        "remove" if args.len() == 1 => {
+                            let arg_k = infer_expr(&args[0].value, env, report);
+                            check_type_match(&key_ty, &arg_k, args[0].span, None, env, report);
+                            return obj_ty.clone();
+                        }
+                        "contains_key" if args.len() == 1 => {
+                            let arg_k = infer_expr(&args[0].value, env, report);
+                            check_type_match(&key_ty, &arg_k, args[0].span, None, env, report);
+                            return Ty::Bool;
+                        }
+                        "get" if args.len() == 1 => {
+                            infer_expr(&args[0].value, env, report);
+                            return Ty::Generic("Option".into(), vec![val_ty]);
+                        }
+                        "len" if args.is_empty() => {
+                            return Ty::Int;
+                        }
+                        _ => {}
+                    }
+                }
+
                 // Set<T> method dispatch (ADR-0015).
                 if let Ty::Generic(name, type_args) = &obj_ty
                     && name == "Set"
@@ -1484,6 +1520,11 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     let elem_ty = type_args[0].clone();
                     match method.as_str() {
                         "insert" if args.len() == 1 => {
+                            let arg_ty = infer_expr(&args[0].value, env, report);
+                            check_type_match(&elem_ty, &arg_ty, args[0].span, None, env, report);
+                            return obj_ty.clone();
+                        }
+                        "remove" if args.len() == 1 => {
                             let arg_ty = infer_expr(&args[0].value, env, report);
                             check_type_match(&elem_ty, &arg_ty, args[0].span, None, env, report);
                             return obj_ty.clone();
@@ -1812,11 +1853,13 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     infer_expr(&arg.value, env, report);
                 }
                 // Method return type is not yet resolved by the type checker
-                // (impl method signatures live in MIR). Returning Ty::Error here
-                // intentionally suppresses downstream E0308 — users see the
-                // E0501 (Stringable impl) diagnostic without cascading false
-                // positives. When method resolution lands, this should return
-                // the impl method's declared return type.
+                // (impl method signatures live in MIR). When the receiver type
+                // is already Ty::Error (e.g. an unresolved module identifier
+                // like `io` or `string`), propagate Ty::Error to suppress
+                // spurious cascade diagnostics. When the receiver type IS known
+                // (a concrete Named/Generic type), also return Ty::Error so that
+                // downstream consumers don't misinterpret the result; Report
+                // dedup prevents duplicate-code floods at the same span.
                 return Ty::Error;
             }
 
