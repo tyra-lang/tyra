@@ -2513,6 +2513,24 @@ fn e0308_help_hint(expected: &Ty, actual: &Ty, env: &TypeEnv) -> Option<String> 
         return Some("convert with `float.to_int(x)`".to_string());
     }
 
+    // Heuristic (iv): ADT variant vs parent — not implementable without richer variant type
+    // representation; deferred to v0.8+.
+    //
+    // ADR 0017 specifies: when expected is a concrete ADT variant type (e.g. the type of
+    // `Foo.Bar`) but actual is the parent ADT type itself (e.g. `Foo`), or vice versa,
+    // suggest `help: "did you mean \`Foo.Bar(...)\`?"`.
+    //
+    // This is not implementable here because `Ty::Named(String)` does not structurally
+    // distinguish ADT variant constructor types from parent ADT types.  Both a parent ADT
+    // `Color` and a standalone named type are represented as `Ty::Named("Color")`, and
+    // `TypeEnv` only maps parent → variant names (forward direction), with no reverse
+    // lookup from a variant name back to its parent ADT.  To implement this heuristic,
+    // `Ty` would need a `Ty::Variant { parent: String, name: String }` variant, or
+    // `TypeEnv` would need a reverse map (variant_name → parent_adt_name).
+    //
+    // TODO(v0.8+): add `Ty::Variant` (or a reverse variant-to-parent map in TypeEnv)
+    // and implement heuristic (iv) with dot-notation suggestion `Foo.Bar(...)`.
+
     None
 }
 

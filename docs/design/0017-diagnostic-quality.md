@@ -210,6 +210,7 @@ Keep the current structure: one label at the use-site, no secondary label pointi
 - Diagnostic dedup adds runtime bookkeeping (set/map of seen (span, code) pairs)
 - Heuristic help is inherently imperfect and may not suit all use cases; refinement may be needed after benchmarking
 - The four heuristics do not cover all type mismatches (e.g. struct field type mismatch, higher-order function arg mismatches) — extensible design for future heuristics
+- Heuristic (iv) (ADT variant vs parent) not implemented in v0.7.0 — `Ty::Named` does not structurally distinguish variants from parent types. Deferred to v0.8+.
 
 **Implementation order**
 
