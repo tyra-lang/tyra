@@ -391,6 +391,25 @@ pub(crate) fn emit_builtin_call(
             .unwrap();
             true
         }
+        _ if fname.starts_with("__map_remove__") => {
+            let k = fname.strip_prefix("__map_remove__").unwrap_or("String");
+            let d = dest.as_deref().unwrap_or("_map_rm");
+            let m = args
+                .first()
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            let k_val = args
+                .get(1)
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            emit_box_value(out, &format!("{d}.kbox"), k_val.as_str(), k, d);
+            writeln!(
+                out,
+                "  %{d} = call ptr @tyra_map_remove(ptr {m}, ptr %{d}.kbox)"
+            )
+            .unwrap();
+            true
+        }
         _ if fname.starts_with("__map_contains__") => {
             let k = fname.strip_prefix("__map_contains__").unwrap_or("String");
             let d = dest.as_deref().unwrap_or("_map_has");
@@ -446,6 +465,25 @@ pub(crate) fn emit_builtin_call(
             writeln!(
                 out,
                 "  %{d} = call ptr @tyra_set_insert(ptr {s}, ptr %{d}.kbox)"
+            )
+            .unwrap();
+            true
+        }
+        _ if fname.starts_with("__set_remove__") => {
+            let t = fname.strip_prefix("__set_remove__").unwrap_or("Int");
+            let d = dest.as_deref().unwrap_or("_set_rm");
+            let s = args
+                .first()
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            let k_val = args
+                .get(1)
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            emit_box_value(out, &format!("{d}.kbox"), k_val.as_str(), t, d);
+            writeln!(
+                out,
+                "  %{d} = call ptr @tyra_set_remove(ptr {s}, ptr %{d}.kbox)"
             )
             .unwrap();
             true

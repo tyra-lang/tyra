@@ -859,6 +859,7 @@ impl<'a> LowerCtx<'a> {
     pub(super) fn register_map_intrinsics(&mut self, k: &str, v: &str) {
         let new_fn = format!("__map_new__{k}__{v}");
         let insert_fn = format!("__map_insert__{k}__{v}");
+        let remove_fn = format!("__map_remove__{k}");
         let contains_fn = format!("__map_contains__{k}");
         // new: () -> ptr (String = ptr hack)
         self.fn_return_types.insert(new_fn.clone(), Ty::String);
@@ -867,6 +868,10 @@ impl<'a> LowerCtx<'a> {
         self.fn_return_types.insert(insert_fn.clone(), Ty::String);
         self.fn_param_types
             .insert(insert_fn, vec![Ty::String, Ty::String, Ty::String]);
+        // remove: (ptr, K) -> ptr
+        self.fn_return_types.insert(remove_fn.clone(), Ty::String);
+        self.fn_param_types
+            .insert(remove_fn, vec![Ty::String, Ty::String]);
         // contains: (ptr, K) -> Bool
         self.fn_return_types.insert(contains_fn.clone(), Ty::Bool);
         self.fn_param_types

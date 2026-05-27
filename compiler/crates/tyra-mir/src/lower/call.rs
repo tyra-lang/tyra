@@ -216,9 +216,121 @@ impl super::LowerCtx<'_> {
         }
 
         // §17.3.6 Map<K, V> method dispatch (generic — ADR-0015).
+        // - m.insert(k, v)    → Map<K,V> (persistent insert, returns new map)
+        // - m.remove(k)       → Map<K,V> (persistent remove, returns new map)
         // - m.get(k)          → Option<V> via MapGetOption (null-ptr check)
         // - m.contains_key(k) → Bool
         // - m.len()           → Int  (handled below in the general .len() arm)
+        if let ExprKind::FieldAccess(obj, method) = &callee.kind
+            && method.as_str() == "insert"
+            && args.len() == 2
+        {
+            if let Some(map_ty) = self.infer_map_type(obj) {
+                let (key_ty, val_ty) = match &map_ty {
+                    Ty::Generic(_, args) if args.len() == 2 => {
+                        (args[0].clone(), args[1].clone())
+                    }
+                    _ => (Ty::String, Ty::Int),
+                };
+                let map_struct = map_ty.monomorphized_name();
+                let k_name = key_ty.monomorphized_name();
+                let v_name = val_ty.monomorphized_name();
+                let obj_val = self.lower_expr(obj, body);
+                let handle = self.fresh_temp();
+                self.emit(
+                    body,
+                    Instruction::FieldGet {
+                        dest: handle.clone(),
+                        obj: Operand::Var(obj_val),
+                        type_name: map_struct.clone(),
+                        field_index: 0,
+                    },
+                );
+                self.string_vars.insert(handle.clone());
+                let key_val = self.lower_expr(&args[0].value, body);
+                let val_val = self.lower_expr(&args[1].value, body);
+                let new_handle = self.fresh_temp();
+                self.emit_at(
+                    body,
+                    call_loc,
+                    Instruction::Call {
+                        dest: Some(new_handle.clone()),
+                        func: format!("__map_insert__{k_name}__{v_name}"),
+                        args: vec![
+                            Operand::Var(handle),
+                            Operand::Var(key_val),
+                            Operand::Var(val_val),
+                        ],
+                    },
+                );
+                self.string_vars.insert(new_handle.clone());
+                let dest = self.fresh_temp();
+                self.emit(
+                    body,
+                    Instruction::StructInit {
+                        dest: dest.clone(),
+                        type_name: map_struct.clone(),
+                        fields: vec![Operand::Var(new_handle)],
+                    },
+                );
+                self.string_vars.insert(dest.clone());
+                self.var_types.insert(dest.clone(), map_struct);
+                self.generic_var_types.insert(dest.clone(), map_ty);
+                return dest;
+            }
+        }
+        if let ExprKind::FieldAccess(obj, method) = &callee.kind
+            && method.as_str() == "remove"
+            && args.len() == 1
+        {
+            if let Some(map_ty) = self.infer_map_type(obj) {
+                let (key_ty, _val_ty) = match &map_ty {
+                    Ty::Generic(_, args) if args.len() == 2 => {
+                        (args[0].clone(), args[1].clone())
+                    }
+                    _ => (Ty::String, Ty::Int),
+                };
+                let map_struct = map_ty.monomorphized_name();
+                let k_name = key_ty.monomorphized_name();
+                let obj_val = self.lower_expr(obj, body);
+                let handle = self.fresh_temp();
+                self.emit(
+                    body,
+                    Instruction::FieldGet {
+                        dest: handle.clone(),
+                        obj: Operand::Var(obj_val),
+                        type_name: map_struct.clone(),
+                        field_index: 0,
+                    },
+                );
+                self.string_vars.insert(handle.clone());
+                let key_val = self.lower_expr(&args[0].value, body);
+                let new_handle = self.fresh_temp();
+                self.emit_at(
+                    body,
+                    call_loc,
+                    Instruction::Call {
+                        dest: Some(new_handle.clone()),
+                        func: format!("__map_remove__{k_name}"),
+                        args: vec![Operand::Var(handle), Operand::Var(key_val)],
+                    },
+                );
+                self.string_vars.insert(new_handle.clone());
+                let dest = self.fresh_temp();
+                self.emit(
+                    body,
+                    Instruction::StructInit {
+                        dest: dest.clone(),
+                        type_name: map_struct.clone(),
+                        fields: vec![Operand::Var(new_handle)],
+                    },
+                );
+                self.string_vars.insert(dest.clone());
+                self.var_types.insert(dest.clone(), map_struct);
+                self.generic_var_types.insert(dest.clone(), map_ty);
+                return dest;
+            }
+        }
         if let ExprKind::FieldAccess(obj, method) = &callee.kind {
             if matches!(method.as_str(), "get" | "contains_key") && args.len() == 1 {
                 if let Some(map_ty) = self.infer_map_type(obj) {
@@ -357,9 +469,10 @@ impl super::LowerCtx<'_> {
 
         // §17.3.x Set<T> method dispatch (ADR-0015).
         // - s.insert(x)   → Set<T> (returns updated set, idempotent on duplicates)
+        // - s.remove(x)   → Set<T> (persistent remove, returns new set without x)
         // - s.contains(x) → Bool
         if let ExprKind::FieldAccess(obj, method) = &callee.kind {
-            if matches!(method.as_str(), "insert" | "contains") && args.len() == 1 {
+            if matches!(method.as_str(), "insert" | "remove" | "contains") && args.len() == 1 {
                 if let Some(set_ty) = self.infer_set_type(obj) {
                     let elem_ty = set_ty.set_elem().cloned().unwrap_or(Ty::Int);
                     let set_struct = set_ty.monomorphized_name();
@@ -399,6 +512,32 @@ impl super::LowerCtx<'_> {
                                 Instruction::Call {
                                     dest: Some(new_handle.clone()),
                                     func: format!("__set_insert__{t_name}"),
+                                    args: vec![Operand::Var(handle), Operand::Var(key_val)],
+                                },
+                            );
+                            self.string_vars.insert(new_handle.clone());
+                            let dest = self.fresh_temp();
+                            self.emit(
+                                body,
+                                Instruction::StructInit {
+                                    dest: dest.clone(),
+                                    type_name: set_struct.clone(),
+                                    fields: vec![Operand::Var(new_handle)],
+                                },
+                            );
+                            self.string_vars.insert(dest.clone());
+                            self.var_types.insert(dest.clone(), set_struct);
+                            self.generic_var_types.insert(dest.clone(), set_ty);
+                            return dest;
+                        }
+                        "remove" => {
+                            let new_handle = self.fresh_temp();
+                            self.emit_at(
+                                body,
+                                call_loc,
+                                Instruction::Call {
+                                    dest: Some(new_handle.clone()),
+                                    func: format!("__set_remove__{t_name}"),
                                     args: vec![Operand::Var(handle), Operand::Var(key_val)],
                                 },
                             );
