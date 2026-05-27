@@ -1,4 +1,4 @@
-//! Generic Map<K,V> runtime — open-addressing hash table (ADR-0015).
+//! Generic Map<K,V> runtime — Hash Array Mapped Trie (HAMT) (ADR-0016).
 //!
 //! All keys and values are stored as opaque `*const u8` (i8* in LLVM) pointing
 //! to GC_malloc'd boxes.  The caller (compiler-emitted code) boxes each key/
@@ -8,8 +8,12 @@
 //! addresses are passed at construction time (function pointers).
 //!
 //! All heap allocations use `GC_malloc` so Boehm GC owns every byte; no manual
-//! `free` is ever needed.  The conservative GC sees the entries array (a
-//! GC_malloc'd pointer) and retains every non-null key/value pointer through it.
+//! `free` is ever needed.  Shared HAMT nodes are safe because Boehm
+//! conservatively scans all pointers in GC_malloc'd memory.
+//!
+//! Structural immutability: `tyra_map_insert` and `tyra_map_remove` return a
+//! NEW TyraMap pointer with path-copied nodes.  The original map is unchanged.
+//! This eliminates the aliasing hazard that would be exposed by iteration.
 //!
 //! Thread-safety: not guaranteed.  Tyra tasks own their maps; no sharing.
 
@@ -19,6 +23,7 @@
 
 use std::ffi::{CStr, c_void};
 use std::os::raw::{c_char, c_int};
+use std::ptr;
 
 // ── Boehm GC extern ─────────────────────────────────────────────────────────
 
@@ -31,86 +36,381 @@ unsafe extern "C" {
 type EqFn = unsafe extern "C" fn(*const u8, *const u8) -> i32;
 type HashFn = unsafe extern "C" fn(*const u8) -> i64;
 
+/// A HAMT node. All variants are heap-allocated via GC_malloc.
 #[repr(C)]
-struct TyraMapEntry {
-    key: *const u8, // null → empty slot
-    val: *const u8,
+enum HamtNode {
+    /// Leaf node: stores one key-value pair.
+    Leaf {
+        hash: u64,
+        key: *const u8,
+        val: *const u8,
+    },
+    /// Internal branch node: up to 32 children indexed by 5-bit hash slices.
+    Branch {
+        bitmap: u32,
+        children: *mut *mut HamtNode,
+    },
+    /// Hash collision node: multiple entries sharing the same full 64-bit hash.
+    Collision {
+        hash: u64,
+        count: u32,
+        entries: *mut (*const u8, *const u8),
+    },
 }
 
+/// Public map handle (C ABI).
 #[repr(C)]
 pub struct TyraMap {
-    eq_fn: EqFn,
-    hash_fn: HashFn,
-    count: i64,
-    capacity: i64, // always a power of 2
-    entries: *mut TyraMapEntry,
+    pub eq_fn: EqFn,
+    pub hash_fn: HashFn,
+    pub count: i64,
+    // root is intentionally not pub: HamtNode is a private implementation detail.
+    root: *mut HamtNode,
 }
 
-// ── Internal helpers ─────────────────────────────────────────────────────────
+// ── HAMT constants ───────────────────────────────────────────────────────────
 
-const INITIAL_CAPACITY: i64 = 8;
-const LOAD_FACTOR_NUM: i64 = 3; // 3/4 = 0.75
-const LOAD_FACTOR_DEN: i64 = 4;
+/// Number of bits per HAMT level (branch factor 32).
+const BITS: u32 = 5;
+/// Mask for extracting BITS bits.
+const MASK: u64 = (1u64 << BITS) - 1;
 
-unsafe fn alloc_entries(cap: i64) -> *mut TyraMapEntry {
-    let bytes = (cap as usize) * size_of::<TyraMapEntry>();
-    let ptr = unsafe { GC_malloc(bytes) } as *mut TyraMapEntry;
-    ptr.write_bytes(0, cap as usize);
-    ptr
+// ── GC allocation helpers ────────────────────────────────────────────────────
+
+unsafe fn gc_alloc<T>() -> *mut T {
+    GC_malloc(size_of::<T>()) as *mut T
 }
 
-unsafe fn slot_for(_entries: *mut TyraMapEntry, cap: i64, hash: i64, probe: i64) -> usize {
-    ((hash.wrapping_add(probe)) & (cap - 1)) as usize
+unsafe fn gc_alloc_array<T>(count: usize) -> *mut T {
+    GC_malloc(size_of::<T>() * count) as *mut T
 }
 
-unsafe fn find_slot(
-    entries: *mut TyraMapEntry,
-    cap: i64,
+// ── HAMT node constructors ───────────────────────────────────────────────────
+
+unsafe fn alloc_leaf(hash: u64, key: *const u8, val: *const u8) -> *mut HamtNode {
+    let node = gc_alloc::<HamtNode>();
+    node.write(HamtNode::Leaf { hash, key, val });
+    node
+}
+
+unsafe fn alloc_branch(bitmap: u32, children: *mut *mut HamtNode) -> *mut HamtNode {
+    let node = gc_alloc::<HamtNode>();
+    node.write(HamtNode::Branch { bitmap, children });
+    node
+}
+
+unsafe fn alloc_collision(
+    hash: u64,
+    count: u32,
+    entries: *mut (*const u8, *const u8),
+) -> *mut HamtNode {
+    let node = gc_alloc::<HamtNode>();
+    node.write(HamtNode::Collision { hash, count, entries });
+    node
+}
+
+// ── Core HAMT operations ─────────────────────────────────────────────────────
+
+/// Look up a key in the HAMT. Returns the value pointer or null.
+unsafe fn hamt_lookup(
+    node: *mut HamtNode,
+    hash: u64,
     key: *const u8,
+    depth: u32,
     eq_fn: EqFn,
-    hash_fn: HashFn,
-) -> (usize, bool) {
-    let h = hash_fn(key);
-    let mut probe: i64 = 0;
-    loop {
-        let idx = slot_for(entries, cap, h, probe);
-        let entry = &*entries.add(idx);
-        if entry.key.is_null() {
-            return (idx, false);
+) -> *const u8 {
+    if node.is_null() {
+        return ptr::null();
+    }
+    match &*node {
+        HamtNode::Leaf { hash: h, key: k, val: v } => {
+            if *h == hash && eq_fn(*k, key) != 0 { *v } else { ptr::null() }
         }
-        if eq_fn(entry.key, key) != 0 {
-            return (idx, true);
+        HamtNode::Branch { bitmap, children } => {
+            let idx = ((hash >> (depth * BITS)) & MASK) as u32;
+            if *bitmap & (1 << idx) == 0 {
+                return ptr::null();
+            }
+            let pos = (*bitmap & ((1 << idx) - 1)).count_ones() as usize;
+            hamt_lookup(*(*children).add(pos), hash, key, depth + 1, eq_fn)
         }
-        probe += 1;
-        if probe == cap {
-            return (0, false);
+        HamtNode::Collision { hash: h, count, entries } => {
+            if *h != hash {
+                return ptr::null();
+            }
+            for i in 0..*count as usize {
+                let (k, v) = *(*entries).add(i);
+                if eq_fn(k, key) != 0 {
+                    return v;
+                }
+            }
+            ptr::null()
         }
     }
 }
 
-unsafe fn grow_map(map: &mut TyraMap) {
-    let new_cap = map.capacity * 2;
-    let new_entries = alloc_entries(new_cap);
-    for i in 0..map.capacity as usize {
-        let old = &*map.entries.add(i);
-        if old.key.is_null() {
-            continue;
-        }
-        let h = (map.hash_fn)(old.key);
-        let mut probe: i64 = 0;
-        loop {
-            let idx = slot_for(new_entries, new_cap, h, probe);
-            let slot = &mut *new_entries.add(idx);
-            if slot.key.is_null() {
-                slot.key = old.key;
-                slot.val = old.val;
-                break;
+/// Insert a key-value pair. Returns a new root node (path-copy semantics).
+/// `inserted` is set to true if a new key was added (as opposed to update).
+unsafe fn hamt_insert(
+    node: *mut HamtNode,
+    hash: u64,
+    key: *const u8,
+    val: *const u8,
+    depth: u32,
+    eq_fn: EqFn,
+    inserted: &mut bool,
+) -> *mut HamtNode {
+    if node.is_null() {
+        *inserted = true;
+        return alloc_leaf(hash, key, val);
+    }
+    match &*node {
+        HamtNode::Leaf { hash: h, key: k, val: existing_v } => {
+            if *h == hash {
+                if eq_fn(*k, key) != 0 {
+                    // Key match: update value (count unchanged).
+                    alloc_leaf(hash, key, val)
+                } else {
+                    // True collision: promote to Collision node.
+                    *inserted = true;
+                    let entries = gc_alloc_array::<(*const u8, *const u8)>(2);
+                    entries.write((*k, *existing_v));
+                    entries.add(1).write((key, val));
+                    alloc_collision(hash, 2, entries)
+                }
+            } else {
+                // Different hashes: create a branch holding both leaves.
+                *inserted = true;
+                merge_leaves(*h, node, hash, key, val, depth, eq_fn)
             }
-            probe += 1;
+        }
+        HamtNode::Branch { bitmap, children } => {
+            let idx = ((hash >> (depth * BITS)) & MASK) as u32;
+            let bit = 1u32 << idx;
+            let pop = (*bitmap & (bit - 1)).count_ones() as usize;
+            let total = bitmap.count_ones() as usize;
+
+            if *bitmap & bit == 0 {
+                // Empty slot: insert new leaf here.
+                *inserted = true;
+                let new_leaf = alloc_leaf(hash, key, val);
+                let new_children = gc_alloc_array::<*mut HamtNode>(total + 1);
+                for i in 0..pop {
+                    new_children.add(i).write(*(*children).add(i));
+                }
+                new_children.add(pop).write(new_leaf);
+                for i in pop..total {
+                    new_children.add(i + 1).write(*(*children).add(i));
+                }
+                alloc_branch(*bitmap | bit, new_children)
+            } else {
+                // Occupied slot: recurse into child.
+                let child = *(*children).add(pop);
+                let new_child = hamt_insert(child, hash, key, val, depth + 1, eq_fn, inserted);
+                let new_children = gc_alloc_array::<*mut HamtNode>(total);
+                for i in 0..total {
+                    new_children.add(i).write(*(*children).add(i));
+                }
+                new_children.add(pop).write(new_child);
+                alloc_branch(*bitmap, new_children)
+            }
+        }
+        HamtNode::Collision { hash: h, count, entries } => {
+            if *h == hash {
+                let n = *count as usize;
+                for i in 0..n {
+                    let (k, _v) = *(*entries).add(i);
+                    if eq_fn(k, key) != 0 {
+                        // Update existing entry in collision bucket.
+                        let new_entries = gc_alloc_array::<(*const u8, *const u8)>(n);
+                        for j in 0..n {
+                            new_entries.add(j).write(*(*entries).add(j));
+                        }
+                        new_entries.add(i).write((key, val));
+                        return alloc_collision(hash, *count, new_entries);
+                    }
+                }
+                // New key in collision bucket.
+                *inserted = true;
+                let new_entries = gc_alloc_array::<(*const u8, *const u8)>(n + 1);
+                for j in 0..n {
+                    new_entries.add(j).write(*(*entries).add(j));
+                }
+                new_entries.add(n).write((key, val));
+                alloc_collision(hash, *count + 1, new_entries)
+            } else {
+                // Different hash: branch containing this collision node + new leaf.
+                *inserted = true;
+                merge_collision_and_leaf(*h, node, hash, key, val, depth)
+            }
         }
     }
-    map.entries = new_entries;
-    map.capacity = new_cap;
+}
+
+/// Create a branch node containing two existing leaves with different hashes.
+unsafe fn merge_leaves(
+    hash_a: u64,
+    leaf_a: *mut HamtNode,
+    hash_b: u64,
+    key_b: *const u8,
+    val_b: *const u8,
+    depth: u32,
+    eq_fn: EqFn,
+) -> *mut HamtNode {
+    let idx_a = ((hash_a >> (depth * BITS)) & MASK) as u32;
+    let idx_b = ((hash_b >> (depth * BITS)) & MASK) as u32;
+
+    if idx_a == idx_b {
+        // Same slot at this depth: recurse one level deeper.
+        let mut inserted = false;
+        let child = hamt_insert(leaf_a, hash_b, key_b, val_b, depth + 1, eq_fn, &mut inserted);
+        let children = gc_alloc_array::<*mut HamtNode>(1);
+        children.write(child);
+        alloc_branch(1u32 << idx_a, children)
+    } else {
+        let leaf_b = alloc_leaf(hash_b, key_b, val_b);
+        let (first, second, bit_first, bit_second) = if idx_a < idx_b {
+            (leaf_a, leaf_b, idx_a, idx_b)
+        } else {
+            (leaf_b, leaf_a, idx_b, idx_a)
+        };
+        let children = gc_alloc_array::<*mut HamtNode>(2);
+        children.write(first);
+        children.add(1).write(second);
+        alloc_branch((1u32 << bit_first) | (1u32 << bit_second), children)
+    }
+}
+
+/// Create a branch containing a collision node and a new leaf with a different hash.
+unsafe fn merge_collision_and_leaf(
+    hash_coll: u64,
+    coll_node: *mut HamtNode,
+    hash_leaf: u64,
+    key_leaf: *const u8,
+    val_leaf: *const u8,
+    depth: u32,
+) -> *mut HamtNode {
+    let idx_c = ((hash_coll >> (depth * BITS)) & MASK) as u32;
+    let idx_l = ((hash_leaf >> (depth * BITS)) & MASK) as u32;
+
+    if idx_c == idx_l {
+        // Same index at this depth: recurse one level deeper.
+        let inner = merge_collision_and_leaf(hash_coll, coll_node, hash_leaf, key_leaf, val_leaf, depth + 1);
+        let children = gc_alloc_array::<*mut HamtNode>(1);
+        children.write(inner);
+        alloc_branch(1u32 << idx_c, children)
+    } else {
+        let new_leaf = alloc_leaf(hash_leaf, key_leaf, val_leaf);
+        let (first, second, bit_first, bit_second) = if idx_c < idx_l {
+            (coll_node, new_leaf, idx_c, idx_l)
+        } else {
+            (new_leaf, coll_node, idx_l, idx_c)
+        };
+        let children = gc_alloc_array::<*mut HamtNode>(2);
+        children.write(first);
+        children.add(1).write(second);
+        alloc_branch((1u32 << bit_first) | (1u32 << bit_second), children)
+    }
+}
+
+/// Remove a key. Returns the new root (path-copy semantics).
+/// `removed` is set to true if a key was actually deleted.
+unsafe fn hamt_remove(
+    node: *mut HamtNode,
+    hash: u64,
+    key: *const u8,
+    depth: u32,
+    eq_fn: EqFn,
+    removed: &mut bool,
+) -> *mut HamtNode {
+    if node.is_null() {
+        return ptr::null_mut();
+    }
+    match &*node {
+        HamtNode::Leaf { hash: h, key: k, val: _ } => {
+            if *h == hash && eq_fn(*k, key) != 0 {
+                *removed = true;
+                ptr::null_mut()
+            } else {
+                node
+            }
+        }
+        HamtNode::Branch { bitmap, children } => {
+            let idx = ((hash >> (depth * BITS)) & MASK) as u32;
+            let bit = 1u32 << idx;
+            if *bitmap & bit == 0 {
+                return node; // key not found
+            }
+            let pop = (*bitmap & (bit - 1)).count_ones() as usize;
+            let total = bitmap.count_ones() as usize;
+            let child = *(*children).add(pop);
+            let new_child = hamt_remove(child, hash, key, depth + 1, eq_fn, removed);
+
+            if !*removed {
+                return node;
+            }
+
+            if new_child.is_null() {
+                if total == 1 {
+                    return ptr::null_mut();
+                }
+                let new_bitmap = *bitmap & !bit;
+                let new_children = gc_alloc_array::<*mut HamtNode>(total - 1);
+                for i in 0..pop {
+                    new_children.add(i).write(*(*children).add(i));
+                }
+                for i in (pop + 1)..total {
+                    new_children.add(i - 1).write(*(*children).add(i));
+                }
+                alloc_branch(new_bitmap, new_children)
+            } else {
+                let new_children = gc_alloc_array::<*mut HamtNode>(total);
+                for i in 0..total {
+                    new_children.add(i).write(*(*children).add(i));
+                }
+                new_children.add(pop).write(new_child);
+                alloc_branch(*bitmap, new_children)
+            }
+        }
+        HamtNode::Collision { hash: h, count, entries } => {
+            if *h != hash {
+                return node;
+            }
+            let n = *count as usize;
+            let mut found_idx = None;
+            for i in 0..n {
+                let (k, _) = *(*entries).add(i);
+                if eq_fn(k, key) != 0 {
+                    found_idx = Some(i);
+                    break;
+                }
+            }
+            match found_idx {
+                None => node,
+                Some(fi) => {
+                    *removed = true;
+                    if n == 1 {
+                        return ptr::null_mut();
+                    }
+                    if n == 2 {
+                        // Downgrade to a single leaf.
+                        let other = if fi == 0 { 1 } else { 0 };
+                        let (k2, v2) = *(*entries).add(other);
+                        return alloc_leaf(hash, k2, v2);
+                    }
+                    let new_entries = gc_alloc_array::<(*const u8, *const u8)>(n - 1);
+                    let mut j = 0usize;
+                    for i in 0..n {
+                        if i != fi {
+                            new_entries.add(j).write(*(*entries).add(i));
+                            j += 1;
+                        }
+                    }
+                    alloc_collision(hash, *count - 1, new_entries)
+                }
+            }
+        }
+    }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -118,20 +418,18 @@ unsafe fn grow_map(map: &mut TyraMap) {
 /// Create an empty map with the given per-K eq/hash functions.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_map_new(eq_fn: EqFn, hash_fn: HashFn) -> *mut TyraMap {
-    let entries = alloc_entries(INITIAL_CAPACITY);
-    let map_bytes = size_of::<TyraMap>();
-    let map = unsafe { GC_malloc(map_bytes) } as *mut TyraMap;
+    let map = gc_alloc::<TyraMap>();
     map.write(TyraMap {
         eq_fn,
         hash_fn,
         count: 0,
-        capacity: INITIAL_CAPACITY,
-        entries,
+        root: ptr::null_mut(),
     });
     map
 }
 
-/// Insert or overwrite `key → val`.  Returns the same map pointer.
+/// Insert or overwrite `key → val`.  Returns a NEW TyraMap (path-copy).
+/// The original map is not modified.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_map_insert(
     map: *mut TyraMap,
@@ -141,44 +439,65 @@ pub unsafe extern "C" fn tyra_map_insert(
     if map.is_null() {
         return map;
     }
-    let m = &mut *map;
-    if (m.count + 1) * LOAD_FACTOR_DEN > m.capacity * LOAD_FACTOR_NUM {
-        grow_map(m);
+    let m = &*map;
+    let hash = (m.hash_fn)(key) as u64;
+    let mut inserted = false;
+    let new_root = hamt_insert(m.root, hash, key, val, 0, m.eq_fn, &mut inserted);
+
+    let new_map = gc_alloc::<TyraMap>();
+    new_map.write(TyraMap {
+        eq_fn: m.eq_fn,
+        hash_fn: m.hash_fn,
+        count: if inserted { m.count + 1 } else { m.count },
+        root: new_root,
+    });
+    new_map
+}
+
+/// Remove `key` from the map.  Returns a NEW TyraMap (path-copy).
+/// If the key is absent, returns a new map equal to the original.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_map_remove(map: *mut TyraMap, key: *const u8) -> *mut TyraMap {
+    if map.is_null() {
+        return map;
     }
-    let (idx, found) = find_slot(m.entries, m.capacity, key, m.eq_fn, m.hash_fn);
-    let slot = &mut *m.entries.add(idx);
-    slot.key = key;
-    slot.val = val;
-    if !found {
-        m.count += 1;
-    }
-    map
+    let m = &*map;
+    let hash = (m.hash_fn)(key) as u64;
+    let mut removed = false;
+    let new_root = hamt_remove(m.root, hash, key, 0, m.eq_fn, &mut removed);
+
+    let new_map = gc_alloc::<TyraMap>();
+    new_map.write(TyraMap {
+        eq_fn: m.eq_fn,
+        hash_fn: m.hash_fn,
+        count: if removed { m.count - 1 } else { m.count },
+        root: new_root,
+    });
+    new_map
 }
 
 /// Returns a pointer to the value box, or null if not found.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_map_get(map: *const TyraMap, key: *const u8) -> *const u8 {
     if map.is_null() {
-        return std::ptr::null();
+        return ptr::null();
     }
     let m = &*map;
-    let (idx, found) = find_slot(m.entries, m.capacity, key, m.eq_fn, m.hash_fn);
-    if found {
-        (*m.entries.add(idx)).val
-    } else {
-        std::ptr::null()
-    }
+    let hash = (m.hash_fn)(key) as u64;
+    hamt_lookup(m.root, hash, key, 0, m.eq_fn)
 }
 
 /// Returns 1 if `key` is present, 0 otherwise.
+/// NOTE: the compiler calls this as `tyra_map_contains`; name kept for ABI compatibility.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_map_contains(map: *const TyraMap, key: *const u8) -> c_int {
-    if map.is_null() {
-        return 0;
-    }
-    let m = &*map;
-    let (_, found) = find_slot(m.entries, m.capacity, key, m.eq_fn, m.hash_fn);
-    found as c_int
+    (!tyra_map_get(map, key).is_null()) as c_int
+}
+
+/// Alias for spec alignment (`tyra_map_contains_key`).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_map_contains_key(map: *const TyraMap, key: *const u8) -> c_int {
+    tyra_map_contains(map, key)
 }
 
 /// Returns the number of entries in the map.
@@ -334,5 +653,87 @@ mod tests {
         let a = CString::new("abc").unwrap();
         let b = CString::new("xyz").unwrap();
         assert_eq!(unsafe { tyra_cstr_eq(a.as_ptr(), b.as_ptr()) }, 0);
+    }
+
+    // ── HAMT-specific tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn immutability_insert_does_not_mutate_original() {
+        let m0 = unsafe { tyra_map_new(eq_i64, hash_i64) };
+        let m1 = unsafe { tyra_map_insert(m0, box_i64(1), box_i64(10)) };
+        let m2 = unsafe { tyra_map_insert(m1, box_i64(2), box_i64(20)) };
+
+        // m1 must not see the key added in m2.
+        assert_eq!(unsafe { tyra_map_len(m1) }, 1);
+        assert!(unsafe { tyra_map_get(m1, box_i64(2)) }.is_null());
+
+        // m2 sees both keys.
+        assert_eq!(unsafe { tyra_map_len(m2) }, 2);
+        assert!(!unsafe { tyra_map_get(m2, box_i64(1)) }.is_null());
+        assert!(!unsafe { tyra_map_get(m2, box_i64(2)) }.is_null());
+    }
+
+    #[test]
+    fn remove_existing_key() {
+        let m = unsafe { tyra_map_new(eq_i64, hash_i64) };
+        let m = unsafe { tyra_map_insert(m, box_i64(1), box_i64(10)) };
+        let m = unsafe { tyra_map_insert(m, box_i64(2), box_i64(20)) };
+        let m2 = unsafe { tyra_map_remove(m, box_i64(1)) };
+        assert_eq!(unsafe { tyra_map_len(m2) }, 1);
+        assert!(unsafe { tyra_map_get(m2, box_i64(1)) }.is_null());
+        assert!(!unsafe { tyra_map_get(m2, box_i64(2)) }.is_null());
+        // Original still intact.
+        assert_eq!(unsafe { tyra_map_len(m) }, 2);
+    }
+
+    #[test]
+    fn remove_missing_key_preserves_count() {
+        let m = unsafe { tyra_map_new(eq_i64, hash_i64) };
+        let m = unsafe { tyra_map_insert(m, box_i64(42), box_i64(1)) };
+        let m2 = unsafe { tyra_map_remove(m, box_i64(99)) };
+        assert_eq!(unsafe { tyra_map_len(m2) }, 1);
+    }
+
+    #[test]
+    fn many_inserts_and_removes() {
+        let m = unsafe { tyra_map_new(eq_i64, hash_i64) };
+        let mut cur = m;
+        for i in 0..100i64 {
+            cur = unsafe { tyra_map_insert(cur, box_i64(i), box_i64(i * 2)) };
+        }
+        assert_eq!(unsafe { tyra_map_len(cur) }, 100);
+        for i in (0..100i64).step_by(2) {
+            cur = unsafe { tyra_map_remove(cur, box_i64(i)) };
+        }
+        assert_eq!(unsafe { tyra_map_len(cur) }, 50);
+        for i in 0..100i64 {
+            let got = unsafe { tyra_map_get(cur, box_i64(i)) };
+            if i % 2 == 0 {
+                assert!(got.is_null(), "key {i} should have been removed");
+            } else {
+                assert!(!got.is_null(), "key {i} should still be present");
+                assert_eq!(unbox_i64(got), i * 2);
+            }
+        }
+    }
+
+    #[test]
+    fn collision_bucket() {
+        // Every key hashes to 42, forcing all entries into a Collision node.
+        unsafe extern "C" fn hash_const(_a: *const u8) -> i64 { 42 }
+
+        let m = unsafe { tyra_map_new(eq_i64, hash_const) };
+        let m = unsafe { tyra_map_insert(m, box_i64(1), box_i64(10)) };
+        let m = unsafe { tyra_map_insert(m, box_i64(2), box_i64(20)) };
+        let m = unsafe { tyra_map_insert(m, box_i64(3), box_i64(30)) };
+        assert_eq!(unsafe { tyra_map_len(m) }, 3);
+        assert_eq!(unbox_i64(unsafe { tyra_map_get(m, box_i64(1)) }), 10);
+        assert_eq!(unbox_i64(unsafe { tyra_map_get(m, box_i64(2)) }), 20);
+        assert_eq!(unbox_i64(unsafe { tyra_map_get(m, box_i64(3)) }), 30);
+
+        let m2 = unsafe { tyra_map_remove(m, box_i64(2)) };
+        assert_eq!(unsafe { tyra_map_len(m2) }, 2);
+        assert!(unsafe { tyra_map_get(m2, box_i64(2)) }.is_null());
+        assert_eq!(unbox_i64(unsafe { tyra_map_get(m2, box_i64(1)) }), 10);
     }
 }
