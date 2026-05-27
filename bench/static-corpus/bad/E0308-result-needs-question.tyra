@@ -1,0 +1,9 @@
+# E0308: expected Int, got Result<Int, String>
+# help: try `expr?` to propagate the error
+fn inner() -> Result<Int, String>
+  Ok(42)
+end
+fn outer() -> Result<Int, String>
+  let n: Int = inner()
+  Ok(n)
+end

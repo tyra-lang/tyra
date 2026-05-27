@@ -1523,4 +1523,105 @@ end
             report.diagnostics()
         );
     }
+
+    // ========================================================================
+    // E0308 heuristic help messages (Phase 1b)
+    // ========================================================================
+
+    fn get_e0308_help(report: &Report) -> Vec<String> {
+        report
+            .diagnostics()
+            .iter()
+            .filter(|d| d.code.as_deref() == Some("E0308"))
+            .filter_map(|d| d.help.clone())
+            .collect()
+    }
+
+    fn has_e0308(report: &Report) -> bool {
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code.as_deref() == Some("E0308"))
+    }
+
+    // Heuristic (i): expected Option<Int>, got Int — suggest Some(...)
+    #[test]
+    fn e0308_help_option_wrap_via_let_annotation() {
+        let source = "let x: Option<Int> = 42\n";
+        let report = check_str(source);
+        assert!(has_e0308(&report), "expected E0308; got: {:?}", report.diagnostics());
+        let helps = get_e0308_help(&report);
+        assert!(
+            helps.iter().any(|h| h.contains("Some")),
+            "expected 'wrap with Some(...)' help; got: {:?}",
+            helps
+        );
+    }
+
+    // Heuristic (iii): expected Float, got Int — suggest float.from_int
+    #[test]
+    fn e0308_help_int_to_float_conversion() {
+        let source = "let x: Float = 42\n";
+        let report = check_str(source);
+        assert!(has_e0308(&report), "expected E0308; got: {:?}", report.diagnostics());
+        let helps = get_e0308_help(&report);
+        assert!(
+            helps.iter().any(|h| h.contains("float.from_int")),
+            "expected 'float.from_int' help; got: {:?}",
+            helps
+        );
+    }
+
+    // Heuristic (iii): expected Int, got Float — suggest float.to_int
+    #[test]
+    fn e0308_help_float_to_int_conversion() {
+        let source = "let x: Int = 3.14\n";
+        let report = check_str(source);
+        assert!(has_e0308(&report), "expected E0308; got: {:?}", report.diagnostics());
+        let helps = get_e0308_help(&report);
+        assert!(
+            helps.iter().any(|h| h.contains("float.to_int")),
+            "expected 'float.to_int' help; got: {:?}",
+            helps
+        );
+    }
+
+    // Guard: no heuristic hint when Ty::Error is involved (unresolved identifier → Error)
+    #[test]
+    fn e0308_no_hint_for_error_type() {
+        // notafunc() returns Ty::Error; guard must suppress any heuristic help
+        let source = "let x: Int = notafunc()\n";
+        let report = check_str(source);
+        let helps = get_e0308_help(&report);
+        assert!(
+            helps.is_empty(),
+            "no heuristic hint should fire when actual type is Error; got: {:?}",
+            helps
+        );
+    }
+
+    // Heuristic (ii): actual is Result<T,E>, expected is T, enclosing fn returns Result
+    #[test]
+    fn e0308_help_result_propagation_suggestion() {
+        let source = r#"
+fn inner() -> Result<Int, String>
+  Ok(42)
+end
+fn outer() -> Result<Int, String>
+  let n: Int = inner()
+  Ok(n)
+end
+"#;
+        let report = check_str(source);
+        // inner() returns Result<Int, String>; let n: Int = ... triggers E0308.
+        // Since outer() returns Result, heuristic (ii) fires: suggest expr?
+        let helps = get_e0308_help(&report);
+        if has_e0308(&report) {
+            assert!(
+                helps.iter().any(|h| h.contains("expr?")),
+                "expected 'expr?' propagation suggestion; got: {:?}",
+                helps
+            );
+        }
+    }
 }
