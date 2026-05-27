@@ -1,0 +1,26 @@
+# iteration_test.tyra
+# Corpus: combined Map and Set iteration test (v0.7.0)
+# Exercises for k, v in map and for v in set in a single program.
+
+fn print_map_entries(m: Map<String, Int>)
+  for k, v in m
+    print("{k} => {v}")
+  end
+end
+
+fn print_set_elements(s: Set<Int>)
+  for v in s
+    print("elem: {v}")
+  end
+end
+
+fn main()
+  let scores = {"alice": 42, "bob": 99}
+  print_map_entries(scores)
+
+  let ids: Set<Int> = set.new()
+  let ids = ids.insert(1)
+  let ids = ids.insert(2)
+  let ids = ids.insert(3)
+  print_set_elements(ids)
+end

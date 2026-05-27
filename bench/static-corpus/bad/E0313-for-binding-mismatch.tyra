@@ -1,0 +1,10 @@
+# E0313-for-binding-mismatch.tyra
+# E0313: for loop binding count mismatch.
+# Map requires 2 bindings but only 1 is given — must produce E0313.
+
+fn main()
+  let m = {"a": 1}
+  for v in m
+    print("{v}")
+  end
+end

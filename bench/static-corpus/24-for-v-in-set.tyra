@@ -1,0 +1,13 @@
+# 24-for-v-in-set.tyra
+# Static corpus: for v in Set iteration (v0.7.0)
+# Verifies single-binding for loop over Set<T>.
+
+fn main()
+  let s: Set<Int> = set.new()
+  let s = s.insert(10)
+  let s = s.insert(20)
+  let s = s.insert(30)
+  for v in s
+    print("{v}")
+  end
+end

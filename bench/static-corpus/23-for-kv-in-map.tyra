@@ -1,0 +1,10 @@
+# 23-for-kv-in-map.tyra
+# Static corpus: for k, v in Map iteration (v0.7.0)
+# Verifies two-binding for loop over Map<K, V>.
+
+fn main()
+  let m = {"hello": 1, "world": 2, "tyra": 3}
+  for k, v in m
+    print("{k}: {v}")
+  end
+end
