@@ -509,6 +509,54 @@ pub unsafe extern "C" fn tyra_map_len(map: *const TyraMap) -> i64 {
     (*map).count
 }
 
+/// Traverse every entry in the map (DFS over the HAMT), calling `callback`
+/// once per entry with `(ctx, key_box, val_box)`.
+///
+/// `ctx` is an opaque pointer forwarded unchanged to every callback
+/// invocation; it is typically a pointer to a GC-managed closure env struct.
+///
+/// Iteration order is determined by the HAMT structure (hash order) and is
+/// NOT guaranteed to be stable between runs.  Do not write tests that depend
+/// on a specific visit order.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_map_for_each(
+    map: *const TyraMap,
+    ctx: *mut c_void,
+    callback: unsafe extern "C" fn(*mut c_void, *const u8, *const u8),
+) {
+    if map.is_null() {
+        return;
+    }
+    hamt_for_each((*map).root, ctx, callback);
+}
+
+unsafe fn hamt_for_each(
+    node: *mut HamtNode,
+    ctx: *mut c_void,
+    callback: unsafe extern "C" fn(*mut c_void, *const u8, *const u8),
+) {
+    if node.is_null() {
+        return;
+    }
+    match &*node {
+        HamtNode::Leaf { key, val, .. } => {
+            callback(ctx, *key, *val);
+        }
+        HamtNode::Branch { bitmap, children } => {
+            let count = bitmap.count_ones() as usize;
+            for i in 0..count {
+                hamt_for_each(*(*children).add(i), ctx, callback);
+            }
+        }
+        HamtNode::Collision { count, entries, .. } => {
+            for i in 0..*count as usize {
+                let (k, v) = *(*entries).add(i);
+                callback(ctx, k, v);
+            }
+        }
+    }
+}
+
 // ── Hashing/equality helpers for compiler-emitted tyra_eq/hash_* functions ───
 
 /// FNV-1a hash of a null-terminated C string.

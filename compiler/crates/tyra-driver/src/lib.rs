@@ -1423,15 +1423,17 @@ fn rename_let_shadows(ast: &mut tyra_ast::SourceFile) {
                 ExprKind::For(f) => {
                     self.walk_expr(&mut f.iter, active);
                     let saved = active.clone();
-                    // The for-binding lives in MIR as a single function-wide
-                    // alloca too, so treat it like a let for shadow purposes.
-                    if self.introduced.contains(&f.binding) {
-                        let new = self.fresh(&f.binding);
-                        active.insert(f.binding.clone(), new.clone());
-                        f.binding = new.clone();
-                        self.introduced.insert(new);
-                    } else {
-                        self.introduced.insert(f.binding.clone());
+                    // Each for-binding lives in MIR as a function-wide alloca;
+                    // treat it like a let for shadow-rename purposes.
+                    for name in f.bindings.iter_mut() {
+                        if self.introduced.contains(name.as_str()) {
+                            let new = self.fresh(name);
+                            active.insert(name.clone(), new.clone());
+                            *name = new.clone();
+                            self.introduced.insert(new);
+                        } else {
+                            self.introduced.insert(name.clone());
+                        }
                     }
                     self.walk_stmts(&mut f.body, active);
                     *active = saved;

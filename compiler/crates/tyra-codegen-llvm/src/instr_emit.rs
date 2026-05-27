@@ -423,6 +423,13 @@ pub(crate) fn emit_instruction(
             writeln!(out, "  %{dest} = load {llvm_ty}, ptr %{source}").unwrap();
         }
 
+        // v0.7.0: Load a typed value from a raw pointer parameter
+        // (used to unbox Map/Set for-each key/value boxes).
+        Instruction::PtrLoad { dest, ptr, ty } => {
+            let llvm_ty = llvm_type_str(ty, ctx.struct_map);
+            writeln!(out, "  %{dest} = load {llvm_ty}, ptr %{ptr}").unwrap();
+        }
+
         Instruction::StructInit {
             dest,
             type_name,
@@ -947,6 +954,40 @@ pub(crate) fn emit_instruction(
                 func,
                 ctx,
             );
+        }
+
+        // v0.7.0: Map iteration via tyra_map_for_each callback.
+        // Extracts fn_ptr and env_ptr from the fat pointer, then calls:
+        //   tyra_map_for_each(map_handle, env_ptr, fn_ptr)
+        Instruction::MapForEachCall { handle, fat_ptr } => {
+            let h = operand_ref(handle, func);
+            let fp = operand_ref(fat_ptr, func);
+            let pfx = if let Operand::Var(name) = fat_ptr {
+                format!("__mfe_{name}")
+            } else {
+                "__mfe_c".to_string()
+            };
+            writeln!(out, "  %{pfx}.fnp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 0").unwrap();
+            writeln!(out, "  %{pfx}.fn_ptr = load ptr, ptr %{pfx}.fnp_gep").unwrap();
+            writeln!(out, "  %{pfx}.envp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 1").unwrap();
+            writeln!(out, "  %{pfx}.env_ptr = load ptr, ptr %{pfx}.envp_gep").unwrap();
+            writeln!(out, "  call void @tyra_map_for_each(ptr {h}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)").unwrap();
+        }
+
+        // v0.7.0: Set iteration via tyra_set_for_each callback.
+        Instruction::SetForEachCall { handle, fat_ptr } => {
+            let h = operand_ref(handle, func);
+            let fp = operand_ref(fat_ptr, func);
+            let pfx = if let Operand::Var(name) = fat_ptr {
+                format!("__sfe_{name}")
+            } else {
+                "__sfe_c".to_string()
+            };
+            writeln!(out, "  %{pfx}.fnp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 0").unwrap();
+            writeln!(out, "  %{pfx}.fn_ptr = load ptr, ptr %{pfx}.fnp_gep").unwrap();
+            writeln!(out, "  %{pfx}.envp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 1").unwrap();
+            writeln!(out, "  %{pfx}.env_ptr = load ptr, ptr %{pfx}.envp_gep").unwrap();
+            writeln!(out, "  call void @tyra_set_for_each(ptr {h}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)").unwrap();
         }
     }
 }

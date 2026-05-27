@@ -426,9 +426,10 @@ pub struct MatchArm {
 }
 
 /// `for item in iter body end` (§10.5)
+/// `bindings` holds one name (List/Set) or two names (Map: key, value).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForExpr {
-    pub binding: String,
+    pub bindings: Vec<String>,
     pub iter: Expr,
     pub body: Vec<Stmt>,
     pub span: Span,

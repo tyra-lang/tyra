@@ -212,7 +212,7 @@ fn substitute_expr(expr: &Expr, subst: &HashMap<String, Ty>) -> Expr {
         ExprKind::If(if_expr) => ExprKind::If(Box::new(substitute_if_expr(if_expr, subst))),
         ExprKind::Match(m) => ExprKind::Match(Box::new(substitute_match_expr(m, subst))),
         ExprKind::For(f) => ExprKind::For(Box::new(ForExpr {
-            binding: f.binding.clone(),
+            bindings: f.bindings.clone(),
             iter: substitute_expr(&f.iter, subst),
             body: f.body.iter().map(|s| substitute_stmt(s, subst)).collect(),
             span: f.span,

@@ -155,7 +155,9 @@ fn collect_sym_expr(
     match &expr.kind {
         ExprKind::For(f) => {
             collect_sym_expr(&f.iter, out, seen);
-            record(&f.binding, CompletionKind::Variable, out, seen);
+            for name in &f.bindings {
+                record(name, CompletionKind::Variable, out, seen);
+            }
             collect_sym_stmts(&f.body, out, seen);
         }
         ExprKind::Lambda(lam) => {
@@ -606,13 +608,15 @@ fn resolve_expr(
         ExprKind::For(f) => {
             resolve_expr(&f.iter, scopes, def_index, report);
             scopes.push();
-            scopes.define(
-                f.binding.clone(),
-                Symbol::Local {
-                    mutable: false,
-                    span: f.span,
-                },
-            );
+            for name in &f.bindings {
+                scopes.define(
+                    name.clone(),
+                    Symbol::Local {
+                        mutable: false,
+                        span: f.span,
+                    },
+                );
+            }
             resolve_body(&f.body, scopes, def_index, report);
             scopes.pop();
         }

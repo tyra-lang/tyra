@@ -175,6 +175,10 @@ pub enum Instruction {
     /// `dest = load source_ptr` — read from an alloca'd slot
     Load { dest: String, source: String },
 
+    /// `dest = load ty, ptr ptr_var` — load a typed value from an arbitrary pointer.
+    /// Used to unbox keys/values passed as `*const u8` in Map/Set for-each callbacks.
+    PtrLoad { dest: String, ptr: String, ty: Ty },
+
     /// `dest = struct_init type_name { val0, val1, ... }`
     /// Constructs a struct value from field values in declaration order.
     StructInit {
@@ -365,6 +369,28 @@ pub enum Instruction {
         args: Vec<Operand>,
         param_types: Vec<Ty>,
         return_type: Ty,
+    },
+
+    /// Call `tyra_map_for_each(map, env_ptr, fn_ptr)` where `fn_ptr` and
+    /// `env_ptr` are extracted from the fat-pointer closure built for the
+    /// for-loop callback (v0.7.0).
+    /// The callback signature is `fn(ptr ctx, ptr kbox, ptr vbox) -> void`.
+    MapForEachCall {
+        /// Operand holding the `*mut TyraMap` pointer.
+        handle: Operand,
+        /// Operand holding the `*mut __closure_fat` fat-pointer value.
+        fat_ptr: Operand,
+    },
+
+    /// Call `tyra_set_for_each(set, env_ptr, fn_ptr)` where `fn_ptr` and
+    /// `env_ptr` are extracted from the fat-pointer closure built for the
+    /// for-loop callback (v0.7.0).
+    /// The callback signature is `fn(ptr ctx, ptr elembox) -> void`.
+    SetForEachCall {
+        /// Operand holding the `*mut TyraSet` pointer.
+        handle: Operand,
+        /// Operand holding the `*mut __closure_fat` fat-pointer value.
+        fat_ptr: Operand,
     },
 }
 

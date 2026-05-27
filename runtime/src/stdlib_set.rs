@@ -421,6 +421,52 @@ pub unsafe extern "C" fn tyra_set_len(set: *const TyraSet) -> i64 {
     (*set).count
 }
 
+/// Traverse every element in the set (DFS over the HAMT), calling `callback`
+/// once per element with `(ctx, elem_box)`.
+///
+/// `ctx` is an opaque pointer forwarded unchanged to every callback
+/// invocation; it is typically a pointer to a GC-managed closure env struct.
+///
+/// Iteration order is determined by the HAMT structure (hash order) and is
+/// NOT guaranteed to be stable between runs.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_set_for_each(
+    set: *const TyraSet,
+    ctx: *mut c_void,
+    callback: unsafe extern "C" fn(*mut c_void, *const u8),
+) {
+    if set.is_null() {
+        return;
+    }
+    set_hamt_for_each((*set).root, ctx, callback);
+}
+
+unsafe fn set_hamt_for_each(
+    node: *mut HamtNode,
+    ctx: *mut c_void,
+    callback: unsafe extern "C" fn(*mut c_void, *const u8),
+) {
+    if node.is_null() {
+        return;
+    }
+    match &*node {
+        HamtNode::Leaf { key, .. } => {
+            callback(ctx, *key);
+        }
+        HamtNode::Branch { bitmap, children } => {
+            let count = bitmap.count_ones() as usize;
+            for i in 0..count {
+                set_hamt_for_each(*(*children).add(i), ctx, callback);
+            }
+        }
+        HamtNode::Collision { count, keys, .. } => {
+            for i in 0..*count as usize {
+                callback(ctx, *(*keys).add(i));
+            }
+        }
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

@@ -2138,10 +2138,44 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             arm_ty.unwrap_or(Ty::Unit)
         }
         ExprKind::For(f) => {
-            infer_expr(&f.iter, env, report);
+            let iter_ty = infer_expr(&f.iter, env, report);
+            // E0313: binding count check against iterable type.
+            let (expected_bindings, binding_tys): (usize, Vec<Ty>) =
+                match &iter_ty {
+                    Ty::Generic(name, args) if name == "Map" && args.len() == 2 => {
+                        (2, vec![args[0].clone(), args[1].clone()])
+                    }
+                    Ty::Generic(name, args) if name == "Set" && !args.is_empty() => {
+                        (1, vec![args[0].clone()])
+                    }
+                    Ty::Generic(name, args) if name == "List" && !args.is_empty() => {
+                        (1, vec![args[0].clone()])
+                    }
+                    // Unknown / Error: accept any binding count, bind to Error.
+                    _ => (f.bindings.len(), vec![Ty::Error; f.bindings.len()]),
+                };
+            if f.bindings.len() != expected_bindings
+                && !matches!(iter_ty, Ty::Error)
+                && expected_bindings != 0
+            {
+                report.add(
+                    Diagnostic::error(format!(
+                        "for loop binding count mismatch: {} requires {} binding(s), found {}",
+                        iter_ty.display_name(),
+                        expected_bindings,
+                        f.bindings.len(),
+                    ))
+                    .with_code("E0313")
+                    .with_label(Label::new(f.span, "binding count mismatch here")),
+                );
+            }
             env.push();
             env.enter_loop();
-            env.define(f.binding.clone(), Ty::Error); // element type unknown without generics
+            // Bind each name with its inferred type (or Error on mismatch).
+            for (i, name) in f.bindings.iter().enumerate() {
+                let ty = binding_tys.get(i).cloned().unwrap_or(Ty::Error);
+                env.define(name.clone(), ty);
+            }
             for stmt in &f.body {
                 check_stmt(stmt, env, report);
             }

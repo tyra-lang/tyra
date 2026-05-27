@@ -301,15 +301,21 @@ impl super::LowerCtx<'_> {
             ExprKind::For(f) => {
                 let iter_val = self.lower_expr(&f.iter, body);
 
-                // Detect if iterating over a List
-                let list_type = self
-                    .generic_var_types
-                    .get(&iter_val)
-                    .filter(|ty| ty.is_list())
-                    .cloned();
+                // Detect iter kind: List, Set, Map, or unknown (stub).
+                let iter_ty = self.generic_var_types.get(&iter_val).cloned();
 
-                if let Some(list_ty) = list_type {
+                let is_list = iter_ty.as_ref().map_or(false, |t| t.is_list());
+                let is_set = iter_ty
+                    .as_ref()
+                    .map_or(false, |t| matches!(t, tyra_types::Ty::Generic(n, args) if n == "Set" && args.len() == 1));
+                let is_map = iter_ty
+                    .as_ref()
+                    .map_or(false, |t| matches!(t, tyra_types::Ty::Generic(n, args) if n == "Map" && args.len() == 2));
+
+                if is_list {
+                    let list_ty = iter_ty.unwrap();
                     let elem_type = list_ty.list_elem().cloned().unwrap_or(Ty::Int);
+                    let binding = f.bindings.first().cloned().unwrap_or_default();
 
                     // Get length
                     let len = self.fresh_temp();
@@ -403,26 +409,26 @@ impl super::LowerCtx<'_> {
                     // keyed maps below only track String / Float / Named /
                     // Generic; Int / Bool / Unit bindings would otherwise
                     // leak through shadow detection.
-                    self.local_binding_names.insert(f.binding.clone());
+                    self.local_binding_names.insert(binding.clone());
                     // Track element type for codegen (Bool tracked in codegen pre-scan).
                     // Named/Generic bindings must also register in var_types /
                     // generic_var_types so subsequent `binding.field` /
                     // `binding[i]` accesses resolve.
                     match &elem_type {
                         Ty::String => {
-                            self.string_vars.insert(f.binding.clone());
+                            self.string_vars.insert(binding.clone());
                         }
                         Ty::Float => {
-                            self.float_vars.insert(f.binding.clone());
+                            self.float_vars.insert(binding.clone());
                         }
                         Ty::Named(n) => {
-                            self.var_types.insert(f.binding.clone(), n.clone());
+                            self.var_types.insert(binding.clone(), n.clone());
                         }
                         Ty::Generic(_, _) => {
                             self.generic_var_types
-                                .insert(f.binding.clone(), elem_type.clone());
+                                .insert(binding.clone(), elem_type.clone());
                             self.var_types
-                                .insert(f.binding.clone(), elem_type.monomorphized_name());
+                                .insert(binding.clone(), elem_type.monomorphized_name());
                         }
                         _ => {}
                     }
@@ -441,12 +447,11 @@ impl super::LowerCtx<'_> {
                     // weakens, Store will silently produce mistyped IR and
                     // LLVM will emit a type-mismatch E0500; tighten with a
                     // MIR-level assert at that point.
-                    if self.pattern_vars.contains(&f.binding) || self.mut_vars.contains(&f.binding)
-                    {
+                    if self.pattern_vars.contains(&binding) || self.mut_vars.contains(&binding) {
                         self.emit(
                             body,
                             Instruction::Store {
-                                dest: f.binding.clone(),
+                                dest: binding.clone(),
                                 value: Operand::Var(elem),
                             },
                         );
@@ -454,7 +459,7 @@ impl super::LowerCtx<'_> {
                         self.emit(
                             body,
                             Instruction::Copy {
-                                dest: f.binding.clone(),
+                                dest: binding.clone(),
                                 source: elem,
                             },
                         );
@@ -512,19 +517,169 @@ impl super::LowerCtx<'_> {
 
                     // End
                     self.emit_synthetic(body, Instruction::Label(end_label));
+                } else if is_set || is_map {
+                    // Map/Set for-each via callback (v0.7.0).
+                    // Collect free variables in the body that come from the enclosing scope.
+                    let binding_set: std::collections::HashSet<String> =
+                        f.bindings.iter().cloned().collect();
+                    let mut captures: Vec<String> = Vec::new();
+                    let mut seen_cap: std::collections::HashSet<String> =
+                        std::collections::HashSet::new();
+                    // Treat all bindings as already-bound inside the body.
+                    let mut bound_in_body = binding_set.clone();
+                    collect_free_in_stmts(
+                        &f.body,
+                        &self.local_binding_names,
+                        &mut bound_in_body,
+                        &mut captures,
+                        &mut seen_cap,
+                    );
+
+                    // Assign a unique ID for this for-each site.
+                    let iter_id = self.closure_counter;
+                    self.closure_counter += 1;
+
+                    // Register env struct when there are captures.
+                    let env_struct_name = if captures.is_empty() {
+                        String::new()
+                    } else {
+                        format!("__for_env_{iter_id}")
+                    };
+
+                    if !captures.is_empty() {
+                        let env_fields: Vec<(String, Ty)> = captures
+                            .iter()
+                            .map(|name| {
+                                let ty = if self.float_vars.contains(name.as_str()) {
+                                    Ty::Float
+                                } else if self.string_vars.contains(name.as_str()) {
+                                    Ty::String
+                                } else if self.bool_vars.contains(name.as_str()) {
+                                    Ty::Bool
+                                } else if let Some(gt) =
+                                    self.generic_var_types.get(name.as_str()).cloned()
+                                {
+                                    gt
+                                } else if let Some(type_name) =
+                                    self.var_types.get(name.as_str()).cloned()
+                                {
+                                    Ty::Named(type_name)
+                                } else {
+                                    Ty::Int
+                                };
+                                (name.clone(), ty)
+                            })
+                            .collect();
+                        self.closure_struct_defs.push(crate::ir::StructDef {
+                            name: env_struct_name.clone(),
+                            fields: env_fields,
+                            is_data: true,
+                            recursive_fields: vec![false; captures.len()],
+                        });
+                    }
+
+                    // Determine binding types from iter type.
+                    let binding_tys: Vec<Ty> = if is_map {
+                        // Map<K,V> → [K, V]
+                        match iter_ty.as_ref().unwrap() {
+                            tyra_types::Ty::Generic(_, args) => {
+                                vec![args[0].clone(), args[1].clone()]
+                            }
+                            _ => vec![Ty::Int, Ty::Int],
+                        }
+                    } else {
+                        // Set<T> → [T]
+                        match iter_ty.as_ref().unwrap() {
+                            tyra_types::Ty::Generic(_, args) => vec![args[0].clone()],
+                            _ => vec![Ty::Int],
+                        }
+                    };
+
+                    // Snapshot enclosing type maps.
+                    let snap_var_types = self.var_types.clone();
+                    let snap_float_vars = self.float_vars.clone();
+                    let snap_string_vars = self.string_vars.clone();
+                    let snap_bool_vars = self.bool_vars.clone();
+                    let snap_generic_var = self.generic_var_types.clone();
+
+                    // Generate the lifted callback function.
+                    self.lower_for_each_callback(
+                        iter_id,
+                        is_map,
+                        &f.bindings,
+                        &binding_tys,
+                        &f.body,
+                        &captures,
+                        &env_struct_name,
+                        &snap_var_types,
+                        &snap_float_vars,
+                        &snap_string_vars,
+                        &snap_bool_vars,
+                        &snap_generic_var,
+                    );
+
+                    // Build the fat-pointer value in the caller.
+                    let fn_name = if is_map {
+                        format!("__map_iter_{iter_id}")
+                    } else {
+                        format!("__set_iter_{iter_id}")
+                    };
+                    let env_field_operands: Vec<Operand> = captures
+                        .iter()
+                        .map(|name| Operand::Var(name.clone()))
+                        .collect();
+
+                    // param_types for the fat ptr: box params (ptr = Ty::String used for ptr).
+                    let cb_param_types: Vec<Ty> = if is_map {
+                        vec![Ty::String, Ty::String]
+                    } else {
+                        vec![Ty::String]
+                    };
+
+                    let fat_ptr = self.fresh_temp();
+                    self.emit(
+                        body,
+                        Instruction::ClosureBuild {
+                            dest: fat_ptr.clone(),
+                            fn_name,
+                            env_fields: env_field_operands,
+                            env_struct_name: env_struct_name.clone(),
+                            param_types: cb_param_types,
+                            return_type: Ty::Unit,
+                        },
+                    );
+
+                    // Dispatch to the runtime.
+                    if is_map {
+                        self.emit(
+                            body,
+                            Instruction::MapForEachCall {
+                                handle: Operand::Var(iter_val),
+                                fat_ptr: Operand::Var(fat_ptr),
+                            },
+                        );
+                    } else {
+                        self.emit(
+                            body,
+                            Instruction::SetForEachCall {
+                                handle: Operand::Var(iter_val),
+                                fat_ptr: Operand::Var(fat_ptr),
+                            },
+                        );
+                    }
                 } else {
-                    // Non-list iteration: keep current stub behavior.
+                    // Non-list/set/map iteration: keep current stub behavior.
                     // Same invariant as the list branch: a pre-existing
-                    // slot for `f.binding` must be type-compatible with
+                    // slot for `f.bindings[0]` must be type-compatible with
                     // `iter_val`. Upheld by the type checker today.
+                    let binding = f.bindings.first().cloned().unwrap_or_default();
                     let stub_end = self.fresh_label("for_end");
-                    self.local_binding_names.insert(f.binding.clone());
-                    if self.pattern_vars.contains(&f.binding) || self.mut_vars.contains(&f.binding)
-                    {
+                    self.local_binding_names.insert(binding.clone());
+                    if self.pattern_vars.contains(&binding) || self.mut_vars.contains(&binding) {
                         self.emit(
                             body,
                             Instruction::Store {
-                                dest: f.binding.clone(),
+                                dest: binding.clone(),
                                 value: Operand::Var(iter_val),
                             },
                         );
@@ -532,7 +687,7 @@ impl super::LowerCtx<'_> {
                         self.emit(
                             body,
                             Instruction::Copy {
-                                dest: f.binding.clone(),
+                                dest: binding.clone(),
                                 source: iter_val,
                             },
                         );
@@ -1387,7 +1542,9 @@ fn collect_free_in_expr(
         ExprKind::For(for_expr) => {
             collect_free_in_expr(&for_expr.iter, enclosing, bound, captures, seen);
             let mut for_bound = bound.clone();
-            for_bound.insert(for_expr.binding.clone());
+            for name in &for_expr.bindings {
+                for_bound.insert(name.clone());
+            }
             collect_free_in_stmts(&for_expr.body, enclosing, &mut for_bound, captures, seen);
         }
         ExprKind::While(while_expr) => {

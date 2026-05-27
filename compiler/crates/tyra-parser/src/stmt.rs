@@ -257,9 +257,18 @@ fn parse_match_arm(ts: &mut TokenStream, report: &mut Report) -> MatchArm {
 }
 
 /// Parse `for binding in iter body end` (§10.5)
+/// Also handles `for k, v in iter body end` for Map iteration.
 pub fn parse_for(ts: &mut TokenStream, report: &mut Report) -> ForExpr {
     let start = ts.advance().span; // consume 'for'
-    let binding = ts.expect_ident(report).unwrap_or_default();
+    let first = ts.expect_ident(report).unwrap_or_default();
+    // Check for optional second binding: `for k, v in ...`
+    let bindings = if ts.check(&TokenKind::Comma) {
+        ts.advance(); // consume ','
+        let second = ts.expect_ident(report).unwrap_or_default();
+        vec![first, second]
+    } else {
+        vec![first]
+    };
     ts.expect(&TokenKind::In, report);
     let iter = parse_expr(ts, report);
     ts.expect_newline_or_eof(report);
@@ -267,7 +276,7 @@ pub fn parse_for(ts: &mut TokenStream, report: &mut Report) -> ForExpr {
     ts.expect(&TokenKind::End, report);
     let end = ts.peek_span();
     ForExpr {
-        binding,
+        bindings,
         iter,
         body,
         span: start.merge(end),

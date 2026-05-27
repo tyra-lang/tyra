@@ -1132,6 +1132,197 @@ impl<'a> LowerCtx<'a> {
         self.closure_fn_types = bak_closure_fn_types;
     }
 
+    /// Generate a lifted callback function for a Map or Set `for` loop (v0.7.0).
+    ///
+    /// The callback signature is:
+    ///   `fn __map_iter_N(__env: ptr, __b0box: ptr[, __b1box: ptr]) -> void`
+    ///
+    /// Parameters:
+    /// - `iter_id`       — unique counter for this for-each site.
+    /// - `is_map`        — true for Map (2 box params), false for Set (1 box param).
+    /// - `bindings`      — user-visible binding name(s) ([elem] or [key, val]).
+    /// - `binding_tys`   — their Tyra types, used for PtrLoad.
+    /// - `body_stmts`    — the for-loop body AST statements.
+    /// - `captures`      — enclosing variables captured by the body.
+    /// - `env_struct_name` — name of the closure env struct (empty if no captures).
+    ///
+    /// The generated function:
+    ///   1. Loads each captured field from `__env` (GEP+PtrLoad).
+    ///   2. Emits `PtrLoad` to unbox each box parameter into the binding name.
+    ///   3. Lowers the for-body stmts.
+    ///   4. Returns void (Unit).
+    ///
+    /// The function is appended to `self.functions`.
+    pub(crate) fn lower_for_each_callback(
+        &mut self,
+        iter_id: u32,
+        is_map: bool,
+        bindings: &[String],
+        binding_tys: &[Ty],
+        body_stmts: &[Stmt],
+        captures: &[String],
+        env_struct_name: &str,
+        saved_var_types: &std::collections::HashMap<String, String>,
+        saved_float_vars: &std::collections::HashSet<String>,
+        saved_string_vars: &std::collections::HashSet<String>,
+        saved_bool_vars: &std::collections::HashSet<String>,
+        saved_generic_var: &std::collections::HashMap<String, Ty>,
+    ) {
+        // Save and clear per-function state.
+        let bak_var_types = std::mem::take(&mut self.var_types);
+        let bak_float_vars = std::mem::take(&mut self.float_vars);
+        let bak_string_vars = std::mem::take(&mut self.string_vars);
+        let bak_bool_vars = std::mem::take(&mut self.bool_vars);
+        let bak_mut_vars = std::mem::take(&mut self.mut_vars);
+        let bak_pattern_vars = std::mem::take(&mut self.pattern_vars);
+        let bak_local_names = std::mem::take(&mut self.local_binding_names);
+        let bak_generic_var = std::mem::take(&mut self.generic_var_types);
+        let bak_deferred = std::mem::take(&mut self.deferred_exprs);
+        let bak_next_defer = self.next_defer_index;
+        let bak_defer_count = self.defer_flag_count;
+        let bak_return_type = self.current_fn_return_type.clone();
+        let bak_closure_vars = std::mem::take(&mut self.closure_vars);
+        let bak_closure_fn_types = std::mem::take(&mut self.closure_fn_types);
+
+        self.current_fn_return_type = Ty::Unit;
+
+        // Restore enclosing type context for capture-type reconstruction.
+        self.var_types = saved_var_types.clone();
+        self.float_vars = saved_float_vars.clone();
+        self.string_vars = saved_string_vars.clone();
+        self.bool_vars = saved_bool_vars.clone();
+        self.generic_var_types = saved_generic_var.clone();
+
+        let prefix = if is_map { "__map_iter" } else { "__set_iter" };
+        let fn_name = format!("{prefix}_{iter_id}");
+
+        // Build params: __env (ptr) + one or two box params.
+        let env_ty = if env_struct_name.is_empty() {
+            Ty::String // "ptr" in LLVM
+        } else {
+            Ty::Named(env_struct_name.to_string())
+        };
+        let mut params: Vec<(String, Ty)> = vec![("__env".into(), env_ty)];
+        self.local_binding_names.insert("__env".into());
+
+        let box_param_names: Vec<String> = if is_map {
+            vec!["__kbox".into(), "__vbox".into()]
+        } else {
+            vec!["__elembox".into()]
+        };
+        for bp in &box_param_names {
+            params.push((bp.clone(), Ty::String)); // ptr
+            self.local_binding_names.insert(bp.clone());
+        }
+
+        let mut body: Vec<MirStmt> = Vec::new();
+
+        // Load captured fields from env struct (same as lower_lifted_lambda).
+        if !captures.is_empty() {
+            let env_llvm_name = env_struct_name.to_string();
+            for (i, cap_name) in captures.iter().enumerate() {
+                // Infer capture type.
+                let cap_ty = if self.float_vars.contains(cap_name.as_str()) {
+                    Ty::Float
+                } else if self.string_vars.contains(cap_name.as_str()) {
+                    Ty::String
+                } else if self.bool_vars.contains(cap_name.as_str()) {
+                    Ty::Bool
+                } else if let Some(gt) = self.generic_var_types.get(cap_name.as_str()).cloned() {
+                    gt
+                } else if let Some(type_name) = self.var_types.get(cap_name.as_str()).cloned() {
+                    Ty::Named(type_name)
+                } else {
+                    Ty::Int
+                };
+                // Register in appropriate type sets.
+                match &cap_ty {
+                    Ty::Float => { self.float_vars.insert(cap_name.clone()); }
+                    Ty::String => { self.string_vars.insert(cap_name.clone()); }
+                    Ty::Bool => { self.bool_vars.insert(cap_name.clone()); }
+                    Ty::Named(n) => { self.var_types.insert(cap_name.clone(), n.clone()); }
+                    Ty::Generic(_, _) => {
+                        self.generic_var_types.insert(cap_name.clone(), cap_ty.clone());
+                        self.var_types.insert(cap_name.clone(), cap_ty.monomorphized_name());
+                    }
+                    _ => {}
+                }
+                self.local_binding_names.insert(cap_name.clone());
+                self.emit(
+                    &mut body,
+                    Instruction::FieldGet {
+                        dest: cap_name.clone(),
+                        obj: Operand::Var("__env".into()),
+                        type_name: env_llvm_name.clone(),
+                        field_index: i as u32,
+                    },
+                );
+            }
+        }
+
+        // Unbox each box parameter into the user-visible binding name.
+        for (i, (binding_name, box_param)) in
+            bindings.iter().zip(box_param_names.iter()).enumerate()
+        {
+            let ty = binding_tys.get(i).cloned().unwrap_or(Ty::Int);
+            // Register the binding in type tracking sets.
+            match &ty {
+                Ty::Float => { self.float_vars.insert(binding_name.clone()); }
+                Ty::String => { self.string_vars.insert(binding_name.clone()); }
+                Ty::Bool => { self.bool_vars.insert(binding_name.clone()); }
+                Ty::Named(n) => { self.var_types.insert(binding_name.clone(), n.clone()); }
+                Ty::Generic(_, _) => {
+                    self.generic_var_types.insert(binding_name.clone(), ty.clone());
+                    self.var_types.insert(binding_name.clone(), ty.monomorphized_name());
+                }
+                _ => {}
+            }
+            self.local_binding_names.insert(binding_name.clone());
+            // Emit PtrLoad to unbox.
+            self.emit(
+                &mut body,
+                Instruction::PtrLoad {
+                    dest: binding_name.clone(),
+                    ptr: box_param.clone(),
+                    ty,
+                },
+            );
+        }
+
+        // Lower the for-body.
+        for stmt in body_stmts {
+            self.lower_stmt(stmt, &mut body);
+        }
+
+        // Implicit return void.
+        self.emit(&mut body, Instruction::Return { value: None });
+
+        self.functions.push(Function {
+            name: fn_name,
+            params,
+            return_type: Ty::Unit,
+            body,
+            is_main: false,
+            local_metas: vec![],
+        });
+
+        // Restore per-function state.
+        self.var_types = bak_var_types;
+        self.float_vars = bak_float_vars;
+        self.string_vars = bak_string_vars;
+        self.bool_vars = bak_bool_vars;
+        self.mut_vars = bak_mut_vars;
+        self.pattern_vars = bak_pattern_vars;
+        self.local_binding_names = bak_local_names;
+        self.generic_var_types = bak_generic_var;
+        self.deferred_exprs = bak_deferred;
+        self.next_defer_index = bak_next_defer;
+        self.defer_flag_count = bak_defer_count;
+        self.current_fn_return_type = bak_return_type;
+        self.closure_vars = bak_closure_vars;
+        self.closure_fn_types = bak_closure_fn_types;
+    }
+
     /// Lower an impl method as a standalone function with mangled name.
     /// Injects `self` as the first parameter with the target type.
     fn lower_impl_method(&mut self, f: &FnDef, target_type_name: &str) -> Function {
@@ -2226,7 +2417,9 @@ fn collect_let_binding_counts_in_expr(e: &Expr, out: &mut std::collections::Hash
             // at different element types are rejected earlier by the
             // type checker, so we never reach here with a genuine
             // type conflict.
-            *out.entry(f.binding.clone()).or_insert(0) += 1;
+            for name in &f.bindings {
+                *out.entry(name.clone()).or_insert(0) += 1;
+            }
             collect_let_binding_counts_in_expr(&f.iter, out);
             collect_let_binding_counts_in_stmts(&f.body, out);
         }

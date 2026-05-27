@@ -918,7 +918,7 @@ impl<'src> Printer<'src> {
         let indent = self.indent_str();
         let for_line = self.line_of(f.span.start);
         self.out.push_str("for ");
-        self.out.push_str(&f.binding);
+        self.out.push_str(&f.bindings.join(", "));
         self.out.push_str(" in ");
         self.print_expr(&f.iter);
         self.out.push('\n');

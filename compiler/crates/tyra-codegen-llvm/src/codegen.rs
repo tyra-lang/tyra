@@ -342,6 +342,7 @@ fn emit_llvm_ir_impl(program: &Program, cov_map: Option<&CovMap>, emit_dwarf: bo
     writeln!(out, "declare ptr @tyra_map_get(ptr, ptr)").unwrap();
     writeln!(out, "declare i32 @tyra_map_contains(ptr, ptr)").unwrap();
     writeln!(out, "declare i64 @tyra_map_len(ptr)").unwrap();
+    writeln!(out, "declare void @tyra_map_for_each(ptr, ptr, ptr)").unwrap();
     writeln!(out, "declare i64 @tyra_hash_cstr(ptr)").unwrap();
     writeln!(out, "declare i32 @tyra_cstr_eq(ptr, ptr)").unwrap();
     // §17.3.x Set<T> generic runtime (ADR-0015).
@@ -349,6 +350,7 @@ fn emit_llvm_ir_impl(program: &Program, cov_map: Option<&CovMap>, emit_dwarf: bo
     writeln!(out, "declare ptr @tyra_set_insert(ptr, ptr)").unwrap();
     writeln!(out, "declare i32 @tyra_set_contains(ptr, ptr)").unwrap();
     writeln!(out, "declare i64 @tyra_set_len(ptr)").unwrap();
+    writeln!(out, "declare void @tyra_set_for_each(ptr, ptr, ptr)").unwrap();
     // Zero-slot for null-safe map-get unboxing (read-only; never written).
     writeln!(
         out,
