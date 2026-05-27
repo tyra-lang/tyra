@@ -94,6 +94,11 @@ pub struct TypeEnv {
     /// calling `infer_expr` on the RHS so that context-sensitive constructors
     /// like `set.new()` can read the expected element type.
     pub(crate) binding_type_hint: Option<Ty>,
+    /// (type_name, method_name) → declared return type for impl methods.
+    /// Populated by collect_top_level_types from ImplDef nodes so that
+    /// call-site resolution can return the correct type rather than Ty::Error
+    /// when the general dispatch path falls through (ADR-0017 §4).
+    impl_method_ret: HashMap<(String, String), Ty>,
 }
 
 impl TypeEnv {
@@ -114,6 +119,7 @@ impl TypeEnv {
             lambda_entry_depths: Vec::new(),
             imported_modules: HashMap::new(),
             binding_type_hint: None,
+            impl_method_ret: HashMap::new(),
         }
     }
 
@@ -276,6 +282,20 @@ impl TypeEnv {
             || self
                 .into_impls
                 .contains(&(from.to_string(), to.to_string()))
+    }
+
+    /// Register the declared return type for an impl method (ADR-0017 §4).
+    /// Called from collect_top_level_types when processing ImplDef nodes.
+    pub fn register_impl_method_ret(&mut self, type_name: String, method_name: String, ret: Ty) {
+        self.impl_method_ret
+            .insert((type_name, method_name), ret);
+    }
+
+    /// Look up the declared return type of an impl method (ADR-0017 §4).
+    /// Returns None when the type or method is not registered.
+    pub fn lookup_impl_method_ret(&self, type_name: &str, method_name: &str) -> Option<&Ty> {
+        self.impl_method_ret
+            .get(&(type_name.to_string(), method_name.to_string()))
     }
 
     /// Register the ability set for a named type (§8 auto-derivation).
@@ -845,7 +865,22 @@ fn collect_top_level_types(items: &[Item], env: &mut TypeEnv) {
                         && i.trait_type_args.len() == 1
                         && let Some(to_name) = type_expr_name(&i.trait_type_args[0])
                     {
-                        env.register_into_impl(target_name, to_name);
+                        env.register_into_impl(target_name.clone(), to_name);
+                    }
+                    // ADR-0017 §4: register impl method return types so that
+                    // call-site dispatch can return the declared type rather than
+                    // Ty::Error when the general handler falls through.
+                    for m in &i.methods {
+                        let ret_ty = m
+                            .return_type
+                            .as_ref()
+                            .map(Ty::from_type_expr)
+                            .unwrap_or(Ty::Unit);
+                        env.register_impl_method_ret(
+                            target_name.clone(),
+                            m.name.clone(),
+                            ret_ty,
+                        );
                     }
                 }
             }
@@ -1852,14 +1887,30 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 for arg in args {
                     infer_expr(&arg.value, env, report);
                 }
-                // Method return type is not yet resolved by the type checker
-                // (impl method signatures live in MIR). When the receiver type
-                // is already Ty::Error (e.g. an unresolved module identifier
-                // like `io` or `string`), propagate Ty::Error to suppress
-                // spurious cascade diagnostics. When the receiver type IS known
-                // (a concrete Named/Generic type), also return Ty::Error so that
-                // downstream consumers don't misinterpret the result; Report
-                // dedup prevents duplicate-code floods at the same span.
+                // ADR-0017 §4: return the declared method return type rather than
+                // Ty::Error so downstream checks can proceed correctly.
+                //
+                // Case 1: receiver already errored (e.g. unresolved `io` ident) →
+                //   propagate Ty::Error to suppress spurious cascade diagnostics.
+                // Case 2: receiver is a known concrete type → look up the impl
+                //   method's declared return type from the registry populated by
+                //   collect_top_level_types.  Fall back to Ty::Error when the
+                //   method is not registered (unknown or stdlib-only method).
+                //
+                // obj_ty was inferred above (line ~1511); reuse it rather than
+                // calling infer_expr(obj) again.
+                if matches!(obj_ty, Ty::Error) {
+                    return Ty::Error;
+                }
+                let type_name = match &obj_ty {
+                    Ty::Named(n) => Some(n.as_str()),
+                    _ => None,
+                };
+                if let Some(tn) = type_name {
+                    if let Some(ret) = env.lookup_impl_method_ret(tn, method.as_str()) {
+                        return ret.clone();
+                    }
+                }
                 return Ty::Error;
             }
 
