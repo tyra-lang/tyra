@@ -56,12 +56,15 @@ pub use stdlib_io::{tyra_io_eof, tyra_io_read_line, tyra_io_read_to_end};
 
 mod stdlib_map;
 pub use stdlib_map::{
-    tyra_cstr_eq, tyra_hash_cstr, tyra_map_contains, tyra_map_contains_key, tyra_map_get,
-    tyra_map_insert, tyra_map_len, tyra_map_new, tyra_map_remove,
+    tyra_cstr_eq, tyra_hash_cstr, tyra_map_contains, tyra_map_contains_key, tyra_map_for_each,
+    tyra_map_get, tyra_map_insert, tyra_map_len, tyra_map_new, tyra_map_remove,
 };
 
 mod stdlib_set;
-pub use stdlib_set::{tyra_set_contains, tyra_set_insert, tyra_set_len, tyra_set_new, tyra_set_remove};
+pub use stdlib_set::{
+    tyra_set_contains, tyra_set_for_each, tyra_set_insert, tyra_set_len, tyra_set_new,
+    tyra_set_remove,
+};
 
 mod stdlib_string;
 pub use stdlib_string::{
