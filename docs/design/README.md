@@ -74,3 +74,6 @@ ADRs are numbered sequentially: `0001`, `0002`, etc. Numbers are never reused. I
 | [0013](0013-test-name-syntax.md) | `test "name"` language syntax (v0.6) | Accepted | 2026-05-26 |
 | [0014](0014-source-location-and-debug-info.md) | Source-location threading and debug info / DWARF (v0.6) | Accepted | 2026-05-26 |
 | [0015](0015-generic-collections.md) | Generic collections — `Map<K,V>` and `Set<T>` (v0.6) | Accepted | 2026-05-26 |
+| [0016](0016-persistent-collections.md) | Persistent collections — HAMT-based `Map<K,V>` and `Set<T>` (v0.7) | Accepted | 2026-05-27 |
+| [0017](0017-diagnostic-quality.md) | Diagnostic quality for type-mismatch errors E0308 (v0.7) | Accepted | 2026-05-27 |
+| [0018](0018-inkwell-migration.md) | Inkwell migration for type-safe LLVM IR generation (v0.7) | Accepted | 2026-05-27 |
