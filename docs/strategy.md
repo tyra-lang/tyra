@@ -1,8 +1,8 @@
 # Tyra Project Strategy
 
-- **Version**: 1.3
+- **Version**: 1.4
 - **Status**: Active
-- **Last updated**: 2026-05-26
+- **Last updated**: 2026-05-27
 - **Owner**: Project lead
 - **Review cadence**: Every 3 months, or after any major spec change
 
@@ -32,7 +32,7 @@ The convergence of three trends creates an opening for Tyra:
 
 Tyra's bet is that **a language designed from scratch for AI auditability and strict semantics, with operational standards matching Go and surface readability matching Ruby, can capture users dissatisfied with Crystal, V, and parts of the Go and Ruby ecosystems.**
 
-**Current status**: v0.6.0 released (2026-05-25). v0.1.0 shipped the compiler, runtime, and Tier 1 stdlib for macOS arm64 and Linux x86_64. v0.2.0 added `tyra fmt`, `tyra test`, `stdlib/assert`, the `continue` statement, and runtime fixes. v0.3.0 delivered the full project lifecycle (`Tyra.toml`, `tyra new`, `tyra mod`, three-layer import resolution, zero-arg commands). v0.4.0 adds lambda / closures (ADR 0011), generic `List<T>` with `map`/`filter`/`fold`, generic `assert.eq<T>`, `tyra bench <dir>`, `tyra test --timeout/--jobs`, and `Tyra.lock` with floating `branch` constraints and transitive dependency resolution. v0.5.0 adds a cross-OS CI gate (Linux glibc + macOS arm64 + Alpine musl required on every PR), `tyra build --static` producing a static single binary on musl (addressing strategy §4.2 vs Crystal's Alpine-only static linking), `string.replace`/`string.join` stdlib functions, and per-test process isolation in the test runner. v0.6.0 (codename Harmonic Moore) ships generic `Map<K,V>` and `Set<T>`, `time`/`log` stdlib modules, `test "name"` syntax with `panics` modifier, runner-native panic expectation, `tyra test --coverage` (line/function), and the DAP debugger (DWARF + lldb-dap + VS Code integration). Phase 1 deliverable #8 (debugger) is now shipped.
+**Current status**: v0.7.0 released (2026-05-27). v0.1.0 shipped the compiler, runtime, and Tier 1 stdlib for macOS arm64 and Linux x86_64. v0.2.0 added `tyra fmt`, `tyra test`, `stdlib/assert`, the `continue` statement, and runtime fixes. v0.3.0 delivered the full project lifecycle (`Tyra.toml`, `tyra new`, `tyra mod`, three-layer import resolution, zero-arg commands). v0.4.0 adds lambda / closures (ADR 0011), generic `List<T>` with `map`/`filter`/`fold`, generic `assert.eq<T>`, `tyra bench <dir>`, `tyra test --timeout/--jobs`, and `Tyra.lock` with floating `branch` constraints and transitive dependency resolution. v0.5.0 adds a cross-OS CI gate (Linux glibc + macOS arm64 + Alpine musl required on every PR), `tyra build --static` producing a static single binary on musl (addressing strategy §4.2 vs Crystal's Alpine-only static linking), `string.replace`/`string.join` stdlib functions, and per-test process isolation in the test runner. v0.6.0 (codename Harmonic Moore) ships generic `Map<K,V>` and `Set<T>`, `time`/`log` stdlib modules, `test "name"` syntax with `panics` modifier, runner-native panic expectation, `tyra test --coverage` (line/function), and the DAP debugger (DWARF + lldb-dap + VS Code integration). Phase 1 deliverable #8 (debugger) is now shipped. v0.7.0 (codename Polymorphic Star) ships E0308 diagnostic improvements (help hints, secondary labels, cascade dedup), HAMT-based persistent `Map<K,V>` and `Set<T>` with `insert`/`remove`/iteration, E0313 for-loop binding mismatch diagnostic, and `inkwell 0.9` dependency with LLVM version auto-detection in CI (full IR migration deferred to v0.8+).
 
 ---
 
@@ -631,6 +631,7 @@ When updating:
 - **v1.1 (2026-04-15)**: Remove prototype transpiler phase (old Phase 1). Renumber: LLVM implementation is now Phase 1, adoption is Phase 2. Go directly from spec to compiler.
 - **v1.2 (2026-05-23)**: Updated §1 current status for v0.5.0 release (cross-OS CI matrix, musl static binary, string.replace/join, per-test isolation).
 - **v1.3 (2026-05-25)**: Updated §1 current status for v0.6.0 release (generic Map/Set, time/log stdlib, test "name" syntax, panic expectation, coverage, DAP debugger).
+- **v1.4 (2026-05-27)**: Updated §1 current status for v0.7.0 release (E0308 diagnostics, HAMT persistent Map/Set, Map/Set iteration, inkwell dependency).
 
 ---
 

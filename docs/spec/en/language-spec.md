@@ -1503,9 +1503,10 @@ export fn index_of(_ list: List<Int>, _ x: Int) -> Option<Int>
   inline `GC_malloc` + loops); no runtime C ABI is involved. Safe because
   the `List<Int>` layout (`{ptr data, i64 len}`) is compiler-owned.
 
-#### 17.3.6 map (v0.6.0 — fully generalized, ADR-0015)
+#### 17.3.6 map (v0.7.0 — HAMT persistent, ADR-0015)
 
-`Map<K, V>` is fully generalized in v0.6.0 for arbitrary `K: Eq + Hash` and arbitrary `V`.
+`Map<K, V>` was fully generalized in v0.6.0, and reimplemented in v0.7.0 as a true
+persistent data structure using HAMT (Hash Array Mapped Trie).
 
 ```tyra
 let table: Map<String, Int> = {"one": 1, "two": 2}
@@ -1518,23 +1519,37 @@ end
 table.contains_key("two")   # Bool
 
 let m: Map<Int, Bool> = {}  # bidirectional inference from expected type
+
+# insert / remove return a new Map; original binding is unchanged
+let m2 = m.insert(1, true)
+let m3 = m2.remove(1)
+
+# iteration
+for k, v in table
+  println("#{k}: #{v}")
+end
 ```
 
 - `m.get(k: K) -> Option<V>`: look up a key; returns `Some(value)` or `None`.
 - `m.contains_key(k: K) -> Bool`: membership test.
 - `m.len() -> Int`: entry count.
-- There is no insert/update method. Add entries via map literals `{k: v, ...}`
-  (`m.insert` is planned for a later release).
+- `m.insert(k: K, v: V) -> Map<K, V>`: add a key-value pair and return a new Map. The original binding is unchanged.
+- `m.remove(k: K) -> Map<K, V>`: remove a key and return a new Map. The original binding is unchanged.
 - Empty literal `{}` is typed by bidirectional inference from the expected type;
   a bare `{}` with no expected type is a compile error.
 - `Float` and types with `mut` fields cannot be keys (`Hash` ability unsatisfied).
 
-**Not in v0.6.0**: `m.remove(k)`, `for k, v in m` iteration, user-defined value
-types as keys (Eq + Hash codegen for structs), map merge/diff operations.
+**HAMT implementation notes**:
+- The implementation uses HAMT (Hash Array Mapped Trie). `insert`/`remove` perform path-copy with structural sharing; the original binding is never mutated.
+- Iteration order is HAMT DFS order (hash-based), not insertion order.
+- `insert`/`remove` during iteration only return new bindings; the in-progress iteration is unaffected.
 
-#### 17.3.7 set (v0.6.0 — new, ADR-0015)
+**Later releases**: user-defined `value` types as keys (Eq + Hash codegen for structs), map merge/diff operations.
 
-`Set<T>` is a new generic collection for arbitrary `T: Eq + Hash`.
+#### 17.3.7 set (v0.7.0 — HAMT persistent, ADR-0015)
+
+`Set<T>` was added in v0.6.0, and reimplemented in v0.7.0 as a true persistent data
+structure using HAMT (Hash Array Mapped Trie).
 
 ```tyra
 import set
@@ -1545,18 +1560,31 @@ let s = s.insert(2)
 let s = s.insert(1)           # duplicate — len unchanged
 s.contains(2)                 # Bool: true
 s.len()                       # Int: 2
+
+# remove returns a new Set; original binding is unchanged
+let s2 = s.remove(1)
+
+# iteration
+for v in s
+  println("#{v}")
+end
 ```
 
 - `set.new() -> Set<T>`: create an empty set. `T` must be inferable from context,
   or supply an explicit annotation (`let s: Set<Int> = set.new()`).
-- `s.insert(v: T) -> Set<T>`: add an element and return the updated set (idempotent).
+- `s.insert(v: T) -> Set<T>`: add an element and return the updated set (idempotent). The original binding is unchanged.
+- `s.remove(v: T) -> Set<T>`: remove an element and return a new set. The original binding is unchanged.
 - `s.contains(v: T) -> Bool`: membership test.
 - `s.len() -> Int`: element count.
 - No set-literal syntax (`{}` conflicts with map literals; use `set.new()` + `.insert()`).
 - `Float` and types with `mut` fields cannot be elements (`Hash` ability unsatisfied).
 
-**Not in v0.6.0**: `s.remove(v)`, iteration, set operations (union/intersection/diff),
-user-defined value types as elements.
+**HAMT implementation notes**:
+- The implementation uses HAMT (Hash Array Mapped Trie). `insert`/`remove` perform path-copy with structural sharing; the original binding is never mutated.
+- Iteration order is HAMT DFS order (hash-based), not insertion order.
+- `insert`/`remove` during iteration only return new bindings; the in-progress iteration is unaffected.
+
+**Later releases**: set operations (union/intersection/diff), user-defined value types as elements.
 
 #### 17.3.8 time (v0.6.0)
 
@@ -1888,8 +1916,8 @@ The following are postponed for later specification:
 - Module-level initialization semantics (`let`/`mut` at module scope)
 - Extended `string` API (replace, join, char_at, regex) — `split` and `split_whitespace` are frozen in §17.3.4; everything else is a later release
 - Extended `list` API — generic `List<T>`, `map` / `filter` / `fold`, and `List<String>` are implemented in v0.4.0 (§17.3.5). `sort_by` and other additional operations are a later release
-- `Map<K,V>` — fully generalized in v0.6.0 (§17.3.6). `remove` / iteration are a later release
-- `Set<T>` — added in v0.6.0 (§17.3.7). Set-literal syntax and `union`/`intersection` are a later release
+- `Map<K,V>` — HAMT persistent in v0.7.0 (§17.3.6). `remove` / `for k, v in m` iteration implemented. User-defined `value` type keys and merge/diff operations are a later release
+- `Set<T>` — HAMT persistent in v0.7.0 (§17.3.7). `remove` / `for v in s` iteration implemented. Set-literal syntax and `union`/`intersection` are a later release
 - `test "name"` language syntax — implemented in v0.6.0 (ADR-0013)
 - `assert.panics` — implemented as runner-native panic expectation in v0.6.0 (ADR-0012); callable stdlib API is not provided
 - Generic `assert.eq<T>` — overloads for `Int` / `String` / `Bool` are implemented in v0.4.0; full generics via ability constraints are a later release

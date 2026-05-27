@@ -235,6 +235,7 @@ fn test_func_emission() {
 - **Test rewrite**: ~20 existing tests must migrate from IR text assertions to semantic assertions. Effort: ~4 hours.
 - **LLVM version management**: Build-time feature selection adds build.rs complexity. CI matrix must pass the correct feature per OS leg. If `llvm-config` is unavailable, the build fails loudly (acceptable; clang is required anyway).
 - **Snapshot test temptation**: Developers may be tempted to use `insta::assert_snapshot!` on IR output. Must actively discourage this in code review (ADR documents rationale).
+- **v0.7.0 では inkwell 依存追加と CI 設定のみ完了。DWARF DIBuilder および `writeln!` → builder API 本体移行はテキスト IR との互換性制約により v0.8.0+ へ繰越し。**
 
 ### Implementation order
 

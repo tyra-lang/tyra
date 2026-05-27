@@ -1482,9 +1482,10 @@ export fn index_of(_ list: List<Int>, _ x: Int) -> Option<Int>
   で行い、C ABI ランタイムは経由しない。`List<Int>` のレイアウト
   (`{ptr data, i64 len}`) はコンパイラ専有のため、これが安全に可能。
 
-#### 17.3.6 map (v0.6.0 — 完全一般化, ADR-0015)
+#### 17.3.6 map (v0.7.0 — HAMT persistent, ADR-0015)
 
-`Map<K, V>` は v0.6.0 で任意の `K: Eq + Hash`, 任意の `V` に完全一般化された。
+`Map<K, V>` は v0.6.0 で完全一般化され、v0.7.0 で HAMT (Hash Array Mapped Trie) による
+真の persistent data structure として再実装された。
 
 ```tyra
 let table: Map<String, Int> = {"one": 1, "two": 2}
@@ -1497,27 +1498,41 @@ end
 table.contains_key("two")  # Bool
 
 let m: Map<Int, Bool> = {}   # 期待型から K=Int, V=Bool を推論
+
+# insert / remove は新しい Map を返す（元の binding は変更されない）
+let m2 = m.insert(1, true)
+let m3 = m2.remove(1)
+
+# イテレーション
+for k, v in table
+  println("#{k}: #{v}")
+end
 ```
 
 - `m.get(k: K) -> Option<V>`: キーを検索し `Some(value)` / `None`。
 - `m.contains_key(k: K) -> Bool`: 存在確認。
 - `m.len() -> Int`: エントリ数。
-- 挿入・更新メソッドはない。エントリの追加はリテラル `{k: v, ...}` で行う（後続リリースで `m.insert` を追加予定）。
+- `m.insert(k: K, v: V) -> Map<K, V>`: キーと値を追加し新しい Map を返す。元の binding は変更されない。
+- `m.remove(k: K) -> Map<K, V>`: キーを削除し新しい Map を返す。元の binding は変更されない。
 - 空リテラル `{}` は期待型から `K`/`V` を双方向推論する。期待型のない `{}` は型エラー。
 - `Float` および `mut` フィールドを持つ型はキーに使用できない（`Hash` ability 不充足）。
   コンパイラは「`Map key type X requires Eq + Hash, which is not yet supported`」と診断する。
 - ランタイム: box 化 erased-value ABI + compiler 生成の `eq`/`hash` 関数ポインタ。
 - 内部レイアウトは `Map<K, V> = { handle: ptr }` の単一 ptr ラッパー。
 
-**v0.6.0 に含まれない操作**:
-- `m.remove(k)` — キー削除（後続リリース）
-- `for k, v in m` — イテレーション（後続リリース）
+**実装ノート (HAMT)**:
+- 実装は HAMT (Hash Array Mapped Trie) を使用。insert/remove は構造共有による path-copy を行い、元の binding は変更されない。
+- イテレーション順序はハッシュ値による DFS 順序であり、挿入順序を保証しない。
+- イテレーション中の insert/remove は新しい binding を返すだけで、進行中のイテレーションには影響しない。
+
+**後続リリース以降**:
 - ユーザー定義 `value` 型のキー（Eq + Hash 自動生成は後続リリース）
 - Map 同士のマージ・差分演算
 
-#### 17.3.7 set (v0.6.0 — 新設, ADR-0015)
+#### 17.3.7 set (v0.7.0 — HAMT persistent, ADR-0015)
 
-`Set<T>` は v0.6.0 で任意の `T: Eq + Hash` に対応する新規コレクション。
+`Set<T>` は v0.6.0 で新設され、v0.7.0 で HAMT (Hash Array Mapped Trie) による
+真の persistent data structure として再実装された。
 
 ```tyra
 import set
@@ -1528,11 +1543,20 @@ let s = s.insert(2)
 let s = s.insert(1)             # 重複は冪等 — len は変わらない
 s.contains(2)                   # Bool: true
 s.len()                         # Int: 2
+
+# remove は新しい Set を返す（元の binding は変更されない）
+let s2 = s.remove(1)
+
+# イテレーション
+for v in s
+  println("#{v}")
+end
 ```
 
 - `set.new() -> Set<T>`: 空の集合を生成。`T` を推論できる文脈では型注釈を省略できるが、
   裸の `set.new()` には `let s: Set<Int> = set.new()` のように明示注釈が必要。
 - `s.insert(v: T) -> Set<T>`: 要素を追加し新しい Set を返す（重複は冪等）。言語の観点では非破壊的。
+- `s.remove(v: T) -> Set<T>`: 要素を削除し新しい Set を返す。元の binding は変更されない。
 - `s.contains(v: T) -> Bool`: 要素の存在確認。
 - `s.len() -> Int`: 要素数。
 - `Float` および `mut` フィールドを持つ型は使用できない（`Hash` ability 不充足）。
@@ -1540,10 +1564,13 @@ s.len()                         # Int: 2
 - セットリテラル構文はない（`{}` が `Map` と衝突するため、`set.new()` + `.insert()` で構築する）。
 - ランタイム: `Map<K,V>` と同じ box 化単一汎用表 + compiler 生成 fn ポインタ。
 
-**v0.6.0 に含まれない操作**:
-- `set.remove(s, v)` — 要素削除（後続リリース）
-- `for v in s` — イテレーション（後続リリース）
-- `set.union` / `set.intersection` / `set.difference` — 集合演算（後続リリース）
+**実装ノート (HAMT)**:
+- 実装は HAMT (Hash Array Mapped Trie) を使用。insert/remove は構造共有による path-copy を行い、元の binding は変更されない。
+- イテレーション順序はハッシュ値による DFS 順序であり、挿入順序を保証しない。
+- イテレーション中の insert/remove は新しい binding を返すだけで、進行中のイテレーションには影響しない。
+
+**後続リリース以降**:
+- `set.union` / `set.intersection` / `set.difference` — 集合演算
 - ユーザー定義 `value` 型の要素（Eq + Hash 自動生成は後続リリース）
 - セットリテラル構文（`{}` と衝突するため非提供。将来も変更しない可能性がある）
 
@@ -1874,8 +1901,8 @@ end
 - モジュールレベルの初期化セマンティクス (`let`/`mut` のモジュールスコープ)
 - `string` の拡張 API (char_at, 正規表現) — `split` / `split_whitespace` / `replace` / `join` は §17.3.4 に凍結済み、それ以外は後続リリース以降
 - `list` の拡張 API — ジェネリック `List<T>`、`map` / `filter` / `fold`、`List<String>` は v0.4.0 で実装済み (§17.3.5)。`sort_by` 等の追加 API は後続リリース以降
-- `Map<K,V>` — v0.6.0 で完全一般化済み (§17.3.6)。`remove` / イテレーションは後続リリース以降
-- `Set<T>` — v0.6.0 で新設済み (§17.3.7)。セットリテラル構文・`union`/`intersection` 等の集合演算は後続リリース以降
+- `Map<K,V>` — v0.7.0 で HAMT persistent 化済み (§17.3.6)。`remove` / `for k, v in m` イテレーション実装済み。ユーザー定義 `value` 型キー・マージ演算は後続リリース以降
+- `Set<T>` — v0.7.0 で HAMT persistent 化済み (§17.3.7)。`remove` / `for v in s` イテレーション実装済み。セットリテラル構文・`union`/`intersection` 等の集合演算は後続リリース以降
 - `test "name"` 言語構文 — v0.6.0 で実装済み (ADR-0013)
 - `assert.panics` — v0.6.0 でランナネイティブの panic expectation として実装済み (ADR-0012)。callable な stdlib API は提供しない（非提供）
 - ジェネリック `assert.eq<T>` — `Int` / `String` / `Bool` 向け overload は v0.4.0 で実装済み。任意型への完全ジェネリック化 (ability constraint) は後続リリース以降

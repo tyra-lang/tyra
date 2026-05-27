@@ -7,6 +7,53 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ---
 
+## [0.7.0] — Polymorphic Star (2026-05-27)
+
+### Stable
+
+**型チェッカー診断改善 (E0308)**
+- `Diagnostic` に `help: Option<String>` フィールドを追加。型不一致エラーに修正提案を表示。
+- E0308 に二次ラベル "expected because of this annotation" を追加。expected 型の宣言元を指示。
+- E0308 ヒューリスティック: (i) T vs Option<T>、(ii) T vs Result<T,E> + `?` 演算子、(iii) Int ↔ Float 変換
+- `Report` に `(span, code)` による診断重複排除を追加。cascade floods を防止。
+- impl メソッド戻り型のレジストリを追加。Ty::Error 抑制の一部を実際の戻り型参照に置換。
+
+**Persistent Collections (HAMT)**
+- `Map<K,V>` と `Set<T>` を HAMT (Hash Array Mapped Trie) で再実装。真の persistent data structure。
+- `m.insert(k, v) -> Map<K,V>` — 元の Map を変更せず新しい Map を返す。
+- `m.remove(k) -> Map<K,V>` — 元の Map を変更せず新しい Map を返す。
+- `s.insert(v) -> Set<T>` / `s.remove(v) -> Set<T>` — 同様に persistent。
+- 構造共有 (path-copy) により insert/remove は O(log₃₂ n) ≈ O(1) ノードコピー。
+
+**Map/Set イテレーション**
+- `for k, v in m { ... }` — Map のキーと値を反復処理。
+- `for v in s { ... }` — Set の要素を反復処理。
+- E0313 "for loop binding count mismatch": binding 数と iterable 型の不一致を報告。
+
+### Experimental
+
+**inkwell 依存追加 (tyra-codegen-llvm)**
+- `inkwell 0.9` を `tyra-codegen-llvm` の依存関係として追加。
+- `build.rs` で LLVM バージョン (19/20/21/22) を自動検出。
+- CI matrix を各 OS の LLVM バージョンに対応させるよう更新。
+
+### Known Limitations
+
+- **E0308 ヒューリスティック (iv) 未実装**: ADT variant vs 親型の提案は `Ty::Named` が variant を区別できないため v0.8+ へ繰越し。
+- **inkwell IR 移行未完**: `writeln!` ベースの IR 生成はそのまま。DWARF `DIBuilder` 移行はテキスト IR との互換性がないため v0.8+ へ繰越し。
+- **イテレーション順序非保証**: `for k, v in m` / `for v in s` の順序は HAMT DFS (ハッシュ順) であり、挿入順序ではない。
+- **`Ty::Var` 寛容化未解消**: 型変数の完全な unification map は v0.8+ へ繰越し。
+
+### Not in This Release
+
+- Hindley-Milner 型推論 (Ty::Var substitution map)
+- ADT variant 型提案 heuristic (iv)
+- inkwell を使った完全な LLVM IR 生成 (writeln! → builder API)
+- `LinkedMap` / `LinkedSet` (挿入順保証コレクション)
+- 自前 linker (clang を linker driver として維持)
+
+---
+
 ## [0.6.0] - 2026-05-25
 
 ### Stable

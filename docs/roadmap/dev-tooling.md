@@ -1,6 +1,6 @@
 # Developer Tooling Roadmap
 
-**Last updated**: 2026-05-26
+**Last updated**: 2026-05-27
 
 This document tracks the status and future direction of `tyra fmt`, `tyra test`,
 and related developer experience tooling.
@@ -95,10 +95,17 @@ and related developer experience tooling.
 - **Generic `Map<K,V>` and `Set<T>`** (ADR-0015): full generalization with boxed erased-value ABI + compiler-emitted `eq`/`hash` fn pointers
 - **DAP debugger** (ADR-0014 Phase 4): DWARF in LLVM IR text, `lldb-dap` adapter, VS Code `debuggers`/`breakpoints` contributions
 
-## Near-term (v0.6+)
+## Shipped in v0.7.0 (2026-05-27)
 
-- Type-checker ergonomics / E0308 diagnostic improvements (highest-leverage AI-audibility improvement)
+- **E0308 diagnostic improvements**: `Diagnostic.help` field with fix suggestions; secondary "expected because of this annotation" label; heuristics (i) T vs Option<T>, (ii) T vs Result<T,E> + `?`, (iii) Int ↔ Float; cascade dedup via `(span, code)` HashSet; `impl_method_ret` registry for return-type lookup
+- **HAMT persistent `Map<K,V>` and `Set<T>`**: `m.insert(k,v) -> Map<K,V>`, `m.remove(k) -> Map<K,V>`, `s.insert(v) -> Set<T>`, `s.remove(v) -> Set<T>` — all path-copy persistent
+- **Map/Set iteration**: `for k, v in m { ... }` and `for v in s { ... }` with HAMT DFS traversal; E0313 "for loop binding count mismatch" diagnostic
+- **inkwell dependency (experimental)**: `inkwell 0.9` added to `tyra-codegen-llvm`; `build.rs` LLVM version detection (19/20/21/22); CI matrix updated per OS leg
+
+## Near-term (v0.7+)
+
 - Full registry-backed SemVer resolver and package registry (`tyra publish`)
+- inkwell IR migration: `writeln!` → builder API, DWARF `DIBuilder` (blocked by text IR compatibility; v0.8+)
 
 ## Long-term
 
