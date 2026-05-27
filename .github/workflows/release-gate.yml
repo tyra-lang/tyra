@@ -24,13 +24,19 @@ jobs:
       - name: Install Rust 1.88
         uses: dtolnay/rust-toolchain@1.88
 
-      - name: Install libgc-dev
+      - name: Install libgc-dev and LLVM 21
         run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          . /etc/os-release
+          echo "deb http://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-21 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm-21.list
           sudo apt-get update
-          sudo apt-get install -y libgc-dev
+          sudo apt-get install -y libgc-dev llvm-21 clang-21
+          sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-21 100
 
       - name: Check workspace at MSRV
-        run: cargo check --workspace
+        # inkwell requires a LLVM version feature; use llvm21-1 to match CI LLVM install above.
+        run: cargo check --workspace --no-default-features --features tyra-codegen-llvm/llvm21-1
 
   release-gate:
     name: build + test + corpus + smoke
@@ -64,10 +70,11 @@ jobs:
             ${{ runner.os }}-cargo-release-gate-
 
       - name: Build release binary and runtime
-        run: cargo build --release -p tyra-cli -p tyra-runtime
+        # inkwell requires an explicit LLVM version feature; LLVM 21 is installed above.
+        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm21-1
 
       - name: Run workspace tests
-        run: cargo test --workspace
+        run: cargo test --workspace --no-default-features --features tyra-codegen-llvm/llvm21-1
 
       - name: Run static corpus check
         env:
@@ -180,10 +187,11 @@ jobs:
             ${{ runner.os }}-cargo-release-gate-
 
       - name: Build release binary and runtime
-        run: cargo build --release -p tyra-cli -p tyra-runtime
+        # inkwell requires an explicit LLVM version feature; LLVM 21 is installed above.
+        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm21-1
 
       - name: Run workspace tests
-        run: cargo test --workspace
+        run: cargo test --workspace --no-default-features --features tyra-codegen-llvm/llvm21-1
 
       - name: Run static corpus check
         env:
@@ -326,10 +334,11 @@ jobs:
             alpine-musl-cargo-release-gate-
 
       - name: Build release binary and runtime
-        run: cargo build --release -p tyra-cli -p tyra-runtime
+        # inkwell requires an explicit LLVM version feature; LLVM 19 is installed above.
+        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm19-1
 
       - name: Run workspace tests
-        run: cargo test --workspace
+        run: cargo test --workspace --no-default-features --features tyra-codegen-llvm/llvm19-1
 
       - name: Run static corpus check
         env:
@@ -446,4 +455,6 @@ jobs:
             ${{ runner.os }}-cargo-release-gate-
 
       - name: Check workspace (tracking only)
-        run: cargo check --workspace
+        # Exclude tyra-codegen-llvm: no LLVM installed on Windows CI.
+        # inkwell requires LLVM headers/libs; Windows support tracked separately.
+        run: cargo check --workspace --exclude tyra-codegen-llvm

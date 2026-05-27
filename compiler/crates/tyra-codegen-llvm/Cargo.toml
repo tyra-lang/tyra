@@ -6,6 +6,20 @@ license.workspace = true
 rust-version.workspace = true
 description = "LLVM IR code generation for the Tyra language"
 
+[features]
+# Select the LLVM version inkwell links against.
+# Default: llvm22-1 (Homebrew LLVM 22 on macOS for local development).
+# CI overrides: Linux/macOS use --features llvm21-1; Alpine uses --features llvm19-1.
+default = ["llvm22-1"]
+llvm19-1 = ["inkwell/llvm19-1"]
+llvm20-1 = ["inkwell/llvm20-1"]
+llvm21-1 = ["inkwell/llvm21-1"]
+llvm22-1 = ["inkwell/llvm22-1"]
+
 [dependencies]
 tyra-mir.workspace = true
 tyra-types.workspace = true
+inkwell = { version = "0.9", default-features = false }
+
+[build-dependencies]
+# build.rs has no extra deps; it only calls std::process::Command

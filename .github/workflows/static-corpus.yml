@@ -20,10 +20,15 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install libgc-dev
+      - name: Install libgc-dev and LLVM 21
         run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          . /etc/os-release
+          echo "deb http://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-21 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm-21.list
           sudo apt-get update
-          sudo apt-get install -y libgc-dev
+          sudo apt-get install -y libgc-dev llvm-21 clang-21
+          sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-21 100
 
       - name: Cache cargo registry and target
         uses: actions/cache@v4
@@ -37,7 +42,8 @@ jobs:
             ${{ runner.os }}-cargo-corpus-
 
       - name: Build tyra-cli and runtime
-        run: cargo build -p tyra-cli -p tyra-runtime
+        # inkwell requires an explicit LLVM version feature; LLVM 21 is installed above.
+        run: cargo build -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm21-1
 
       - name: Run static corpus check (tyra check + tyra test)
         run: bash bench/static-corpus/check.sh ./target/debug/tyra
