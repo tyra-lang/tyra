@@ -94,6 +94,11 @@ impl Report {
                 output.push_str(&format!("  = note: {note}\n"));
             }
 
+            // Help
+            if let Some(help) = &diag.help {
+                output.push_str(&format!("  = help: {help}\n"));
+            }
+
             output.push('\n');
         }
 

@@ -45,6 +45,7 @@ pub struct Diagnostic {
     pub message: String,
     pub labels: Vec<Label>,
     pub notes: Vec<String>,
+    pub help: Option<String>,
 }
 
 impl Diagnostic {
@@ -55,6 +56,7 @@ impl Diagnostic {
             message: message.into(),
             labels: Vec::new(),
             notes: Vec::new(),
+            help: None,
         }
     }
 
@@ -65,6 +67,7 @@ impl Diagnostic {
             message: message.into(),
             labels: Vec::new(),
             notes: Vec::new(),
+            help: None,
         }
     }
 
@@ -75,6 +78,7 @@ impl Diagnostic {
             message: message.into(),
             labels: Vec::new(),
             notes: Vec::new(),
+            help: None,
         }
     }
 
@@ -90,6 +94,11 @@ impl Diagnostic {
 
     pub fn with_note(mut self, note: impl Into<String>) -> Self {
         self.notes.push(note.into());
+        self
+    }
+
+    pub fn with_help(mut self, help: impl Into<String>) -> Self {
+        self.help = Some(help.into());
         self
     }
 }

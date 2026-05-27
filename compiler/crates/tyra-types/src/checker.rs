@@ -1120,15 +1120,17 @@ fn check_fn(f: &FnDef, env: &mut TypeEnv, self_ty: Option<&Ty>, report: &mut Rep
         && !return_check_skip(&declared_ret, &actual_ty)
         && actual_ty != declared_ret
     {
-        report.add(
-            Diagnostic::error(format!(
-                "return type mismatch: expected {}, found {}",
-                declared_ret.display_name(),
-                actual_ty.display_name()
-            ))
-            .with_code("E0309")
-            .with_label(Label::new(span, "this expression has the wrong type")),
-        );
+        let mut diag = Diagnostic::error(format!(
+            "return type mismatch: expected {}, found {}",
+            declared_ret.display_name(),
+            actual_ty.display_name()
+        ))
+        .with_code("E0309")
+        .with_label(Label::new(span, "this expression has the wrong type"));
+        if let Some(ret_te) = &f.return_type {
+            diag = diag.with_label(Label::new(ret_te.span, "return type declared here"));
+        }
+        report.add(diag);
     }
 
     env.pop_return_type();
@@ -1156,7 +1158,7 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
             let binding_ty = if let Some(annotation) = &s.type_annotation {
                 let expected = Ty::from_type_expr(annotation);
                 check_supported_map_ty(&expected, s.span, report);
-                check_type_match(&expected, &value_ty, s.span, report);
+                check_type_match(&expected, &value_ty, s.span, Some(annotation.span), report);
                 expected
             } else {
                 value_ty
@@ -1175,7 +1177,7 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
             let binding_ty = if let Some(annotation) = &s.type_annotation {
                 let expected = Ty::from_type_expr(annotation);
                 check_supported_map_ty(&expected, s.span, report);
-                check_type_match(&expected, &value_ty, s.span, report);
+                check_type_match(&expected, &value_ty, s.span, Some(annotation.span), report);
                 expected
             } else {
                 value_ty
@@ -1483,12 +1485,12 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     match method.as_str() {
                         "insert" if args.len() == 1 => {
                             let arg_ty = infer_expr(&args[0].value, env, report);
-                            check_type_match(&elem_ty, &arg_ty, args[0].span, report);
+                            check_type_match(&elem_ty, &arg_ty, args[0].span, None, report);
                             return obj_ty.clone();
                         }
                         "contains" if args.len() == 1 => {
                             let arg_ty = infer_expr(&args[0].value, env, report);
-                            check_type_match(&elem_ty, &arg_ty, args[0].span, report);
+                            check_type_match(&elem_ty, &arg_ty, args[0].span, None, report);
                             return Ty::Bool;
                         }
                         "len" if args.is_empty() => {
@@ -1521,7 +1523,7 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                                 && name == "List"
                                 && let Some(expected) = params.first()
                             {
-                                check_type_match(expected, &elem_ty, args[1].span, report);
+                                check_type_match(expected, &elem_ty, args[1].span, None, report);
                             }
                             return list_ty;
                         }
@@ -1544,11 +1546,12 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                             }
                             let list_ty = infer_expr(&args[0].value, env, report);
                             let f_ty = infer_expr(&args[1].value, env, report);
-                            check_type_match(&ret, &list_ty, args[0].span, report);
+                            check_type_match(&ret, &list_ty, args[0].span, None, report);
                             check_type_match(
                                 &Ty::Fn(vec![Ty::Int], Box::new(Ty::Int)),
                                 &f_ty,
                                 args[1].span,
+                                None,
                                 report,
                             );
                             return ret;
@@ -1572,11 +1575,12 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                             }
                             let list_ty = infer_expr(&args[0].value, env, report);
                             let f_ty = infer_expr(&args[1].value, env, report);
-                            check_type_match(&ret, &list_ty, args[0].span, report);
+                            check_type_match(&ret, &list_ty, args[0].span, None, report);
                             check_type_match(
                                 &Ty::Fn(vec![Ty::String], Box::new(Ty::String)),
                                 &f_ty,
                                 args[1].span,
+                                None,
                                 report,
                             );
                             return ret;
@@ -1600,11 +1604,12 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                             }
                             let list_ty = infer_expr(&args[0].value, env, report);
                             let f_ty = infer_expr(&args[1].value, env, report);
-                            check_type_match(&ret, &list_ty, args[0].span, report);
+                            check_type_match(&ret, &list_ty, args[0].span, None, report);
                             check_type_match(
                                 &Ty::Fn(vec![Ty::Int], Box::new(Ty::Bool)),
                                 &f_ty,
                                 args[1].span,
+                                None,
                                 report,
                             );
                             return ret;
@@ -1628,11 +1633,12 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                             }
                             let list_ty = infer_expr(&args[0].value, env, report);
                             let f_ty = infer_expr(&args[1].value, env, report);
-                            check_type_match(&ret, &list_ty, args[0].span, report);
+                            check_type_match(&ret, &list_ty, args[0].span, None, report);
                             check_type_match(
                                 &Ty::Fn(vec![Ty::String], Box::new(Ty::Bool)),
                                 &f_ty,
                                 args[1].span,
+                                None,
                                 report,
                             );
                             return ret;
@@ -1660,13 +1666,15 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                                 &Ty::Generic("List".into(), vec![Ty::Int]),
                                 &list_ty,
                                 args[0].span,
+                                None,
                                 report,
                             );
-                            check_type_match(&Ty::Int, &init_ty, args[1].span, report);
+                            check_type_match(&Ty::Int, &init_ty, args[1].span, None, report);
                             check_type_match(
                                 &Ty::Fn(vec![Ty::Int, Ty::Int], Box::new(Ty::Int)),
                                 &f_ty,
                                 args[2].span,
+                                None,
                                 report,
                             );
                             return Ty::Int;
@@ -1694,13 +1702,15 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                                 &Ty::Generic("List".into(), vec![Ty::String]),
                                 &list_ty,
                                 args[0].span,
+                                None,
                                 report,
                             );
-                            check_type_match(&Ty::String, &init_ty, args[1].span, report);
+                            check_type_match(&Ty::String, &init_ty, args[1].span, None, report);
                             check_type_match(
                                 &Ty::Fn(vec![Ty::String, Ty::String], Box::new(Ty::String)),
                                 &f_ty,
                                 args[2].span,
+                                None,
                                 report,
                             );
                             return Ty::String;
@@ -1824,7 +1834,7 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                         // Check each argument type against parameter type
                         for (arg, param_ty) in args.iter().zip(param_tys.iter()) {
                             let arg_ty = infer_expr(&arg.value, env, report);
-                            check_type_match(param_ty, &arg_ty, arg.span, report);
+                            check_type_match(param_ty, &arg_ty, arg.span, None, report);
                         }
                     }
                     *ret_ty
@@ -2444,20 +2454,28 @@ fn peel_to_set(ty: &Ty) -> Option<&Ty> {
     None
 }
 
-fn check_type_match(expected: &Ty, actual: &Ty, span: Span, report: &mut Report) {
+fn check_type_match(
+    expected: &Ty,
+    actual: &Ty,
+    span: Span,
+    origin_span: Option<Span>,
+    report: &mut Report,
+) {
     if !types_compatible(expected, actual) {
-        report.add(
-            Diagnostic::error(format!(
-                "type mismatch: expected {}, found {}",
-                expected.display_name(),
-                actual.display_name()
-            ))
-            .with_code("E0308")
-            .with_label(Label::new(
-                span,
-                format!("expected {}", expected.display_name()),
-            )),
-        );
+        let mut diag = Diagnostic::error(format!(
+            "type mismatch: expected {}, found {}",
+            expected.display_name(),
+            actual.display_name()
+        ))
+        .with_code("E0308")
+        .with_label(Label::new(
+            span,
+            format!("expected {}", expected.display_name()),
+        ));
+        if let Some(origin) = origin_span {
+            diag = diag.with_label(Label::new(origin, "expected because of this annotation"));
+        }
+        report.add(diag);
     }
 }
 
