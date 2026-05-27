@@ -226,16 +226,6 @@ pub unsafe extern "C" fn tyra_cstr_eq(a: *const c_char, b: *const c_char) -> c_i
 mod tests {
     use super::*;
 
-    // Stub GC_malloc for unit tests (no Boehm GC linked in test binary).
-    #[cfg(test)]
-    mod gc_shim {
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn GC_malloc(size: usize) -> *mut u8 {
-            let layout = std::alloc::Layout::from_size_align(size, 8).unwrap();
-            unsafe { std::alloc::alloc_zeroed(layout) }
-        }
-    }
-
     unsafe extern "C" fn eq_i64(a: *const u8, b: *const u8) -> i32 {
         let va = *(a as *const i64);
         let vb = *(b as *const i64);
