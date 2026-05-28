@@ -1,0 +1,15 @@
+import io
+
+let m = {"one": 1, "two": 2, "three": 3}
+
+match io.read_line()
+when Some(key)
+  match m.get(key)
+  when Some(n)
+    print("value=#{n}")
+  when None
+    print("missing")
+  end
+when None
+  print("missing")
+end
