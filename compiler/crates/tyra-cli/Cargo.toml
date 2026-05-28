@@ -24,5 +24,14 @@ tyra-pkg.workspace = true
 tyra-runtime.workspace = true
 tyra-codegen-llvm.workspace = true
 
+[features]
+# Forward the LLVM version feature down to tyra-codegen-llvm.
+# Default targets macOS arm64 (Homebrew LLVM 22). CI overrides with --no-default-features --features llvmXX-1.
+default = ["llvm22-1"]
+llvm19-1 = ["tyra-codegen-llvm/llvm19-1"]
+llvm20-1 = ["tyra-codegen-llvm/llvm20-1"]
+llvm21-1 = ["tyra-codegen-llvm/llvm21-1"]
+llvm22-1 = ["tyra-codegen-llvm/llvm22-1"]
+
 [dev-dependencies]
 tempfile = "3"

@@ -19,6 +19,14 @@ tyra-driver = { workspace = true }
 tyra-diagnostics = { workspace = true }
 tyra-lexer = { workspace = true }
 
+[features]
+# Forward LLVM version feature through tyra-driver to tyra-codegen-llvm.
+default = ["llvm22-1"]
+llvm19-1 = ["tyra-driver/llvm19-1"]
+llvm20-1 = ["tyra-driver/llvm20-1"]
+llvm21-1 = ["tyra-driver/llvm21-1"]
+llvm22-1 = ["tyra-driver/llvm22-1"]
+
 [dev-dependencies]
 tower = "0.4"
 futures = "0.3"

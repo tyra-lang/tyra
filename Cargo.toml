@@ -34,8 +34,8 @@ tyra-parser = { path = "compiler/crates/tyra-parser" }
 tyra-resolve = { path = "compiler/crates/tyra-resolve" }
 tyra-types = { path = "compiler/crates/tyra-types" }
 tyra-mir = { path = "compiler/crates/tyra-mir" }
-tyra-codegen-llvm = { path = "compiler/crates/tyra-codegen-llvm" }
-tyra-driver = { path = "compiler/crates/tyra-driver" }
+tyra-codegen-llvm = { path = "compiler/crates/tyra-codegen-llvm", default-features = false }
+tyra-driver = { path = "compiler/crates/tyra-driver", default-features = false }
 tyra-runtime = { path = "runtime" }
 tyra-fmt      = { path = "tools/tyra-fmt" }
 tyra-manifest = { path = "tools/tyra-manifest" }
