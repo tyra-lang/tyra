@@ -607,12 +607,51 @@ mod tests {
         assert_eq!(unsafe { tyra_set_contains(s2, box_i64(1)) }, 1);
     }
 
-    // ── GC stress tests ───────────────────────────────────────────────────────
+    // ── GC / structural-sharing tests ────────────────────────────────────────
+    //
+    // Three tiers:
+    //   1. smoke (non-ignored) — no GC_gcollect, always runs in CI.
+    //      Checks shared-node correctness with N=100.
+    //   2. gc_shared_nodes_survive_collection_set (#[ignore]) — N=1 000 with
+    //      an explicit GC_gcollect cycle.
+    //   3. gc_stress_set_large_n (#[ignore]) — N=100 000 churn with
+    //      intermediate invariant checks.
+    //
+    // Run ignored tests single-threaded to avoid Boehm GC exclusion-range
+    // conflicts between parallel test threads:
+    //   cargo test -p tyra-runtime -- --ignored --test-threads=1
 
-    // Run manually: cargo test -p tyra-runtime -- gc_shared_nodes_survive_collection --ignored -- --test-threads=1
+    // Always-on smoke: structural sharing correctness without forcing GC.
+    #[test]
+    fn shared_snapshot_smoke_set() {
+        let n = 100i64;
+        let mut cur = unsafe { tyra_set_new(eq_i64, hash_i64) };
+        for i in 0..n {
+            cur = unsafe { tyra_set_insert(cur, box_i64(i)) };
+        }
+        let snapshots: Vec<*mut TyraSet> = (0..10i64)
+            .map(|s| unsafe { tyra_set_insert(cur, box_i64(n + s)) })
+            .collect();
+
+        assert_eq!(unsafe { tyra_set_len(cur) }, n);
+        for i in 0..n {
+            assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i)) }, 1,
+                "base: element {i} missing");
+        }
+        for (s, &snap) in snapshots.iter().enumerate() {
+            let s = s as i64;
+            assert_eq!(unsafe { tyra_set_len(snap) }, n + 1, "snapshot {s}: wrong len");
+            assert_eq!(unsafe { tyra_set_contains(snap, box_i64(n + s)) }, 1,
+                "snapshot {s}: private element missing");
+            assert_eq!(unsafe { tyra_set_contains(snap, box_i64(0)) }, 1,
+                "snapshot {s}: shared element 0 missing");
+        }
+    }
+
+    // GC cycle: shared nodes must survive an explicit GC_gcollect.
     #[test]
     #[ignore]
-    fn gc_shared_nodes_survive_collection() {
+    fn gc_shared_nodes_survive_collection_set() {
         unsafe extern "C" { fn GC_gcollect(); }
 
         let n = 1_000i64;
@@ -620,20 +659,17 @@ mod tests {
         for i in 0..n {
             cur = unsafe { tyra_set_insert(cur, box_i64(i)) };
         }
-
-        // Build 50 snapshots sharing most of `cur`'s nodes.
         let snapshots: Vec<*mut TyraSet> = (0..50i64)
             .map(|s| unsafe { tyra_set_insert(cur, box_i64(n + s)) })
             .collect();
 
         unsafe { GC_gcollect(); }
 
-        assert_eq!(unsafe { tyra_set_len(cur) }, n, "base set len wrong after GC");
+        assert_eq!(unsafe { tyra_set_len(cur) }, n, "base: wrong len after GC");
         for i in 0..n {
             assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i)) }, 1,
                 "base: element {i} missing after GC");
         }
-
         for (s, &snap) in snapshots.iter().enumerate() {
             let s = s as i64;
             assert_eq!(unsafe { tyra_set_len(snap) }, n + 1,
@@ -645,8 +681,7 @@ mod tests {
         }
     }
 
-    // Long-running stress — skipped in normal CI.
-    // Run manually: cargo test -p tyra-runtime -- gc_stress_set_large_n --ignored --nocapture
+    // Long-running churn with intermediate invariant checks after each GC.
     #[test]
     #[ignore]
     fn gc_stress_set_large_n() {
@@ -655,28 +690,70 @@ mod tests {
         let n = 100_000i64;
         let mut cur = unsafe { tyra_set_new(eq_i64, hash_i64) };
 
+        // Phase 1: insert N entries, checking invariants every 10 K.
         for i in 0..n {
             cur = unsafe { tyra_set_insert(cur, box_i64(i)) };
             if i % 10_000 == 9_999 {
                 unsafe { GC_gcollect(); }
-                assert_eq!(unsafe { tyra_set_len(cur) }, i + 1,
-                    "wrong len at i={i} after GC");
+                let expected_len = i + 1;
+                assert_eq!(unsafe { tyra_set_len(cur) }, expected_len,
+                    "phase 1: len at i={i}");
+                // Representative element present.
+                assert_eq!(unsafe { tyra_set_contains(cur, box_i64(0)) }, 1,
+                    "phase 1: element 0 missing at i={i}");
+                // Element not yet inserted absent.
+                assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i + 1)) }, 0,
+                    "phase 1: future element present at i={i}");
             }
         }
         assert_eq!(unsafe { tyra_set_len(cur) }, n);
 
+        // Phase 2: remove every even element, checking invariants every 10 K.
         for i in (0..n).step_by(2) {
             cur = unsafe { tyra_set_remove(cur, box_i64(i)) };
             if i % 10_000 == 9_998 {
                 unsafe { GC_gcollect(); }
+                let removed_so_far = (i / 2) + 1;
+                assert_eq!(unsafe { tyra_set_len(cur) }, n - removed_so_far,
+                    "phase 2: len after removing up to element {i}");
+                // The just-removed element must be absent.
+                assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i)) }, 0,
+                    "phase 2: removed element {i} still present");
+                // The preceding odd element must still be present.
+                if i > 0 {
+                    assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i - 1)) }, 1,
+                        "phase 2: retained odd element {} missing", i - 1);
+                }
             }
         }
         assert_eq!(unsafe { tyra_set_len(cur) }, n / 2);
 
+        // Phase 3: insert another N entries, checking invariants every 10 K.
+        for i in n..(2 * n) {
+            cur = unsafe { tyra_set_insert(cur, box_i64(i)) };
+            if i % 10_000 == 9_999 {
+                unsafe { GC_gcollect(); }
+                let inserted_p3 = i - n + 1;
+                assert_eq!(unsafe { tyra_set_len(cur) }, n / 2 + inserted_p3,
+                    "phase 3: len at i={i}");
+                assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i)) }, 1,
+                    "phase 3: just-inserted element {i} missing");
+                // An odd phase-1 element must still be present.
+                assert_eq!(unsafe { tyra_set_contains(cur, box_i64(1)) }, 1,
+                    "phase 3: phase-1 odd element 1 missing at i={i}");
+            }
+        }
+        assert_eq!(unsafe { tyra_set_len(cur) }, n / 2 + n);
+
+        // Final GC + full integrity sweep.
         unsafe { GC_gcollect(); }
         for i in (1..n).step_by(2) {
             assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i)) }, 1,
-                "odd element {i} missing after full stress");
+                "final: phase-1 odd element {i} missing");
+        }
+        for i in n..(2 * n) {
+            assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i)) }, 1,
+                "final: phase-3 element {i} missing");
         }
     }
 }

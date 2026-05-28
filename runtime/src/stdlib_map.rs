@@ -785,44 +785,70 @@ mod tests {
         assert_eq!(unbox_i64(unsafe { tyra_map_get(m2, box_i64(1)) }), 10);
     }
 
-    // ── GC stress tests ───────────────────────────────────────────────────────
+    // ── GC / structural-sharing tests ────────────────────────────────────────
+    //
+    // Three tiers:
+    //   1. smoke (non-ignored) — no GC_gcollect, always runs in CI.
+    //      Checks shared-node correctness with N=100.
+    //   2. gc_shared_nodes_survive_collection_map (#[ignore]) — N=1 000 with
+    //      an explicit GC_gcollect cycle.
+    //   3. gc_stress_large_n_map (#[ignore]) — N=100 000 churn with
+    //      intermediate invariant checks.
+    //
+    // Run ignored tests single-threaded to avoid Boehm GC exclusion-range
+    // conflicts between parallel test threads:
+    //   cargo test -p tyra-runtime -- --ignored --test-threads=1
 
-    // Verify that shared HAMT child nodes are not prematurely collected.
-    // Creates a base map, builds 50 derived maps that share most of its
-    // structure, forces a GC cycle, then checks every entry is intact.
-    // Marked #[ignore] because GC_gcollect must not be called concurrently
-    // from parallel test threads (Boehm GC exclusion range constraint).
-    // Run manually: cargo test -p tyra-runtime -- gc_shared_nodes_survive_collection --ignored -- --test-threads=1
+    // Always-on smoke: structural sharing correctness without forcing GC.
     #[test]
-    #[ignore]
-    fn gc_shared_nodes_survive_collection() {
-        unsafe extern "C" { fn GC_gcollect(); }
-
-        let n = 1_000i64;
-        let base = unsafe { tyra_map_new(eq_i64, hash_i64) };
-        let mut cur = base;
+    fn shared_snapshot_smoke_map() {
+        let n = 100i64;
+        let mut cur = unsafe { tyra_map_new(eq_i64, hash_i64) };
         for i in 0..n {
             cur = unsafe { tyra_map_insert(cur, box_i64(i), box_i64(i * 3)) };
         }
+        let snapshots: Vec<*mut TyraMap> = (0..10i64)
+            .map(|s| unsafe { tyra_map_insert(cur, box_i64(n + s), box_i64(s * 7)) })
+            .collect();
 
-        // Build 50 snapshots — each shares nearly all nodes with `cur`.
+        assert_eq!(unsafe { tyra_map_len(cur) }, n);
+        for i in 0..n {
+            assert_eq!(unbox_i64(unsafe { tyra_map_get(cur, box_i64(i)) }), i * 3,
+                "base: key {i} wrong");
+        }
+        for (s, &snap) in snapshots.iter().enumerate() {
+            let s = s as i64;
+            assert_eq!(unsafe { tyra_map_len(snap) }, n + 1, "snapshot {s}: wrong len");
+            assert_eq!(unbox_i64(unsafe { tyra_map_get(snap, box_i64(n + s)) }), s * 7,
+                "snapshot {s}: private value wrong");
+            assert!(!unsafe { tyra_map_get(snap, box_i64(0)) }.is_null(),
+                "snapshot {s}: shared key 0 missing");
+        }
+    }
+
+    // GC cycle: shared nodes must survive an explicit GC_gcollect.
+    #[test]
+    #[ignore]
+    fn gc_shared_nodes_survive_collection_map() {
+        unsafe extern "C" { fn GC_gcollect(); }
+
+        let n = 1_000i64;
+        let mut cur = unsafe { tyra_map_new(eq_i64, hash_i64) };
+        for i in 0..n {
+            cur = unsafe { tyra_map_insert(cur, box_i64(i), box_i64(i * 3)) };
+        }
         let snapshots: Vec<*mut TyraMap> = (0..50i64)
             .map(|s| unsafe { tyra_map_insert(cur, box_i64(n + s), box_i64(s * 7)) })
             .collect();
 
-        // Force a full GC cycle. Shared nodes must stay live because
-        // `cur` and `snapshots` are still reachable on the stack.
         unsafe { GC_gcollect(); }
 
-        // Original map is intact.
-        assert_eq!(unsafe { tyra_map_len(cur) }, n, "base map len wrong after GC");
+        assert_eq!(unsafe { tyra_map_len(cur) }, n, "base: wrong len after GC");
         for i in 0..n {
             let got = unsafe { tyra_map_get(cur, box_i64(i)) };
             assert!(!got.is_null(), "base: key {i} missing after GC");
             assert_eq!(unbox_i64(got), i * 3, "base: wrong value for key {i} after GC");
         }
-
-        // Each snapshot has its private key and can still read shared entries.
         for (s, &snap) in snapshots.iter().enumerate() {
             let s = s as i64;
             assert_eq!(unsafe { tyra_map_len(snap) }, n + 1,
@@ -831,61 +857,84 @@ mod tests {
             assert!(!got.is_null(), "snapshot {s}: private key missing after GC");
             assert_eq!(unbox_i64(got), s * 7,
                 "snapshot {s}: wrong private value after GC");
-            // Spot-check a shared entry (key 0) from the base map.
-            let shared = unsafe { tyra_map_get(snap, box_i64(0)) };
-            assert!(!shared.is_null(), "snapshot {s}: shared key 0 missing after GC");
+            assert!(!unsafe { tyra_map_get(snap, box_i64(0)) }.is_null(),
+                "snapshot {s}: shared key 0 missing after GC");
         }
     }
 
-    // Long-running stress — skipped in normal CI.
-    // Run manually: cargo test -p tyra-runtime -- gc_stress_large_n --ignored --nocapture
+    // Long-running churn with intermediate invariant checks after each GC.
     #[test]
     #[ignore]
-    fn gc_stress_large_n() {
+    fn gc_stress_large_n_map() {
         unsafe extern "C" { fn GC_gcollect(); }
 
         let n = 100_000i64;
         let mut cur = unsafe { tyra_map_new(eq_i64, hash_i64) };
 
-        // Phase 1: insert N entries, forcing GC every 10 K.
+        // Phase 1: insert N entries, checking invariants every 10 K.
         for i in 0..n {
             cur = unsafe { tyra_map_insert(cur, box_i64(i), box_i64(i)) };
             if i % 10_000 == 9_999 {
                 unsafe { GC_gcollect(); }
-                assert_eq!(unsafe { tyra_map_len(cur) }, i + 1,
-                    "phase 1: wrong len at i={i} after GC");
+                let expected_len = i + 1;
+                assert_eq!(unsafe { tyra_map_len(cur) }, expected_len,
+                    "phase 1: len at i={i}");
+                // Representative key present.
+                assert!(!unsafe { tyra_map_get(cur, box_i64(0)) }.is_null(),
+                    "phase 1: key 0 missing at i={i}");
+                // Key not yet inserted absent.
+                assert!(unsafe { tyra_map_get(cur, box_i64(i + 1)) }.is_null(),
+                    "phase 1: future key present at i={i}");
             }
         }
         assert_eq!(unsafe { tyra_map_len(cur) }, n);
 
-        // Phase 2: remove every even key with periodic GC.
+        // Phase 2: remove every even key, checking invariants every 10 K.
         for i in (0..n).step_by(2) {
             cur = unsafe { tyra_map_remove(cur, box_i64(i)) };
             if i % 10_000 == 9_998 {
                 unsafe { GC_gcollect(); }
+                let removed_so_far = (i / 2) + 1;
+                assert_eq!(unsafe { tyra_map_len(cur) }, n - removed_so_far,
+                    "phase 2: len after removing up to key {i}");
+                // The just-removed key must be absent.
+                assert!(unsafe { tyra_map_get(cur, box_i64(i)) }.is_null(),
+                    "phase 2: removed key {i} still present");
+                // The preceding odd key must still be present.
+                if i > 0 {
+                    assert!(!unsafe { tyra_map_get(cur, box_i64(i - 1)) }.is_null(),
+                        "phase 2: retained odd key {} missing", i - 1);
+                }
             }
         }
-        assert_eq!(unsafe { tyra_map_len(cur) }, n / 2,
-            "phase 2: wrong len after bulk remove");
+        assert_eq!(unsafe { tyra_map_len(cur) }, n / 2);
 
-        // Phase 3: insert another N entries.
+        // Phase 3: insert another N entries, checking invariants every 10 K.
         for i in n..(2 * n) {
             cur = unsafe { tyra_map_insert(cur, box_i64(i), box_i64(i)) };
             if i % 10_000 == 9_999 {
                 unsafe { GC_gcollect(); }
+                let inserted_p3 = i - n + 1;
+                assert_eq!(unsafe { tyra_map_len(cur) }, n / 2 + inserted_p3,
+                    "phase 3: len at i={i}");
+                assert!(!unsafe { tyra_map_get(cur, box_i64(i)) }.is_null(),
+                    "phase 3: just-inserted key {i} missing");
+                // An odd phase-1 key must still be present.
+                assert!(!unsafe { tyra_map_get(cur, box_i64(1)) }.is_null(),
+                    "phase 3: phase-1 odd key 1 missing at i={i}");
             }
         }
         assert_eq!(unsafe { tyra_map_len(cur) }, n / 2 + n);
 
-        // Final GC + integrity check.
+        // Final GC + full integrity sweep.
         unsafe { GC_gcollect(); }
         for i in (1..n).step_by(2) {
             assert!(!unsafe { tyra_map_get(cur, box_i64(i)) }.is_null(),
-                "phase-1 odd key {i} missing after full stress");
+                "final: phase-1 odd key {i} missing");
         }
         for i in n..(2 * n) {
             assert!(!unsafe { tyra_map_get(cur, box_i64(i)) }.is_null(),
-                "phase-3 key {i} missing after full stress");
+                "final: phase-3 key {i} missing");
         }
     }
 }
