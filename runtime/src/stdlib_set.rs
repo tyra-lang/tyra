@@ -15,6 +15,7 @@ use std::ptr;
 
 unsafe extern "C" {
     fn GC_malloc(size: usize) -> *mut c_void;
+    fn GC_init();
 }
 
 type EqFn = unsafe extern "C" fn(*const u8, *const u8) -> i32;
@@ -365,6 +366,9 @@ unsafe fn hamt_remove(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_set_new(eq_fn: EqFn, hash_fn: HashFn) -> *mut TyraSet {
+    // GC_init is idempotent; generated main always calls it first, but unit
+    // tests may call tyra_set_new directly without going through tyra_rt_init.
+    GC_init();
     let set = gc_alloc::<TyraSet>();
     set.write(TyraSet {
         eq_fn,

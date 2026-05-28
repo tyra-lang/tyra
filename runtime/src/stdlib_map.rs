@@ -29,6 +29,7 @@ use std::ptr;
 
 unsafe extern "C" {
     fn GC_malloc(size: usize) -> *mut c_void;
+    fn GC_init();
 }
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -465,6 +466,9 @@ unsafe fn hamt_remove(
 /// Create an empty map with the given per-K eq/hash functions.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_map_new(eq_fn: EqFn, hash_fn: HashFn) -> *mut TyraMap {
+    // GC_init is idempotent; generated main always calls it first, but unit
+    // tests may call tyra_map_new directly without going through tyra_rt_init.
+    GC_init();
     let map = gc_alloc::<TyraMap>();
     map.write(TyraMap {
         eq_fn,

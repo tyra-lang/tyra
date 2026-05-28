@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # llvm-sys defaults to static linking which requires libPolly (not in the
+  # standard llvm-21 apt package). Force shared linking instead.
+  LLVM_LINK_SHARED: "1"
+
 jobs:
   corpus:
     name: tyra check + test (static corpus)

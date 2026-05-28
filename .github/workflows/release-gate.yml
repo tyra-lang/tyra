@@ -12,6 +12,9 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # llvm-sys defaults to static linking which requires libPolly (not in the
+  # standard llvm-21/llvm-19 apt/apk package). Force shared linking instead.
+  LLVM_LINK_SHARED: "1"
 
 jobs:
   msrv:
