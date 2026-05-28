@@ -1,8 +1,8 @@
 # Tyra Language Specification
 
-- **Version**: 0.4
+- **Version**: 0.7
 - **Status**: Stable
-- **Last updated**: 2026-05-26
+- **Last updated**: 2026-05-27
 
 ## 1. 目的
 

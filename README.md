@@ -2,7 +2,7 @@
 
 A statically-typed, AI-friendly programming language for backend services, CLI tools, and business applications.
 
-> **v0.6.0** — generic `Map<K,V>` and `Set<T>`, `time`/`log` stdlib, `test "name"` syntax with `panics` modifier, `tyra test --coverage`, and the DAP debugger (DWARF + lldb-dap + VS Code). [See known limitations](#known-limitations) before using in production.
+> **v0.7.0** — HAMT-persistent `Map<K,V>` and `Set<T>` with `insert`/`remove`/iteration, E0308 diagnostic improvements (help hints, secondary labels), `for k, v in m` syntax, and post-release diagnostic hardening (E0204 hard error, E0213, E0110/E0211 help hints). AI-gen benchmark: 98/100 pass. [See known limitations](#known-limitations) before using in production.
 
 ---
 
@@ -12,13 +12,14 @@ Tyra is a general-purpose language designed from the ground up for an era where 
 
 ```tyra
 import fs
+import string
 
-fn word_count(path: String) -> Result<Int, fs.Error>
+fn word_count(path: String) -> Result<Int, fs.FsError>
   let text = fs.read_to_string(path)?
-  Ok(text.split(" ").length())
+  Ok(string.split_whitespace(text).len())
 end
 
-export fn main() -> Unit
+fn main() -> Unit
   match word_count("notes.txt")
   when Ok(n)
     print("#{n} words")
@@ -84,9 +85,9 @@ fn label(payment: Payment) -> String
 end
 
 # Errors as values, propagated with ?
-fn read_port() -> Result<Int, ConfigError>
+fn read_port() -> Result<Int, String>
   let text = fs.read_to_string("app.conf")?
-  parse_int(text)?
+  string.parse_int(text).ok_or("invalid port number")?
 end
 
 # Value types with auto-derived equality
@@ -125,11 +126,11 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 
 ## Status
 
-**Stable in v0.6.0** — supported and tested:
+**Stable in v0.7.0** — supported and tested:
 
 | Component | Notes |
 | --- | --- |
-| Language specification v0.6 | ✅ Complete |
+| Language specification v0.7 | ✅ Complete |
 | Lexer, Parser, Type checker | ✅ Complete |
 | LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 (glibc + musl) |
 | Standard library: string, list, fs, io, float, json, assert, time, log | ✅ Complete |
@@ -148,14 +149,17 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | `tyra bench <dir>` — general-purpose wall-clock microbenchmark runner | ✅ Complete |
 | Lambda / closures (spec §9.4, ADR 0011) | ✅ Complete |
 | Generic `List<T>` + `map`/`filter`/`fold` | ✅ Complete |
-| Generic `Map<K,V>` — arbitrary `K: Eq + Hash`, arbitrary `V` | ✅ Complete (v0.6.0+) |
-| Generic `Set<T>` — arbitrary `T: Eq + Hash` | ✅ Complete (v0.6.0+) |
+| Generic `Map<K,V>` — HAMT-persistent, `insert`/`remove`/`get`/`contains_key`/iteration | ✅ Complete (v0.7.0+) |
+| Generic `Set<T>` — HAMT-persistent, `insert`/`remove`/`contains`/iteration | ✅ Complete (v0.7.0+) |
+| `for k, v in m` / `for v in s` — Map/Set iteration | ✅ Complete (v0.7.0+) |
+| E0308 diagnostic improvements — help hints, secondary labels, cascade dedup | ✅ Complete (v0.7.0+) |
+| E0313 — for-loop binding count mismatch diagnostic | ✅ Complete (v0.7.0+) |
 | Generic `assert.eq` / `assert.ne` (Int, String, Bool) | ✅ Complete |
 | `string.replace` / `string.join` | ✅ Complete (v0.5.0+) |
 | `Tyra.lock` + floating `branch` constraints + transitive dep resolution | ✅ Complete |
 | LSP server (`tyra-lsp`) + VS Code extension | ✅ Development install |
 | DAP debugger (DWARF + lldb-dap + VS Code breakpoints/locals) | ✅ Complete (v0.6.0+) |
-| Static conformance corpus (19 programs + error cases) | ✅ CI-gated |
+| Static conformance corpus (25 positive programs + 19 error cases) | ✅ CI-gated |
 
 ## Platform support
 
@@ -286,8 +290,8 @@ The compiler always declares which spec version it implements:
 
 ```console
 $ tyra --version
-tyra 0.6.0
-implementing language spec 0.6
+tyra 0.7.0
+implementing language spec 0.7
 ```
 
 While Tyra is at v0.x, **breaking changes are allowed in MINOR version bumps**. After v1.0, breaking changes will use the Edition model (similar to Rust editions).
