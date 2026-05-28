@@ -36,7 +36,7 @@ jobs:
 
       - name: Check workspace at MSRV
         # prefer-dynamic avoids requiring libPolly.a (not in the apt llvm-21 package).
-        run: cargo check --workspace --no-default-features --features tyra-codegen-llvm/llvm21-1-prefer-dynamic-prefer-dynamic
+        run: cargo check --workspace --no-default-features --features tyra-codegen-llvm/llvm21-1-prefer-dynamic
 
   release-gate:
     name: build + test + corpus + smoke

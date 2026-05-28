@@ -71,7 +71,7 @@ jobs:
 
       - name: Build release binary and runtime
         # inkwell requires an explicit LLVM version feature; LLVM 21 is installed above.
-        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm21-1
+        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm21-1-prefer-dynamic
 
       - name: Verify binary architecture
         run: |
@@ -157,7 +157,7 @@ jobs:
 
       - name: Build release binary and runtime
         # inkwell requires an explicit LLVM version feature; LLVM 19 is installed above.
-        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm19-1
+        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm19-1-prefer-dynamic
 
       - name: Verify static binary
         run: |
