@@ -227,9 +227,7 @@ impl super::LowerCtx<'_> {
         {
             if let Some(map_ty) = self.infer_map_type(obj) {
                 let (key_ty, val_ty) = match &map_ty {
-                    Ty::Generic(_, args) if args.len() == 2 => {
-                        (args[0].clone(), args[1].clone())
-                    }
+                    Ty::Generic(_, args) if args.len() == 2 => (args[0].clone(), args[1].clone()),
                     _ => (Ty::String, Ty::Int),
                 };
                 let map_struct = map_ty.monomorphized_name();
@@ -285,9 +283,7 @@ impl super::LowerCtx<'_> {
         {
             if let Some(map_ty) = self.infer_map_type(obj) {
                 let (key_ty, _val_ty) = match &map_ty {
-                    Ty::Generic(_, args) if args.len() == 2 => {
-                        (args[0].clone(), args[1].clone())
-                    }
+                    Ty::Generic(_, args) if args.len() == 2 => (args[0].clone(), args[1].clone()),
                     _ => (Ty::String, Ty::Int),
                 };
                 let map_struct = map_ty.monomorphized_name();
@@ -1509,10 +1505,7 @@ impl super::LowerCtx<'_> {
                          `string.{fn_name}` does not exist in stdlib"
                     ))
                     .with_code("E0204")
-                    .with_note(format!(
-                        "at {}:{}:{}",
-                        file, call_loc.line, call_loc.col
-                    ))
+                    .with_note(format!("at {}:{}:{}", file, call_loc.line, call_loc.col))
                     .with_help(
                         "Available string functions: string.len, string.is_empty, \
                          string.trim, string.to_upper, string.to_lower, string.contains, \

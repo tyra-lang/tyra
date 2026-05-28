@@ -36,14 +36,14 @@ fn main() {
         }
     };
 
-    if let (Some(detected_feat), Some(selected_feat)) = (detected_feature, selected) {
-        if detected_feat != selected_feat {
-            println!(
-                "cargo:warning=tyra-codegen-llvm: detected LLVM feature `{detected_feat}` \
-                 but Cargo feature `{selected_feat}` is active. Pass \
-                 `--no-default-features --features {detected_feat}` to match the installed LLVM."
-            );
-        }
+    if let (Some(detected_feat), Some(selected_feat)) = (detected_feature, selected)
+        && detected_feat != selected_feat
+    {
+        println!(
+            "cargo:warning=tyra-codegen-llvm: detected LLVM feature `{detected_feat}` \
+             but Cargo feature `{selected_feat}` is active. Pass \
+             `--no-default-features --features {detected_feat}` to match the installed LLVM."
+        );
     }
 
     // Re-run if LLVM environment changes.
@@ -62,18 +62,15 @@ fn detect_llvm_version() -> Option<u32> {
         "llvm-config-19",
     ];
     for cmd in &candidates {
-        if let Ok(out) = std::process::Command::new(cmd).arg("--version").output() {
-            if out.status.success() {
-                if let Ok(s) = std::str::from_utf8(&out.stdout) {
-                    if let Some(major) = s
-                        .split('.')
-                        .next()
-                        .and_then(|n| n.trim().parse::<u32>().ok())
-                    {
-                        return Some(major);
-                    }
-                }
-            }
+        if let Ok(out) = std::process::Command::new(cmd).arg("--version").output()
+            && out.status.success()
+            && let Ok(s) = std::str::from_utf8(&out.stdout)
+            && let Some(major) = s
+                .split('.')
+                .next()
+                .and_then(|n| n.trim().parse::<u32>().ok())
+        {
+            return Some(major);
         }
     }
     None

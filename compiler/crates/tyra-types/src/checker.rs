@@ -287,8 +287,7 @@ impl TypeEnv {
     /// Register the declared return type for an impl method (ADR-0017 §4).
     /// Called from collect_top_level_types when processing ImplDef nodes.
     pub fn register_impl_method_ret(&mut self, type_name: String, method_name: String, ret: Ty) {
-        self.impl_method_ret
-            .insert((type_name, method_name), ret);
+        self.impl_method_ret.insert((type_name, method_name), ret);
     }
 
     /// Look up the declared return type of an impl method (ADR-0017 §4).
@@ -876,11 +875,7 @@ fn collect_top_level_types(items: &[Item], env: &mut TypeEnv) {
                             .as_ref()
                             .map(Ty::from_type_expr)
                             .unwrap_or(Ty::Unit);
-                        env.register_impl_method_ret(
-                            target_name.clone(),
-                            m.name.clone(),
-                            ret_ty,
-                        );
+                        env.register_impl_method_ret(target_name.clone(), m.name.clone(), ret_ty);
                     }
                 }
             }
@@ -1193,7 +1188,14 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
             let binding_ty = if let Some(annotation) = &s.type_annotation {
                 let expected = Ty::from_type_expr(annotation);
                 check_supported_map_ty(&expected, s.span, report);
-                check_type_match(&expected, &value_ty, s.span, Some(annotation.span), env, report);
+                check_type_match(
+                    &expected,
+                    &value_ty,
+                    s.span,
+                    Some(annotation.span),
+                    env,
+                    report,
+                );
                 expected
             } else {
                 value_ty
@@ -1212,7 +1214,14 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
             let binding_ty = if let Some(annotation) = &s.type_annotation {
                 let expected = Ty::from_type_expr(annotation);
                 check_supported_map_ty(&expected, s.span, report);
-                check_type_match(&expected, &value_ty, s.span, Some(annotation.span), env, report);
+                check_type_match(
+                    &expected,
+                    &value_ty,
+                    s.span,
+                    Some(annotation.span),
+                    env,
+                    report,
+                );
                 expected
             } else {
                 value_ty
@@ -1482,28 +1491,22 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     && method == "new"
                     && args.is_empty()
                 {
-                    if let Some(set_ty) = env
-                        .binding_type_hint
-                        .as_ref()
-                        .and_then(|t| peel_to_set(t))
+                    if let Some(set_ty) =
+                        env.binding_type_hint.as_ref().and_then(|t| peel_to_set(t))
                     {
                         return set_ty.clone();
                     }
-                    if let Some(set_ty) =
-                        env.current_return_type().and_then(|t| peel_to_set(t))
-                    {
+                    if let Some(set_ty) = env.current_return_type().and_then(|t| peel_to_set(t)) {
                         return set_ty.clone();
                     }
                     report.add(
-                        Diagnostic::error(
-                            "cannot infer Set element type".to_string(),
-                        )
-                        .with_code("E0308")
-                        .with_label(Label::new(expr.span, "element type unknown"))
-                        .with_note(
-                            "add a type annotation: `let s: Set<Int> = set.new()` \
+                        Diagnostic::error("cannot infer Set element type".to_string())
+                            .with_code("E0308")
+                            .with_label(Label::new(expr.span, "element type unknown"))
+                            .with_note(
+                                "add a type annotation: `let s: Set<Int> = set.new()` \
                              (supported element types: Int, Bool, String)",
-                        ),
+                            ),
                     );
                     return Ty::Error;
                 }
@@ -1635,7 +1638,14 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                                 && name == "List"
                                 && let Some(expected) = params.first()
                             {
-                                check_type_match(expected, &elem_ty, args[1].span, None, env, report);
+                                check_type_match(
+                                    expected,
+                                    &elem_ty,
+                                    args[1].span,
+                                    None,
+                                    env,
+                                    report,
+                                );
                             }
                             return list_ty;
                         }
@@ -1824,7 +1834,14 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                                 env,
                                 report,
                             );
-                            check_type_match(&Ty::String, &init_ty, args[1].span, None, env, report);
+                            check_type_match(
+                                &Ty::String,
+                                &init_ty,
+                                args[1].span,
+                                None,
+                                env,
+                                report,
+                            );
                             check_type_match(
                                 &Ty::Fn(vec![Ty::String, Ty::String], Box::new(Ty::String)),
                                 &f_ty,
@@ -1942,41 +1959,47 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     Ty::Named(n) => Some(n.as_str()),
                     _ => None,
                 };
-                if let Some(tn) = type_name {
-                    if let Some(ret) = env.lookup_impl_method_ret(tn, method.as_str()) {
-                        return ret.clone();
-                    }
+                if let Some(tn) = type_name
+                    && let Some(ret) = env.lookup_impl_method_ret(tn, method.as_str())
+                {
+                    return ret.clone();
                 }
                 // Unknown method on a known generic type — emit E0204 so the user
                 // sees a clear error instead of a silent Ty::Error that later
                 // crashes codegen with E0500 (i64/ptr type mismatch in LLVM IR).
-                if let Ty::Generic(generic_name, _) = &obj_ty {
-                    if matches!(
+                if let Ty::Generic(generic_name, _) = &obj_ty
+                    && matches!(
                         generic_name.as_str(),
                         "List" | "Option" | "Result" | "Map" | "Set"
-                    ) {
-                        let help_msg = match generic_name.as_str() {
-                            "List" => "List operations are module-level functions: \
+                    )
+                {
+                    let help_msg = match generic_name.as_str() {
+                        "List" => {
+                            "List operations are module-level functions: \
                                 list.get(xs, i), list.len(xs), list.push(xs, x), \
-                                list.map(xs, f), list.filter(xs, f), list.fold(xs, init, f)",
-                            "Option" => "Use a `match` expression to unwrap Option: \
-                                `match opt when Some(x) x when None default_val end`",
-                            "Result" => "Use a `match` expression to unwrap Result: \
+                                list.map(xs, f), list.filter(xs, f), list.fold(xs, init, f)"
+                        }
+                        "Option" => {
+                            "Use a `match` expression to unwrap Option: \
+                                `match opt when Some(x) x when None default_val end`"
+                        }
+                        "Result" => {
+                            "Use a `match` expression to unwrap Result: \
                                 `match res when Ok(x) x when Err(e) handle_e end`. \
-                                Use `?` inside a fn body to propagate.",
-                            _ => "Check the stdlib documentation for available methods",
-                        };
-                        report.add(
-                            Diagnostic::error(format!(
-                                "unknown method `{}` on `{}`",
-                                method,
-                                obj_ty.display_name()
-                            ))
-                            .with_code("E0204")
-                            .with_label(Label::new(expr.span, "method called here"))
-                            .with_help(help_msg),
-                        );
-                    }
+                                Use `?` inside a fn body to propagate."
+                        }
+                        _ => "Check the stdlib documentation for available methods",
+                    };
+                    report.add(
+                        Diagnostic::error(format!(
+                            "unknown method `{}` on `{}`",
+                            method,
+                            obj_ty.display_name()
+                        ))
+                        .with_code("E0204")
+                        .with_label(Label::new(expr.span, "method called here"))
+                        .with_help(help_msg),
+                    );
                 }
                 return Ty::Error;
             }
@@ -2207,20 +2230,19 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
         ExprKind::For(f) => {
             let iter_ty = infer_expr(&f.iter, env, report);
             // E0313: binding count check against iterable type.
-            let (expected_bindings, binding_tys): (usize, Vec<Ty>) =
-                match &iter_ty {
-                    Ty::Generic(name, args) if name == "Map" && args.len() == 2 => {
-                        (2, vec![args[0].clone(), args[1].clone()])
-                    }
-                    Ty::Generic(name, args) if name == "Set" && !args.is_empty() => {
-                        (1, vec![args[0].clone()])
-                    }
-                    Ty::Generic(name, args) if name == "List" && !args.is_empty() => {
-                        (1, vec![args[0].clone()])
-                    }
-                    // Unknown / Error: accept any binding count, bind to Error.
-                    _ => (f.bindings.len(), vec![Ty::Error; f.bindings.len()]),
-                };
+            let (expected_bindings, binding_tys): (usize, Vec<Ty>) = match &iter_ty {
+                Ty::Generic(name, args) if name == "Map" && args.len() == 2 => {
+                    (2, vec![args[0].clone(), args[1].clone()])
+                }
+                Ty::Generic(name, args) if name == "Set" && !args.is_empty() => {
+                    (1, vec![args[0].clone()])
+                }
+                Ty::Generic(name, args) if name == "List" && !args.is_empty() => {
+                    (1, vec![args[0].clone()])
+                }
+                // Unknown / Error: accept any binding count, bind to Error.
+                _ => (f.bindings.len(), vec![Ty::Error; f.bindings.len()]),
+            };
             if f.bindings.len() != expected_bindings
                 && !matches!(iter_ty, Ty::Error)
                 && expected_bindings != 0
@@ -2673,30 +2695,28 @@ fn e0308_help_hint(expected: &Ty, actual: &Ty, env: &TypeEnv) -> Option<String> 
 
     // Heuristic (i): T vs Option<T>
     // expected is Option<T> but actual is T → suggest Some(...)
-    if let Some(inner) = expected.option_inner() {
-        if inner == actual {
-            return Some("wrap with `Some(...)`".to_string());
-        }
+    if let Some(inner) = expected.option_inner()
+        && inner == actual
+    {
+        return Some("wrap with `Some(...)`".to_string());
     }
     // actual is Option<T> but expected is T → suggest match-when unwrap
-    if let Some(inner) = actual.option_inner() {
-        if inner == expected {
-            return Some(
-                "unwrap with `match opt when Some(x) x when None default end`".to_string(),
-            );
-        }
+    if let Some(inner) = actual.option_inner()
+        && inner == expected
+    {
+        return Some("unwrap with `match opt when Some(x) x when None default end`".to_string());
     }
 
     // Heuristic (ii): Result<T,E>/T with propagation suggestion
     // actual is Result<T,E> but expected is T, and we're inside a Result-returning fn
-    if let Some(ok_ty) = actual.result_ok_type() {
-        if ok_ty == expected {
-            // Only suggest if the enclosing function also returns a Result.
-            if let Some(ret_ty) = env.current_return_type() {
-                if ret_ty.is_result() {
-                    return Some("try `expr?` to propagate the error".to_string());
-                }
-            }
+    if let Some(ok_ty) = actual.result_ok_type()
+        && ok_ty == expected
+    {
+        // Only suggest if the enclosing function also returns a Result.
+        if let Some(ret_ty) = env.current_return_type()
+            && ret_ty.is_result()
+        {
+            return Some("try `expr?` to propagate the error".to_string());
         }
     }
 

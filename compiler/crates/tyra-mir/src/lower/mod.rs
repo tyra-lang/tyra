@@ -1164,6 +1164,7 @@ impl<'a> LowerCtx<'a> {
     ///   4. Returns void (Unit).
     ///
     /// The function is appended to `self.functions`.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn lower_for_each_callback(
         &mut self,
         iter_id: u32,
@@ -1248,13 +1249,23 @@ impl<'a> LowerCtx<'a> {
                 };
                 // Register in appropriate type sets.
                 match &cap_ty {
-                    Ty::Float => { self.float_vars.insert(cap_name.clone()); }
-                    Ty::String => { self.string_vars.insert(cap_name.clone()); }
-                    Ty::Bool => { self.bool_vars.insert(cap_name.clone()); }
-                    Ty::Named(n) => { self.var_types.insert(cap_name.clone(), n.clone()); }
+                    Ty::Float => {
+                        self.float_vars.insert(cap_name.clone());
+                    }
+                    Ty::String => {
+                        self.string_vars.insert(cap_name.clone());
+                    }
+                    Ty::Bool => {
+                        self.bool_vars.insert(cap_name.clone());
+                    }
+                    Ty::Named(n) => {
+                        self.var_types.insert(cap_name.clone(), n.clone());
+                    }
                     Ty::Generic(_, _) => {
-                        self.generic_var_types.insert(cap_name.clone(), cap_ty.clone());
-                        self.var_types.insert(cap_name.clone(), cap_ty.monomorphized_name());
+                        self.generic_var_types
+                            .insert(cap_name.clone(), cap_ty.clone());
+                        self.var_types
+                            .insert(cap_name.clone(), cap_ty.monomorphized_name());
                     }
                     _ => {}
                 }
@@ -1278,13 +1289,23 @@ impl<'a> LowerCtx<'a> {
             let ty = binding_tys.get(i).cloned().unwrap_or(Ty::Int);
             // Register the binding in type tracking sets.
             match &ty {
-                Ty::Float => { self.float_vars.insert(binding_name.clone()); }
-                Ty::String => { self.string_vars.insert(binding_name.clone()); }
-                Ty::Bool => { self.bool_vars.insert(binding_name.clone()); }
-                Ty::Named(n) => { self.var_types.insert(binding_name.clone(), n.clone()); }
+                Ty::Float => {
+                    self.float_vars.insert(binding_name.clone());
+                }
+                Ty::String => {
+                    self.string_vars.insert(binding_name.clone());
+                }
+                Ty::Bool => {
+                    self.bool_vars.insert(binding_name.clone());
+                }
+                Ty::Named(n) => {
+                    self.var_types.insert(binding_name.clone(), n.clone());
+                }
                 Ty::Generic(_, _) => {
-                    self.generic_var_types.insert(binding_name.clone(), ty.clone());
-                    self.var_types.insert(binding_name.clone(), ty.monomorphized_name());
+                    self.generic_var_types
+                        .insert(binding_name.clone(), ty.clone());
+                    self.var_types
+                        .insert(binding_name.clone(), ty.monomorphized_name());
                 }
                 _ => {}
             }
