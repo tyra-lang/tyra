@@ -633,6 +633,7 @@ When updating:
 - **v1.3 (2026-05-25)**: Updated §1 current status for v0.6.0 release (generic Map/Set, time/log stdlib, test "name" syntax, panic expectation, coverage, DAP debugger).
 - **v1.4 (2026-05-27)**: Updated §1 current status for v0.7.0 release (E0308 diagnostics, HAMT persistent Map/Set, Map/Set iteration, inkwell dependency).
 - **v1.5 (2026-05-28)**: Updated §1 for v0.7.0 post-release hardening (E0204 hard error, E0213, E0110/E0211 help hints, List/Option method dispatch, AI-gen Run 16 results).
+- **v1.6 (2026-05-28)**: Updated §1 for AI-gen Run 17 final benchmark (98/100 pass, 98.0%; hardening 後の最終測定値).
 
 ---
 
