@@ -455,8 +455,9 @@ jobs:
             ${{ runner.os }}-cargo-release-gate-
 
       - name: Check workspace (tracking only)
-        # tyra-cli and tyra-driver both depend on tyra-codegen-llvm (which requires LLVM/inkwell),
-        # so --exclude cannot break the dependency chain. Check only the LLVM-free crates explicitly.
+        # tyra-cli, tyra-driver, and tyra-lsp all depend on tyra-codegen-llvm (which requires
+        # LLVM/inkwell), so --exclude cannot break the dependency chain. Check all LLVM-free
+        # crates explicitly: compiler front-end, runtime, and tools.
         run: >
           cargo check
           -p tyra-ast
@@ -466,3 +467,8 @@ jobs:
           -p tyra-parser
           -p tyra-resolve
           -p tyra-types
+          -p tyra-runtime
+          -p tyra-fmt
+          -p tyra-manifest
+          -p tyra-new
+          -p tyra-pkg
