@@ -455,6 +455,14 @@ jobs:
             ${{ runner.os }}-cargo-release-gate-
 
       - name: Check workspace (tracking only)
-        # Exclude tyra-codegen-llvm: no LLVM installed on Windows CI.
-        # inkwell requires LLVM headers/libs; Windows support tracked separately.
-        run: cargo check --workspace --exclude tyra-codegen-llvm
+        # tyra-cli and tyra-driver both depend on tyra-codegen-llvm (which requires LLVM/inkwell),
+        # so --exclude cannot break the dependency chain. Check only the LLVM-free crates explicitly.
+        run: >
+          cargo check
+          -p tyra-ast
+          -p tyra-diagnostics
+          -p tyra-lexer
+          -p tyra-mir
+          -p tyra-parser
+          -p tyra-resolve
+          -p tyra-types

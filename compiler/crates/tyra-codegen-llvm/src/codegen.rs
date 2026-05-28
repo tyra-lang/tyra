@@ -336,18 +336,21 @@ fn emit_llvm_ir_impl(program: &Program, cov_map: Option<&CovMap>, emit_dwarf: bo
     writeln!(out, "declare i64 @tyra_float_to_int(double)").unwrap();
     writeln!(out, "declare i32 @tyra_float_is_nan(double)").unwrap();
     writeln!(out, "declare i32 @tyra_float_is_infinite(double)").unwrap();
-    // §17.3.6 Map<K,V> generic runtime (ADR-0015).
+    // §17.3.6 Map<K,V> generic runtime (ADR-0015, ADR-0016).
     writeln!(out, "declare ptr @tyra_map_new(ptr, ptr)").unwrap();
     writeln!(out, "declare ptr @tyra_map_insert(ptr, ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_map_remove(ptr, ptr)").unwrap();
     writeln!(out, "declare ptr @tyra_map_get(ptr, ptr)").unwrap();
     writeln!(out, "declare i32 @tyra_map_contains(ptr, ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_map_contains_key(ptr, ptr)").unwrap();
     writeln!(out, "declare i64 @tyra_map_len(ptr)").unwrap();
     writeln!(out, "declare void @tyra_map_for_each(ptr, ptr, ptr)").unwrap();
     writeln!(out, "declare i64 @tyra_hash_cstr(ptr)").unwrap();
     writeln!(out, "declare i32 @tyra_cstr_eq(ptr, ptr)").unwrap();
-    // §17.3.x Set<T> generic runtime (ADR-0015).
+    // §17.3.7 Set<T> generic runtime (ADR-0015, ADR-0016).
     writeln!(out, "declare ptr @tyra_set_new(ptr, ptr)").unwrap();
     writeln!(out, "declare ptr @tyra_set_insert(ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_set_remove(ptr, ptr)").unwrap();
     writeln!(out, "declare i32 @tyra_set_contains(ptr, ptr)").unwrap();
     writeln!(out, "declare i64 @tyra_set_len(ptr)").unwrap();
     writeln!(out, "declare void @tyra_set_for_each(ptr, ptr, ptr)").unwrap();
