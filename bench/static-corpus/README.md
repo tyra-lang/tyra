@@ -29,6 +29,7 @@ Files in the top-level directory are expected to compile without errors.
 | `09-error-handling.tyra` | `defer`, `panic`, compound `and`/`or`, `Into` chain |
 | `10-data-modeling.tyra` | `value`/`data` distinction, `Stringable`, `Eq`/`Ord` |
 | `11-break-loop.tyra` | `break` inside `while` and `for` (§10.4, §10.5) |
+| `25-nested-match-map-get.tyra` | Nested `match` on `io.read_line()` + `Map.get()` — E0500 regression guard (§10.3, §17.3.6) |
 
 ## Negative corpus (`bad/`)
 

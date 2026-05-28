@@ -1,3 +1,7 @@
+# 25-nested-match-map-get.tyra
+# Regression: nested match on io.read_line() result + Map.get() (E0500 guard)
+# SPEC_REF: §10.3 — match/when expression; §17.3.6 — Map.get returning Option<V>
+
 import io
 
 let m = {"one": 1, "two": 2, "three": 3}
