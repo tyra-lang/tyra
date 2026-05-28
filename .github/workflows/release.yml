@@ -117,6 +117,7 @@ jobs:
             clang19 \
             llvm19 \
             llvm19-dev \
+            llvm19-static \
             musl-dev \
             pkgconf \
             file \
