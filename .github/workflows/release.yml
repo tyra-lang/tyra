@@ -118,6 +118,9 @@ jobs:
             llvm19 \
             llvm19-dev \
             llvm19-static \
+            zlib-static \
+            zstd-static \
+            libxml2-static \
             musl-dev \
             pkgconf \
             file \
