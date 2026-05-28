@@ -11,54 +11,54 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ### Stable
 
-**型チェッカー診断改善 (E0308)**
-- `Diagnostic` に `help: Option<String>` フィールドを追加。型不一致エラーに修正提案を表示。
-- E0308 に二次ラベル "expected because of this annotation" を追加。expected 型の宣言元を指示。
-- E0308 ヒューリスティック: (i) T vs Option<T>、(ii) T vs Result<T,E> + `?` 演算子、(iii) Int ↔ Float 変換
-- `Report` に `(span, code)` による診断重複排除を追加。cascade floods を防止。
-- impl メソッド戻り型のレジストリを追加。Ty::Error 抑制の一部を実際の戻り型参照に置換。
+**Type checker diagnostics — E0308 improvements**
+- Added `help: Option<String>` field to `Diagnostic`; type mismatch errors now surface fix suggestions.
+- Added secondary label "expected because of this annotation" to E0308, pointing to the declaration site of the expected type.
+- E0308 heuristics: (i) T vs Option<T>, (ii) T vs Result<T,E> + `?` operator, (iii) Int ↔ Float conversion.
+- Added deduplication by `(span, code)` to `Report` to prevent cascade floods.
+- Added an impl-method return-type registry; some `Ty::Error` suppressions replaced with real return-type lookups.
 
-**診断精度の追加改善**
-- E0110 (`import` inside function body): `with_help` でファイル先頭への移動を案内。
-- E0211 (`?` at top level): `with_help` で `fn main() -> Result<Unit, E>` 内への移動を案内。
-- E0213 (新規): `fn main` とトップレベル文が共存した場合の専用エラーコード。以前は内部 BUG パニックだった。
-- E0204 (unknown string method): MIR lowering で `lower_errors` に push し driver の `Report` に伝播。未知の string method が `compile_fail` になるようになった (以前は exit code 0 で silent だった)。
-- `List<T>`・`Option<T>` のインスタンスメソッド (`.get`、`.len`、`.ok_or`) を型チェッカーで適切に解決。未知メソッドが E0204 として明示的にエラーになり、Ty::Error カスケードによる E0500 LLVM クラッシュを排除。
-- **AI-gen ベンチマーク最終測定値 (Run 17, 2026-05-28)**: 98/100 pass (98.0%)。Run 16 (E0204 hard-error 前) 91% から +7pt。残存 2 件は codegen 残存エッジケース (E0500) 1 件と AI 構文エラー 1 件。
+**Additional diagnostic accuracy improvements**
+- E0110 (`import` inside function body): `with_help` guides the user to move the import to the file top.
+- E0211 (`?` at top level): `with_help` guides the user to wrap the call in `fn main() -> Result<Unit, E>`.
+- E0213 (new): dedicated error code for the case where `fn main` and top-level statements coexist; previously an internal BUG panic.
+- E0204 (unknown string method): errors are now pushed to `lower_errors` in MIR lowering and propagated to the driver's `Report`; unknown string methods are now `compile_fail` (previously silent with exit code 0).
+- Instance methods on `List<T>` and `Option<T>` (`.get`, `.len`, `.ok_or`) are now resolved correctly by the type checker; unknown methods hard-error as E0204, eliminating E0500 LLVM crashes caused by `Ty::Error` cascades.
+- **AI-gen benchmark final result (Run 17, 2026-05-28)**: 98/100 pass (98.0%) — up +7 pt from Run 16 (91%, before E0204 hard-error). Remaining 2 failures: 1 codegen edge case (E0500), 1 AI-generated syntax error.
 
 **Persistent Collections (HAMT)**
-- `Map<K,V>` と `Set<T>` を HAMT (Hash Array Mapped Trie) で再実装。真の persistent data structure。
-- `m.insert(k, v) -> Map<K,V>` — 元の Map を変更せず新しい Map を返す。
-- `m.remove(k) -> Map<K,V>` — 元の Map を変更せず新しい Map を返す。
-- `s.insert(v) -> Set<T>` / `s.remove(v) -> Set<T>` — 同様に persistent。
-- 構造共有 (path-copy) により insert/remove は O(log₃₂ n) ≈ O(1) ノードコピー。
+- `Map<K,V>` and `Set<T>` reimplemented using HAMT (Hash Array Mapped Trie) as true persistent data structures.
+- `m.insert(k, v) -> Map<K,V>` — returns a new Map without modifying the original.
+- `m.remove(k) -> Map<K,V>` — returns a new Map without modifying the original.
+- `s.insert(v) -> Set<T>` / `s.remove(v) -> Set<T>` — likewise persistent.
+- Structural sharing (path-copy) keeps insert/remove at O(log₃₂ n) ≈ O(1) node copies.
 
-**Map/Set イテレーション**
-- `for k, v in m { ... }` — Map のキーと値を反復処理。
-- `for v in s { ... }` — Set の要素を反復処理。
-- E0313 "for loop binding count mismatch": binding 数と iterable 型の不一致を報告。
+**Map/Set iteration**
+- `for k, v in m { ... }` — iterate over keys and values of a Map.
+- `for v in s { ... }` — iterate over elements of a Set.
+- E0313 "for loop binding count mismatch": reports a mismatch between the number of bindings and the iterable type.
 
 ### Experimental
 
-**inkwell 依存追加 (tyra-codegen-llvm)**
-- `inkwell 0.9` を `tyra-codegen-llvm` の依存関係として追加。
-- `build.rs` で LLVM バージョン (19/20/21/22) を自動検出。
-- CI matrix を各 OS の LLVM バージョンに対応させるよう更新。
+**inkwell dependency (tyra-codegen-llvm)**
+- Added `inkwell 0.9` as a dependency of `tyra-codegen-llvm`.
+- `build.rs` auto-detects the installed LLVM version (19/20/21/22).
+- Updated CI matrix to match each OS's available LLVM version.
 
 ### Known Limitations
 
-- **E0308 ヒューリスティック (iv) 未実装**: ADT variant vs 親型の提案は `Ty::Named` が variant を区別できないため v0.8+ へ繰越し。
-- **inkwell IR 移行未完**: `writeln!` ベースの IR 生成はそのまま。DWARF `DIBuilder` 移行はテキスト IR との互換性がないため v0.8+ へ繰越し。
-- **イテレーション順序非保証**: `for k, v in m` / `for v in s` の順序は HAMT DFS (ハッシュ順) であり、挿入順序ではない。
-- **`Ty::Var` 寛容化未解消**: 型変数の完全な unification map は v0.8+ へ繰越し。
+- **E0308 heuristic (iv) not implemented**: ADT variant vs parent type suggestions deferred to v0.8+ because `Ty::Named` cannot distinguish variants.
+- **inkwell IR migration incomplete**: `writeln!`-based IR generation unchanged; DWARF `DIBuilder` migration is incompatible with text IR and deferred to v0.8+.
+- **Iteration order not guaranteed**: `for k, v in m` / `for v in s` order is HAMT DFS (hash order), not insertion order.
+- **`Ty::Var` permissiveness unresolved**: full unification map for type variables deferred to v0.8+.
 
 ### Not in This Release
 
-- Hindley-Milner 型推論 (Ty::Var substitution map)
-- ADT variant 型提案 heuristic (iv)
-- inkwell を使った完全な LLVM IR 生成 (writeln! → builder API)
-- `LinkedMap` / `LinkedSet` (挿入順保証コレクション)
-- 自前 linker (clang を linker driver として維持)
+- Hindley-Milner type inference (Ty::Var substitution map)
+- ADT variant type-suggestion heuristic (iv)
+- Full LLVM IR generation via inkwell (writeln! → builder API)
+- `LinkedMap` / `LinkedSet` (insertion-order-preserving collections)
+- Custom linker (clang retained as linker driver)
 
 ---
 
