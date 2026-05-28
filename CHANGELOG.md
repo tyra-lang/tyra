@@ -18,6 +18,13 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - `Report` に `(span, code)` による診断重複排除を追加。cascade floods を防止。
 - impl メソッド戻り型のレジストリを追加。Ty::Error 抑制の一部を実際の戻り型参照に置換。
 
+**診断精度の追加改善**
+- E0110 (`import` inside function body): `with_help` でファイル先頭への移動を案内。
+- E0211 (`?` at top level): `with_help` で `fn main() -> Result<Unit, E>` 内への移動を案内。
+- E0213 (新規): `fn main` とトップレベル文が共存した場合の専用エラーコード。以前は内部 BUG パニックだった。
+- E0204 (unknown string method): MIR lowering で `lower_errors` に push し driver の `Report` に伝播。未知の string method が `compile_fail` になるようになった (以前は exit code 0 で silent だった)。
+- `List<T>`・`Option<T>` のインスタンスメソッド (`.get`、`.len`、`.ok_or`) を型チェッカーで適切に解決。未知メソッドが E0204 として明示的にエラーになり、Ty::Error カスケードによる E0500 LLVM クラッシュを排除。
+
 **Persistent Collections (HAMT)**
 - `Map<K,V>` と `Set<T>` を HAMT (Hash Array Mapped Trie) で再実装。真の persistent data structure。
 - `m.insert(k, v) -> Map<K,V>` — 元の Map を変更せず新しい Map を返す。
