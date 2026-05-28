@@ -606,4 +606,77 @@ mod tests {
         assert_eq!(unsafe { tyra_set_contains(s2, box_i64(2)) }, 0);
         assert_eq!(unsafe { tyra_set_contains(s2, box_i64(1)) }, 1);
     }
+
+    // ── GC stress tests ───────────────────────────────────────────────────────
+
+    // Run manually: cargo test -p tyra-runtime -- gc_shared_nodes_survive_collection --ignored -- --test-threads=1
+    #[test]
+    #[ignore]
+    fn gc_shared_nodes_survive_collection() {
+        unsafe extern "C" { fn GC_gcollect(); }
+
+        let n = 1_000i64;
+        let mut cur = unsafe { tyra_set_new(eq_i64, hash_i64) };
+        for i in 0..n {
+            cur = unsafe { tyra_set_insert(cur, box_i64(i)) };
+        }
+
+        // Build 50 snapshots sharing most of `cur`'s nodes.
+        let snapshots: Vec<*mut TyraSet> = (0..50i64)
+            .map(|s| unsafe { tyra_set_insert(cur, box_i64(n + s)) })
+            .collect();
+
+        unsafe { GC_gcollect(); }
+
+        assert_eq!(unsafe { tyra_set_len(cur) }, n, "base set len wrong after GC");
+        for i in 0..n {
+            assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i)) }, 1,
+                "base: element {i} missing after GC");
+        }
+
+        for (s, &snap) in snapshots.iter().enumerate() {
+            let s = s as i64;
+            assert_eq!(unsafe { tyra_set_len(snap) }, n + 1,
+                "snapshot {s}: wrong len after GC");
+            assert_eq!(unsafe { tyra_set_contains(snap, box_i64(n + s)) }, 1,
+                "snapshot {s}: private element missing after GC");
+            assert_eq!(unsafe { tyra_set_contains(snap, box_i64(0)) }, 1,
+                "snapshot {s}: shared element 0 missing after GC");
+        }
+    }
+
+    // Long-running stress — skipped in normal CI.
+    // Run manually: cargo test -p tyra-runtime -- gc_stress_set_large_n --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn gc_stress_set_large_n() {
+        unsafe extern "C" { fn GC_gcollect(); }
+
+        let n = 100_000i64;
+        let mut cur = unsafe { tyra_set_new(eq_i64, hash_i64) };
+
+        for i in 0..n {
+            cur = unsafe { tyra_set_insert(cur, box_i64(i)) };
+            if i % 10_000 == 9_999 {
+                unsafe { GC_gcollect(); }
+                assert_eq!(unsafe { tyra_set_len(cur) }, i + 1,
+                    "wrong len at i={i} after GC");
+            }
+        }
+        assert_eq!(unsafe { tyra_set_len(cur) }, n);
+
+        for i in (0..n).step_by(2) {
+            cur = unsafe { tyra_set_remove(cur, box_i64(i)) };
+            if i % 10_000 == 9_998 {
+                unsafe { GC_gcollect(); }
+            }
+        }
+        assert_eq!(unsafe { tyra_set_len(cur) }, n / 2);
+
+        unsafe { GC_gcollect(); }
+        for i in (1..n).step_by(2) {
+            assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i)) }, 1,
+                "odd element {i} missing after full stress");
+        }
+    }
 }
