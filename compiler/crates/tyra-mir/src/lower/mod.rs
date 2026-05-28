@@ -40,6 +40,7 @@ pub fn lower(file: &SourceFile, sources: &tyra_diagnostics::SourceMap) -> Progra
             string_constants: vec![],
             struct_defs: vec![],
             source_files: vec![],
+            lower_errors: vec![],
         };
     }
 
@@ -623,6 +624,7 @@ pub fn lower(file: &SourceFile, sources: &tyra_diagnostics::SourceMap) -> Progra
         string_constants: ctx.string_constants,
         struct_defs,
         source_files: ctx.source_files,
+        lower_errors: ctx.lower_errors,
     }
 }
 
@@ -745,6 +747,10 @@ pub(crate) struct LowerCtx<'a> {
     /// Source location of the AST node currently being lowered (ADR 0014).
     /// Updated at the start of each statement lowering.
     pub(crate) current_loc: crate::ir::SourceLoc,
+    /// Diagnostics accumulated during MIR lowering (e.g. E0204 for unknown
+    /// stdlib methods).  Transferred to Program::lower_errors so the driver
+    /// can forward them to its Report and trigger hard-error propagation.
+    pub(crate) lower_errors: Vec<tyra_diagnostics::Diagnostic>,
 }
 
 /// Result of resolving an impl method call.
@@ -802,6 +808,7 @@ impl<'a> LowerCtx<'a> {
             closure_fn_types: std::collections::HashMap::new(),
             closure_struct_defs: Vec::new(),
             current_loc: crate::ir::SourceLoc::dummy(),
+            lower_errors: Vec::new(),
         }
     }
 

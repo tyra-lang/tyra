@@ -45,6 +45,7 @@ mod tests {
             string_constants: vec!["hello, tyra".into()],
             struct_defs: vec![],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -104,6 +105,7 @@ mod tests {
             string_constants: vec![],
             struct_defs: vec![],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -128,6 +130,7 @@ mod tests {
             string_constants: vec!["hello".into(), "world".into()],
             struct_defs: vec![],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -161,6 +164,7 @@ mod tests {
                 recursive_fields: vec![],
             }],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -219,6 +223,7 @@ mod tests {
                 recursive_fields: vec![],
             }],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -270,6 +275,7 @@ mod tests {
                 recursive_fields: vec![],
             }],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -323,6 +329,7 @@ mod tests {
                 recursive_fields: vec![],
             }],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -362,6 +369,7 @@ mod tests {
             string_constants: vec!["hello".into(), "world".into()],
             struct_defs: vec![],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -422,6 +430,7 @@ mod tests {
                 recursive_fields: vec![false, false],
             }],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -482,6 +491,7 @@ mod tests {
                 recursive_fields: vec![false, false],
             }],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -551,6 +561,7 @@ mod tests {
                 recursive_fields: vec![false, false],
             }],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -623,6 +634,7 @@ mod tests {
                 recursive_fields: vec![false, false, false],
             }],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -671,6 +683,7 @@ mod tests {
             string_constants: vec!["oops".into()],
             struct_defs: vec![],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -723,6 +736,7 @@ mod tests {
                 recursive_fields: vec![],
             }],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -793,6 +807,7 @@ mod tests {
             string_constants: vec![],
             struct_defs: vec![],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -856,6 +871,7 @@ mod tests {
                 recursive_fields: vec![],
             }],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);
@@ -909,6 +925,7 @@ mod tests {
             string_constants: vec![],
             struct_defs: vec![],
             source_files: vec![],
+            lower_errors: vec![],
         };
 
         let ir = emit_llvm_ir(&program);

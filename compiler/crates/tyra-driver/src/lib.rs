@@ -258,6 +258,20 @@ fn compile_to_ir_impl(
 
     // MIR lowering
     let mir = tyra_mir::lower(&ast, &sources);
+    for diag in mir.lower_errors.iter().cloned() {
+        report.add(diag);
+    }
+    if report.has_errors() {
+        return (
+            CompileResult {
+                success: false,
+                report,
+                sources,
+                llvm_ir: None,
+            },
+            None,
+        );
+    }
 
     // LLVM IR generation
     if coverage {

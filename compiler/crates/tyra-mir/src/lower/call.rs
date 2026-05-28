@@ -1496,27 +1496,31 @@ impl super::LowerCtx<'_> {
                 // with an opaque LLVM E0500.  Reject early with E0204 so the
                 // user (or the AI on retry) sees a real diagnostic pointing
                 // at the missing string method.
-                // [E0204] Emit a diagnostic-style error to stderr with location
-                // and available-methods help, then return a safe i64(0) placeholder
-                // so downstream lowering does not crash on an unresolved temp.
-                // (LowerCtx has no Report field yet; a full Diagnostic path is
-                // tracked as a follow-up.)
-                eprintln!(
-                    "error[E0204]: unknown string method `{fn_name}`: \
-                     `string.{fn_name}` does not exist in stdlib\n  \
-                     --> {}:{}:{}\n  \
-                     = help: Available string functions: string.len, string.is_empty, \
-                     string.trim, string.to_upper, string.to_lower, string.contains, \
-                     string.starts_with, string.ends_with, string.parse_int, \
-                     string.byte_at, string.substring, string.reverse, \
-                     string.from_byte, string.split, string.split_whitespace, \
-                     string.replace, string.join",
-                    self.source_files
-                        .get(call_loc.file_id as usize)
-                        .map(|s| s.as_str())
-                        .unwrap_or("<unknown>"),
-                    call_loc.line,
-                    call_loc.col,
+                // Push a hard error into lower_errors so the driver forwards it
+                // to Report and triggers compile failure (exit code ≠ 0).
+                let file = self
+                    .source_files
+                    .get(call_loc.file_id as usize)
+                    .map(|s| s.as_str())
+                    .unwrap_or("<unknown>");
+                self.lower_errors.push(
+                    tyra_diagnostics::Diagnostic::error(format!(
+                        "unknown string method `{fn_name}`: \
+                         `string.{fn_name}` does not exist in stdlib"
+                    ))
+                    .with_code("E0204")
+                    .with_note(format!(
+                        "at {}:{}:{}",
+                        file, call_loc.line, call_loc.col
+                    ))
+                    .with_help(
+                        "Available string functions: string.len, string.is_empty, \
+                         string.trim, string.to_upper, string.to_lower, string.contains, \
+                         string.starts_with, string.ends_with, string.parse_int, \
+                         string.byte_at, string.substring, string.reverse, \
+                         string.from_byte, string.split, string.split_whitespace, \
+                         string.replace, string.join",
+                    ),
                 );
                 let dest = self.fresh_temp();
                 self.emit_at(

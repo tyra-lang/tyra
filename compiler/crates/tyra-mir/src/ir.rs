@@ -10,6 +10,7 @@
 // - Each instruction has a clear, single effect
 // - Control flow is explicit (no nested expressions)
 
+use tyra_diagnostics::Diagnostic;
 use tyra_types::Ty;
 
 /// Source location attached to each MIR instruction.
@@ -97,6 +98,11 @@ pub struct Program {
     /// file_id 0 is the primary source file; additional entries come from
     /// inlined stdlib or multi-file builds (future).
     pub source_files: Vec<String>,
+    /// Diagnostics emitted during MIR lowering that must be forwarded to the
+    /// driver's Report so they become hard errors (e.g. E0204 for unknown
+    /// string methods).  The driver checks this after `tyra_mir::lower` and
+    /// adds each entry to its Report before calling `report.has_errors()`.
+    pub lower_errors: Vec<Diagnostic>,
 }
 
 /// A MIR function.
