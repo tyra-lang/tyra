@@ -24,6 +24,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - E0213 (新規): `fn main` とトップレベル文が共存した場合の専用エラーコード。以前は内部 BUG パニックだった。
 - E0204 (unknown string method): MIR lowering で `lower_errors` に push し driver の `Report` に伝播。未知の string method が `compile_fail` になるようになった (以前は exit code 0 で silent だった)。
 - `List<T>`・`Option<T>` のインスタンスメソッド (`.get`、`.len`、`.ok_or`) を型チェッカーで適切に解決。未知メソッドが E0204 として明示的にエラーになり、Ty::Error カスケードによる E0500 LLVM クラッシュを排除。
+- **AI-gen ベンチマーク最終測定値 (Run 17, 2026-05-28)**: 98/100 pass (98.0%)。Run 16 (E0204 hard-error 前) 91% から +7pt。残存 2 件は codegen 残存エッジケース (E0500) 1 件と AI 構文エラー 1 件。
 
 **Persistent Collections (HAMT)**
 - `Map<K,V>` と `Set<T>` を HAMT (Hash Array Mapped Trie) で再実装。真の persistent data structure。

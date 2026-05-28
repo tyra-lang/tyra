@@ -2,14 +2,16 @@
 
 Prompts observed: 100
 
-Latest sweep: **Run 16** (`tyra+spec × claude × 100`, 2026-05-28)
-after v0.7.0 (Polymorphic Star): E0308 diagnostic improvements (secondary
-labels, help hints), HAMT persistent Map/Set + iteration, `for k, v in m`
-syntax, E0313, method return-type fix (impl_method_ret registry).
+Latest sweep: **Run 17** (`tyra+spec × claude × 100`, seed=2, 2026-05-28)
+after v0.7.0 post-release hardening: E0204 promoted to hard compile error
+(`Program::lower_errors`), E0213 new error code, E0110/E0211 help hints,
+`List<T>`/`Option<T>` instance method dispatch (eliminates E0500 cascades).
 
 | language  | generator | pass | check_fail | exec_fail | compile_fail | generator_fail | harness_error | skipped | total | pass% |
 | --------- | --------- | ---- | ---------- | --------- | ------------ | -------------- | ------------- | ------- | ----- | ----- |
-| tyra+spec | claude    | 91   | 0          | 0         | 9            | 0              | 0             | 0       | 100   | 91.0% |
+| tyra+spec | claude    | 98   | 0          | 0         | 2            | 0              | 0             | 0       | 100   | 98.0% |
+
+**Run 16** (seed=1, 2026-05-28, **E0204 hard-error 前**): pass=91, compile_fail=9, 91.0%
 
 **Note on Claude variance**: `--seed 1` doesn't fully determine
 Claude CLI output, so each sweep samples slightly different code
@@ -33,7 +35,32 @@ Historical passes on 100-prompt × tyra+spec × claude sweeps:
 | 13  | 2026-04-23 | 78   | 84           | + List<T> propagation + list.len / list.get |
 | 14  | 2026-04-23 | 83   | 91           | + if/else arm-type unification (E0305)      |
 | 15  | 2026-04-23 | 77   | 89           | + parser value/data/type keyword relaxation (variance -6 vs Run 14) |
-| 16  | 2026-05-28 | 91   | 91           | v0.7.0: E0308 diag improvements + HAMT Map/Set + iteration + E0313 |
+| 16  | 2026-05-28 | 91   | 91           | v0.7.0: E0308 diag improvements + HAMT Map/Set + iteration + E0313 (E0204 hard-error 前) |
+| 17  | 2026-05-28 | 98   | 98           | v0.7.0 post-release: E0204 hard error + E0213 + E0110/E0211 help + List/Option method dispatch |
+
+Run 17 failing-prompt distribution (2 prompts, prompt-level):
+
+| prompt              | error | actual cause                                                                 |
+| ------------------- | ----- | ---------------------------------------------------------------------------- |
+| 017-key-value-lookup | E0500 | Ty::Error cascade → `i64` vs `Option__Int` type mismatch in LLVM IR (residual codegen edge case) |
+| 088-histogram        | E0100 | AI wrote `_ value: Int` — invalid labeled-parameter syntax (parser error)   |
+
+Run 16 → Run 17 deltas (v0.7.0 post-release hardening impact):
+
+- **pass: 91 → 98 (+7, +8%)**
+- **compile_fail: 9 → 2** — E0204 hard error converted `string.get` hallucinations from silent pass/exec_fail to proper compile_fail; with correct diagnostics AI now avoids this pattern on seed=2
+- E0308: 0 (unchanged)
+- E0500: 1 → 1 (residual — different prompt than Run 16; `017-key-value-lookup`)
+- BUG/E0213: 2 → 0 — E0213 new error code + help hints eliminated fn-main + top-level coexistence failures
+- E0110: 2 → 0 — help hint eliminated import-inside-function failures
+- E0211: 1 → 0 — help hint eliminated `?`-in-top-level failure
+- E0204: 2 → 0 — E0204 hard error + help showing available methods eliminated string.get hallucinations
+- E0005: 1 → 0 — AI avoided i64 overflow literal on seed=2 (variance)
+- New E0100: 1 — AI syntax error (`_ value: Int`); language-model variance, not a compiler regression
+
+The **2% residual** is attributable to one structural codegen bug (E0500, Ty::Error cascade in a specific pattern) and one AI syntax error. The structural bug is the next hardening target.
+
+---
 
 Run 11 error distribution (100 prompts):
 
