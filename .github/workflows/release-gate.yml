@@ -347,6 +347,12 @@ jobs:
         run: cargo test --workspace --exclude tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm19-1-prefer-dynamic
 
       - name: Run runtime tests (single-threaded, Boehm GC safety)
+        # GC_INITIAL_HEAP_SIZE: prevent BDW GC from triggering collection #1 inside
+        # Alpine musl containers where pthread_kill-based thread stopping fails
+        # ("Signals delivery fails constantly at GC #1"). Smoke tests use <<1 MB of
+        # GC heap; 64 MB initial size keeps the heap below the collection threshold.
+        env:
+          GC_INITIAL_HEAP_SIZE: "64m"
         run: cargo test -p tyra-runtime -- --test-threads=1
 
       - name: Run static corpus check
