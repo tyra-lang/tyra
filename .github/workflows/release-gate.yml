@@ -12,9 +12,6 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  # llvm-sys defaults to static linking which requires libPolly (not in the
-  # standard llvm-21/llvm-19 apt/apk package). Force shared linking instead.
-  LLVM_LINK_SHARED: "1"
 
 jobs:
   msrv:
@@ -38,8 +35,8 @@ jobs:
           sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-21 100
 
       - name: Check workspace at MSRV
-        # inkwell requires a LLVM version feature; use llvm21-1 to match CI LLVM install above.
-        run: cargo check --workspace --no-default-features --features tyra-codegen-llvm/llvm21-1
+        # prefer-dynamic avoids requiring libPolly.a (not in the apt llvm-21 package).
+        run: cargo check --workspace --no-default-features --features tyra-codegen-llvm/llvm21-1-prefer-dynamic-prefer-dynamic
 
   release-gate:
     name: build + test + corpus + smoke
@@ -74,10 +71,10 @@ jobs:
 
       - name: Build release binary and runtime
         # inkwell requires an explicit LLVM version feature; LLVM 21 is installed above.
-        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm21-1
+        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm21-1-prefer-dynamic
 
       - name: Run workspace tests (excluding runtime)
-        run: cargo test --workspace --exclude tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm21-1
+        run: cargo test --workspace --exclude tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm21-1-prefer-dynamic
 
       - name: Run runtime tests (single-threaded, Boehm GC safety)
         run: cargo test -p tyra-runtime -- --test-threads=1
@@ -194,10 +191,10 @@ jobs:
 
       - name: Build release binary and runtime
         # inkwell requires an explicit LLVM version feature; LLVM 21 is installed above.
-        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm21-1
+        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm21-1-prefer-dynamic
 
       - name: Run workspace tests (excluding runtime)
-        run: cargo test --workspace --exclude tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm21-1
+        run: cargo test --workspace --exclude tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm21-1-prefer-dynamic
 
       - name: Run runtime tests (single-threaded, Boehm GC safety)
         run: cargo test -p tyra-runtime -- --test-threads=1
@@ -344,10 +341,10 @@ jobs:
 
       - name: Build release binary and runtime
         # inkwell requires an explicit LLVM version feature; LLVM 19 is installed above.
-        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm19-1
+        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm19-1-prefer-dynamic
 
       - name: Run workspace tests (excluding runtime)
-        run: cargo test --workspace --exclude tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm19-1
+        run: cargo test --workspace --exclude tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm19-1-prefer-dynamic
 
       - name: Run runtime tests (single-threaded, Boehm GC safety)
         run: cargo test -p tyra-runtime -- --test-threads=1

@@ -9,11 +9,6 @@ on:
 permissions:
   contents: read
 
-env:
-  # llvm-sys defaults to static linking which requires libPolly (not in the
-  # standard llvm-21 apt package). Force shared linking instead.
-  LLVM_LINK_SHARED: "1"
-
 jobs:
   corpus:
     name: tyra check + test (static corpus)
@@ -47,8 +42,8 @@ jobs:
             ${{ runner.os }}-cargo-corpus-
 
       - name: Build tyra-cli and runtime
-        # inkwell requires an explicit LLVM version feature; LLVM 21 is installed above.
-        run: cargo build -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm21-1
+        # prefer-dynamic avoids requiring libPolly.a (not in the apt llvm-21 package).
+        run: cargo build -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm21-1-prefer-dynamic
 
       - name: Run static corpus check (tyra check + tyra test)
         run: bash bench/static-corpus/check.sh ./target/debug/tyra

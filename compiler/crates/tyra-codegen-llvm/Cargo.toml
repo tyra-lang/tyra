@@ -12,9 +12,13 @@ description = "LLVM IR code generation for the Tyra language"
 # CI overrides: Linux/macOS use --features llvm21-1; Alpine uses --features llvm19-1.
 default = ["llvm22-1"]
 llvm19-1 = ["inkwell/llvm19-1"]
+llvm19-1-prefer-dynamic = ["inkwell/llvm19-1-prefer-dynamic"]
 llvm20-1 = ["inkwell/llvm20-1"]
+llvm20-1-prefer-dynamic = ["inkwell/llvm20-1-prefer-dynamic"]
 llvm21-1 = ["inkwell/llvm21-1"]
+llvm21-1-prefer-dynamic = ["inkwell/llvm21-1-prefer-dynamic"]
 llvm22-1 = ["inkwell/llvm22-1"]
+llvm22-1-prefer-dynamic = ["inkwell/llvm22-1-prefer-dynamic"]
 
 [dependencies]
 tyra-mir.workspace = true
