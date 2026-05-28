@@ -595,6 +595,33 @@ impl super::LowerCtx<'_> {
                     {
                         return Some(ty.clone());
                     }
+                    // Instance method call on a variable with a known generic
+                    // type (Map/Set/List).  Without this, assert.eq dispatch
+                    // falls back to Ty::Int for Bool-returning methods like
+                    // contains_key/contains, producing an i1/i64 LLVM mismatch.
+                    if let ExprKind::Ident(var_name) = &obj.kind {
+                        if let Some(Ty::Generic(gname, gargs)) =
+                            self.generic_var_types.get(var_name.as_str())
+                        {
+                            match (gname.as_str(), variant.as_str()) {
+                                ("Map", "contains_key") | ("Set", "contains") => {
+                                    return Some(Ty::Bool);
+                                }
+                                ("Map", "len") | ("Set", "len") | ("List", "len") => {
+                                    return Some(Ty::Int);
+                                }
+                                ("Map", "get") => {
+                                    let val_ty = gargs.get(1).cloned().unwrap_or(Ty::Int);
+                                    return Some(Ty::Generic("Option".into(), vec![val_ty]));
+                                }
+                                ("List", "get") => {
+                                    let elem_ty = gargs.first().cloned().unwrap_or(Ty::Int);
+                                    return Some(Ty::Generic("Option".into(), vec![elem_ty]));
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
                     None
                 } else {
                     None

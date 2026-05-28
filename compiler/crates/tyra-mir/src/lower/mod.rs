@@ -32,12 +32,16 @@ pub fn lower(file: &SourceFile, sources: &tyra_diagnostics::SourceMap) -> Progra
     let has_top_level_stmts = file.items.iter().any(|item| matches!(item, Item::Stmt(_)));
 
     // ADR-0006 Rule 2: fn main and top-level statements are mutually exclusive.
-    // This should already be caught by the parser/resolver, but we enforce it here
-    // defensively to avoid producing invalid MIR with duplicate main functions.
-    assert!(
-        !(has_explicit_main && has_top_level_stmts),
-        "BUG: fn main and top-level statements both present (ADR-0006 Rule 2 violation)"
-    );
+    // The resolver already emitted E0213 for this case; skip MIR lowering here
+    // to avoid producing invalid MIR with duplicate main functions.
+    if has_explicit_main && has_top_level_stmts {
+        return Program {
+            functions: vec![],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec![],
+        };
+    }
 
     // Collect type definitions for ADT tag assignment and value field info
     for item in &file.items {

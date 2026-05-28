@@ -1576,6 +1576,42 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     }
                 }
 
+                // List<T> instance method dispatch (MIR-handled forms).
+                if let Ty::Generic(name, type_args) = &obj_ty
+                    && name == "List"
+                    && !type_args.is_empty()
+                {
+                    let elem_ty = type_args[0].clone();
+                    match method.as_str() {
+                        // get(i): List<T> -> Option<T>
+                        "get" if args.len() == 1 => {
+                            infer_expr(&args[0].value, env, report);
+                            return Ty::Generic("Option".into(), vec![elem_ty]);
+                        }
+                        // len(): List<T> -> Int
+                        "len" if args.is_empty() => {
+                            return Ty::Int;
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Option<T> method dispatch.
+                if let Ty::Generic(name, type_args) = &obj_ty
+                    && name == "Option"
+                    && !type_args.is_empty()
+                {
+                    let inner_ty = type_args[0].clone();
+                    match method.as_str() {
+                        // ok_or(err): Option<T> -> Result<T, E>
+                        "ok_or" if args.len() == 1 => {
+                            let err_ty = infer_expr(&args[0].value, env, report);
+                            return Ty::Generic("Result".into(), vec![inner_ty, err_ty]);
+                        }
+                        _ => {}
+                    }
+                }
+
                 // Special-case: module-qualified List mutations.
                 // `list.push(xs: List<T>, x)` requires the element argument to
                 // match the list's element type.  The generic method-call
@@ -1909,6 +1945,37 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 if let Some(tn) = type_name {
                     if let Some(ret) = env.lookup_impl_method_ret(tn, method.as_str()) {
                         return ret.clone();
+                    }
+                }
+                // Unknown method on a known generic type — emit E0204 so the user
+                // sees a clear error instead of a silent Ty::Error that later
+                // crashes codegen with E0500 (i64/ptr type mismatch in LLVM IR).
+                if let Ty::Generic(generic_name, _) = &obj_ty {
+                    if matches!(
+                        generic_name.as_str(),
+                        "List" | "Option" | "Result" | "Map" | "Set"
+                    ) {
+                        let help_msg = match generic_name.as_str() {
+                            "List" => "List operations are module-level functions: \
+                                list.get(xs, i), list.len(xs), list.push(xs, x), \
+                                list.map(xs, f), list.filter(xs, f), list.fold(xs, init, f)",
+                            "Option" => "Use a `match` expression to unwrap Option: \
+                                `match opt when Some(x) x when None default_val end`",
+                            "Result" => "Use a `match` expression to unwrap Result: \
+                                `match res when Ok(x) x when Err(e) handle_e end`. \
+                                Use `?` inside a fn body to propagate.",
+                            _ => "Check the stdlib documentation for available methods",
+                        };
+                        report.add(
+                            Diagnostic::error(format!(
+                                "unknown method `{}` on `{}`",
+                                method,
+                                obj_ty.display_name()
+                            ))
+                            .with_code("E0204")
+                            .with_label(Label::new(expr.span, "method called here"))
+                            .with_help(help_msg),
+                        );
                     }
                 }
                 return Ty::Error;

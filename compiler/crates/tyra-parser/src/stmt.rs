@@ -35,7 +35,8 @@ pub fn parse_stmt(ts: &mut TokenStream, report: &mut Report) -> Stmt {
                 .with_label(tyra_diagnostics::Label::new(
                     span,
                     format!("move this `{kw}` to the top of the file, before any `fn` definitions"),
-                )),
+                ))
+                .with_help("Place all `import` and `export` statements at the top of the file, before any `fn`, `data`, or `value` definitions"),
             );
             // Skip remaining tokens on this line to suppress cascade errors.
             while !matches!(

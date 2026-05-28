@@ -293,8 +293,43 @@ fn symbol_span(sym: &Symbol) -> Option<Span> {
     }
 }
 
-/// ADR-0006 Rules 3-5: top-level statements may not contain ?, .await, or return.
+/// ADR-0006 Rules 2-5: top-level statement restrictions.
 fn validate_top_level_restrictions(items: &[Item], report: &mut Report) {
+    // ADR-0006 Rule 2: fn main and top-level statements are mutually exclusive.
+    let main_item = items.iter().find(|item| {
+        matches!(item, Item::FnDef(f) if f.name == "main")
+    });
+    let first_top_stmt = items.iter().find(|item| matches!(item, Item::Stmt(_)));
+
+    if let (Some(main_item), Some(first_stmt)) = (main_item, first_top_stmt) {
+        let main_span = if let Item::FnDef(f) = main_item {
+            f.span
+        } else {
+            unreachable!()
+        };
+        let stmt_span = match first_stmt {
+            Item::Stmt(s) => match s {
+                Stmt::Let(s) => s.span,
+                Stmt::Mut(s) => s.span,
+                Stmt::Return(s) => s.span,
+                Stmt::Defer(s) => s.span,
+                Stmt::Break(s) => s.span,
+                Stmt::Continue(s) => s.span,
+                Stmt::Expr(s) => s.span,
+            },
+            _ => unreachable!(),
+        };
+        report.add(
+            Diagnostic::error("`fn main` and top-level statements cannot coexist")
+                .with_code("E0213")
+                .with_label(Label::new(main_span, "`fn main` defined here"))
+                .with_label(Label::new(stmt_span, "top-level statement here"))
+                .with_note("ADR-0006 Rule 2: use either `fn main` or top-level statements as the entry point, not both")
+                .with_help("Remove `fn main` and keep the top-level statements, or move the top-level statements inside `fn main`"),
+        );
+    }
+
+    // ADR-0006 Rules 3-5: top-level statements may not contain ?, .await, or return.
     for item in items {
         if let Item::Stmt(stmt) = item {
             check_stmt_restrictions(stmt, report);
@@ -327,7 +362,8 @@ fn check_expr_restrictions(expr: &Expr, report: &mut Report) {
                 Diagnostic::error("`?` is not allowed in top-level statements")
                     .with_code("E0211")
                     .with_label(Label::new(expr.span, "use explicit `fn main() -> Result<Unit, E>` for error propagation"))
-                    .with_note("top-level statements are desugared to `fn main() -> Unit` (ADR-0006 Rule 3)"),
+                    .with_note("top-level statements are desugared to `fn main() -> Unit` (ADR-0006 Rule 3)")
+                    .with_help("Define `fn main() -> Result<Unit, E>` and move the `?` operator inside its body"),
             );
         }
         ExprKind::Await(_) => {
