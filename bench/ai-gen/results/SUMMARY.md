@@ -2,13 +2,14 @@
 
 Prompts observed: 100
 
-Latest sweep: **Run 15** (`tyra+spec × claude × 100`, 2026-04-23)
-after parser relaxation (accept `value`/`data`/`type`/`trait`/`impl`
-as identifiers in expressions).
+Latest sweep: **Run 16** (`tyra+spec × claude × 100`, 2026-05-28)
+after v0.7.0 (Polymorphic Star): E0308 diagnostic improvements (secondary
+labels, help hints), HAMT persistent Map/Set + iteration, `for k, v in m`
+syntax, E0313, method return-type fix (impl_method_ret registry).
 
 | language  | generator | pass | check_fail | exec_fail | compile_fail | generator_fail | harness_error | skipped | total | pass% |
 | --------- | --------- | ---- | ---------- | --------- | ------------ | -------------- | ------------- | ------- | ----- | ----- |
-| tyra+spec | claude    | 77   | 12         | 0         | 11           | 0              | 0             | 0       | 100   | 77.0% |
+| tyra+spec | claude    | 91   | 0          | 0         | 9            | 0              | 0             | 0       | 100   | 91.0% |
 
 **Note on Claude variance**: `--seed 1` doesn't fully determine
 Claude CLI output, so each sweep samples slightly different code
@@ -32,6 +33,7 @@ Historical passes on 100-prompt × tyra+spec × claude sweeps:
 | 13  | 2026-04-23 | 78   | 84           | + List<T> propagation + list.len / list.get |
 | 14  | 2026-04-23 | 83   | 91           | + if/else arm-type unification (E0305)      |
 | 15  | 2026-04-23 | 77   | 89           | + parser value/data/type keyword relaxation (variance -6 vs Run 14) |
+| 16  | 2026-05-28 | 91   | 91           | v0.7.0: E0308 diag improvements + HAMT Map/Set + iteration + E0313 |
 
 Run 11 error distribution (100 prompts):
 
@@ -67,6 +69,50 @@ hallucinations are essentially resolved. The dominant barrier is
 now Tyra's type-checker rejecting the types AI writes naturally.
 Relaxing the type-checker (or improving its diagnostics so AI
 understands what to fix on retry) is the next attack surface.
+
+Run 16 failing-prompt distribution (9 prompts, prompt-level):
+
+| prompt              | error     | actual cause                                              |
+| ------------------- | --------- | --------------------------------------------------------- |
+| 010-count-vowels    | E0204     | hallucinated `string.get` — no such method in stdlib      |
+| 026-count-lines     | BUG       | `fn main` + top-level statements both present             |
+| 043-starts-with     | E0110     | `import` inside function body (must be top-level)         |
+| 049-count-chars     | E0110     | `import` inside function body (must be top-level)         |
+| 062-sum-two-squares | E0211     | `?` used in top-level statements (only valid in fn body)  |
+| 076-running-max     | E0005     | integer literal overflows `Int` (i64); also E0104         |
+| 090-balanced-parens | E0204     | hallucinated `string.get` — no such method in stdlib      |
+| 096-rate-limit      | BUG       | `fn main` + top-level statements both present             |
+| 099-sum-column      | E0500     | LLVM codegen: type mismatch in emitted IR (`i64` vs `ptr`) |
+
+E0308: **0 occurrences** across all 100 prompts (was 50 occurrences in Run 11).
+
+Run 15 → Run 16 deltas (v0.7.0 impact):
+
+- **pass: 77 → 91 (+14, +18%)**
+- **check_fail: 12 → 0** (all prompts that previously produced check_fail
+  now compile and execute successfully; the harness measures single-shot
+  pass/fail without retry, so this shows the compiler accepted more
+  programs — not that diagnostics improved retry success)
+- compile_fail: 11 → 9 (minor reduction)
+- E0308: **50 occurrences (Run 11) → 0 (Run 16)** — the primary target
+  of v0.7.0 diagnostic work is no longer observed in generated code
+
+The residual failure surface for v0.8.0 prioritization:
+- **Hallucinated stdlib methods** (`string.get`, 2 prompts): AI invents
+  string methods not in stdlib v0.1; spec or error message needs to make
+  available methods clearer.
+- **`fn main` + top-level statements conflict** (BUG, 2 prompts): AI mixes
+  top-level expressions with `fn main`; ADR-0006 Rule 2 needs better
+  enforcement or clearer diagnostics.
+- **`import` inside function body** (E0110, 2 prompts): AI places imports
+  inside functions; parser/checker message may need to reinforce top-level
+  restriction.
+- **`?` in top-level statements** (E0211, 1 prompt): AI uses error
+  propagation outside a function context.
+- **Integer overflow literal** (E0005, 1 prompt): AI wrote `-9223372036854775808`
+  directly; the parser sees the positive literal `9223372036854775808` which
+  overflows `Int` (i64) before the unary minus is applied.
+- **LLVM codegen IR type mismatch** (E0500, 1 prompt): pre-existing edge case.
 
 `pass%` is computed against non-skipped runs so a missing compiler
 does not depress the headline number.
