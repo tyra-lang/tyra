@@ -105,7 +105,11 @@ unsafe fn alloc_collision(
     entries: *mut (*const u8, *const u8),
 ) -> *mut HamtNode {
     let node = gc_alloc::<HamtNode>();
-    node.write(HamtNode::Collision { hash, count, entries });
+    node.write(HamtNode::Collision {
+        hash,
+        count,
+        entries,
+    });
     node
 }
 
@@ -123,8 +127,16 @@ unsafe fn hamt_lookup(
         return ptr::null();
     }
     match &*node {
-        HamtNode::Leaf { hash: h, key: k, val: v } => {
-            if *h == hash && eq_fn(*k, key) != 0 { *v } else { ptr::null() }
+        HamtNode::Leaf {
+            hash: h,
+            key: k,
+            val: v,
+        } => {
+            if *h == hash && eq_fn(*k, key) != 0 {
+                *v
+            } else {
+                ptr::null()
+            }
         }
         HamtNode::Branch { bitmap, children } => {
             let idx = ((hash >> (depth * BITS)) & MASK) as u32;
@@ -134,7 +146,11 @@ unsafe fn hamt_lookup(
             let pos = (*bitmap & ((1 << idx) - 1)).count_ones() as usize;
             hamt_lookup(*(*children).add(pos), hash, key, depth + 1, eq_fn)
         }
-        HamtNode::Collision { hash: h, count, entries } => {
+        HamtNode::Collision {
+            hash: h,
+            count,
+            entries,
+        } => {
             if *h != hash {
                 return ptr::null();
             }
@@ -165,7 +181,11 @@ unsafe fn hamt_insert(
         return alloc_leaf(hash, key, val);
     }
     match &*node {
-        HamtNode::Leaf { hash: h, key: k, val: existing_v } => {
+        HamtNode::Leaf {
+            hash: h,
+            key: k,
+            val: existing_v,
+        } => {
             if *h == hash {
                 if eq_fn(*k, key) != 0 {
                     // Key match: update value (count unchanged).
@@ -215,7 +235,11 @@ unsafe fn hamt_insert(
                 alloc_branch(*bitmap, new_children)
             }
         }
-        HamtNode::Collision { hash: h, count, entries } => {
+        HamtNode::Collision {
+            hash: h,
+            count,
+            entries,
+        } => {
             if *h == hash {
                 let n = *count as usize;
                 for i in 0..n {
@@ -263,7 +287,15 @@ unsafe fn merge_leaves(
     if idx_a == idx_b {
         // Same slot at this depth: recurse one level deeper.
         let mut inserted = false;
-        let child = hamt_insert(leaf_a, hash_b, key_b, val_b, depth + 1, eq_fn, &mut inserted);
+        let child = hamt_insert(
+            leaf_a,
+            hash_b,
+            key_b,
+            val_b,
+            depth + 1,
+            eq_fn,
+            &mut inserted,
+        );
         let children = gc_alloc_array::<*mut HamtNode>(1);
         children.write(child);
         alloc_branch(1u32 << idx_a, children)
@@ -295,7 +327,14 @@ unsafe fn merge_collision_and_leaf(
 
     if idx_c == idx_l {
         // Same index at this depth: recurse one level deeper.
-        let inner = merge_collision_and_leaf(hash_coll, coll_node, hash_leaf, key_leaf, val_leaf, depth + 1);
+        let inner = merge_collision_and_leaf(
+            hash_coll,
+            coll_node,
+            hash_leaf,
+            key_leaf,
+            val_leaf,
+            depth + 1,
+        );
         let children = gc_alloc_array::<*mut HamtNode>(1);
         children.write(inner);
         alloc_branch(1u32 << idx_c, children)
@@ -327,7 +366,11 @@ unsafe fn hamt_remove(
         return ptr::null_mut();
     }
     match &*node {
-        HamtNode::Leaf { hash: h, key: k, val: _ } => {
+        HamtNode::Leaf {
+            hash: h,
+            key: k,
+            val: _,
+        } => {
             if *h == hash && eq_fn(*k, key) != 0 {
                 *removed = true;
                 ptr::null_mut()
@@ -372,7 +415,11 @@ unsafe fn hamt_remove(
                 alloc_branch(*bitmap, new_children)
             }
         }
-        HamtNode::Collision { hash: h, count, entries } => {
+        HamtNode::Collision {
+            hash: h,
+            count,
+            entries,
+        } => {
             if *h != hash {
                 return node;
             }
@@ -768,7 +815,9 @@ mod tests {
     #[test]
     fn collision_bucket() {
         // Every key hashes to 42, forcing all entries into a Collision node.
-        unsafe extern "C" fn hash_const(_a: *const u8) -> i64 { 42 }
+        unsafe extern "C" fn hash_const(_a: *const u8) -> i64 {
+            42
+        }
 
         let m = unsafe { tyra_map_new(eq_i64, hash_const) };
         let m = unsafe { tyra_map_insert(m, box_i64(1), box_i64(10)) };
@@ -813,16 +862,28 @@ mod tests {
 
         assert_eq!(unsafe { tyra_map_len(cur) }, n);
         for i in 0..n {
-            assert_eq!(unbox_i64(unsafe { tyra_map_get(cur, box_i64(i)) }), i * 3,
-                "base: key {i} wrong");
+            assert_eq!(
+                unbox_i64(unsafe { tyra_map_get(cur, box_i64(i)) }),
+                i * 3,
+                "base: key {i} wrong"
+            );
         }
         for (s, &snap) in snapshots.iter().enumerate() {
             let s = s as i64;
-            assert_eq!(unsafe { tyra_map_len(snap) }, n + 1, "snapshot {s}: wrong len");
-            assert_eq!(unbox_i64(unsafe { tyra_map_get(snap, box_i64(n + s)) }), s * 7,
-                "snapshot {s}: private value wrong");
-            assert!(!unsafe { tyra_map_get(snap, box_i64(0)) }.is_null(),
-                "snapshot {s}: shared key 0 missing");
+            assert_eq!(
+                unsafe { tyra_map_len(snap) },
+                n + 1,
+                "snapshot {s}: wrong len"
+            );
+            assert_eq!(
+                unbox_i64(unsafe { tyra_map_get(snap, box_i64(n + s)) }),
+                s * 7,
+                "snapshot {s}: private value wrong"
+            );
+            assert!(
+                !unsafe { tyra_map_get(snap, box_i64(0)) }.is_null(),
+                "snapshot {s}: shared key 0 missing"
+            );
         }
     }
 
@@ -830,7 +891,9 @@ mod tests {
     #[test]
     #[ignore]
     fn gc_shared_nodes_survive_collection_map() {
-        unsafe extern "C" { fn GC_gcollect(); }
+        unsafe extern "C" {
+            fn GC_gcollect();
+        }
 
         let n = 1_000i64;
         let mut cur = unsafe { tyra_map_new(eq_i64, hash_i64) };
@@ -841,24 +904,38 @@ mod tests {
             .map(|s| unsafe { tyra_map_insert(cur, box_i64(n + s), box_i64(s * 7)) })
             .collect();
 
-        unsafe { GC_gcollect(); }
+        unsafe {
+            GC_gcollect();
+        }
 
         assert_eq!(unsafe { tyra_map_len(cur) }, n, "base: wrong len after GC");
         for i in 0..n {
             let got = unsafe { tyra_map_get(cur, box_i64(i)) };
             assert!(!got.is_null(), "base: key {i} missing after GC");
-            assert_eq!(unbox_i64(got), i * 3, "base: wrong value for key {i} after GC");
+            assert_eq!(
+                unbox_i64(got),
+                i * 3,
+                "base: wrong value for key {i} after GC"
+            );
         }
         for (s, &snap) in snapshots.iter().enumerate() {
             let s = s as i64;
-            assert_eq!(unsafe { tyra_map_len(snap) }, n + 1,
-                "snapshot {s}: wrong len after GC");
+            assert_eq!(
+                unsafe { tyra_map_len(snap) },
+                n + 1,
+                "snapshot {s}: wrong len after GC"
+            );
             let got = unsafe { tyra_map_get(snap, box_i64(n + s)) };
             assert!(!got.is_null(), "snapshot {s}: private key missing after GC");
-            assert_eq!(unbox_i64(got), s * 7,
-                "snapshot {s}: wrong private value after GC");
-            assert!(!unsafe { tyra_map_get(snap, box_i64(0)) }.is_null(),
-                "snapshot {s}: shared key 0 missing after GC");
+            assert_eq!(
+                unbox_i64(got),
+                s * 7,
+                "snapshot {s}: wrong private value after GC"
+            );
+            assert!(
+                !unsafe { tyra_map_get(snap, box_i64(0)) }.is_null(),
+                "snapshot {s}: shared key 0 missing after GC"
+            );
         }
     }
 
@@ -866,7 +943,9 @@ mod tests {
     #[test]
     #[ignore]
     fn gc_stress_large_n_map() {
-        unsafe extern "C" { fn GC_gcollect(); }
+        unsafe extern "C" {
+            fn GC_gcollect();
+        }
 
         let n = 100_000i64;
         let mut cur = unsafe { tyra_map_new(eq_i64, hash_i64) };
@@ -875,16 +954,25 @@ mod tests {
         for i in 0..n {
             cur = unsafe { tyra_map_insert(cur, box_i64(i), box_i64(i)) };
             if i % 10_000 == 9_999 {
-                unsafe { GC_gcollect(); }
+                unsafe {
+                    GC_gcollect();
+                }
                 let expected_len = i + 1;
-                assert_eq!(unsafe { tyra_map_len(cur) }, expected_len,
-                    "phase 1: len at i={i}");
+                assert_eq!(
+                    unsafe { tyra_map_len(cur) },
+                    expected_len,
+                    "phase 1: len at i={i}"
+                );
                 // Representative key present.
-                assert!(!unsafe { tyra_map_get(cur, box_i64(0)) }.is_null(),
-                    "phase 1: key 0 missing at i={i}");
+                assert!(
+                    !unsafe { tyra_map_get(cur, box_i64(0)) }.is_null(),
+                    "phase 1: key 0 missing at i={i}"
+                );
                 // Key not yet inserted absent.
-                assert!(unsafe { tyra_map_get(cur, box_i64(i + 1)) }.is_null(),
-                    "phase 1: future key present at i={i}");
+                assert!(
+                    unsafe { tyra_map_get(cur, box_i64(i + 1)) }.is_null(),
+                    "phase 1: future key present at i={i}"
+                );
             }
         }
         assert_eq!(unsafe { tyra_map_len(cur) }, n);
@@ -893,17 +981,27 @@ mod tests {
         for i in (0..n).step_by(2) {
             cur = unsafe { tyra_map_remove(cur, box_i64(i)) };
             if i % 10_000 == 9_998 {
-                unsafe { GC_gcollect(); }
+                unsafe {
+                    GC_gcollect();
+                }
                 let removed_so_far = (i / 2) + 1;
-                assert_eq!(unsafe { tyra_map_len(cur) }, n - removed_so_far,
-                    "phase 2: len after removing up to key {i}");
+                assert_eq!(
+                    unsafe { tyra_map_len(cur) },
+                    n - removed_so_far,
+                    "phase 2: len after removing up to key {i}"
+                );
                 // The just-removed key must be absent.
-                assert!(unsafe { tyra_map_get(cur, box_i64(i)) }.is_null(),
-                    "phase 2: removed key {i} still present");
+                assert!(
+                    unsafe { tyra_map_get(cur, box_i64(i)) }.is_null(),
+                    "phase 2: removed key {i} still present"
+                );
                 // The preceding odd key must still be present.
                 if i > 0 {
-                    assert!(!unsafe { tyra_map_get(cur, box_i64(i - 1)) }.is_null(),
-                        "phase 2: retained odd key {} missing", i - 1);
+                    assert!(
+                        !unsafe { tyra_map_get(cur, box_i64(i - 1)) }.is_null(),
+                        "phase 2: retained odd key {} missing",
+                        i - 1
+                    );
                 }
             }
         }
@@ -913,28 +1011,43 @@ mod tests {
         for i in n..(2 * n) {
             cur = unsafe { tyra_map_insert(cur, box_i64(i), box_i64(i)) };
             if i % 10_000 == 9_999 {
-                unsafe { GC_gcollect(); }
+                unsafe {
+                    GC_gcollect();
+                }
                 let inserted_p3 = i - n + 1;
-                assert_eq!(unsafe { tyra_map_len(cur) }, n / 2 + inserted_p3,
-                    "phase 3: len at i={i}");
-                assert!(!unsafe { tyra_map_get(cur, box_i64(i)) }.is_null(),
-                    "phase 3: just-inserted key {i} missing");
+                assert_eq!(
+                    unsafe { tyra_map_len(cur) },
+                    n / 2 + inserted_p3,
+                    "phase 3: len at i={i}"
+                );
+                assert!(
+                    !unsafe { tyra_map_get(cur, box_i64(i)) }.is_null(),
+                    "phase 3: just-inserted key {i} missing"
+                );
                 // An odd phase-1 key must still be present.
-                assert!(!unsafe { tyra_map_get(cur, box_i64(1)) }.is_null(),
-                    "phase 3: phase-1 odd key 1 missing at i={i}");
+                assert!(
+                    !unsafe { tyra_map_get(cur, box_i64(1)) }.is_null(),
+                    "phase 3: phase-1 odd key 1 missing at i={i}"
+                );
             }
         }
         assert_eq!(unsafe { tyra_map_len(cur) }, n / 2 + n);
 
         // Final GC + full integrity sweep.
-        unsafe { GC_gcollect(); }
+        unsafe {
+            GC_gcollect();
+        }
         for i in (1..n).step_by(2) {
-            assert!(!unsafe { tyra_map_get(cur, box_i64(i)) }.is_null(),
-                "final: phase-1 odd key {i} missing");
+            assert!(
+                !unsafe { tyra_map_get(cur, box_i64(i)) }.is_null(),
+                "final: phase-1 odd key {i} missing"
+            );
         }
         for i in n..(2 * n) {
-            assert!(!unsafe { tyra_map_get(cur, box_i64(i)) }.is_null(),
-                "final: phase-3 key {i} missing");
+            assert!(
+                !unsafe { tyra_map_get(cur, box_i64(i)) }.is_null(),
+                "final: phase-3 key {i} missing"
+            );
         }
     }
 }

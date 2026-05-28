@@ -76,7 +76,13 @@ unsafe fn alloc_collision(hash: u64, count: u32, keys: *mut *const u8) -> *mut H
     node
 }
 
-unsafe fn hamt_contains(node: *mut HamtNode, hash: u64, key: *const u8, depth: u32, eq_fn: EqFn) -> bool {
+unsafe fn hamt_contains(
+    node: *mut HamtNode,
+    hash: u64,
+    key: *const u8,
+    depth: u32,
+    eq_fn: EqFn,
+) -> bool {
     if node.is_null() {
         return false;
     }
@@ -90,7 +96,11 @@ unsafe fn hamt_contains(node: *mut HamtNode, hash: u64, key: *const u8, depth: u
             let pos = (*bitmap & ((1 << idx) - 1)).count_ones() as usize;
             hamt_contains(*(*children).add(pos), hash, key, depth + 1, eq_fn)
         }
-        HamtNode::Collision { hash: h, count, keys } => {
+        HamtNode::Collision {
+            hash: h,
+            count,
+            keys,
+        } => {
             if *h != hash {
                 return false;
             }
@@ -164,7 +174,11 @@ unsafe fn hamt_insert(
                 alloc_branch(*bitmap, new_children)
             }
         }
-        HamtNode::Collision { hash: h, count, keys } => {
+        HamtNode::Collision {
+            hash: h,
+            count,
+            keys,
+        } => {
             if *h == hash {
                 let n = *count as usize;
                 for i in 0..n {
@@ -304,7 +318,11 @@ unsafe fn hamt_remove(
                 alloc_branch(*bitmap, new_children)
             }
         }
-        HamtNode::Collision { hash: h, count, keys } => {
+        HamtNode::Collision {
+            hash: h,
+            count,
+            keys,
+        } => {
             if *h != hash {
                 return node;
             }
@@ -593,7 +611,9 @@ mod tests {
 
     #[test]
     fn collision_bucket() {
-        unsafe extern "C" fn hash_const(_a: *const u8) -> i64 { 7 }
+        unsafe extern "C" fn hash_const(_a: *const u8) -> i64 {
+            7
+        }
 
         let s = unsafe { tyra_set_new(eq_i64, hash_const) };
         let s = unsafe { tyra_set_insert(s, box_i64(1)) };
@@ -635,16 +655,29 @@ mod tests {
 
         assert_eq!(unsafe { tyra_set_len(cur) }, n);
         for i in 0..n {
-            assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i)) }, 1,
-                "base: element {i} missing");
+            assert_eq!(
+                unsafe { tyra_set_contains(cur, box_i64(i)) },
+                1,
+                "base: element {i} missing"
+            );
         }
         for (s, &snap) in snapshots.iter().enumerate() {
             let s = s as i64;
-            assert_eq!(unsafe { tyra_set_len(snap) }, n + 1, "snapshot {s}: wrong len");
-            assert_eq!(unsafe { tyra_set_contains(snap, box_i64(n + s)) }, 1,
-                "snapshot {s}: private element missing");
-            assert_eq!(unsafe { tyra_set_contains(snap, box_i64(0)) }, 1,
-                "snapshot {s}: shared element 0 missing");
+            assert_eq!(
+                unsafe { tyra_set_len(snap) },
+                n + 1,
+                "snapshot {s}: wrong len"
+            );
+            assert_eq!(
+                unsafe { tyra_set_contains(snap, box_i64(n + s)) },
+                1,
+                "snapshot {s}: private element missing"
+            );
+            assert_eq!(
+                unsafe { tyra_set_contains(snap, box_i64(0)) },
+                1,
+                "snapshot {s}: shared element 0 missing"
+            );
         }
     }
 
@@ -652,7 +685,9 @@ mod tests {
     #[test]
     #[ignore]
     fn gc_shared_nodes_survive_collection_set() {
-        unsafe extern "C" { fn GC_gcollect(); }
+        unsafe extern "C" {
+            fn GC_gcollect();
+        }
 
         let n = 1_000i64;
         let mut cur = unsafe { tyra_set_new(eq_i64, hash_i64) };
@@ -663,21 +698,35 @@ mod tests {
             .map(|s| unsafe { tyra_set_insert(cur, box_i64(n + s)) })
             .collect();
 
-        unsafe { GC_gcollect(); }
+        unsafe {
+            GC_gcollect();
+        }
 
         assert_eq!(unsafe { tyra_set_len(cur) }, n, "base: wrong len after GC");
         for i in 0..n {
-            assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i)) }, 1,
-                "base: element {i} missing after GC");
+            assert_eq!(
+                unsafe { tyra_set_contains(cur, box_i64(i)) },
+                1,
+                "base: element {i} missing after GC"
+            );
         }
         for (s, &snap) in snapshots.iter().enumerate() {
             let s = s as i64;
-            assert_eq!(unsafe { tyra_set_len(snap) }, n + 1,
-                "snapshot {s}: wrong len after GC");
-            assert_eq!(unsafe { tyra_set_contains(snap, box_i64(n + s)) }, 1,
-                "snapshot {s}: private element missing after GC");
-            assert_eq!(unsafe { tyra_set_contains(snap, box_i64(0)) }, 1,
-                "snapshot {s}: shared element 0 missing after GC");
+            assert_eq!(
+                unsafe { tyra_set_len(snap) },
+                n + 1,
+                "snapshot {s}: wrong len after GC"
+            );
+            assert_eq!(
+                unsafe { tyra_set_contains(snap, box_i64(n + s)) },
+                1,
+                "snapshot {s}: private element missing after GC"
+            );
+            assert_eq!(
+                unsafe { tyra_set_contains(snap, box_i64(0)) },
+                1,
+                "snapshot {s}: shared element 0 missing after GC"
+            );
         }
     }
 
@@ -685,7 +734,9 @@ mod tests {
     #[test]
     #[ignore]
     fn gc_stress_set_large_n() {
-        unsafe extern "C" { fn GC_gcollect(); }
+        unsafe extern "C" {
+            fn GC_gcollect();
+        }
 
         let n = 100_000i64;
         let mut cur = unsafe { tyra_set_new(eq_i64, hash_i64) };
@@ -694,16 +745,27 @@ mod tests {
         for i in 0..n {
             cur = unsafe { tyra_set_insert(cur, box_i64(i)) };
             if i % 10_000 == 9_999 {
-                unsafe { GC_gcollect(); }
+                unsafe {
+                    GC_gcollect();
+                }
                 let expected_len = i + 1;
-                assert_eq!(unsafe { tyra_set_len(cur) }, expected_len,
-                    "phase 1: len at i={i}");
+                assert_eq!(
+                    unsafe { tyra_set_len(cur) },
+                    expected_len,
+                    "phase 1: len at i={i}"
+                );
                 // Representative element present.
-                assert_eq!(unsafe { tyra_set_contains(cur, box_i64(0)) }, 1,
-                    "phase 1: element 0 missing at i={i}");
+                assert_eq!(
+                    unsafe { tyra_set_contains(cur, box_i64(0)) },
+                    1,
+                    "phase 1: element 0 missing at i={i}"
+                );
                 // Element not yet inserted absent.
-                assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i + 1)) }, 0,
-                    "phase 1: future element present at i={i}");
+                assert_eq!(
+                    unsafe { tyra_set_contains(cur, box_i64(i + 1)) },
+                    0,
+                    "phase 1: future element present at i={i}"
+                );
             }
         }
         assert_eq!(unsafe { tyra_set_len(cur) }, n);
@@ -712,17 +774,29 @@ mod tests {
         for i in (0..n).step_by(2) {
             cur = unsafe { tyra_set_remove(cur, box_i64(i)) };
             if i % 10_000 == 9_998 {
-                unsafe { GC_gcollect(); }
+                unsafe {
+                    GC_gcollect();
+                }
                 let removed_so_far = (i / 2) + 1;
-                assert_eq!(unsafe { tyra_set_len(cur) }, n - removed_so_far,
-                    "phase 2: len after removing up to element {i}");
+                assert_eq!(
+                    unsafe { tyra_set_len(cur) },
+                    n - removed_so_far,
+                    "phase 2: len after removing up to element {i}"
+                );
                 // The just-removed element must be absent.
-                assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i)) }, 0,
-                    "phase 2: removed element {i} still present");
+                assert_eq!(
+                    unsafe { tyra_set_contains(cur, box_i64(i)) },
+                    0,
+                    "phase 2: removed element {i} still present"
+                );
                 // The preceding odd element must still be present.
                 if i > 0 {
-                    assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i - 1)) }, 1,
-                        "phase 2: retained odd element {} missing", i - 1);
+                    assert_eq!(
+                        unsafe { tyra_set_contains(cur, box_i64(i - 1)) },
+                        1,
+                        "phase 2: retained odd element {} missing",
+                        i - 1
+                    );
                 }
             }
         }
@@ -732,28 +806,47 @@ mod tests {
         for i in n..(2 * n) {
             cur = unsafe { tyra_set_insert(cur, box_i64(i)) };
             if i % 10_000 == 9_999 {
-                unsafe { GC_gcollect(); }
+                unsafe {
+                    GC_gcollect();
+                }
                 let inserted_p3 = i - n + 1;
-                assert_eq!(unsafe { tyra_set_len(cur) }, n / 2 + inserted_p3,
-                    "phase 3: len at i={i}");
-                assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i)) }, 1,
-                    "phase 3: just-inserted element {i} missing");
+                assert_eq!(
+                    unsafe { tyra_set_len(cur) },
+                    n / 2 + inserted_p3,
+                    "phase 3: len at i={i}"
+                );
+                assert_eq!(
+                    unsafe { tyra_set_contains(cur, box_i64(i)) },
+                    1,
+                    "phase 3: just-inserted element {i} missing"
+                );
                 // An odd phase-1 element must still be present.
-                assert_eq!(unsafe { tyra_set_contains(cur, box_i64(1)) }, 1,
-                    "phase 3: phase-1 odd element 1 missing at i={i}");
+                assert_eq!(
+                    unsafe { tyra_set_contains(cur, box_i64(1)) },
+                    1,
+                    "phase 3: phase-1 odd element 1 missing at i={i}"
+                );
             }
         }
         assert_eq!(unsafe { tyra_set_len(cur) }, n / 2 + n);
 
         // Final GC + full integrity sweep.
-        unsafe { GC_gcollect(); }
+        unsafe {
+            GC_gcollect();
+        }
         for i in (1..n).step_by(2) {
-            assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i)) }, 1,
-                "final: phase-1 odd element {i} missing");
+            assert_eq!(
+                unsafe { tyra_set_contains(cur, box_i64(i)) },
+                1,
+                "final: phase-1 odd element {i} missing"
+            );
         }
         for i in n..(2 * n) {
-            assert_eq!(unsafe { tyra_set_contains(cur, box_i64(i)) }, 1,
-                "final: phase-3 element {i} missing");
+            assert_eq!(
+                unsafe { tyra_set_contains(cur, box_i64(i)) },
+                1,
+                "final: phase-3 element {i} missing"
+            );
         }
     }
 }

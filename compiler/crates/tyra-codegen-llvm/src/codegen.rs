@@ -233,7 +233,11 @@ fn emit_llvm_ir_impl(program: &Program, cov_map: Option<&CovMap>, emit_dwarf: bo
     }
     // DWARF local variable intrinsic (ADR-0014 §4a-ii).
     if emit_dwarf {
-        writeln!(out, "declare void @llvm.dbg.declare(metadata, metadata, metadata)").unwrap();
+        writeln!(
+            out,
+            "declare void @llvm.dbg.declare(metadata, metadata, metadata)"
+        )
+        .unwrap();
     }
     writeln!(out, "declare i32 @puts(ptr)").unwrap();
     writeln!(out, "declare i32 @printf(ptr, ...)").unwrap();

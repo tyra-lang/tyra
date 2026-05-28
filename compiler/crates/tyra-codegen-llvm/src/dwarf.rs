@@ -57,13 +57,19 @@ impl DwarfCtx {
             next_id += 1;
             file_ids.push(id);
             let (fname, dir) = split_path(path);
-            defs.push((id, format!("!DIFile(filename: \"{fname}\", directory: \"{dir}\")")));
+            defs.push((
+                id,
+                format!("!DIFile(filename: \"{fname}\", directory: \"{dir}\")"),
+            ));
         }
         if file_ids.is_empty() {
             let id = next_id;
             next_id += 1;
             file_ids.push(id);
-            defs.push((id, "!DIFile(filename: \"<unknown>\", directory: \"\")".into()));
+            defs.push((
+                id,
+                "!DIFile(filename: \"<unknown>\", directory: \"\")".into(),
+            ));
         }
         let primary_file_id = file_ids[0];
 
@@ -90,15 +96,22 @@ impl DwarfCtx {
                 .and_then(|l| file_ids.get(l.file_id as usize).copied())
                 .unwrap_or(primary_file_id);
 
-            let display_name = if func.is_main { "main" } else { func.name.as_str() };
-            defs.push((sp_id, format!(
-                "distinct !DISubprogram(name: \"{display_name}\", linkageName: \"{ln}\", \
+            let display_name = if func.is_main {
+                "main"
+            } else {
+                func.name.as_str()
+            };
+            defs.push((
+                sp_id,
+                format!(
+                    "distinct !DISubprogram(name: \"{display_name}\", linkageName: \"{ln}\", \
                  scope: !{file_node}, file: !{file_node}, line: {first_line}, \
                  type: !{subrt_id}, isLocal: false, isDefinition: true, \
                  scopeLine: {first_line}, flags: DIFlagPrototyped, isOptimized: false, \
                  unit: !{cu_id}, retainedNodes: !{empty_id})",
-                ln = func.name,
-            )));
+                    ln = func.name,
+                ),
+            ));
         }
 
         // Module flags
@@ -107,7 +120,10 @@ impl DwarfCtx {
         defs.push((dw_ver_id, "!{i32 7, !\"Dwarf Version\", i32 4}".into()));
         let dbg_info_id = next_id;
         next_id += 1;
-        defs.push((dbg_info_id, "!{i32 2, !\"Debug Info Version\", i32 3}".into()));
+        defs.push((
+            dbg_info_id,
+            "!{i32 2, !\"Debug Info Version\", i32 3}".into(),
+        ));
         let wchar_id = next_id;
         next_id += 1;
         defs.push((wchar_id, "!{i32 1, !\"wchar_size\", i32 4}".into()));
@@ -118,11 +134,14 @@ impl DwarfCtx {
         defs.push((ident_id, "!{!\"Tyra v0.6.0\"}".into()));
 
         // Define !DICompileUnit now that primary_file_id and empty_id are known
-        defs.push((cu_id, format!(
-            "distinct !DICompileUnit(language: DW_LANG_C99, file: !{primary_file_id}, \
+        defs.push((
+            cu_id,
+            format!(
+                "distinct !DICompileUnit(language: DW_LANG_C99, file: !{primary_file_id}, \
              producer: \"Tyra v0.6.0\", isOptimized: false, runtimeVersion: 0, \
              emissionKind: FullDebug, splitDebugInlining: false)"
-        )));
+            ),
+        ));
 
         DwarfCtx {
             defs,
@@ -153,8 +172,10 @@ impl DwarfCtx {
         let id = self.next_id;
         self.next_id += 1;
         self.loc_cache.insert(key, id);
-        self.defs
-            .push((id, format!("!DILocation(line: {line}, column: 1, scope: !{sp_id})")));
+        self.defs.push((
+            id,
+            format!("!DILocation(line: {line}, column: 1, scope: !{sp_id})"),
+        ));
         id
     }
 
@@ -201,10 +222,13 @@ impl DwarfCtx {
             .unwrap_or(self.file_ids[0]);
         let id = self.next_id;
         self.next_id += 1;
-        self.defs.push((id, format!(
-            "!DILocalVariable(name: \"{name}\", scope: !{sp_id}, \
+        self.defs.push((
+            id,
+            format!(
+                "!DILocalVariable(name: \"{name}\", scope: !{sp_id}, \
              file: !{file_node}, line: {line}, type: !{type_id})"
-        )));
+            ),
+        ));
         id
     }
 

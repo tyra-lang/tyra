@@ -967,11 +967,23 @@ pub(crate) fn emit_instruction(
             } else {
                 "__mfe_c".to_string()
             };
-            writeln!(out, "  %{pfx}.fnp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 0").unwrap();
+            writeln!(
+                out,
+                "  %{pfx}.fnp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 0"
+            )
+            .unwrap();
             writeln!(out, "  %{pfx}.fn_ptr = load ptr, ptr %{pfx}.fnp_gep").unwrap();
-            writeln!(out, "  %{pfx}.envp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 1").unwrap();
+            writeln!(
+                out,
+                "  %{pfx}.envp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 1"
+            )
+            .unwrap();
             writeln!(out, "  %{pfx}.env_ptr = load ptr, ptr %{pfx}.envp_gep").unwrap();
-            writeln!(out, "  call void @tyra_map_for_each(ptr {h}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)").unwrap();
+            writeln!(
+                out,
+                "  call void @tyra_map_for_each(ptr {h}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)"
+            )
+            .unwrap();
         }
 
         // v0.7.0: Set iteration via tyra_set_for_each callback.
@@ -983,11 +995,23 @@ pub(crate) fn emit_instruction(
             } else {
                 "__sfe_c".to_string()
             };
-            writeln!(out, "  %{pfx}.fnp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 0").unwrap();
+            writeln!(
+                out,
+                "  %{pfx}.fnp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 0"
+            )
+            .unwrap();
             writeln!(out, "  %{pfx}.fn_ptr = load ptr, ptr %{pfx}.fnp_gep").unwrap();
-            writeln!(out, "  %{pfx}.envp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 1").unwrap();
+            writeln!(
+                out,
+                "  %{pfx}.envp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 1"
+            )
+            .unwrap();
             writeln!(out, "  %{pfx}.env_ptr = load ptr, ptr %{pfx}.envp_gep").unwrap();
-            writeln!(out, "  call void @tyra_set_for_each(ptr {h}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)").unwrap();
+            writeln!(
+                out,
+                "  call void @tyra_set_for_each(ptr {h}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)"
+            )
+            .unwrap();
         }
     }
 }

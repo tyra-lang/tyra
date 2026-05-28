@@ -1549,7 +1549,11 @@ end
     fn e0308_help_option_wrap_via_let_annotation() {
         let source = "let x: Option<Int> = 42\n";
         let report = check_str(source);
-        assert!(has_e0308(&report), "expected E0308; got: {:?}", report.diagnostics());
+        assert!(
+            has_e0308(&report),
+            "expected E0308; got: {:?}",
+            report.diagnostics()
+        );
         let helps = get_e0308_help(&report);
         assert!(
             helps.iter().any(|h| h.contains("Some")),
@@ -1563,7 +1567,11 @@ end
     fn e0308_help_int_to_float_conversion() {
         let source = "let x: Float = 42\n";
         let report = check_str(source);
-        assert!(has_e0308(&report), "expected E0308; got: {:?}", report.diagnostics());
+        assert!(
+            has_e0308(&report),
+            "expected E0308; got: {:?}",
+            report.diagnostics()
+        );
         let helps = get_e0308_help(&report);
         assert!(
             helps.iter().any(|h| h.contains("float.from_int")),
@@ -1577,7 +1585,11 @@ end
     fn e0308_help_float_to_int_conversion() {
         let source = "let x: Int = 3.14\n";
         let report = check_str(source);
-        assert!(has_e0308(&report), "expected E0308; got: {:?}", report.diagnostics());
+        assert!(
+            has_e0308(&report),
+            "expected E0308; got: {:?}",
+            report.diagnostics()
+        );
         let helps = get_e0308_help(&report);
         assert!(
             helps.iter().any(|h| h.contains("float.to_int")),

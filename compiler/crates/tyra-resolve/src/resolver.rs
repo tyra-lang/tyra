@@ -296,9 +296,9 @@ fn symbol_span(sym: &Symbol) -> Option<Span> {
 /// ADR-0006 Rules 2-5: top-level statement restrictions.
 fn validate_top_level_restrictions(items: &[Item], report: &mut Report) {
     // ADR-0006 Rule 2: fn main and top-level statements are mutually exclusive.
-    let main_item = items.iter().find(|item| {
-        matches!(item, Item::FnDef(f) if f.name == "main")
-    });
+    let main_item = items
+        .iter()
+        .find(|item| matches!(item, Item::FnDef(f) if f.name == "main"));
     let first_top_stmt = items.iter().find(|item| matches!(item, Item::Stmt(_)));
 
     if let (Some(main_item), Some(first_stmt)) = (main_item, first_top_stmt) {
