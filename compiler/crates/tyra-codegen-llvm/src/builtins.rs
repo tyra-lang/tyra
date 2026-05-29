@@ -1462,7 +1462,7 @@ fn emit_float_to_int(out: &mut String, dest: Option<&str>, args: &[Operand], fun
 }
 
 /// parse::<Int>(str) -> Option<Int>
-/// Uses strtol with endptr check.
+/// Uses strtoll with endptr check (strtoll is i64-safe on all platforms including Windows LLP64).
 fn emit_parse_int(
     out: &mut String,
     dest: Option<&str>,
@@ -1483,10 +1483,11 @@ fn emit_parse_int(
     };
     // Alloca for endptr
     writeln!(out, "  %{d}.endp = alloca ptr").unwrap();
-    // Call strtol(str, &endptr, 10)
+    // Call strtoll(str, &endptr, 10) — strtoll guarantees i64 on all platforms
+    // including Windows LLP64 where strtol would return only 32 bits.
     writeln!(
         out,
-        "  %{d}.val = call i64 @strtol(ptr {val}, ptr %{d}.endp, i32 10)"
+        "  %{d}.val = call i64 @strtoll(ptr {val}, ptr %{d}.endp, i32 10)"
     )
     .unwrap();
     // Load endptr

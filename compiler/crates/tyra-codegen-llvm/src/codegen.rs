@@ -369,8 +369,9 @@ fn emit_llvm_ir_impl(program: &Program, cov_map: Option<&CovMap>, emit_dwarf: bo
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();
     // §18.8: bench clock intrinsic (v0.4.0). See runtime/src/lib.rs.
     writeln!(out, "declare i64 @__bench_clock_ns()").unwrap();
-    // strtol returns long (i64 on LP64 platforms). TODO: use strtoll for Windows LLP64.
-    writeln!(out, "declare i64 @strtol(ptr, ptr, i32)").unwrap();
+    // strtoll returns long long (i64 on both LP64 and Windows LLP64), ensuring
+    // correct 64-bit behaviour regardless of platform ABI.
+    writeln!(out, "declare i64 @strtoll(ptr, ptr, i32)").unwrap();
     writeln!(out).unwrap();
 
     // Build function signature map for cross-function type resolution
