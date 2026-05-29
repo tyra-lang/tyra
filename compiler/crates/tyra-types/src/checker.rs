@@ -51,6 +51,11 @@ pub struct TypeEnv {
     /// - User-defined: `type Color = | Red | Green | Blue` → "Color" → ["Red", "Green", "Blue"]
     /// - Prelude: "Option" → ["Some", "None"], "Result" → ["Ok", "Err"]
     adt_variants: HashMap<String, Vec<String>>,
+    /// Reverse map: variant name → list of ADT names that contain it.
+    /// Used by heuristic (iv) to suggest `Foo.Bar` when `Bar` is a unique variant of `Foo`.
+    /// If a variant name appears in multiple ADTs (ambiguous), the list has length > 1
+    /// and no suggestion is emitted (false-positive avoidance).
+    variant_to_adts: HashMap<String, Vec<String>>,
     /// Stack of enclosing function return types (for `return` stmt and `?` operator checks).
     /// Top of stack = innermost enclosing function. Empty when not inside any fn body.
     return_type_stack: Vec<Ty>,
@@ -107,6 +112,7 @@ impl TypeEnv {
             bindings: vec![HashMap::new()],
             let_bindings: vec![HashSet::new()],
             adt_variants: HashMap::new(),
+            variant_to_adts: HashMap::new(),
             return_type_stack: Vec::new(),
             loop_depth: 0,
             trait_methods: HashMap::new(),
@@ -240,7 +246,16 @@ impl TypeEnv {
     }
 
     /// Register an ADT with its variant names for exhaustiveness checking.
+    /// Also maintains the reverse `variant_to_adts` map for heuristic (iv)
+    /// (ADR-0017): when a variant name resolves to exactly one parent ADT,
+    /// E0308 can suggest `ParentAdt.VariantName(...)`.
     pub fn register_adt(&mut self, type_name: String, variants: Vec<String>) {
+        for variant in &variants {
+            self.variant_to_adts
+                .entry(variant.clone())
+                .or_default()
+                .push(type_name.clone());
+        }
         self.adt_variants.insert(type_name, variants);
     }
 
@@ -2731,6 +2746,18 @@ fn peel_to_set(ty: &Ty) -> Option<&Ty> {
 /// Only fires when both `expected` and `actual` are fully concrete (no
 /// `Ty::Var` or `Ty::Error` on either side).  This prevents false-positive
 /// suggestions when the type checker has not yet resolved one of the types.
+/// Returns the ADT name if `variant_name` is a variant of exactly one ADT in scope.
+/// Returns None if the variant appears in zero or 2+ ADTs (ambiguous → no suggestion).
+/// Used by heuristic (iv) of `e0308_help_hint` (ADR-0017).
+fn find_unique_adt_for_variant(variant_name: &str, env: &TypeEnv) -> Option<String> {
+    let adts = env.variant_to_adts.get(variant_name)?;
+    if adts.len() == 1 {
+        Some(adts[0].clone())
+    } else {
+        None // ambiguous: same variant name in multiple ADTs → no suggestion
+    }
+}
+
 fn e0308_help_hint(expected: &Ty, actual: &Ty, env: &TypeEnv) -> Option<String> {
     // Guard: only suggest when both types are fully concrete.
     fn is_concrete(ty: &Ty) -> bool {
@@ -2775,23 +2802,19 @@ fn e0308_help_hint(expected: &Ty, actual: &Ty, env: &TypeEnv) -> Option<String> 
         return Some("convert with `float.to_int(x)`".to_string());
     }
 
-    // Heuristic (iv): ADT variant vs parent — not implementable without richer variant type
-    // representation; deferred to v0.8+.
-    //
-    // ADR 0017 specifies: when expected is a concrete ADT variant type (e.g. the type of
-    // `Foo.Bar`) but actual is the parent ADT type itself (e.g. `Foo`), or vice versa,
-    // suggest `help: "did you mean \`Foo.Bar(...)\`?"`.
-    //
-    // This is not implementable here because `Ty::Named(String)` does not structurally
-    // distinguish ADT variant constructor types from parent ADT types.  Both a parent ADT
-    // `Color` and a standalone named type are represented as `Ty::Named("Color")`, and
-    // `TypeEnv` only maps parent → variant names (forward direction), with no reverse
-    // lookup from a variant name back to its parent ADT.  To implement this heuristic,
-    // `Ty` would need a `Ty::Variant { parent: String, name: String }` variant, or
-    // `TypeEnv` would need a reverse map (variant_name → parent_adt_name).
-    //
-    // TODO(v0.8+): add `Ty::Variant` (or a reverse variant-to-parent map in TypeEnv)
-    // and implement heuristic (iv) with dot-notation suggestion `Foo.Bar(...)`.
+    // Heuristic (iv): expected Named type Foo, found Named type Bar where Bar is a variant of Foo.
+    // Example: fn returns `Color` but the body uses bare `Red` (which resolved to `Ty::Named("Red")`).
+    // Suggest: `did you mean `Color.Red`?`
+    // Conservative guard: only fire when `found_name` resolves to *exactly one* parent ADT
+    // in scope and that parent matches `expected_name`. If `found_name` is a variant of
+    // multiple ADTs (ambiguous), no suggestion is emitted.
+    if let (Ty::Named(expected_name), Ty::Named(found_name)) = (expected, actual) {
+        if let Some(adt_name) = find_unique_adt_for_variant(found_name, env) {
+            if &adt_name == expected_name {
+                return Some(format!("did you mean `{}.{}`?", expected_name, found_name));
+            }
+        }
+    }
 
     None
 }

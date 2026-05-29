@@ -1,0 +1,13 @@
+# 26-linked-map-order.tyra
+# Validates: LinkedMap insertion order is preserved during iteration (ADR-0019)
+import linked_map
+
+fn main() -> Unit
+  let lm: LinkedMap<String, Int> = LinkedMap.new()
+  let lm = lm.insert("a", 1)
+  let lm = lm.insert("b", 2)
+  let lm = lm.insert("c", 3)
+  for k, v in lm
+    print("#{k}=#{v}")
+  end
+end

@@ -133,6 +133,34 @@ impl Ty {
         }
     }
 
+    /// Check if this is a LinkedMap<K,V> type (§11, ADR-0019).
+    pub fn is_linked_map(&self) -> bool {
+        matches!(self, Ty::Generic(name, args) if name == "LinkedMap" && args.len() == 2)
+    }
+
+    /// Extract (K, V) from LinkedMap<K,V>.
+    pub fn linked_map_kv(&self) -> Option<(&Ty, &Ty)> {
+        match self {
+            Ty::Generic(name, args) if name == "LinkedMap" && args.len() == 2 => {
+                Some((&args[0], &args[1]))
+            }
+            _ => None,
+        }
+    }
+
+    /// Check if this is a LinkedSet<T> type (§11, ADR-0019).
+    pub fn is_linked_set(&self) -> bool {
+        matches!(self, Ty::Generic(name, args) if name == "LinkedSet" && args.len() == 1)
+    }
+
+    /// Extract T from LinkedSet<T>.
+    pub fn linked_set_elem(&self) -> Option<&Ty> {
+        match self {
+            Ty::Generic(name, args) if name == "LinkedSet" && args.len() == 1 => Some(&args[0]),
+            _ => None,
+        }
+    }
+
     /// Generate a monomorphized name for codegen.
     /// e.g., Option<Int> → "Option__Int", Result<String, AppError> → "Result__String__AppError"
     pub fn monomorphized_name(&self) -> String {

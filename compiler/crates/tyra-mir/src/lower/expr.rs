@@ -311,6 +311,9 @@ impl super::LowerCtx<'_> {
                 let is_map = iter_ty
                     .as_ref()
                     .map_or(false, |t| matches!(t, tyra_types::Ty::Generic(n, args) if n == "Map" && args.len() == 2));
+                // §11 / ADR-0019: insertion-order collections.
+                let is_linked_map = iter_ty.as_ref().map_or(false, |t| t.is_linked_map());
+                let is_linked_set = iter_ty.as_ref().map_or(false, |t| t.is_linked_set());
 
                 if is_list {
                     let list_ty = iter_ty.unwrap();
@@ -517,8 +520,8 @@ impl super::LowerCtx<'_> {
 
                     // End
                     self.emit_synthetic(body, Instruction::Label(end_label));
-                } else if is_set || is_map {
-                    // Map/Set for-each via callback (v0.7.0).
+                } else if is_set || is_map || is_linked_map || is_linked_set {
+                    // Map/Set/LinkedMap/LinkedSet for-each via callback (v0.7.0/v0.8.0).
                     // Collect free variables in the body that come from the enclosing scope.
                     let binding_set: std::collections::HashSet<String> =
                         f.bindings.iter().cloned().collect();
@@ -578,9 +581,12 @@ impl super::LowerCtx<'_> {
                         });
                     }
 
+                    // Determine if this is a "key-value" (map-like) or "single-value" (set-like) iter.
+                    let is_kv_iter = is_map || is_linked_map;
+
                     // Determine binding types from iter type.
-                    let binding_tys: Vec<Ty> = if is_map {
-                        // Map<K,V> → [K, V]
+                    let binding_tys: Vec<Ty> = if is_kv_iter {
+                        // Map<K,V> / LinkedMap<K,V> → [K, V]
                         match iter_ty.as_ref().unwrap() {
                             tyra_types::Ty::Generic(_, args) => {
                                 vec![args[0].clone(), args[1].clone()]
@@ -588,7 +594,7 @@ impl super::LowerCtx<'_> {
                             _ => vec![Ty::Int, Ty::Int],
                         }
                     } else {
-                        // Set<T> → [T]
+                        // Set<T> / LinkedSet<T> → [T]
                         match iter_ty.as_ref().unwrap() {
                             tyra_types::Ty::Generic(_, args) => vec![args[0].clone()],
                             _ => vec![Ty::Int],
@@ -602,10 +608,20 @@ impl super::LowerCtx<'_> {
                     let snap_bool_vars = self.bool_vars.clone();
                     let snap_generic_var = self.generic_var_types.clone();
 
+                    // Determine the fn_prefix for the lifted callback function.
+                    let callback_prefix: Option<&'static str> = if is_linked_map {
+                        Some("__linked_map_iter")
+                    } else if is_linked_set {
+                        Some("__linked_set_iter")
+                    } else {
+                        None // use default (__map_iter / __set_iter)
+                    };
+
                     // Generate the lifted callback function.
                     self.lower_for_each_callback(
                         iter_id,
-                        is_map,
+                        is_kv_iter,
+                        callback_prefix,
                         &f.bindings,
                         &binding_tys,
                         &f.body,
@@ -621,6 +637,10 @@ impl super::LowerCtx<'_> {
                     // Build the fat-pointer value in the caller.
                     let fn_name = if is_map {
                         format!("__map_iter_{iter_id}")
+                    } else if is_linked_map {
+                        format!("__linked_map_iter_{iter_id}")
+                    } else if is_linked_set {
+                        format!("__linked_set_iter_{iter_id}")
                     } else {
                         format!("__set_iter_{iter_id}")
                     };
@@ -630,7 +650,7 @@ impl super::LowerCtx<'_> {
                         .collect();
 
                     // param_types for the fat ptr: box params (ptr = Ty::String used for ptr).
-                    let cb_param_types: Vec<Ty> = if is_map {
+                    let cb_param_types: Vec<Ty> = if is_kv_iter {
                         vec![Ty::String, Ty::String]
                     } else {
                         vec![Ty::String]
@@ -654,6 +674,22 @@ impl super::LowerCtx<'_> {
                         self.emit(
                             body,
                             Instruction::MapForEachCall {
+                                handle: Operand::Var(iter_val),
+                                fat_ptr: Operand::Var(fat_ptr),
+                            },
+                        );
+                    } else if is_linked_map {
+                        self.emit(
+                            body,
+                            Instruction::LinkedMapForEachCall {
+                                handle: Operand::Var(iter_val),
+                                fat_ptr: Operand::Var(fat_ptr),
+                            },
+                        );
+                    } else if is_linked_set {
+                        self.emit(
+                            body,
+                            Instruction::LinkedSetForEachCall {
                                 handle: Operand::Var(iter_val),
                                 fat_ptr: Operand::Var(fat_ptr),
                             },

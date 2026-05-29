@@ -517,6 +517,182 @@ pub(crate) fn emit_builtin_call(
             writeln!(out, "  %{d} = call i64 @tyra_set_len(ptr {s})").unwrap();
             true
         }
+        // §11 / ADR-0019: LinkedMap<K,V> generic intrinsics.
+        _ if fname.starts_with("__linked_map_new__") => {
+            let suffix = fname.strip_prefix("__linked_map_new__").unwrap_or("");
+            let parts: Vec<&str> = suffix.splitn(2, "__").collect();
+            let k = parts.first().copied().unwrap_or("String");
+            let d = dest.as_deref().unwrap_or("_lm");
+            writeln!(
+                out,
+                "  %{d} = call ptr @tyra_linked_map_new(ptr @tyra_eq_{k}, ptr @tyra_hash_{k})"
+            )
+            .unwrap();
+            true
+        }
+        _ if fname.starts_with("__linked_map_insert__") => {
+            let suffix = fname.strip_prefix("__linked_map_insert__").unwrap_or("");
+            let parts: Vec<&str> = suffix.splitn(2, "__").collect();
+            let k = parts.first().copied().unwrap_or("String");
+            let v = parts.get(1).copied().unwrap_or("Int");
+            let d = dest.as_deref().unwrap_or("_lm_ins");
+            let m = args
+                .first()
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            let k_val = args
+                .get(1)
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            let v_val = args
+                .get(2)
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "0".into());
+            emit_box_value(out, &format!("{d}.kbox"), k_val.as_str(), k, d);
+            emit_box_value(out, &format!("{d}.vbox"), v_val.as_str(), v, d);
+            writeln!(
+                out,
+                "  %{d} = call ptr @tyra_linked_map_insert(ptr {m}, ptr %{d}.kbox, ptr %{d}.vbox)"
+            )
+            .unwrap();
+            true
+        }
+        _ if fname.starts_with("__linked_map_remove__") => {
+            let k = fname
+                .strip_prefix("__linked_map_remove__")
+                .unwrap_or("String");
+            let d = dest.as_deref().unwrap_or("_lm_rm");
+            let m = args
+                .first()
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            let k_val = args
+                .get(1)
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            emit_box_value(out, &format!("{d}.kbox"), k_val.as_str(), k, d);
+            writeln!(
+                out,
+                "  %{d} = call ptr @tyra_linked_map_remove(ptr {m}, ptr %{d}.kbox)"
+            )
+            .unwrap();
+            true
+        }
+        _ if fname.starts_with("__linked_map_contains__") => {
+            let k = fname
+                .strip_prefix("__linked_map_contains__")
+                .unwrap_or("String");
+            let d = dest.as_deref().unwrap_or("_lm_has");
+            let m = args
+                .first()
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            let k_val = args
+                .get(1)
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            emit_box_value(out, &format!("{d}.kbox"), k_val.as_str(), k, d);
+            writeln!(
+                out,
+                "  %{d}.i32 = call i32 @tyra_linked_map_contains_key(ptr {m}, ptr %{d}.kbox)"
+            )
+            .unwrap();
+            writeln!(out, "  %{d} = icmp ne i32 %{d}.i32, 0").unwrap();
+            true
+        }
+        _ if fname == "__linked_map_len" => {
+            let d = dest.as_deref().unwrap_or("_lm_len");
+            let m = args
+                .first()
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            writeln!(out, "  %{d} = call i64 @tyra_linked_map_len(ptr {m})").unwrap();
+            true
+        }
+        // §11 / ADR-0019: LinkedSet<T> generic intrinsics.
+        _ if fname.starts_with("__linked_set_new__") => {
+            let t = fname.strip_prefix("__linked_set_new__").unwrap_or("Int");
+            let d = dest.as_deref().unwrap_or("_ls");
+            writeln!(
+                out,
+                "  %{d} = call ptr @tyra_linked_set_new(ptr @tyra_eq_{t}, ptr @tyra_hash_{t})"
+            )
+            .unwrap();
+            true
+        }
+        _ if fname.starts_with("__linked_set_insert__") => {
+            let t = fname
+                .strip_prefix("__linked_set_insert__")
+                .unwrap_or("Int");
+            let d = dest.as_deref().unwrap_or("_ls_ins");
+            let s = args
+                .first()
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            let k_val = args
+                .get(1)
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            emit_box_value(out, &format!("{d}.kbox"), k_val.as_str(), t, d);
+            writeln!(
+                out,
+                "  %{d} = call ptr @tyra_linked_set_insert(ptr {s}, ptr %{d}.kbox)"
+            )
+            .unwrap();
+            true
+        }
+        _ if fname.starts_with("__linked_set_remove__") => {
+            let t = fname
+                .strip_prefix("__linked_set_remove__")
+                .unwrap_or("Int");
+            let d = dest.as_deref().unwrap_or("_ls_rm");
+            let s = args
+                .first()
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            let k_val = args
+                .get(1)
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            emit_box_value(out, &format!("{d}.kbox"), k_val.as_str(), t, d);
+            writeln!(
+                out,
+                "  %{d} = call ptr @tyra_linked_set_remove(ptr {s}, ptr %{d}.kbox)"
+            )
+            .unwrap();
+            true
+        }
+        _ if fname.starts_with("__linked_set_contains__") => {
+            let t = fname
+                .strip_prefix("__linked_set_contains__")
+                .unwrap_or("Int");
+            let d = dest.as_deref().unwrap_or("_ls_has");
+            let s = args
+                .first()
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            let k_val = args
+                .get(1)
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            emit_box_value(out, &format!("{d}.kbox"), k_val.as_str(), t, d);
+            writeln!(
+                out,
+                "  %{d}.i32 = call i32 @tyra_linked_set_contains(ptr {s}, ptr %{d}.kbox)"
+            )
+            .unwrap();
+            writeln!(out, "  %{d} = icmp ne i32 %{d}.i32, 0").unwrap();
+            true
+        }
+        _ if fname == "__linked_set_len" => {
+            let d = dest.as_deref().unwrap_or("_ls_len");
+            let s = args
+                .first()
+                .map(|a| operand_ref(a, func))
+                .unwrap_or_else(|| "null".into());
+            writeln!(out, "  %{d} = call i64 @tyra_linked_set_len(ptr {s})").unwrap();
+            true
+        }
         // §17.3.5: list stdlib intrinsics (List<Int> only).
         "__list_int_push" => {
             emit_list_int_push(out, dest.as_deref(), args, func, ctx);

@@ -1156,6 +1156,7 @@ name = "tyra-codegen-llvm"
 version = "0.7.0"
 dependencies = [
  "inkwell",
+ "tyra-diagnostics",
  "tyra-mir",
  "tyra-types",
 ]

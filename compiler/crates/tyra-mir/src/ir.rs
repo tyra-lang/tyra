@@ -305,6 +305,17 @@ pub enum Instruction {
         val_ty: Ty,
     },
 
+    /// `dest = linked_map_get_option(handle, key)` — call `tyra_linked_map_get`,
+    /// check for null, and construct `Option<V>`.  Tag is 0 for Some, 1 for None.
+    /// Mirrors `MapGetOption` but calls the LinkedMap runtime (ADR-0019).
+    LinkedMapGetOption {
+        dest: String,
+        handle: Operand,
+        key: Operand,
+        key_ty: Ty,
+        val_ty: Ty,
+    },
+
     /// `dest = spawn func(args...)` — submit a task to the async runtime (§14.4, M9).
     /// Codegen emits a synthetic thunk that unboxes args, calls `func`, and boxes
     /// the result. `arg_types` and `result_type` drive the LLVM layout of the
@@ -394,6 +405,30 @@ pub enum Instruction {
     /// The callback signature is `fn(ptr ctx, ptr elembox) -> void`.
     SetForEachCall {
         /// Operand holding the `*mut TyraSet` pointer.
+        handle: Operand,
+        /// Operand holding the `*mut __closure_fat` fat-pointer value.
+        fat_ptr: Operand,
+    },
+
+    /// Call `tyra_linked_map_for_each(lm, env_ptr, fn_ptr)` where `fn_ptr`
+    /// and `env_ptr` are extracted from the fat-pointer closure built for the
+    /// for-loop callback (v0.8.0, ADR-0019).
+    /// The callback signature is `fn(ptr ctx, ptr kbox, ptr vbox) -> void`.
+    /// Iteration order is guaranteed to match insertion order.
+    LinkedMapForEachCall {
+        /// Operand holding the `*mut TyraLinkedMap` pointer.
+        handle: Operand,
+        /// Operand holding the `*mut __closure_fat` fat-pointer value.
+        fat_ptr: Operand,
+    },
+
+    /// Call `tyra_linked_set_for_each(ls, env_ptr, fn_ptr)` where `fn_ptr`
+    /// and `env_ptr` are extracted from the fat-pointer closure built for the
+    /// for-loop callback (v0.8.0, ADR-0019).
+    /// The callback signature is `fn(ptr ctx, ptr elembox) -> void`.
+    /// Iteration order is guaranteed to match insertion order.
+    LinkedSetForEachCall {
+        /// Operand holding the `*mut TyraLinkedSet` pointer.
         handle: Operand,
         /// Operand holding the `*mut __closure_fat` fat-pointer value.
         fat_ptr: Operand,

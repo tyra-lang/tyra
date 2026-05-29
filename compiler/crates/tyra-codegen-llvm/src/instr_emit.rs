@@ -866,6 +866,82 @@ pub(crate) fn emit_instruction(
             .unwrap();
         }
 
+        // v0.8.0 / ADR-0019: LinkedMap<K,V>.get(k) → Option<V>
+        // Mirrors MapGetOption but calls tyra_linked_map_get.
+        Instruction::LinkedMapGetOption {
+            dest,
+            handle,
+            key,
+            key_ty,
+            val_ty,
+        } => {
+            use tyra_types::Ty;
+            let h = operand_ref(handle, func);
+            let k = operand_ref(key, func);
+            let v_name = val_ty.monomorphized_name();
+            let opt_struct = format!("Option__{v_name}");
+            let opt_llvm = if let Some(info) = ctx.struct_map.get(&opt_struct) {
+                info.llvm_name.clone()
+            } else {
+                format!("%struct.{opt_struct}")
+            };
+
+            // Box the key.
+            match key_ty {
+                Ty::Int => {
+                    writeln!(out, "  %{dest}.kbox = call ptr @GC_malloc(i64 8)").unwrap();
+                    writeln!(out, "  store i64 {k}, ptr %{dest}.kbox").unwrap();
+                }
+                Ty::Bool => {
+                    writeln!(out, "  %{dest}.kbox = call ptr @GC_malloc(i64 8)").unwrap();
+                    writeln!(out, "  %{dest}.ki8 = zext i1 {k} to i8").unwrap();
+                    writeln!(out, "  store i8 %{dest}.ki8, ptr %{dest}.kbox").unwrap();
+                }
+                _ => {
+                    writeln!(out, "  %{dest}.kbox = call ptr @GC_malloc(i64 8)").unwrap();
+                    writeln!(out, "  store ptr {k}, ptr %{dest}.kbox").unwrap();
+                }
+            }
+
+            // vbox = tyra_linked_map_get(handle, kbox) — null = not found.
+            writeln!(
+                out,
+                "  %{dest}.vbox = call ptr @tyra_linked_map_get(ptr {h}, ptr %{dest}.kbox)"
+            )
+            .unwrap();
+            writeln!(out, "  %{dest}.present = icmp ne ptr %{dest}.vbox, null").unwrap();
+
+            writeln!(
+                out,
+                "  %{dest}.safe = select i1 %{dest}.present, ptr %{dest}.vbox, ptr @.tyra_zero_slot"
+            )
+            .unwrap();
+
+            let (val_llvm_ty, val_load_instr, val_zero) = match val_ty {
+                Ty::Bool => ("i1", "load i8, ptr", "0"),
+                Ty::Float => ("double", "load double, ptr", "0.0"),
+                Ty::String => ("ptr", "load ptr, ptr", "null"),
+                _ => ("i64", "load i64, ptr", "0"),
+            };
+            writeln!(out, "  %{dest}.rawval = {val_load_instr} %{dest}.safe").unwrap();
+            writeln!(out, "  %{dest}.tag = select i1 %{dest}.present, i8 0, i8 1").unwrap();
+            writeln!(
+                out,
+                "  %{dest}.val = select i1 %{dest}.present, {val_llvm_ty} %{dest}.rawval, {val_llvm_ty} {val_zero}"
+            )
+            .unwrap();
+            writeln!(
+                out,
+                "  %{dest}.s0 = insertvalue {opt_llvm} undef, i8 %{dest}.tag, 0"
+            )
+            .unwrap();
+            writeln!(
+                out,
+                "  %{dest} = insertvalue {opt_llvm} %{dest}.s0, {val_llvm_ty} %{dest}.val, 1"
+            )
+            .unwrap();
+        }
+
         Instruction::Spawn {
             dest,
             func: target_fn,
@@ -1010,6 +1086,62 @@ pub(crate) fn emit_instruction(
             writeln!(
                 out,
                 "  call void @tyra_set_for_each(ptr {h}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)"
+            )
+            .unwrap();
+        }
+
+        // v0.8.0 / ADR-0019: LinkedMap iteration via tyra_linked_map_for_each callback.
+        Instruction::LinkedMapForEachCall { handle, fat_ptr } => {
+            let h = operand_ref(handle, func);
+            let fp = operand_ref(fat_ptr, func);
+            let pfx = if let Operand::Var(name) = fat_ptr {
+                format!("__lmfe_{name}")
+            } else {
+                "__lmfe_c".to_string()
+            };
+            writeln!(
+                out,
+                "  %{pfx}.fnp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 0"
+            )
+            .unwrap();
+            writeln!(out, "  %{pfx}.fn_ptr = load ptr, ptr %{pfx}.fnp_gep").unwrap();
+            writeln!(
+                out,
+                "  %{pfx}.envp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 1"
+            )
+            .unwrap();
+            writeln!(out, "  %{pfx}.env_ptr = load ptr, ptr %{pfx}.envp_gep").unwrap();
+            writeln!(
+                out,
+                "  call void @tyra_linked_map_for_each(ptr {h}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)"
+            )
+            .unwrap();
+        }
+
+        // v0.8.0 / ADR-0019: LinkedSet iteration via tyra_linked_set_for_each callback.
+        Instruction::LinkedSetForEachCall { handle, fat_ptr } => {
+            let h = operand_ref(handle, func);
+            let fp = operand_ref(fat_ptr, func);
+            let pfx = if let Operand::Var(name) = fat_ptr {
+                format!("__lsfe_{name}")
+            } else {
+                "__lsfe_c".to_string()
+            };
+            writeln!(
+                out,
+                "  %{pfx}.fnp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 0"
+            )
+            .unwrap();
+            writeln!(out, "  %{pfx}.fn_ptr = load ptr, ptr %{pfx}.fnp_gep").unwrap();
+            writeln!(
+                out,
+                "  %{pfx}.envp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 1"
+            )
+            .unwrap();
+            writeln!(out, "  %{pfx}.env_ptr = load ptr, ptr %{pfx}.envp_gep").unwrap();
+            writeln!(
+                out,
+                "  call void @tyra_linked_set_for_each(ptr {h}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)"
             )
             .unwrap();
         }

@@ -358,6 +358,21 @@ fn emit_llvm_ir_impl(program: &Program, cov_map: Option<&CovMap>, emit_dwarf: bo
     writeln!(out, "declare i32 @tyra_set_contains(ptr, ptr)").unwrap();
     writeln!(out, "declare i64 @tyra_set_len(ptr)").unwrap();
     writeln!(out, "declare void @tyra_set_for_each(ptr, ptr, ptr)").unwrap();
+    // §11 / ADR-0019: LinkedMap<K,V> insertion-order map runtime.
+    writeln!(out, "declare ptr @tyra_linked_map_new(ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_linked_map_insert(ptr, ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_linked_map_remove(ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_linked_map_get(ptr, ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_linked_map_contains_key(ptr, ptr)").unwrap();
+    writeln!(out, "declare i64 @tyra_linked_map_len(ptr)").unwrap();
+    writeln!(out, "declare void @tyra_linked_map_for_each(ptr, ptr, ptr)").unwrap();
+    // §11 / ADR-0019: LinkedSet<T> insertion-order set runtime.
+    writeln!(out, "declare ptr @tyra_linked_set_new(ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_linked_set_insert(ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_linked_set_remove(ptr, ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_linked_set_contains(ptr, ptr)").unwrap();
+    writeln!(out, "declare i64 @tyra_linked_set_len(ptr)").unwrap();
+    writeln!(out, "declare void @tyra_linked_set_for_each(ptr, ptr, ptr)").unwrap();
     // Zero-slot for null-safe map-get unboxing (read-only; never written).
     writeln!(
         out,

@@ -1,6 +1,6 @@
 # Tyra Language Specification
 
-- **Version**: 0.7
+- **Version**: 0.8
 - **Status**: Stable
 - **Last updated**: 2026-05-27
 
@@ -841,6 +841,8 @@ end
 - `List<T>`
 - `Map<K, V>` — v0.6.0 で任意の `K: Eq + Hash` / 任意 `V` に完全一般化（§17.3.6）
 - `Set<T>` — v0.6.0 で任意の `T: Eq + Hash` として新設（§17.3.7）
+- `LinkedMap<K, V>` — v0.8.0 で新設。挿入順を保持する永続 Map（ADR-0019）
+- `LinkedSet<T>` — v0.8.0 で新設。挿入順を保持する永続 Set（ADR-0019）
 
 リテラル:
 
@@ -866,6 +868,55 @@ let z = items.get(0)?      # Option 早期 return (関数戻り値が Option の
 > - `List<T>`: `[]` / `.get(index)` / `for` の generic サポートは v0.1 で利用可能。`list` モジュール関数（`list.push` / `sum` / `max` / `min` / `contains` / `index_of`）は **`List<Int>` 専用** で凍結（§17.3.5）。`List<String>` などは `for` で走査可だが `list.*` 関数は使えない。
 > - `Map<K, V>`: v0.6.0 で任意 K / V に完全一般化（§17.3.6）。`remove` / イテレーションは後続リリース以降。
 > - `Set<T>`: v0.6.0 で新設（§17.3.7）。セットリテラル構文・集合演算は後続リリース以降。
+> - `LinkedMap<K, V>`: v0.8.0 で新設（ADR-0019）。`K: Eq + Hash`、任意 `V`。挿入順イテレーション対応。`import linked_map` が必要。
+> - `LinkedSet<T>`: v0.8.0 で新設（ADR-0019）。`T: Eq + Hash`。挿入順イテレーション対応。`import linked_set` が必要。
+
+### 11.1 LinkedMap — 挿入順保持 Map (v0.8.0, ADR-0019)
+
+`LinkedMap<K, V>` は挿入順序を保持する永続 Map である。`Map<K, V>` (HAMT ベース、反復順序未定義) とは異なり、`for k, v in lm` は常に最初の `.insert()` 呼び出し順で要素を返す。
+
+```tyra
+import linked_map
+
+let lm = LinkedMap.new()
+  .insert("a", 1)
+  .insert("b", 2)
+  .insert("c", 3)
+
+for k, v in lm
+  print("#{k}=#{v}")   # 出力: a=1, b=2, c=3 (この順)
+end
+
+let v = lm.get("b")       # Option<Int> — Some(2)
+let lm2 = lm.remove("a") # LinkedMap<String, Int>; "b", "c" が残る
+let ok = lm.contains_key("c")  # Bool — true
+let n = lm.len()               # Int — 3
+```
+
+**制約**: `K` は `Eq + Hash` ability constraint を満たす必要がある。`Float` キーは不可。
+
+### 11.2 LinkedSet — 挿入順保持 Set (v0.8.0, ADR-0019)
+
+`LinkedSet<T>` は挿入順序を保持する永続 Set である。
+
+```tyra
+import linked_set
+
+let ls = LinkedSet.new()
+  .insert(10)
+  .insert(20)
+  .insert(30)
+
+for x in ls
+  print(x)   # 出力: 10, 20, 30 (この順)
+end
+
+let ok = ls.contains(20)  # Bool — true
+let ls2 = ls.remove(20)   # LinkedSet<Int>; 10, 30 が残る
+let n = ls.len()           # Int — 3
+```
+
+**制約**: `T` は `Eq + Hash` ability constraint を満たす必要がある。`Float` 要素は不可。
 
 ---
 

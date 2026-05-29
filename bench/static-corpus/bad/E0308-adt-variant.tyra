@@ -1,0 +1,11 @@
+# E0308-adt-variant.tyra
+# Heuristic (iv): bare variant name used where the parent ADT type is expected.
+# expects: error[E0308]
+# expects: help: did you mean `Color.Red`?
+
+type Color =
+  | Red
+  | Green
+  | Blue
+
+let c: Color = Red
