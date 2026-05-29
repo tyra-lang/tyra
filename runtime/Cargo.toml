@@ -27,4 +27,7 @@ crossbeam-channel = "0.5"
 # avoids the native OpenSSL / SecureTransport dependency.
 ureq = { version = ">=2.12, <3", default-features = false, features = ["tls"] }
 
+[build-dependencies]
+vcpkg = "0.2"
+
 [dev-dependencies]
