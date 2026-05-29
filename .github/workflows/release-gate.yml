@@ -448,9 +448,8 @@ jobs:
           echo "$output" | grep -qE '^not ok ' && { echo "FAIL: test-name panics smoke tests have failures"; exit 1; } || true
 
   release-gate-windows:
-    name: build + test + smoke (windows tracking)
+    name: build + test + smoke (windows required)
     runs-on: windows-2025-vs2026
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4

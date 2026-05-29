@@ -170,7 +170,7 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | Linux x86_64 (glibc) | Dynamic | Supported |
 | Linux x86_64 (musl) | Static | Supported (v0.5.0+) |
 | macOS arm64 | Dynamic | Supported |
-| Windows | — | Unguaranteed (tracking) |
+| Windows x86_64 (MSVC) | Dynamic (`gc.dll` same-dir) | Supported (v0.8.0+, MSVC ABI, `gc.dll` same-dir) |
 
 **Using the musl static release artifact:**
 
@@ -205,7 +205,7 @@ tyra build --static myprogram.tyra
 
 ## Known limitations
 
-- **Windows**: untested. Build via WSL2 is recommended. A non-blocking tracking CI job surfaces toolchain drift.
+- **Windows**: supported on x86_64-pc-windows-msvc (v0.8.0+, MSVC ABI). Place `gc.dll` in the same directory as the output binary. MinGW GNU ABI is not supported. Windows ARM64 is deferred to v0.9.
 - **`tyra build --static`**: only reliable on musl. glibc static linking is unsupported (breaks `getaddrinfo`).
 - **`http.server`**: experimental. Single-threaded, no TLS, no middleware. Do not use in production.
 - **Breaking changes**: expect breaking changes before v1.0.
