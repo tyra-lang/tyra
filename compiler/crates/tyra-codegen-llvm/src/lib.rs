@@ -16,6 +16,119 @@ mod type_scan;
 pub use codegen::{emit_llvm_ir, emit_llvm_ir_coverage, emit_llvm_ir_debug};
 pub use coverage::{CovMap, format_report, merge_covraw, parse_covmap, write_covmap_text};
 
+use tyra_diagnostics::Diagnostic;
+use tyra_mir::{Instruction, Program};
+use tyra_types::Ty;
+
+/// Guard: `Ty::Error` or an unresolved `Ty::Var` must never reach codegen.
+///
+/// Walks the MIR Program looking for unresolved types in function signatures,
+/// struct definitions, local metadata, and instruction operands.  If any are
+/// found, returns a `Vec<Diagnostic>` containing one or more E9001 entries
+/// (Internal Compiler Error).  Returning `Err` keeps LLVM from crashing on
+/// malformed IR and presents the user with a normal compiler error instead of
+/// a Rust panic / backtrace.
+///
+/// Why this is an ICE (E9001) and not a regular error:
+///   By the time MIR is generated, the type checker should have either fully
+///   resolved every type or emitted a user-facing diagnostic (E0xxx) and
+///   refused to proceed.  An unresolved type at this stage therefore signals
+///   a checker bug, not user error.
+pub fn check_no_type_errors(program: &Program) -> Result<(), Vec<Diagnostic>> {
+    let mut diags: Vec<Diagnostic> = Vec::new();
+
+    fn push_ice(ctx: &str, ty: &Ty, diags: &mut Vec<Diagnostic>) {
+        if has_unresolved(ty) {
+            diags.push(
+                Diagnostic::error(format!(
+                    "internal compiler error: unresolved type reached code generation \
+                     ({ctx}: `{}`)",
+                    ty.display_name()
+                ))
+                .with_code("E9001")
+                .with_help(
+                    "This is a compiler bug. Please report at \
+                     https://github.com/tyra-lang/tyra/issues",
+                ),
+            );
+        }
+    }
+
+    for sd in &program.struct_defs {
+        for (fname, fty) in &sd.fields {
+            push_ice(
+                &format!("struct `{}` field `{}`", sd.name, fname),
+                fty,
+                &mut diags,
+            );
+        }
+    }
+
+    for func in &program.functions {
+        for (pname, pty) in &func.params {
+            push_ice(
+                &format!("function `{}` parameter `{}`", func.name, pname),
+                pty,
+                &mut diags,
+            );
+        }
+        push_ice(
+            &format!("function `{}` return type", func.name),
+            &func.return_type,
+            &mut diags,
+        );
+        for lm in &func.local_metas {
+            push_ice(
+                &format!("function `{}` local `{}`", func.name, lm.name),
+                &lm.ty,
+                &mut diags,
+            );
+        }
+        for stmt in &func.body {
+            for ty in instruction_types(&stmt.instr) {
+                push_ice(
+                    &format!("function `{}` instruction", func.name),
+                    ty,
+                    &mut diags,
+                );
+            }
+        }
+    }
+
+    if diags.is_empty() {
+        Ok(())
+    } else {
+        Err(diags)
+    }
+}
+
+/// Recursively check whether `ty` contains a `Ty::Error` or an unresolved
+/// `Ty::Var` placeholder.
+fn has_unresolved(ty: &Ty) -> bool {
+    match ty {
+        Ty::Error | Ty::Var(_) => true,
+        Ty::Generic(_, args) => args.iter().any(has_unresolved),
+        Ty::Fn(params, ret) => params.iter().any(has_unresolved) || has_unresolved(ret),
+        _ => false,
+    }
+}
+
+/// Extract type fields appearing inside a single MIR `Instruction`.
+///
+/// Only a representative subset is scanned (those carrying user-visible types).
+/// The primary leak vectors — function signatures, struct defs, and local
+/// metadata — are checked by the caller, so this scan is intentionally narrow.
+fn instruction_types(instr: &Instruction) -> Vec<&Ty> {
+    match instr {
+        Instruction::PtrLoad { ty, .. } => vec![ty],
+        Instruction::ListInit { elem_type, .. }
+        | Instruction::ListGet { elem_type, .. }
+        | Instruction::ListGetSafe { elem_type, .. }
+        | Instruction::ListPush { elem_type, .. } => vec![elem_type],
+        _ => Vec::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

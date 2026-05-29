@@ -21,6 +21,7 @@ llvm22-1 = ["inkwell/llvm22-1"]
 llvm22-1-prefer-dynamic = ["inkwell/llvm22-1-prefer-dynamic"]
 
 [dependencies]
+tyra-diagnostics.workspace = true
 tyra-mir.workspace = true
 tyra-types.workspace = true
 inkwell = { version = "0.9", default-features = false }

@@ -1342,12 +1342,16 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                         "Map key type `{}` requires Eq + Hash, which is not yet supported for this type",
                         key_ty.display_name()
                     ))
+                    .with_code("E0308")
                     .with_label(Label::new(expr.span, "unsupported key type"))
                     .with_note(
                         "Supported Map key types: Int, Bool, String. \
                          Support for user-defined value types (with Eq + Hash) is planned for a future release.",
                     ),
                 );
+                // A user-facing E0308 has been emitted; returning Ty::Error
+                // here is safe because the driver bails on `report.has_errors()`
+                // before invoking codegen, so the E9001 ICE guard never sees it.
                 return Ty::Error;
             }
             if !matches!(val_ty, Ty::Int | Ty::Bool | Ty::String | Ty::Error) {
@@ -1356,12 +1360,14 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                         "Map value type `{}` is not supported in this version",
                         val_ty.display_name()
                     ))
+                    .with_code("E0308")
                     .with_label(Label::new(expr.span, "unsupported value type"))
                     .with_note(
                         "Map values must be Int, Bool, or String. \
                          User-defined value types are planned for a future release.",
                     ),
                 );
+                // See note above: E0308 emitted, Ty::Error is safe to return.
                 return Ty::Error;
             }
             // Check K: Eq + Hash using the existing ability system.
@@ -1953,6 +1959,10 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 // obj_ty was inferred above (line ~1511); reuse it rather than
                 // calling infer_expr(obj) again.
                 if matches!(obj_ty, Ty::Error) {
+                    // Receiver already failed to type-check — a prior diagnostic
+                    // has already been emitted.  Suppress cascade and propagate
+                    // Ty::Error; the driver bails on `report.has_errors()`
+                    // before codegen, so the E9001 guard will never see this.
                     return Ty::Error;
                 }
                 let type_name = match &obj_ty {
@@ -1964,6 +1974,14 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 {
                     return ret.clone();
                 }
+                // Note: a known Named type without a registered impl-method
+                // entry is intentionally left silent here.  Several methods
+                // (e.g. `value.copy(field: new_value)`) are dispatched during
+                // MIR lowering rather than during type-check, so emitting
+                // E0204 unconditionally would break legitimate programs.
+                // If such a method is truly unknown, MIR lowering raises a
+                // diagnostic; if Ty::Error still escapes, the E9001 guard at
+                // codegen entry will catch it.
                 // Unknown method on a known generic type — emit E0204 so the user
                 // sees a clear error instead of a silent Ty::Error that later
                 // crashes codegen with E0500 (i64/ptr type mismatch in LLVM IR).
@@ -1999,6 +2017,35 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                         .with_code("E0204")
                         .with_label(Label::new(expr.span, "method called here"))
                         .with_help(help_msg),
+                    );
+                    return Ty::Error;
+                }
+                // Catch-all: method called on a receiver that is neither a
+                // Named user type nor a known-generic stdlib type — for
+                // example, a primitive (`5.foo()`), a function value, or an
+                // unresolved `Ty::Var`.  Without a diagnostic here, Ty::Error
+                // would silently leak into MIR and be caught only by the
+                // E9001 ICE guard at codegen entry.  Emit E0204 so the user
+                // gets a normal error message.
+                //
+                // Named receivers are intentionally NOT caught here: methods
+                // such as `value.copy(...)` are dispatched during MIR lowering
+                // and would otherwise raise a spurious E0204 at type-check
+                // time.
+                if type_name.is_none() && !matches!(obj_ty, Ty::Generic(_, _)) {
+                    report.add(
+                        Diagnostic::error(format!(
+                            "unknown method `{}` on `{}`",
+                            method,
+                            obj_ty.display_name()
+                        ))
+                        .with_code("E0204")
+                        .with_label(Label::new(expr.span, "method called here"))
+                        .with_help(
+                            "Methods are resolved against the receiver's type. \
+                             Verify the receiver has the expected type and that \
+                             the method is defined for it.",
+                        ),
                     );
                 }
                 return Ty::Error;

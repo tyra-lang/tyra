@@ -273,6 +273,25 @@ fn compile_to_ir_impl(
         );
     }
 
+    // ICE guard (E9001): refuse to invoke LLVM codegen on a MIR that still
+    // carries `Ty::Error` or unresolved `Ty::Var`. Such types signal a bug in
+    // the type checker; without this guard they would crash LLVM with an opaque
+    // type-mismatch (the previous E0500 LLVM-IR failure mode).
+    if let Err(diags) = tyra_codegen_llvm::check_no_type_errors(&mir) {
+        for d in diags {
+            report.add(d);
+        }
+        return (
+            CompileResult {
+                success: false,
+                report,
+                sources,
+                llvm_ir: None,
+            },
+            None,
+        );
+    }
+
     // LLVM IR generation
     if coverage {
         let (llvm_ir, covmap_text) = tyra_codegen_llvm::emit_llvm_ir_coverage(&mir);
