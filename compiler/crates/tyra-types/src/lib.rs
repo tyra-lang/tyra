@@ -8,7 +8,7 @@ mod checker;
 mod ty;
 
 pub use checker::{TypeEnv, TypeIndex, check, infer_expr};
-pub use ty::{Ty, types_compatible};
+pub use ty::{Substitution, Ty, TyVarId, UnifyError, types_compatible, unify};
 
 #[cfg(test)]
 mod tests {
