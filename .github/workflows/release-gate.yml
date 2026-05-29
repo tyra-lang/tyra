@@ -458,6 +458,12 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install bdwgc via vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: "a34c873a9717a888f58dc05268dea15592c2f0ff"
+          runVcpkgInstall: true
+
       - name: Cache cargo registry and target
         uses: actions/cache@v4
         with:
