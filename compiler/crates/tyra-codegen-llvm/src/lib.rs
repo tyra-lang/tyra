@@ -113,19 +113,73 @@ fn has_unresolved(ty: &Ty) -> bool {
     }
 }
 
-/// Extract type fields appearing inside a single MIR `Instruction`.
+/// Extract every `Ty` carried by a single MIR `Instruction`.
 ///
-/// Only a representative subset is scanned (those carrying user-visible types).
-/// The primary leak vectors — function signatures, struct defs, and local
-/// metadata — are checked by the caller, so this scan is intentionally narrow.
+/// Exhaustive over all instruction variants that embed a `Ty`. When a new
+/// instruction variant with a `Ty` field is added to `ir.rs`, this function
+/// must be updated — the explicit wildcard-free match below ensures the
+/// compiler will flag the omission.
 fn instruction_types(instr: &Instruction) -> Vec<&Ty> {
     match instr {
         Instruction::PtrLoad { ty, .. } => vec![ty],
+
         Instruction::ListInit { elem_type, .. }
         | Instruction::ListGet { elem_type, .. }
         | Instruction::ListGetSafe { elem_type, .. }
-        | Instruction::ListPush { elem_type, .. } => vec![elem_type],
-        _ => Vec::new(),
+        | Instruction::ListPush { elem_type, .. }
+        | Instruction::JoinAll { elem_type, .. }
+        | Instruction::Select { elem_type, .. } => vec![elem_type],
+
+        Instruction::MapGetOption { key_ty, val_ty, .. }
+        | Instruction::LinkedMapGetOption { key_ty, val_ty, .. } => vec![key_ty, val_ty],
+
+        Instruction::Spawn { arg_types, result_type, .. } => {
+            let mut tys: Vec<&Ty> = arg_types.iter().collect();
+            tys.push(result_type);
+            tys
+        }
+
+        Instruction::Await { result_type, .. } => vec![result_type],
+
+        Instruction::ClosureBuild { param_types, return_type, .. } => {
+            let mut tys: Vec<&Ty> = param_types.iter().collect();
+            tys.push(return_type);
+            tys
+        }
+
+        Instruction::IndirectCall { param_types, return_type, .. } => {
+            let mut tys: Vec<&Ty> = param_types.iter().collect();
+            tys.push(return_type);
+            tys
+        }
+
+        // No embedded Ty fields:
+        Instruction::Const { .. }
+        | Instruction::Call { .. }
+        | Instruction::BinOp { .. }
+        | Instruction::Neg { .. }
+        | Instruction::Not { .. }
+        | Instruction::Copy { .. }
+        | Instruction::Return { .. }
+        | Instruction::Label { .. }
+        | Instruction::BranchIf { .. }
+        | Instruction::Jump { .. }
+        | Instruction::Phi { .. }
+        | Instruction::Alloca { .. }
+        | Instruction::Store { .. }
+        | Instruction::Load { .. }
+        | Instruction::StructInit { .. }
+        | Instruction::FieldGet { .. }
+        | Instruction::FieldSet { .. }
+        | Instruction::AdtInit { .. }
+        | Instruction::AdtTag { .. }
+        | Instruction::AdtPayload { .. }
+        | Instruction::StringFormat { .. }
+        | Instruction::ListLen { .. }
+        | Instruction::MapForEachCall { .. }
+        | Instruction::SetForEachCall { .. }
+        | Instruction::LinkedMapForEachCall { .. }
+        | Instruction::LinkedSetForEachCall { .. } => Vec::new(),
     }
 }
 

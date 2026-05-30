@@ -940,6 +940,7 @@ impl super::LowerCtx<'_> {
                 .binding_type_hint
                 .as_ref()
                 .and_then(|h| h.linked_map_kv())
+                .or_else(|| self.current_fn_return_type.linked_map_kv())
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .unwrap_or((Ty::String, Ty::Int));
             let lm_ty = Ty::Generic("LinkedMap".into(), vec![k_ty.clone(), v_ty.clone()]);

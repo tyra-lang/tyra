@@ -1532,6 +1532,62 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     return Ty::Error;
                 }
 
+                // LinkedMap.new() — mirror set.new() inference: binding hint → return type → error.
+                if let ExprKind::Ident(mod_name) = &obj.kind
+                    && mod_name == "LinkedMap"
+                    && method == "new"
+                    && args.is_empty()
+                {
+                    if let Some(lm_ty) =
+                        env.binding_type_hint.as_ref().and_then(|t| peel_to_linked_map(t))
+                    {
+                        return lm_ty.clone();
+                    }
+                    if let Some(lm_ty) =
+                        env.current_return_type().and_then(|t| peel_to_linked_map(t))
+                    {
+                        return lm_ty.clone();
+                    }
+                    report.add(
+                        Diagnostic::error("cannot infer LinkedMap key/value types".to_string())
+                            .with_code("E0308")
+                            .with_label(Label::new(expr.span, "key/value types unknown"))
+                            .with_note(
+                                "add a type annotation: \
+                                 `let m: LinkedMap<String, Int> = LinkedMap.new()`",
+                            ),
+                    );
+                    return Ty::Error;
+                }
+
+                // LinkedSet.new() — mirror set.new() inference.
+                if let ExprKind::Ident(mod_name) = &obj.kind
+                    && mod_name == "LinkedSet"
+                    && method == "new"
+                    && args.is_empty()
+                {
+                    if let Some(ls_ty) =
+                        env.binding_type_hint.as_ref().and_then(|t| peel_to_linked_set(t))
+                    {
+                        return ls_ty.clone();
+                    }
+                    if let Some(ls_ty) =
+                        env.current_return_type().and_then(|t| peel_to_linked_set(t))
+                    {
+                        return ls_ty.clone();
+                    }
+                    report.add(
+                        Diagnostic::error("cannot infer LinkedSet element type".to_string())
+                            .with_code("E0308")
+                            .with_label(Label::new(expr.span, "element type unknown"))
+                            .with_note(
+                                "add a type annotation: \
+                                 `let s: LinkedSet<Int> = LinkedSet.new()`",
+                            ),
+                    );
+                    return Ty::Error;
+                }
+
                 let obj_ty = infer_expr(obj, env, report);
                 check_trait_method_call(&obj_ty, method, expr.span, env, report);
 
@@ -1596,6 +1652,68 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                         "len" if args.is_empty() => {
                             return Ty::Int;
                         }
+                        _ => {}
+                    }
+                }
+
+                // LinkedMap<K,V> method dispatch (ADR-0019, v0.8.0).
+                if let Ty::Generic(name, type_args) = &obj_ty
+                    && name == "LinkedMap"
+                    && type_args.len() == 2
+                {
+                    let key_ty = type_args[0].clone();
+                    let val_ty = type_args[1].clone();
+                    match method.as_str() {
+                        "insert" if args.len() == 2 => {
+                            let arg_k = infer_expr(&args[0].value, env, report);
+                            let arg_v = infer_expr(&args[1].value, env, report);
+                            check_type_match(&key_ty, &arg_k, args[0].span, None, env, report);
+                            check_type_match(&val_ty, &arg_v, args[1].span, None, env, report);
+                            return obj_ty.clone();
+                        }
+                        "remove" if args.len() == 1 => {
+                            let arg_k = infer_expr(&args[0].value, env, report);
+                            check_type_match(&key_ty, &arg_k, args[0].span, None, env, report);
+                            return obj_ty.clone();
+                        }
+                        "contains_key" if args.len() == 1 => {
+                            let arg_k = infer_expr(&args[0].value, env, report);
+                            check_type_match(&key_ty, &arg_k, args[0].span, None, env, report);
+                            return Ty::Bool;
+                        }
+                        "get" if args.len() == 1 => {
+                            let arg_k = infer_expr(&args[0].value, env, report);
+                            check_type_match(&key_ty, &arg_k, args[0].span, None, env, report);
+                            return Ty::Generic("Option".into(), vec![val_ty]);
+                        }
+                        "len" if args.is_empty() => return Ty::Int,
+                        _ => {}
+                    }
+                }
+
+                // LinkedSet<T> method dispatch (ADR-0019, v0.8.0).
+                if let Ty::Generic(name, type_args) = &obj_ty
+                    && name == "LinkedSet"
+                    && !type_args.is_empty()
+                {
+                    let elem_ty = type_args[0].clone();
+                    match method.as_str() {
+                        "insert" if args.len() == 1 => {
+                            let arg_ty = infer_expr(&args[0].value, env, report);
+                            check_type_match(&elem_ty, &arg_ty, args[0].span, None, env, report);
+                            return obj_ty.clone();
+                        }
+                        "remove" if args.len() == 1 => {
+                            let arg_ty = infer_expr(&args[0].value, env, report);
+                            check_type_match(&elem_ty, &arg_ty, args[0].span, None, env, report);
+                            return obj_ty.clone();
+                        }
+                        "contains" if args.len() == 1 => {
+                            let arg_ty = infer_expr(&args[0].value, env, report);
+                            check_type_match(&elem_ty, &arg_ty, args[0].span, None, env, report);
+                            return Ty::Bool;
+                        }
+                        "len" if args.is_empty() => return Ty::Int,
                         _ => {}
                     }
                 }
@@ -2735,6 +2853,34 @@ fn peel_to_set(ty: &Ty) -> Option<&Ty> {
             "Result" if args.len() == 2 => return peel_to_set(&args[0]),
             // List<Set<T>> → peel the element (unlikely but consistent)
             "List" if args.len() == 1 => return peel_to_set(&args[0]),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn peel_to_linked_map(ty: &Ty) -> Option<&Ty> {
+    if ty.is_linked_map() {
+        return Some(ty);
+    }
+    if let Ty::Generic(name, args) = ty {
+        match name.as_str() {
+            "Option" if args.len() == 1 => return peel_to_linked_map(&args[0]),
+            "Result" if args.len() == 2 => return peel_to_linked_map(&args[0]),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn peel_to_linked_set(ty: &Ty) -> Option<&Ty> {
+    if ty.is_linked_set() {
+        return Some(ty);
+    }
+    if let Ty::Generic(name, args) = ty {
+        match name.as_str() {
+            "Option" if args.len() == 1 => return peel_to_linked_set(&args[0]),
+            "Result" if args.len() == 2 => return peel_to_linked_set(&args[0]),
             _ => {}
         }
     }
