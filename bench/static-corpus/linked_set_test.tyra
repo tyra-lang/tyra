@@ -1,5 +1,8 @@
 # bench/static-corpus/linked_set_test.tyra
-# Tests LinkedSet insertion order, contains, remove, len.
+# Tests LinkedSet contains, remove (persistent semantics), and len.
+# Insertion-order iteration is compile-verified in 28-linked-set.tyra (for-loop
+# over LinkedSet compiles); a pure-Tyra value accumulator across for-loop
+# iterations requires mut capture, which is constrained by ADR-0011 (E0402).
 # SPEC_REF: §11 (LinkedSet — insertion-order-preserving persistent collection, ADR-0019, v0.8.0)
 import assert
 import linked_set
