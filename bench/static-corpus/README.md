@@ -110,7 +110,7 @@ The script is informational (exits 0); it is not run in CI.
 
 ### Windows corpus (`win/`)
 
-Files in `win/` are smoke-test programs specifically for the Windows MSVC ABI target (ADR-0021, v0.8.0). They are **not** checked by the default `check.sh` (which targets the host platform). They are run by the `release-gate-windows` CI job and can be compiled manually with:
+Files in `win/` are smoke-test programs specifically for the Windows MSVC ABI target (ADR-0021, v0.8.0). They are **not** checked by the default `check.sh` (which targets the host platform) and are **not yet wired into CI** — they serve as documentation for the expected Windows deployment model (`gc.dll` same-dir) and can be compiled manually with:
 
 ```powershell
 .\target\debug\tyra.exe build bench\static-corpus\win\01-hello-win.tyra

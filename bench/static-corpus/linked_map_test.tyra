@@ -11,10 +11,24 @@ fn test_linked_map_get() -> Result<Unit, String>
   let m: LinkedMap<String, Int> = LinkedMap.new()
   let m = m.insert("a", 1)
   let m = m.insert("b", 2)
-  assert.eq(m.get("a"), Some(1))?
-  assert.eq(m.get("b"), Some(2))?
-  assert.eq(m.get("z"), None)?
-  Ok(())
+  match m.get("a")
+  when Some(v)
+    assert.eq(v, 1)?
+  when None
+    Err("expected Some(1) for key 'a', got None")?
+  end
+  match m.get("b")
+  when Some(v)
+    assert.eq(v, 2)?
+  when None
+    Err("expected Some(2) for key 'b', got None")?
+  end
+  match m.get("z")
+  when Some(_)
+    Err("expected None for key 'z', got Some")?
+  when None
+    Ok(())
+  end
 end
 
 fn test_linked_map_contains_key() -> Result<Unit, String>
