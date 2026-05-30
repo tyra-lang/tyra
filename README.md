@@ -2,7 +2,7 @@
 
 A statically-typed, AI-friendly programming language for backend services, CLI tools, and business applications.
 
-> **v0.8.0** — Hindley-Milner type inference (rank-1), E0500 LLVM crash eliminated (E9001 ICE guard), `LinkedMap<K,V>` / `LinkedSet<T>` (insertion-order-preserving), E0308 heuristic iv (ADT variant suggestion), Windows native support (MSVC ABI, `vcpkg` + `lld-link`). AI-gen benchmark: 86/100 pass (E0500: 0). [See known limitations](#known-limitations) before using in production.
+> **v0.8.0** — Hindley-Milner type inference (rank-1), E0500 LLVM crash eliminated (E9001 ICE guard), `LinkedMap<K,V>` / `LinkedSet<T>` (insertion-order-preserving), E0308 heuristic iv (ADT variant suggestion), Windows native support (MSVC ABI, `vcpkg` + `lld-link`). **E0500 occurrences: 0** in AI-gen benchmark Run 18 (86/100 pass, seed=18 — seed differs from Run 17's seed=2, so pass-count comparison is not direct; see [`bench/ai-gen/results/SUMMARY.md`](bench/ai-gen/results/SUMMARY.md)). [See known limitations](#known-limitations) before using in production.
 
 ---
 

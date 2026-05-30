@@ -101,26 +101,32 @@ let p2 = p1.copy(x: 3.0)
 
 ## 開発状況
 
-**v0.4.0 で安定** — サポート済み・テスト済み:
+**v0.8.0 で安定** — サポート済み・テスト済み:
 
 | コンポーネント | 備考 |
 | --- | --- |
-| 言語仕様 v0.4 | ✅ 完成 |
+| 言語仕様 v0.8 | ✅ 完成 |
 | Lexer / Parser / 型検査器 | ✅ 完成 |
-| LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 |
-| 標準ライブラリ: string, list, fs, io, float, json, assert | ✅ 完成 |
+| Hindley-Milner 型推論 (rank-1)、E9001 ICE ガード | ✅ 完成 (v0.8.0+) |
+| E0308 ヒューリスティック iv — ADT バリアント提案 | ✅ 完成 (v0.8.0+) |
+| `LinkedMap<K,V>` / `LinkedSet<T>` — 挿入順保持 永続コレクション | ✅ 完成 (v0.8.0+) |
+| Windows ネイティブサポート (MSVC ABI、vcpkg + lld-link) | ✅ 完成 (v0.8.0+) |
+| LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 / Windows x86_64 |
+| 標準ライブラリ: string, list, fs, io, float, json, assert, time, log | ✅ 完成 |
 | `tyra check / run / build / fmt / test / new / mod / bench` CLI | ✅ 完成 |
-| `tyra test --timeout` / `--jobs N` — タイムアウト・並列実行 | ✅ 完成 |
+| `tyra test --timeout` / `--jobs N` / `--coverage` | ✅ 完成 |
 | `tyra bench <dir>` — 汎用 wall-clock ベンチランナー | ✅ 完成 |
 | ラムダ / クロージャ (spec §9.4, ADR 0011) | ✅ 完成 |
 | ジェネリック `List<T>` + `map`/`filter`/`fold` | ✅ 完成 |
-| `assert.eq` / `assert.ne` ジェネリック多重定義 (Int, String, Bool) | ✅ 完成 |
 | `Tyra.lock` + floating `branch` 制約 + 推移的依存解決 | ✅ 完成 |
 | `Tyra.toml` マニフェスト + `tyra mod` 依存管理 (`--locked` CI モード) | ✅ 完成 |
+| HAMT 永続 `Map<K,V>` / `Set<T>` + `for k, v in m` / `for v in s` | ✅ 完成 (v0.7.0+) |
+| DAP デバッガ (DWARF + lldb-dap + VS Code ブレークポイント / ローカル変数) | ✅ 完成 (v0.6.0+) |
+| `tyra test --coverage` — ライン / 関数カバレッジレポート | ✅ 完成 (v0.6.0+) |
 | LSP サーバ (`tyra-lsp`) + VS Code 拡張 | ✅ 開発インストール可 |
-| 静的適合コーパス (19 本 + エラー事例) | ✅ CI ゲート済み |
+| 静的適合コーパス (33 本 + エラー事例 21 本) | ✅ CI ゲート済み |
 
-**v0.4.0 で実験的** — 含まれているが本番利用不可:
+**実験的** — 含まれているが本番利用不可:
 
 | コンポーネント | 備考 |
 | --- | --- |
@@ -130,10 +136,11 @@ let p2 = p1.copy(x: 3.0)
 
 | コンポーネント | 備考 |
 | --- | --- |
-| registry-backed SemVer リゾルバ、`tyra publish` | ⏳ v0.5+ 予定 |
-| `assert.panics` | ⏳ テスト分離が必要 |
-| `test "name"` 言語構文 | ⏳ 別途 ADR が必要 |
-| ビルド済みバイナリ (homebrew, apt) | ⏳ 将来予定 |
+| registry-backed SemVer リゾルバ、`tyra publish` | ⏳ 将来予定 |
+| inkwell IR 生成への移行 (writeln! → builder API) | ⏳ v0.9 予定 |
+| Windows ARM64 / MSVC PDB デバッグシンボル | ⏳ v0.9 予定 |
+| `SortedMap` / `SortedSet` (ソート順コレクション) | ⏳ v0.9 予定 |
+| ビルド済みバイナリ (Homebrew, apt) | ⏳ 将来予定 |
 | VS Code Marketplace 公開 | ⏳ 将来予定 |
 
 ## 既知の制限
