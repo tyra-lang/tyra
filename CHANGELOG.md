@@ -32,26 +32,25 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - `import linked_map` / `import linked_set` to use; no literal syntax in v0.8.
 - Runtime conformance tests: `bench/static-corpus/linked_map_test.tyra` (4 tests), `bench/static-corpus/linked_set_test.tyra` (3 tests).
 
-**Windows native support — MSVC ABI (ADR-0021)**
-- `vcpkg.json` manifest: `bdwgc` (Boehm GC) via `x64-windows` (MSVC dynamic) triplet.
-- `tyra-driver`: Windows linker path uses `llc.exe` (IR → COFF obj, `-mtriple=x86_64-pc-windows-msvc`) + `lld-link.exe` with explicit CRT imports (`ucrt.lib`, `msvcrt.lib`, `vcruntime.lib`, `kernel32.lib`, `ole32.lib`).
-- `gc.dll` auto-copied next to the output binary by `tyra build`; Windows DLL loader resolves it without PATH changes.
-- `ilammy/msvc-dev-cmd@v1` added to CI to initialise `LIB`/`INCLUDE`/`PATH` before linking.
-- `release-gate-windows`: `continue-on-error: true` removed; CI coverage expanded to include Windows corpus steps (`01-hello-win.tyra`, `02-gc-alloc-win.tyra`).
-- Windows corpus (`bench/static-corpus/win/`) wired into `release-gate-windows` CI: `01-hello-win.tyra` (minimal binary + DLL load) and `02-gc-alloc-win.tyra` (Boehm GC allocation).
-- Distribution: `tyra-<version>-windows-x86_64.zip` with `tyra.exe` + `gc.dll` co-located.
-
 **`strtol` → `strtoll` (LLP64 fix)**
 - Replaced `strtol` with `strtoll` in emitted LLVM IR. On Windows MSVC, `long` is 32-bit (LLP64); `long long` is 64-bit on all platforms, matching Tyra's `Int` (i64).
 
 **Language spec v0.8**
 - `docs/spec/{ja,en}/language-spec.md` §11: added `LinkedMap` / `LinkedSet` sections with API reference, complexity table, and comparison with `Map` / `Set`.
 
+### Experimental
+
+**Windows MSVC ABI support (ADR-0021)**
+- Source-level Windows MSVC ABI support: `vcpkg.json` manifest declares `bdwgc` (Boehm GC) via the `x64-windows` (MSVC dynamic) triplet.
+- `tyra-driver`: Windows linker path uses `llc.exe` (IR → COFF obj, `-mtriple=x86_64-pc-windows-msvc`) + `lld-link.exe` with explicit CRT imports (`ucrt.lib`, `msvcrt.lib`, `vcruntime.lib`, `kernel32.lib`, `ole32.lib`).
+- `gc.dll` auto-copied next to the output binary by `tyra build`; Windows DLL loader resolves it without PATH changes.
+- `release-gate-windows` CI job is **tracking-only** (`continue-on-error: true`): it `cargo check`s the LLVM-free crates (compiler front-end + runtime + tooling) to catch Windows source-level compile regressions. Full LLVM build, smoke tests, and `bench/static-corpus/win/` corpus are **not** run in CI because the official LLVM Windows installer does not bundle the dev files (lib/include) that `llvm-sys 211` requires. Distribution builds are produced in a separate release-artifact pipeline; users running on Windows must follow `README.md` § Platform support to build locally.
+
 ### Known Limitations
 
 - **HM unification is conservative**: `types_compatible()` uses a per-call throw-away substitution rather than propagating it across the full checker pass. Full substitution threading is deferred to v0.9. No regressions observed in static corpus or AI-gen benchmark, but edge cases in user code remain possible.
 - **`LinkedMap.remove` / `LinkedSet.remove` is O(n)**: the entries array is fully rebuilt on each remove. Use `Map` / `Set` for workloads where removal is frequent.
-- **Windows MSVC ABI only**: MinGW GNU ABI and Windows ARM64 are not supported. Native PDB debug symbols are deferred to v0.9 (DWARF debug info works on macOS/Linux).
+- **Windows is experimental (see § Experimental above)**: source-level MSVC ABI only; CI is `cargo check` for LLVM-free crates. Building the full compiler on Windows requires a local LLVM 21 SDK with dev files (the official LLVM Windows installer omits them). MinGW GNU ABI, Windows ARM64, and native PDB debug symbols are deferred to v0.9 (DWARF works on macOS/Linux).
 - **AI-gen benchmark Run 18**: 86/100 pass (seed=18). Seed differs from Run 17 (seed=2); pass-count is not directly comparable. The primary v0.8.0 signal is **E0500 count = 0**.
 
 ### Not in This Release

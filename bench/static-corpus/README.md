@@ -110,7 +110,7 @@ The script is informational (exits 0); it is not run in CI.
 
 ### Windows corpus (`win/`)
 
-Files in `win/` are smoke-test programs specifically for the Windows MSVC ABI target (ADR-0021, v0.8.0). They are **not** checked by the default `check.sh` (which targets the host platform). They are run by the `release-gate-windows` CI job (`.github/workflows/release-gate.yml`, "Windows corpus" steps) and can also be compiled manually with:
+Files in `win/` are smoke-test programs specifically for the Windows MSVC ABI target (ADR-0021, v0.8.0). They are **not** checked by the default `check.sh` (which targets the host platform), and they are **not** run in CI: `release-gate-windows` is a tracking-only job that only `cargo check`s the LLVM-free crates because the official LLVM Windows installer omits the dev files required by `llvm-sys`. They serve as documentation for the expected Windows deployment model (`gc.dll` same-dir) and as a manual smoke-test fixture when building Tyra on Windows with an LLVM SDK installed locally:
 
 ```powershell
 .\target\debug\tyra.exe build bench\static-corpus\win\01-hello-win.tyra

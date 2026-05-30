@@ -19,7 +19,7 @@ Consequence: a Tyra program that constructs or consumes file paths is portable
 without any platform-specific branching in the source code.  No dedicated
 corpus file is required to exercise this behavior — the existing
 `bench/static-corpus/` positive corpus files compile and run identically on
-Windows once the toolchain is set up (see `PLATFORMS.md`).
+Windows once the toolchain is set up (see `README.md` § Platform support).
 
 ## Adding Windows-specific corpus files
 
@@ -47,5 +47,9 @@ fi
 | `gc.lib` / `gc.dll` | vcpkg `bdwgc:x64-windows` | Boehm GC, ADR-0007 |
 | `tyra_runtime.lib` | `cargo build --workspace` | Built alongside `tyra.exe` |
 
-See `README.md` § Platform support (single source of truth for platform status)
-and `.github/workflows/release-gate.yml` (`release-gate-windows`) for the CI setup.
+See `README.md` § Platform support (single source of truth for platform status).
+Note that `release-gate-windows` in `.github/workflows/release-gate.yml` is
+**tracking-only** in v0.8.0: it `cargo check`s the LLVM-free crates and does not
+run a full LLVM build or any program in this directory, because the official
+LLVM Windows installer omits the dev files required by `llvm-sys`. The files in
+this directory are documentation / manual smoke-test fixtures.

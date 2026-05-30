@@ -2,7 +2,7 @@
 
 バックエンドサービス、CLI ツール、業務アプリケーションのための、AI フレンドリーな静的型付け言語。
 
-> **v0.8.0** — Hindley-Milner 型推論 (rank-1)、E0500 LLVM クラッシュ撲滅 (E9001 ICE ガード)、`LinkedMap<K,V>` / `LinkedSet<T>` (挿入順保持)、E0308 ヒューリスティック iv (ADT バリアント提案)、Windows ネイティブサポート (MSVC ABI)。本番利用前に [既知の制限](#既知の制限) をご確認ください。
+> **v0.8.0** — Hindley-Milner 型推論 (rank-1)、E0500 LLVM クラッシュ撲滅 (E9001 ICE ガード)、`LinkedMap<K,V>` / `LinkedSet<T>` (挿入順保持)、E0308 ヒューリスティック iv (ADT バリアント提案)、Windows MSVC ABI 実験的サポート。本番利用前に [既知の制限](#既知の制限) をご確認ください。
 
 ---
 
@@ -144,8 +144,8 @@ end
 | Hindley-Milner 型推論 (rank-1)、E9001 ICE ガード | ✅ 完成 (v0.8.0+) |
 | E0308 ヒューリスティック iv — ADT バリアント提案 | ✅ 完成 (v0.8.0+) |
 | `LinkedMap<K,V>` / `LinkedSet<T>` — 挿入順保持 永続コレクション | ✅ 完成 (v0.8.0+) |
-| Windows ネイティブサポート (MSVC ABI、vcpkg + lld-link) | ✅ 完成 (v0.8.0+) |
-| LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 / Windows x86_64 |
+| Windows MSVC ABI サポート (vcpkg + lld-link, ソースレベル) | ⚠️ 実験的 (v0.8.0+; CI は LLVM-free crates の `cargo check` のみ) |
+| LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 |
 | 標準ライブラリ: string, list, fs, io, float, json, assert, time, log | ✅ 完成 |
 | `tyra check / run / build / fmt / test / new / mod / bench` CLI | ✅ 完成 |
 | `tyra test --timeout` / `--jobs N` / `--coverage` | ✅ 完成 |
@@ -179,7 +179,7 @@ end
 
 ## 既知の制限
 
-- **Windows**: x86_64-pc-windows-msvc でサポート (v0.8.0+, MSVC ABI)。`tyra build` が `gc.dll` を出力バイナリと同じディレクトリに自動コピーします。PATH の変更は不要です。MinGW GNU ABI は非対応。Windows ARM64 とネイティブ PDB デバッグシンボルは v0.9 以降。
+- **Windows は v0.8.0 では実験的**: x86_64-pc-windows-msvc 向けのソースレベル MSVC ABI サポートを実装済みで、`tyra build` は `gc.dll` を出力バイナリと同階層に自動コピーします。ただし LLVM 公式 Windows インストーラは `llvm-sys` が必要とする dev ファイル (lib/include) を同梱しないため、`release-gate-windows` CI では LLVM-free crates の `cargo check` しか実行していません。フルコンパイラを Windows でビルドするには LLVM 21 SDK (dev ファイル込み) のローカルインストールが必要です。MinGW GNU ABI、Windows ARM64、ネイティブ PDB デバッグシンボルは v0.9 以降。
 - **`LinkedMap.remove` / `LinkedSet.remove` は O(n)**: entries 配列を毎回再構築します。削除が頻繁なユースケースには `Map` / `Set` を使ってください。
 - **HM 型推論は保守的**: `types_compatible()` は現在、呼び出しごとに使い捨ての substitution を使っており、チェッカー全体に伝播させていません。完全な推論伝播は v0.9 予定。ほとんどのプログラムには影響ありませんが、稀に予期しない型エラーが出る可能性があります。
 - **`tyra build --static`**: musl 上のみ信頼できます。glibc 静的リンクは非対応 (`getaddrinfo` が壊れます)。
