@@ -476,9 +476,13 @@ jobs:
           arch: x64
 
       - name: Verify LLVM installation
+        # Informational only — continue-on-error ensures this never blocks the build.
+        # Reports what is installed; actual failure would appear in the cargo build step.
+        continue-on-error: true
         run: |
-          llc --version
-          lld-link --version || echo "lld-link not available; build step may fail"
+          Write-Host "LLVM_PATH=$env:LLVM_PATH"
+          & "$env:LLVM_PATH\bin\llc" --version
+          lld-link --version
 
       - name: Install bdwgc via vcpkg
         uses: lukka/run-vcpkg@v11
