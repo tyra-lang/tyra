@@ -100,6 +100,41 @@ let p1 = Point(x: 1.0, y: 2.0)
 let p2 = p1.copy(x: 3.0)
 ```
 
+## New in v0.8.0 — LinkedMap and LinkedSet
+
+`LinkedMap<K,V>` and `LinkedSet<T>` preserve insertion order during iteration, unlike the HAMT-based `Map`/`Set` which iterate in hash order.
+
+```tyra
+import linked_map
+
+fn main() -> Unit
+  let scores: LinkedMap<String, Int> = LinkedMap.new()
+  let scores = scores.insert("alice", 95)
+  let scores = scores.insert("bob",   87)
+  let scores = scores.insert("carol", 92)
+  for name, score in scores
+    print("#{name}: #{score}")   # alice, bob, carol — insertion order guaranteed
+  end
+  let after = scores.remove("bob")
+  print("len=#{after.len()}")    # 2
+end
+```
+
+```tyra
+import linked_set
+
+fn main() -> Unit
+  let seen: LinkedSet<String> = LinkedSet.new()
+  let seen = seen.insert("apple")
+  let seen = seen.insert("banana")
+  let seen = seen.insert("apple")   # duplicate — no-op
+  print("len=#{seen.len()}")        # 2
+  for item in seen
+    print(item)                     # apple, banana — insertion order
+  end
+end
+```
+
 ## Quick start: testing
 
 Create a `*_test.tyra` file and run `tyra test`:
@@ -205,7 +240,9 @@ tyra build --static myprogram.tyra
 
 ## Known limitations
 
-- **Windows**: supported on x86_64-pc-windows-msvc (v0.8.0+, MSVC ABI). Place `gc.dll` in the same directory as the output binary. MinGW GNU ABI is not supported. Windows ARM64 is deferred to v0.9.
+- **Windows**: supported on x86_64-pc-windows-msvc (v0.8.0+, MSVC ABI). `tyra build` auto-copies `gc.dll` next to the output binary; no PATH change needed. MinGW GNU ABI is not supported. Windows ARM64 and native PDB debug symbols are v0.9+.
+- **`LinkedMap.remove` / `LinkedSet.remove` is O(n)**: the entries array is rebuilt on each remove. For workloads with frequent removals, use `Map` / `Set` instead.
+- **HM unification is conservative**: `types_compatible()` uses a per-call throw-away substitution rather than propagating the substitution across the full checker. Full substitution threading is deferred to v0.9. Most programs are unaffected; edge cases may surface unexpected type errors.
 - **`tyra build --static`**: only reliable on musl. glibc static linking is unsupported (breaks `getaddrinfo`).
 - **`http.server`**: experimental. Single-threaded, no TLS, no middleware. Do not use in production.
 - **Breaking changes**: expect breaking changes before v1.0.

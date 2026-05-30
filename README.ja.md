@@ -99,6 +99,40 @@ let p1 = Point(x: 1.0, y: 2.0)
 let p2 = p1.copy(x: 3.0)
 ```
 
+## v0.8.0 の新機能 — LinkedMap と LinkedSet
+
+`LinkedMap<K,V>` と `LinkedSet<T>` はイテレーション時に挿入順を保持します。HAMT ベースの `Map` / `Set` がハッシュ順でイテレートするのと異なります。
+
+```tyra
+import linked_map
+
+fn main() -> Unit
+  let scores: LinkedMap<String, Int> = LinkedMap.new()
+  let scores = scores.insert("alice", 95)
+  let scores = scores.insert("bob",   87)
+  let scores = scores.insert("carol", 92)
+  for name, score in scores
+    print("#{name}: #{score}")   # alice, bob, carol の順が保証される
+  end
+  print("len=#{scores.remove("bob").len()}")  # 2
+end
+```
+
+```tyra
+import linked_set
+
+fn main() -> Unit
+  let seen: LinkedSet<String> = LinkedSet.new()
+  let seen = seen.insert("apple")
+  let seen = seen.insert("banana")
+  let seen = seen.insert("apple")   # 重複は無視される
+  print("len=#{seen.len()}")        # 2
+  for item in seen
+    print(item)                     # apple, banana の順が保証される
+  end
+end
+```
+
 ## 開発状況
 
 **v0.8.0 で安定** — サポート済み・テスト済み:
@@ -145,7 +179,10 @@ let p2 = p1.copy(x: 3.0)
 
 ## 既知の制限
 
-- **Windows**: x86_64-pc-windows-msvc でサポート (v0.8.0+, MSVC ABI)。出力バイナリと同じディレクトリに `gc.dll` を配置してください。MinGW GNU ABI は非対応。Windows ARM64 は v0.9 以降。
+- **Windows**: x86_64-pc-windows-msvc でサポート (v0.8.0+, MSVC ABI)。`tyra build` が `gc.dll` を出力バイナリと同じディレクトリに自動コピーします。PATH の変更は不要です。MinGW GNU ABI は非対応。Windows ARM64 とネイティブ PDB デバッグシンボルは v0.9 以降。
+- **`LinkedMap.remove` / `LinkedSet.remove` は O(n)**: entries 配列を毎回再構築します。削除が頻繁なユースケースには `Map` / `Set` を使ってください。
+- **HM 型推論は保守的**: `types_compatible()` は現在、呼び出しごとに使い捨ての substitution を使っており、チェッカー全体に伝播させていません。完全な推論伝播は v0.9 予定。ほとんどのプログラムには影響ありませんが、稀に予期しない型エラーが出る可能性があります。
+- **`tyra build --static`**: musl 上のみ信頼できます。glibc 静的リンクは非対応 (`getaddrinfo` が壊れます)。
 - **`http.server`**: 実験的。シングルスレッド、TLS なし、ミドルウェアなし。本番で使用しないでください。
 - **破壊的変更**: v1.0 までは破壊的変更が予想されます。
 
