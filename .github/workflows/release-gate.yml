@@ -541,8 +541,10 @@ jobs:
           -p tyra-pkg
 
       - name: Build workspace (tracking only)
-        # LLVM_SYS_*_PREFIX is set automatically by KyleMayes/install-llvm-action (env: true).
+        # LLVM_SYS_211_PREFIX is required by llvm-sys 211.x; install-llvm-action
+        # sets LLVM_PATH but not LLVM_SYS_*_PREFIX, so we set it explicitly here.
         env:
+          LLVM_SYS_211_PREFIX: ${{ env.LLVM_PATH }}
           VCPKG_ROOT: ${{ github.workspace }}\vcpkg
         run: cargo build --workspace --no-default-features --features tyra-codegen-llvm/llvm21-1-prefer-dynamic
 
@@ -552,6 +554,7 @@ jobs:
         # regressions in the code we just changed.
         # Note: tyra-runtime links against libgc.dll; VCPKG_ROOT provides gc.lib at build time.
         env:
+          LLVM_SYS_211_PREFIX: ${{ env.LLVM_PATH }}
           VCPKG_ROOT: ${{ github.workspace }}\vcpkg
         run: cargo test --workspace --no-default-features --features tyra-codegen-llvm/llvm21-1-prefer-dynamic
 
