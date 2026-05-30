@@ -1,5 +1,9 @@
 # E0308-adt-variant.tyra
-# Heuristic (iv): bare variant name used where the parent ADT type is expected.
+# Heuristic (iv): variant name used as return type annotation; call site has
+# a type-annotated binding expecting the parent ADT type.
+# get_red() is declared as -> Red (Ty::Named("Red")); let c: Color expects
+# Ty::Named("Color"). check_type_match fires E0308 + heuristic (iv) suggestion.
+# SPEC_REF: §8 (type checker E0308 diagnostics, ADR-0017 heuristic iv, v0.8.0)
 # expects: error[E0308]
 # expects: help: did you mean `Color.Red`?
 
@@ -8,4 +12,8 @@ type Color =
   | Green
   | Blue
 
-let c: Color = Red
+fn get_red() -> Red
+  Color.Red
+end
+
+let c: Color = get_red()
