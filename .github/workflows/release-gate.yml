@@ -59,7 +59,7 @@ jobs:
           sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-21 100
 
       - name: Cache cargo registry and target
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -179,7 +179,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo registry and target
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -334,7 +334,7 @@ jobs:
           echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
 
       - name: Cache cargo registry and target
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ${{ env.CARGO_HOME }}/registry
@@ -508,7 +508,7 @@ jobs:
           }
 
       - name: Cache cargo registry and target
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
