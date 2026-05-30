@@ -2011,7 +2011,11 @@ fn build_link_cmd_windows(
                 None
             }
         })
-        .or_else(|| std::env::var("LIBGC_PREFIX").ok().map(std::path::PathBuf::from));
+        .or_else(|| {
+            std::env::var("LIBGC_PREFIX")
+                .ok()
+                .map(std::path::PathBuf::from)
+        });
 
     // Step 3: Locate tyra_runtime.lib next to the running compiler.
     let runtime_lib_path = std::env::current_exe()

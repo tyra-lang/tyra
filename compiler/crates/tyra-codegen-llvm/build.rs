@@ -121,14 +121,12 @@ fn find_llvm_windows(ver: u32) -> Option<std::path::PathBuf> {
         }
     }
     // 2. vcpkg installed path (x64-windows triplet)
-    let vcpkg_path =
-        std::path::PathBuf::from("vcpkg_installed/x64-windows/bin/llvm-config.exe");
+    let vcpkg_path = std::path::PathBuf::from("vcpkg_installed/x64-windows/bin/llvm-config.exe");
     if vcpkg_path.exists() {
         return Some(vcpkg_path);
     }
     // 3. Standard Windows install path (LLVM installer default)
-    let standard =
-        std::path::PathBuf::from(r"C:\Program Files\LLVM\bin\llvm-config.exe");
+    let standard = std::path::PathBuf::from(r"C:\Program Files\LLVM\bin\llvm-config.exe");
     if standard.exists() {
         return Some(standard);
     }

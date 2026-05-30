@@ -1538,13 +1538,16 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     && method == "new"
                     && args.is_empty()
                 {
-                    if let Some(lm_ty) =
-                        env.binding_type_hint.as_ref().and_then(|t| peel_to_linked_map(t))
+                    if let Some(lm_ty) = env
+                        .binding_type_hint
+                        .as_ref()
+                        .and_then(|t| peel_to_linked_map(t))
                     {
                         return lm_ty.clone();
                     }
-                    if let Some(lm_ty) =
-                        env.current_return_type().and_then(|t| peel_to_linked_map(t))
+                    if let Some(lm_ty) = env
+                        .current_return_type()
+                        .and_then(|t| peel_to_linked_map(t))
                     {
                         return lm_ty.clone();
                     }
@@ -1566,13 +1569,16 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     && method == "new"
                     && args.is_empty()
                 {
-                    if let Some(ls_ty) =
-                        env.binding_type_hint.as_ref().and_then(|t| peel_to_linked_set(t))
+                    if let Some(ls_ty) = env
+                        .binding_type_hint
+                        .as_ref()
+                        .and_then(|t| peel_to_linked_set(t))
                     {
                         return ls_ty.clone();
                     }
-                    if let Some(ls_ty) =
-                        env.current_return_type().and_then(|t| peel_to_linked_set(t))
+                    if let Some(ls_ty) = env
+                        .current_return_type()
+                        .and_then(|t| peel_to_linked_set(t))
                     {
                         return ls_ty.clone();
                     }

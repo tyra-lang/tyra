@@ -9,8 +9,8 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use crate::stdlib_linked_map::{
-    TyraLinkedMap, tyra_linked_map_contains_key, tyra_linked_map_for_each,
-    tyra_linked_map_insert, tyra_linked_map_len, tyra_linked_map_new, tyra_linked_map_remove,
+    TyraLinkedMap, tyra_linked_map_contains_key, tyra_linked_map_for_each, tyra_linked_map_insert,
+    tyra_linked_map_len, tyra_linked_map_new, tyra_linked_map_remove,
 };
 use std::ffi::c_void;
 use std::os::raw::c_int;
@@ -55,10 +55,7 @@ fn unit_val() -> *const u8 {
 
 /// Create an empty LinkedSet.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn tyra_linked_set_new(
-    eq_fn: EqFn,
-    hash_fn: HashFn,
-) -> *mut TyraLinkedSet {
+pub unsafe extern "C" fn tyra_linked_set_new(eq_fn: EqFn, hash_fn: HashFn) -> *mut TyraLinkedSet {
     GC_init();
     let inner = tyra_linked_map_new(eq_fn, hash_fn);
     wrap(inner)

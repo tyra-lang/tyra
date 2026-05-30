@@ -173,10 +173,7 @@ unsafe fn make_map(
 
 /// Create an empty LinkedMap.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn tyra_linked_map_new(
-    eq_fn: EqFn,
-    hash_fn: HashFn,
-) -> *mut TyraLinkedMap {
+pub unsafe extern "C" fn tyra_linked_map_new(eq_fn: EqFn, hash_fn: HashFn) -> *mut TyraLinkedMap {
     GC_init();
     let idx_cap = MIN_IDX_CAP;
     let index = gc_alloc_array::<IndexSlot>(idx_cap);

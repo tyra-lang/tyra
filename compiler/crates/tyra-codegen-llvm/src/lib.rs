@@ -95,11 +95,7 @@ pub fn check_no_type_errors(program: &Program) -> Result<(), Vec<Diagnostic>> {
         }
     }
 
-    if diags.is_empty() {
-        Ok(())
-    } else {
-        Err(diags)
-    }
+    if diags.is_empty() { Ok(()) } else { Err(diags) }
 }
 
 /// Recursively check whether `ty` contains a `Ty::Error` or an unresolved
@@ -133,7 +129,11 @@ fn instruction_types(instr: &Instruction) -> Vec<&Ty> {
         Instruction::MapGetOption { key_ty, val_ty, .. }
         | Instruction::LinkedMapGetOption { key_ty, val_ty, .. } => vec![key_ty, val_ty],
 
-        Instruction::Spawn { arg_types, result_type, .. } => {
+        Instruction::Spawn {
+            arg_types,
+            result_type,
+            ..
+        } => {
             let mut tys: Vec<&Ty> = arg_types.iter().collect();
             tys.push(result_type);
             tys
@@ -141,13 +141,21 @@ fn instruction_types(instr: &Instruction) -> Vec<&Ty> {
 
         Instruction::Await { result_type, .. } => vec![result_type],
 
-        Instruction::ClosureBuild { param_types, return_type, .. } => {
+        Instruction::ClosureBuild {
+            param_types,
+            return_type,
+            ..
+        } => {
             let mut tys: Vec<&Ty> = param_types.iter().collect();
             tys.push(return_type);
             tys
         }
 
-        Instruction::IndirectCall { param_types, return_type, .. } => {
+        Instruction::IndirectCall {
+            param_types,
+            return_type,
+            ..
+        } => {
             let mut tys: Vec<&Ty> = param_types.iter().collect();
             tys.push(return_type);
             tys

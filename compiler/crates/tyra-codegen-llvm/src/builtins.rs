@@ -621,9 +621,7 @@ pub(crate) fn emit_builtin_call(
             true
         }
         _ if fname.starts_with("__linked_set_insert__") => {
-            let t = fname
-                .strip_prefix("__linked_set_insert__")
-                .unwrap_or("Int");
+            let t = fname.strip_prefix("__linked_set_insert__").unwrap_or("Int");
             let d = dest.as_deref().unwrap_or("_ls_ins");
             let s = args
                 .first()
@@ -642,9 +640,7 @@ pub(crate) fn emit_builtin_call(
             true
         }
         _ if fname.starts_with("__linked_set_remove__") => {
-            let t = fname
-                .strip_prefix("__linked_set_remove__")
-                .unwrap_or("Int");
+            let t = fname.strip_prefix("__linked_set_remove__").unwrap_or("Int");
             let d = dest.as_deref().unwrap_or("_ls_rm");
             let s = args
                 .first()
