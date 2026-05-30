@@ -507,8 +507,25 @@ fn collect_elem_types_stmt(stmt: &MirStmt, keys: &mut std::collections::HashSet<
         } else if let Some(t) = func.strip_prefix("__set_contains__") {
             keys.insert(t.to_string());
         }
+        // LinkedMap (ADR-0019): __linked_map_new__K__V  or  __linked_map_contains__K
+        if let Some(rest) = func.strip_prefix("__linked_map_new__") {
+            if let Some(k) = rest.split("__").next() {
+                keys.insert(k.to_string());
+            }
+        } else if let Some(rest) = func.strip_prefix("__linked_map_contains__") {
+            keys.insert(rest.to_string());
+        }
+        // LinkedSet (ADR-0019): __linked_set_new__T  or  __linked_set_contains__T
+        if let Some(t) = func.strip_prefix("__linked_set_new__") {
+            keys.insert(t.to_string());
+        } else if let Some(t) = func.strip_prefix("__linked_set_contains__") {
+            keys.insert(t.to_string());
+        }
     }
     if let Instruction::MapGetOption { key_ty, .. } = instr {
+        keys.insert(key_ty.monomorphized_name());
+    }
+    if let Instruction::LinkedMapGetOption { key_ty, .. } = instr {
         keys.insert(key_ty.monomorphized_name());
     }
 }
