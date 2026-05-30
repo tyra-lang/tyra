@@ -460,18 +460,12 @@ jobs:
           targets: x86_64-pc-windows-msvc
 
       - name: Install LLVM 21 (Windows)
-        # Download the official LLVM 21 release for Windows from GitHub releases.
-        # llvmorg-21 is the latest stable LLVM 21 release as of v0.8.0 planning.
-        run: |
-          $llvm_url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.2/LLVM-21.1.2-Windows-X64.exe"
-          $installer = "$env:TEMP\llvm-installer.exe"
-          Write-Host "Downloading LLVM 21..."
-          Invoke-WebRequest -Uri $llvm_url -OutFile $installer
-          Write-Host "Installing LLVM 21 (silent)..."
-          Start-Process -FilePath $installer -ArgumentList "/S" -Wait
-          $llvm_bin = "C:\Program Files\LLVM\bin"
-          echo "$llvm_bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          Write-Host "LLVM installed to $llvm_bin"
+        # KyleMayes/install-llvm-action handles version resolution and PATH setup,
+        # avoiding hardcoded release URLs that break when patch versions change.
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "21"
+          env: true
 
       - name: Initialise MSVC developer environment
         # Sets LIB, INCLUDE, PATH so that lld-link.exe can resolve CRT/Windows SDK libraries
@@ -523,10 +517,8 @@ jobs:
           -p tyra-pkg
 
       - name: Build workspace (tracking only)
-        # inkwell requires an explicit LLVM version feature; LLVM 21 is installed above.
-        # LLVM_SYS_221_PREFIX tells llvm-sys where to find the LLVM installation.
+        # LLVM_SYS_*_PREFIX is set automatically by KyleMayes/install-llvm-action (env: true).
         env:
-          LLVM_SYS_221_PREFIX: "C:\\Program Files\\LLVM"
           VCPKG_ROOT: ${{ github.workspace }}\vcpkg
         run: cargo build --workspace --no-default-features --features tyra-codegen-llvm/llvm21-1-prefer-dynamic
 
@@ -536,7 +528,6 @@ jobs:
         # regressions in the code we just changed.
         # Note: tyra-runtime links against libgc.dll; VCPKG_ROOT provides gc.lib at build time.
         env:
-          LLVM_SYS_221_PREFIX: "C:\\Program Files\\LLVM"
           VCPKG_ROOT: ${{ github.workspace }}\vcpkg
         run: cargo test --workspace --no-default-features --features tyra-codegen-llvm/llvm21-1-prefer-dynamic
 
