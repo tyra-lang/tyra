@@ -29,7 +29,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
@@ -108,9 +108,13 @@ jobs:
       RUSTUP_HOME: /root/.rustup
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Alpine dependencies
+        # GNU `tar` is added preemptively: busybox tar (Alpine default) has
+        # failed during the `actions/cache` post-job save step on Alpine
+        # jobs, likely above a certain cache size. Adding GNU tar avoids the
+        # "/bin/tar failed with exit code 1" save warning observed previously.
         run: |
           apk add --no-cache \
             gc-dev \
@@ -126,7 +130,8 @@ jobs:
             file \
             bash \
             curl \
-            git
+            git \
+            tar
 
       - name: Set up LLVM 19 symlinks
         run: |
@@ -204,7 +209,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4

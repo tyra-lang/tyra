@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust 1.88
         uses: dtolnay/rust-toolchain@1.88
@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -167,7 +167,7 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install dependencies (macOS)
         run: |
@@ -291,9 +291,13 @@ jobs:
       RUSTUP_HOME: /root/.rustup
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Alpine dependencies
+        # GNU `tar` is added preemptively: busybox tar (Alpine default) has
+        # failed during the `actions/cache` post-job save step on this job,
+        # likely above a certain cache size. Adding GNU tar avoids the
+        # "/bin/tar failed with exit code 1" save warning observed previously.
         run: |
           apk add --no-cache \
             gc-dev \
@@ -305,7 +309,8 @@ jobs:
             file \
             bash \
             curl \
-            git
+            git \
+            tar
 
       - name: Set up LLVM 19 symlinks
         run: |
@@ -462,7 +467,7 @@ jobs:
     continue-on-error: true
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
