@@ -2,7 +2,7 @@
 
 A statically-typed, AI-friendly programming language for backend services, CLI tools, and business applications.
 
-> **v0.7.0** — HAMT-persistent `Map<K,V>` and `Set<T>` with `insert`/`remove`/iteration, E0308 diagnostic improvements (help hints, secondary labels), `for k, v in m` syntax, and post-release diagnostic hardening (E0204 hard error, E0213, E0110/E0211 help hints). AI-gen benchmark: 98/100 pass. [See known limitations](#known-limitations) before using in production.
+> **v0.8.0** — Hindley-Milner type inference (rank-1), E0500 LLVM crash eliminated (E9001 ICE guard), `LinkedMap<K,V>` / `LinkedSet<T>` (insertion-order-preserving), E0308 heuristic iv (ADT variant suggestion), Windows native support (MSVC ABI, `vcpkg` + `lld-link`). AI-gen benchmark: 86/100 pass (E0500: 0). [See known limitations](#known-limitations) before using in production.
 
 ---
 
@@ -126,7 +126,7 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 
 ## Status
 
-**Stable in v0.7.0** — supported and tested:
+**Stable in v0.8.0** — supported and tested:
 
 | Component | Notes |
 | --- | --- |
@@ -159,7 +159,7 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | `Tyra.lock` + floating `branch` constraints + transitive dep resolution | ✅ Complete |
 | LSP server (`tyra-lsp`) + VS Code extension | ✅ Development install |
 | DAP debugger (DWARF + lldb-dap + VS Code breakpoints/locals) | ✅ Complete (v0.6.0+) |
-| Static conformance corpus (25 positive programs + 19 error cases) | ✅ CI-gated |
+| Static conformance corpus (33 positive programs + 21 error cases) | ✅ CI-gated |
 
 ## Platform support
 
@@ -290,8 +290,8 @@ The compiler always declares which spec version it implements:
 
 ```console
 $ tyra --version
-tyra 0.7.0
-implementing language spec 0.7
+tyra 0.8.0
+implementing language spec 0.8
 ```
 
 While Tyra is at v0.x, **breaking changes are allowed in MINOR version bumps**. After v1.0, breaking changes will use the Edition model (similar to Rust editions).
