@@ -1,0 +1,38 @@
+# bench/static-corpus/linked_set_test.tyra
+# Tests LinkedSet insertion order, contains, remove, len.
+# SPEC_REF: §11 (LinkedSet — insertion-order-preserving persistent collection, ADR-0019, v0.8.0)
+import assert
+import linked_set
+
+fn test_linked_set_contains() -> Result<Unit, String>
+  let s: LinkedSet<String> = LinkedSet.new()
+  let s = s.insert("x")
+  let s = s.insert("y")
+  assert.eq(s.contains("x"), true)?
+  assert.eq(s.contains("y"), true)?
+  assert.eq(s.contains("z"), false)?
+  Ok(())
+end
+
+fn test_linked_set_len() -> Result<Unit, String>
+  let s: LinkedSet<Int> = LinkedSet.new()
+  assert.eq(s.len(), 0)?
+  let s = s.insert(1)
+  let s = s.insert(2)
+  let s = s.insert(3)
+  assert.eq(s.len(), 3)?
+  Ok(())
+end
+
+fn test_linked_set_remove_persistent() -> Result<Unit, String>
+  let s: LinkedSet<String> = LinkedSet.new()
+  let s = s.insert("a")
+  let s = s.insert("b")
+  let s = s.insert("c")
+  let s2 = s.remove("b")
+  assert.eq(s.contains("b"), true)?
+  assert.eq(s2.contains("b"), false)?
+  assert.eq(s.len(), 3)?
+  assert.eq(s2.len(), 2)?
+  Ok(())
+end

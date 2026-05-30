@@ -30,6 +30,9 @@ Files in the top-level directory are expected to compile without errors.
 | `10-data-modeling.tyra` | `value`/`data` distinction, `Stringable`, `Eq`/`Ord` |
 | `11-break-loop.tyra` | `break` inside `while` and `for` (§10.4, §10.5) |
 | `25-nested-match-map-get.tyra` | Nested `match` on `io.read_line()` + `Map.get()` — E0500 regression guard (§10.3, §17.3.6) |
+| `26-linked-map-order.tyra` | `LinkedMap` insert/iteration compiles; runtime order verified in `linked_map_order_test.tyra` (§11, ADR-0019, v0.8.0) |
+| `27-hm-inference-empty-map.tyra` | Empty map literal `{}` resolves via HM unification from type annotation without `Ty::Error` (ADR-0020, v0.8.0) |
+| `28-linked-set.tyra` | `LinkedSet` insert/contains/remove/len/for-loop compiles; runtime correctness in `linked_set_test.tyra` (§11, ADR-0019, v0.8.0) |
 
 ## Negative corpus (`bad/`)
 
