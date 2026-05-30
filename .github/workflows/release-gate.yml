@@ -485,9 +485,11 @@ jobs:
           lld-link --version
 
       - name: Install bdwgc via vcpkg
+        # Using latest vcpkg commit to ensure MSYS2 build-tool packages
+        # (pkgconf etc.) are current and available on upstream mirrors.
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: "a34c873a9717a888f58dc05268dea15592c2f0ff"
+          vcpkgGitCommitId: "00d899c410b31467733472fc3a83a25729046b13"
           runVcpkgInstall: true
 
       - name: Cache cargo registry and target
