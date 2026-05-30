@@ -492,6 +492,24 @@ jobs:
           vcpkgGitCommitId: "00d899c410b31467733472fc3a83a25729046b13"
           runVcpkgInstall: true
 
+      - name: Set LIBGC_PREFIX from vcpkg install
+        # run-vcpkg uses --x-install-root with a non-standard UUID path.
+        # The Rust vcpkg crate expects packages in $VCPKG_ROOT/installed/.
+        # Dynamically locate gc.lib and export LIBGC_PREFIX so runtime/build.rs
+        # can find it via the LIBGC_PREFIX fallback path.
+        run: |
+          $gclib = Get-ChildItem -Path '${{ github.workspace }}' -Filter 'gc.lib' -Recurse -ErrorAction SilentlyContinue `
+            | Where-Object { $_.FullName -match 'x64-windows' } `
+            | Select-Object -First 1
+          if ($gclib) {
+            $prefix = Split-Path $gclib.DirectoryName
+            echo "LIBGC_PREFIX=$prefix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Host "LIBGC_PREFIX=$prefix"
+          } else {
+            Write-Error "gc.lib not found after vcpkg install"
+            exit 1
+          }
+
       - name: Cache cargo registry and target
         uses: actions/cache@v4
         with:
