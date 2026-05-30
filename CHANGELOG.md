@@ -14,7 +14,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 **Hindley-Milner type inference — rank-1 unification (ADR-0020)**
 - Added `TyVarId(u32)` and `Substitution(HashMap<TyVarId, Ty>)` as the rank-1 HM inference foundation.
 - `unify(a, b, &mut subst)` with occurs check prevents infinite types.
-- `types_compatible()` delegates to `unify()` internally; no semantic change to existing programs.
+- `types_compatible()` delegates to `unify()` internally; no regressions observed in the static corpus or AI-gen benchmark.
 - `check_no_type_errors()` guard added in `tyra-driver` before LLVM IR emission: `Ty::Error` or unresolved `Ty::Var` reaching codegen now emits **`E9001 InternalTypeLeakedToCodegen`** and exits cleanly (exit code 1) instead of crashing LLVM with an opaque IR type-mismatch error.
 - `E9001` is the first entry in the `E9xxx` ICE (Internal Compiler Error) range reserved in `tyra-diagnostics`.
 - **E0500 occurrences in AI-gen benchmark: 0** (was 1 in Run 17). Run 18 result: 86/100 pass (seed=18); cross-seed comparison with Run 17 seed=2 is not direct — see `bench/ai-gen/results/SUMMARY.md` for details.
@@ -37,7 +37,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - `tyra-driver`: Windows linker path uses `llc.exe` (IR → COFF obj, `-mtriple=x86_64-pc-windows-msvc`) + `lld-link.exe` with explicit CRT imports (`ucrt.lib`, `msvcrt.lib`, `vcruntime.lib`, `kernel32.lib`, `ole32.lib`).
 - `gc.dll` auto-copied next to the output binary by `tyra build`; Windows DLL loader resolves it without PATH changes.
 - `ilammy/msvc-dev-cmd@v1` added to CI to initialise `LIB`/`INCLUDE`/`PATH` before linking.
-- `release-gate-windows` promoted from `continue-on-error: true` to **required** (merge blocker).
+- `release-gate-windows`: `continue-on-error: true` removed; CI coverage expanded to include Windows corpus steps (`01-hello-win.tyra`, `02-gc-alloc-win.tyra`).
 - Windows corpus (`bench/static-corpus/win/`) wired into `release-gate-windows` CI: `01-hello-win.tyra` (minimal binary + DLL load) and `02-gc-alloc-win.tyra` (Boehm GC allocation).
 - Distribution: `tyra-<version>-windows-x86_64.zip` with `tyra.exe` + `gc.dll` co-located.
 
@@ -49,7 +49,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ### Known Limitations
 
-- **HM unification is conservative**: `types_compatible()` uses a per-call throw-away substitution rather than propagating it across the full checker pass. Full substitution threading is deferred to v0.9. Programs accepted by v0.7 continue to compile.
+- **HM unification is conservative**: `types_compatible()` uses a per-call throw-away substitution rather than propagating it across the full checker pass. Full substitution threading is deferred to v0.9. No regressions observed in static corpus or AI-gen benchmark, but edge cases in user code remain possible.
 - **`LinkedMap.remove` / `LinkedSet.remove` is O(n)**: the entries array is fully rebuilt on each remove. Use `Map` / `Set` for workloads where removal is frequent.
 - **Windows MSVC ABI only**: MinGW GNU ABI and Windows ARM64 are not supported. Native PDB debug symbols are deferred to v0.9 (DWARF debug info works on macOS/Linux).
 - **AI-gen benchmark Run 18**: 86/100 pass (seed=18). Seed differs from Run 17 (seed=2); pass-count is not directly comparable. The primary v0.8.0 signal is **E0500 count = 0**.
