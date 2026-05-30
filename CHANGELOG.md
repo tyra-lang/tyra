@@ -7,57 +7,60 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ---
 
-## [0.8.0] — Lexical Bengio (2026-05-29)
+## [0.8.0] — Lexical Bengio (2026-05-30)
 
 ### Stable
 
-**Hindley-Milner type inference (ADR-0020)**
-- Introduced `TyVarId(u32)` and `Substitution(HashMap<TyVarId, Ty>)` as the foundation for rank-1 Hindley-Milner unification.
-- `unify()` with occurs check eliminates infinite-type recursion.
-- `types_compatible()` now delegates to `unify()` internally.
-- `E9001 InternalTypeLeakedToCodegen`: new ICE diagnostic code; `Ty::Error`/unresolved `Ty::Var` reaching codegen now emits E9001 and fails cleanly instead of crashing LLVM (the previous E0500 mode).
-- `check_no_type_errors()` guard added in `tyra-driver` before LLVM IR emission.
+**Hindley-Milner type inference — rank-1 unification (ADR-0020)**
+- Added `TyVarId(u32)` and `Substitution(HashMap<TyVarId, Ty>)` as the rank-1 HM inference foundation.
+- `unify(a, b, &mut subst)` with occurs check prevents infinite types.
+- `types_compatible()` delegates to `unify()` internally; no semantic change to existing programs.
+- `check_no_type_errors()` guard added in `tyra-driver` before LLVM IR emission: `Ty::Error` or unresolved `Ty::Var` reaching codegen now emits **`E9001 InternalTypeLeakedToCodegen`** and exits cleanly (exit code 1) instead of crashing LLVM with an opaque IR type-mismatch error.
+- `E9001` is the first entry in the `E9xxx` ICE (Internal Compiler Error) range reserved in `tyra-diagnostics`.
+- **E0500 occurrences in AI-gen benchmark: 0** (was 1 in Run 17). Run 18 result: 86/100 pass (seed=18); cross-seed comparison with Run 17 seed=2 is not direct — see `bench/ai-gen/results/SUMMARY.md` for details.
 
 **E0308 heuristic (iv) — ADT variant suggestion**
-- When a variant name is used where its parent ADT type is expected, E0308 now includes `help: did you mean \`Foo.Bar(...)\`?`.
-- Suggestion is suppressed when the same variant name exists in multiple ADTs (no false positives).
+- When a variant name (e.g. `Red`) is used where its parent ADT type (e.g. `Color`) is expected, E0308 now appends `help: did you mean \`Color.Red\`?`.
+- Suppressed when the same variant name appears in two or more ADTs (no false positives).
+- Implemented via `TypeEnv.variant_to_adts` reverse map populated at `register_adt()` time.
 
 **LinkedMap / LinkedSet — insertion-order-preserving persistent collections (ADR-0019)**
-- `LinkedMap<K,V>`: entries backed by insertion-order array + HAMT index. Operations: `new()`, `insert()`, `get()`, `remove()`, `contains_key()`, `len()`.
-- `LinkedSet<T>`: symmetric wrapper. Operations: `new()`, `insert()`, `contains()`, `remove()`, `len()`.
-- `for k, v in lm { ... }` iterates in insertion order (guaranteed by spec §11).
-- HAMT-based `Map<K,V>` and `Set<T>` are unchanged; `LinkedMap`/`LinkedSet` are separate types.
-- `import linked_map` / `import linked_set` to use.
+- `LinkedMap<K,V>`: insertion-order entries array + HAMT key-index hybrid. API: `new()`, `insert(k,v)`, `get(k) -> Option<V>`, `remove(k)`, `contains_key(k)`, `len()`.
+- `LinkedSet<T>`: symmetric wrapper. API: `new()`, `insert(v)`, `contains(v)`, `remove(v)`, `len()`.
+- `for k, v in lm { ... }` and `for v in ls { ... }` iterate in insertion order — **guaranteed by spec §11**.
+- HAMT-based `Map<K,V>` / `Set<T>` are unchanged; `LinkedMap` / `LinkedSet` are independent types with separate intrinsics (`tyra_linked_map_*` / `tyra_linked_set_*`).
+- `import linked_map` / `import linked_set` to use; no literal syntax in v0.8.
+- Runtime conformance tests: `bench/static-corpus/linked_map_test.tyra` (4 tests), `bench/static-corpus/linked_set_test.tyra` (3 tests).
 
 **Windows native support — MSVC ABI (ADR-0021)**
-- `vcpkg.json` manifest: `bdwgc` (Boehm GC) via `x64-windows` triplet.
-- `tyra-driver`: Windows linker path — `llc.exe` (IR→obj) + `lld-link.exe` (COFF link) with explicit CRT defaults (`ucrt.lib`, `msvcrt.lib`, `vcruntime.lib`, `kernel32.lib`, `ole32.lib`).
-- `gc.dll` auto-copied to the output directory; loader resolves it without PATH changes.
-- `release-gate-windows` promoted to required (merge blocker); CI includes `ilammy/msvc-dev-cmd@v1` for LIB/INCLUDE/PATH initialisation.
-- Artifact: `tyra-<version>-windows-x86_64.zip` with `tyra.exe` + `gc.dll` (same directory).
+- `vcpkg.json` manifest: `bdwgc` (Boehm GC) via `x64-windows` (MSVC dynamic) triplet.
+- `tyra-driver`: Windows linker path uses `llc.exe` (IR → COFF obj, `-mtriple=x86_64-pc-windows-msvc`) + `lld-link.exe` with explicit CRT imports (`ucrt.lib`, `msvcrt.lib`, `vcruntime.lib`, `kernel32.lib`, `ole32.lib`).
+- `gc.dll` auto-copied next to the output binary by `tyra build`; Windows DLL loader resolves it without PATH changes.
+- `ilammy/msvc-dev-cmd@v1` added to CI to initialise `LIB`/`INCLUDE`/`PATH` before linking.
+- `release-gate-windows` promoted from `continue-on-error: true` to **required** (merge blocker).
+- Windows corpus (`bench/static-corpus/win/`) wired into `release-gate-windows` CI: `01-hello-win.tyra` (minimal binary + DLL load) and `02-gc-alloc-win.tyra` (Boehm GC allocation).
+- Distribution: `tyra-<version>-windows-x86_64.zip` with `tyra.exe` + `gc.dll` co-located.
 
 **`strtol` → `strtoll` (LLP64 fix)**
-- `tyra-codegen-llvm` IR now calls `strtoll` (guaranteed 64-bit on all platforms) instead of `strtol` (32-bit `long` on Windows MSVC).
+- Replaced `strtol` with `strtoll` in emitted LLVM IR. On Windows MSVC, `long` is 32-bit (LLP64); `long long` is 64-bit on all platforms, matching Tyra's `Int` (i64).
 
 **Language spec v0.8**
-- `docs/spec/{ja,en}/language-spec.md`: §11 extended with `LinkedMap` / `LinkedSet` sections including API reference and comparison table (iteration order, remove cost) vs `Map` / `Set`.
+- `docs/spec/{ja,en}/language-spec.md` §11: added `LinkedMap` / `LinkedSet` sections with API reference, complexity table, and comparison with `Map` / `Set`.
 
 ### Known Limitations
 
-- **HM unification is conservative**: `types_compatible()` still uses a throw-away substitution per call rather than propagating the substitution across the full checker. Full substitution threading is deferred to v0.9.
-- **LinkedMap `remove` is O(n)**: rebuilds the entries array. Use `Map` for workloads with frequent removals.
-- **Windows MSVC ABI only**: MinGW GNU ABI is not supported (vcpkg `x64-windows` triplet incompatibility). Windows ARM64 is deferred to v0.9.
-- **No native PDB debug info**: DWARF debug info works on macOS/Linux; PDB generation on Windows is v0.9.
-- **AI-gen benchmark Run 18** requires API keys; pending manual execution.
+- **HM unification is conservative**: `types_compatible()` uses a per-call throw-away substitution rather than propagating it across the full checker pass. Full substitution threading is deferred to v0.9. Programs accepted by v0.7 continue to compile.
+- **`LinkedMap.remove` / `LinkedSet.remove` is O(n)**: the entries array is fully rebuilt on each remove. Use `Map` / `Set` for workloads where removal is frequent.
+- **Windows MSVC ABI only**: MinGW GNU ABI and Windows ARM64 are not supported. Native PDB debug symbols are deferred to v0.9 (DWARF debug info works on macOS/Linux).
+- **AI-gen benchmark Run 18**: 86/100 pass (seed=18). Seed differs from Run 17 (seed=2); pass-count is not directly comparable. The primary v0.8.0 signal is **E0500 count = 0**.
 
 ### Not in This Release
 
 - inkwell IR generation migration (writeln! → builder API) — v0.9
-- rank-N polymorphism / type classes — spec §22 non-goals
-- Windows ARM64 — v0.9
-- native PDB debug symbols — v0.9
+- rank-N polymorphism / type classes / where clauses — spec §22 non-goals
+- Windows ARM64 / native PDB debug symbols — v0.9
 - `SortedMap` / `SortedSet` (sort-order collections) — v0.9
-- `LinkedMap` literal syntax (`{| k: v |}`) — v0.9
+- `LinkedMap` literal syntax (`{| k: v |}`) and `LinkedMap.from([...])` — v0.9
 - Full substitution propagation across checker — v0.9
 
 ---

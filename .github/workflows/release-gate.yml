@@ -560,3 +560,31 @@ jobs:
             exit 1
           }
           Write-Host "Smoke test passed."
+
+      - name: Windows corpus — 01-hello-win.tyra
+        # bench/static-corpus/win/01-hello-win.tyra: minimal binary + gc.dll same-dir (ADR-0021).
+        env:
+          TYRA_STDLIB: ${{ github.workspace }}\stdlib
+          VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+        run: |
+          .\target\debug\tyra.exe build bench\static-corpus\win\01-hello-win.tyra -o .\target\debug\win_hello
+          $out = .\target\debug\win_hello.exe
+          Write-Host "win_hello output: $out"
+          if ($out -notmatch "hello, tyra") {
+            Write-Error "win corpus 01 failed: '$out'"
+            exit 1
+          }
+
+      - name: Windows corpus — 02-gc-alloc-win.tyra
+        # bench/static-corpus/win/02-gc-alloc-win.tyra: GC allocation smoke test (ADR-0007 + ADR-0021).
+        env:
+          TYRA_STDLIB: ${{ github.workspace }}\stdlib
+          VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+        run: |
+          .\target\debug\tyra.exe build bench\static-corpus\win\02-gc-alloc-win.tyra -o .\target\debug\win_gc
+          $out = .\target\debug\win_gc.exe
+          Write-Host "win_gc output: $out"
+          if ($out -notmatch "gc_ok=5") {
+            Write-Error "win corpus 02 failed: '$out'"
+            exit 1
+          }
