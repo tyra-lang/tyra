@@ -220,6 +220,10 @@ pub const PRELUDE_FUNCTIONS: &[&str] = &[
     // §17.3.x Set<T> generic module (ADR-0015). `set` is always in scope so
     // `set.new()` requires no explicit import.
     "set",
+    // §11 / ADR-0019: LinkedMap<K,V> and LinkedSet<T> insertion-order collections.
+    // `linked_map` / `linked_set` are the module names (analogous to `set`).
+    "linked_map",
+    "linked_set",
     // §17.3.6 Map<K,V> generic intrinsics (ADR-0015).
     // These are synthesized by MIR lowering — never appear in Tyra source —
     // so they do not need to be prelude-visible.  The old hardcoded
@@ -263,6 +267,8 @@ pub const PRELUDE_TYPES: &[&str] = &[
     "List",
     "Map",
     "Set",
+    "LinkedMap",
+    "LinkedSet",
     "Task",
     // Standard traits (§17.1)
     "Into",

@@ -51,6 +51,11 @@ pub struct TypeEnv {
     /// - User-defined: `type Color = | Red | Green | Blue` → "Color" → ["Red", "Green", "Blue"]
     /// - Prelude: "Option" → ["Some", "None"], "Result" → ["Ok", "Err"]
     adt_variants: HashMap<String, Vec<String>>,
+    /// Reverse map: variant name → list of ADT names that contain it.
+    /// Used by heuristic (iv) to suggest `Foo.Bar` when `Bar` is a unique variant of `Foo`.
+    /// If a variant name appears in multiple ADTs (ambiguous), the list has length > 1
+    /// and no suggestion is emitted (false-positive avoidance).
+    variant_to_adts: HashMap<String, Vec<String>>,
     /// Stack of enclosing function return types (for `return` stmt and `?` operator checks).
     /// Top of stack = innermost enclosing function. Empty when not inside any fn body.
     return_type_stack: Vec<Ty>,
@@ -107,6 +112,7 @@ impl TypeEnv {
             bindings: vec![HashMap::new()],
             let_bindings: vec![HashSet::new()],
             adt_variants: HashMap::new(),
+            variant_to_adts: HashMap::new(),
             return_type_stack: Vec::new(),
             loop_depth: 0,
             trait_methods: HashMap::new(),
@@ -240,7 +246,16 @@ impl TypeEnv {
     }
 
     /// Register an ADT with its variant names for exhaustiveness checking.
+    /// Also maintains the reverse `variant_to_adts` map for heuristic (iv)
+    /// (ADR-0017): when a variant name resolves to exactly one parent ADT,
+    /// E0308 can suggest `ParentAdt.VariantName(...)`.
     pub fn register_adt(&mut self, type_name: String, variants: Vec<String>) {
+        for variant in &variants {
+            self.variant_to_adts
+                .entry(variant.clone())
+                .or_default()
+                .push(type_name.clone());
+        }
         self.adt_variants.insert(type_name, variants);
     }
 
@@ -1342,12 +1357,16 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                         "Map key type `{}` requires Eq + Hash, which is not yet supported for this type",
                         key_ty.display_name()
                     ))
+                    .with_code("E0308")
                     .with_label(Label::new(expr.span, "unsupported key type"))
                     .with_note(
                         "Supported Map key types: Int, Bool, String. \
                          Support for user-defined value types (with Eq + Hash) is planned for a future release.",
                     ),
                 );
+                // A user-facing E0308 has been emitted; returning Ty::Error
+                // here is safe because the driver bails on `report.has_errors()`
+                // before invoking codegen, so the E9001 ICE guard never sees it.
                 return Ty::Error;
             }
             if !matches!(val_ty, Ty::Int | Ty::Bool | Ty::String | Ty::Error) {
@@ -1356,12 +1375,14 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                         "Map value type `{}` is not supported in this version",
                         val_ty.display_name()
                     ))
+                    .with_code("E0308")
                     .with_label(Label::new(expr.span, "unsupported value type"))
                     .with_note(
                         "Map values must be Int, Bool, or String. \
                          User-defined value types are planned for a future release.",
                     ),
                 );
+                // See note above: E0308 emitted, Ty::Error is safe to return.
                 return Ty::Error;
             }
             // Check K: Eq + Hash using the existing ability system.
@@ -1511,6 +1532,68 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     return Ty::Error;
                 }
 
+                // LinkedMap.new() — mirror set.new() inference: binding hint → return type → error.
+                if let ExprKind::Ident(mod_name) = &obj.kind
+                    && mod_name == "LinkedMap"
+                    && method == "new"
+                    && args.is_empty()
+                {
+                    if let Some(lm_ty) = env
+                        .binding_type_hint
+                        .as_ref()
+                        .and_then(|t| peel_to_linked_map(t))
+                    {
+                        return lm_ty.clone();
+                    }
+                    if let Some(lm_ty) = env
+                        .current_return_type()
+                        .and_then(|t| peel_to_linked_map(t))
+                    {
+                        return lm_ty.clone();
+                    }
+                    report.add(
+                        Diagnostic::error("cannot infer LinkedMap key/value types".to_string())
+                            .with_code("E0308")
+                            .with_label(Label::new(expr.span, "key/value types unknown"))
+                            .with_note(
+                                "add a type annotation: \
+                                 `let m: LinkedMap<String, Int> = LinkedMap.new()`",
+                            ),
+                    );
+                    return Ty::Error;
+                }
+
+                // LinkedSet.new() — mirror set.new() inference.
+                if let ExprKind::Ident(mod_name) = &obj.kind
+                    && mod_name == "LinkedSet"
+                    && method == "new"
+                    && args.is_empty()
+                {
+                    if let Some(ls_ty) = env
+                        .binding_type_hint
+                        .as_ref()
+                        .and_then(|t| peel_to_linked_set(t))
+                    {
+                        return ls_ty.clone();
+                    }
+                    if let Some(ls_ty) = env
+                        .current_return_type()
+                        .and_then(|t| peel_to_linked_set(t))
+                    {
+                        return ls_ty.clone();
+                    }
+                    report.add(
+                        Diagnostic::error("cannot infer LinkedSet element type".to_string())
+                            .with_code("E0308")
+                            .with_label(Label::new(expr.span, "element type unknown"))
+                            .with_note(
+                                "add a type annotation: \
+                                 `let s: LinkedSet<Int> = LinkedSet.new()`",
+                            ),
+                    );
+                    return Ty::Error;
+                }
+
                 let obj_ty = infer_expr(obj, env, report);
                 check_trait_method_call(&obj_ty, method, expr.span, env, report);
 
@@ -1575,6 +1658,68 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                         "len" if args.is_empty() => {
                             return Ty::Int;
                         }
+                        _ => {}
+                    }
+                }
+
+                // LinkedMap<K,V> method dispatch (ADR-0019, v0.8.0).
+                if let Ty::Generic(name, type_args) = &obj_ty
+                    && name == "LinkedMap"
+                    && type_args.len() == 2
+                {
+                    let key_ty = type_args[0].clone();
+                    let val_ty = type_args[1].clone();
+                    match method.as_str() {
+                        "insert" if args.len() == 2 => {
+                            let arg_k = infer_expr(&args[0].value, env, report);
+                            let arg_v = infer_expr(&args[1].value, env, report);
+                            check_type_match(&key_ty, &arg_k, args[0].span, None, env, report);
+                            check_type_match(&val_ty, &arg_v, args[1].span, None, env, report);
+                            return obj_ty.clone();
+                        }
+                        "remove" if args.len() == 1 => {
+                            let arg_k = infer_expr(&args[0].value, env, report);
+                            check_type_match(&key_ty, &arg_k, args[0].span, None, env, report);
+                            return obj_ty.clone();
+                        }
+                        "contains_key" if args.len() == 1 => {
+                            let arg_k = infer_expr(&args[0].value, env, report);
+                            check_type_match(&key_ty, &arg_k, args[0].span, None, env, report);
+                            return Ty::Bool;
+                        }
+                        "get" if args.len() == 1 => {
+                            let arg_k = infer_expr(&args[0].value, env, report);
+                            check_type_match(&key_ty, &arg_k, args[0].span, None, env, report);
+                            return Ty::Generic("Option".into(), vec![val_ty]);
+                        }
+                        "len" if args.is_empty() => return Ty::Int,
+                        _ => {}
+                    }
+                }
+
+                // LinkedSet<T> method dispatch (ADR-0019, v0.8.0).
+                if let Ty::Generic(name, type_args) = &obj_ty
+                    && name == "LinkedSet"
+                    && !type_args.is_empty()
+                {
+                    let elem_ty = type_args[0].clone();
+                    match method.as_str() {
+                        "insert" if args.len() == 1 => {
+                            let arg_ty = infer_expr(&args[0].value, env, report);
+                            check_type_match(&elem_ty, &arg_ty, args[0].span, None, env, report);
+                            return obj_ty.clone();
+                        }
+                        "remove" if args.len() == 1 => {
+                            let arg_ty = infer_expr(&args[0].value, env, report);
+                            check_type_match(&elem_ty, &arg_ty, args[0].span, None, env, report);
+                            return obj_ty.clone();
+                        }
+                        "contains" if args.len() == 1 => {
+                            let arg_ty = infer_expr(&args[0].value, env, report);
+                            check_type_match(&elem_ty, &arg_ty, args[0].span, None, env, report);
+                            return Ty::Bool;
+                        }
+                        "len" if args.is_empty() => return Ty::Int,
                         _ => {}
                     }
                 }
@@ -1953,6 +2098,10 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 // obj_ty was inferred above (line ~1511); reuse it rather than
                 // calling infer_expr(obj) again.
                 if matches!(obj_ty, Ty::Error) {
+                    // Receiver already failed to type-check — a prior diagnostic
+                    // has already been emitted.  Suppress cascade and propagate
+                    // Ty::Error; the driver bails on `report.has_errors()`
+                    // before codegen, so the E9001 guard will never see this.
                     return Ty::Error;
                 }
                 let type_name = match &obj_ty {
@@ -1964,6 +2113,14 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 {
                     return ret.clone();
                 }
+                // Note: a known Named type without a registered impl-method
+                // entry is intentionally left silent here.  Several methods
+                // (e.g. `value.copy(field: new_value)`) are dispatched during
+                // MIR lowering rather than during type-check, so emitting
+                // E0204 unconditionally would break legitimate programs.
+                // If such a method is truly unknown, MIR lowering raises a
+                // diagnostic; if Ty::Error still escapes, the E9001 guard at
+                // codegen entry will catch it.
                 // Unknown method on a known generic type — emit E0204 so the user
                 // sees a clear error instead of a silent Ty::Error that later
                 // crashes codegen with E0500 (i64/ptr type mismatch in LLVM IR).
@@ -1999,6 +2156,35 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                         .with_code("E0204")
                         .with_label(Label::new(expr.span, "method called here"))
                         .with_help(help_msg),
+                    );
+                    return Ty::Error;
+                }
+                // Catch-all: method called on a receiver that is neither a
+                // Named user type nor a known-generic stdlib type — for
+                // example, a primitive (`5.foo()`), a function value, or an
+                // unresolved `Ty::Var`.  Without a diagnostic here, Ty::Error
+                // would silently leak into MIR and be caught only by the
+                // E9001 ICE guard at codegen entry.  Emit E0204 so the user
+                // gets a normal error message.
+                //
+                // Named receivers are intentionally NOT caught here: methods
+                // such as `value.copy(...)` are dispatched during MIR lowering
+                // and would otherwise raise a spurious E0204 at type-check
+                // time.
+                if type_name.is_none() && !matches!(obj_ty, Ty::Generic(_, _)) {
+                    report.add(
+                        Diagnostic::error(format!(
+                            "unknown method `{}` on `{}`",
+                            method,
+                            obj_ty.display_name()
+                        ))
+                        .with_code("E0204")
+                        .with_label(Label::new(expr.span, "method called here"))
+                        .with_help(
+                            "Methods are resolved against the receiver's type. \
+                             Verify the receiver has the expected type and that \
+                             the method is defined for it.",
+                        ),
                     );
                 }
                 return Ty::Error;
@@ -2679,11 +2865,51 @@ fn peel_to_set(ty: &Ty) -> Option<&Ty> {
     None
 }
 
+fn peel_to_linked_map(ty: &Ty) -> Option<&Ty> {
+    if ty.is_linked_map() {
+        return Some(ty);
+    }
+    if let Ty::Generic(name, args) = ty {
+        match name.as_str() {
+            "Option" if args.len() == 1 => return peel_to_linked_map(&args[0]),
+            "Result" if args.len() == 2 => return peel_to_linked_map(&args[0]),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn peel_to_linked_set(ty: &Ty) -> Option<&Ty> {
+    if ty.is_linked_set() {
+        return Some(ty);
+    }
+    if let Ty::Generic(name, args) = ty {
+        match name.as_str() {
+            "Option" if args.len() == 1 => return peel_to_linked_set(&args[0]),
+            "Result" if args.len() == 2 => return peel_to_linked_set(&args[0]),
+            _ => {}
+        }
+    }
+    None
+}
+
 /// Compute a conservative heuristic help message for E0308.
 ///
 /// Only fires when both `expected` and `actual` are fully concrete (no
 /// `Ty::Var` or `Ty::Error` on either side).  This prevents false-positive
 /// suggestions when the type checker has not yet resolved one of the types.
+/// Returns the ADT name if `variant_name` is a variant of exactly one ADT in scope.
+/// Returns None if the variant appears in zero or 2+ ADTs (ambiguous → no suggestion).
+/// Used by heuristic (iv) of `e0308_help_hint` (ADR-0017).
+fn find_unique_adt_for_variant(variant_name: &str, env: &TypeEnv) -> Option<String> {
+    let adts = env.variant_to_adts.get(variant_name)?;
+    if adts.len() == 1 {
+        Some(adts[0].clone())
+    } else {
+        None // ambiguous: same variant name in multiple ADTs → no suggestion
+    }
+}
+
 fn e0308_help_hint(expected: &Ty, actual: &Ty, env: &TypeEnv) -> Option<String> {
     // Guard: only suggest when both types are fully concrete.
     fn is_concrete(ty: &Ty) -> bool {
@@ -2728,23 +2954,19 @@ fn e0308_help_hint(expected: &Ty, actual: &Ty, env: &TypeEnv) -> Option<String> 
         return Some("convert with `float.to_int(x)`".to_string());
     }
 
-    // Heuristic (iv): ADT variant vs parent — not implementable without richer variant type
-    // representation; deferred to v0.8+.
-    //
-    // ADR 0017 specifies: when expected is a concrete ADT variant type (e.g. the type of
-    // `Foo.Bar`) but actual is the parent ADT type itself (e.g. `Foo`), or vice versa,
-    // suggest `help: "did you mean \`Foo.Bar(...)\`?"`.
-    //
-    // This is not implementable here because `Ty::Named(String)` does not structurally
-    // distinguish ADT variant constructor types from parent ADT types.  Both a parent ADT
-    // `Color` and a standalone named type are represented as `Ty::Named("Color")`, and
-    // `TypeEnv` only maps parent → variant names (forward direction), with no reverse
-    // lookup from a variant name back to its parent ADT.  To implement this heuristic,
-    // `Ty` would need a `Ty::Variant { parent: String, name: String }` variant, or
-    // `TypeEnv` would need a reverse map (variant_name → parent_adt_name).
-    //
-    // TODO(v0.8+): add `Ty::Variant` (or a reverse variant-to-parent map in TypeEnv)
-    // and implement heuristic (iv) with dot-notation suggestion `Foo.Bar(...)`.
+    // Heuristic (iv): expected Named type Foo, found Named type Bar where Bar is a variant of Foo.
+    // Example: fn returns `Color` but the body uses bare `Red` (which resolved to `Ty::Named("Red")`).
+    // Suggest: `did you mean `Color.Red`?`
+    // Conservative guard: only fire when `found_name` resolves to *exactly one* parent ADT
+    // in scope and that parent matches `expected_name`. If `found_name` is a variant of
+    // multiple ADTs (ambiguous), no suggestion is emitted.
+    if let (Ty::Named(expected_name), Ty::Named(found_name)) = (expected, actual) {
+        if let Some(adt_name) = find_unique_adt_for_variant(found_name, env) {
+            if &adt_name == expected_name {
+                return Some(format!("did you mean `{}.{}`?", expected_name, found_name));
+            }
+        }
+    }
 
     None
 }

@@ -1,5 +1,16 @@
 // Diagnostic represents a single compiler message (error, warning, note).
 // Format: error[E0042]: message at file:line:col
+//
+// Diagnostic code ranges (informational):
+//   E0001–E0099: Lexer / parser errors
+//   E0100–E0299: Resolver / scope errors
+//   E0300–E0499: Type checker errors (mismatch, missing method, ...)
+//   E0500–E0599: MIR / codegen-time errors visible to users (e.g. LLVM type
+//                mismatch that escaped the checker; ideally never seen)
+//   E9000–E9999: Internal Compiler Errors (ICE).  These indicate a compiler
+//                bug.  Examples:
+//                  - E9001: unresolved type (`Ty::Error` or unbound `Ty::Var`)
+//                    reached the codegen stage.
 
 use crate::Span;
 

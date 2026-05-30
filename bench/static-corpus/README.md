@@ -30,6 +30,9 @@ Files in the top-level directory are expected to compile without errors.
 | `10-data-modeling.tyra` | `value`/`data` distinction, `Stringable`, `Eq`/`Ord` |
 | `11-break-loop.tyra` | `break` inside `while` and `for` (§10.4, §10.5) |
 | `25-nested-match-map-get.tyra` | Nested `match` on `io.read_line()` + `Map.get()` — E0500 regression guard (§10.3, §17.3.6) |
+| `26-linked-map-order.tyra` | `LinkedMap` insert/iteration compiles; runtime order verified in `linked_map_order_test.tyra` (§11, ADR-0019, v0.8.0) |
+| `27-hm-inference-empty-map.tyra` | Empty map literal `{}` resolves via HM unification from type annotation without `Ty::Error` (ADR-0020, v0.8.0) |
+| `28-linked-set.tyra` | `LinkedSet` insert/contains/remove/len/for-loop compiles; runtime correctness in `linked_set_test.tyra` (§11, ADR-0019, v0.8.0) |
 
 ## Negative corpus (`bad/`)
 
@@ -49,6 +52,15 @@ and that stderr contains `error[Exxxx]`.
 | `bad/E0305-arithmetic-type-mismatch.tyra` | E0305 — type: arithmetic type mismatch |
 | `bad/E0309-return-type-mismatch.tyra` | E0309 — type: fn return type mismatch |
 | `bad/E0400-non-exhaustive-match.tyra` | E0400 — type: non-exhaustive match |
+| `bad/E0308-adt-variant.tyra` | E0308 — type: ADT variant used where parent type expected (heuristic iv, v0.8.0) |
+
+### Documentation-only fixtures (not CI-checked by `check.sh`)
+
+Some files in `bad/` are **documentation fixtures** rather than automated regression guards. `check.sh` only verifies files whose filename starts with `Exxxx-` (an error code prefix) and exits non-zero on unexpected output. The following file does not follow that pattern and is intentionally excluded from automated checking:
+
+| File | Purpose |
+|------|---------|
+| `bad/E9001_no_type_error_reaches_codegen.tyra` | Documents the expected E0308 diagnostic for a Map value-type mismatch. Verifies that E9001 (ICE: unresolved type reached codegen) does **not** appear — i.e., the compiler diagnoses the error before codegen rather than crashing. This is a property that can only be confirmed by running `tyra check` manually, not by pattern-matching a fixed error code in `check.sh`. The E9001 guard itself is unit-tested in `tyra-codegen-llvm/src/lib.rs`. |
 
 ## Running the corpus
 
@@ -95,6 +107,20 @@ The script is informational (exits 0); it is not run in CI.
 3. Add a row to the positive corpus table above.
 4. Do NOT add programs that are expected to fail at runtime (runtime-only
    failures belong in `bench/ai-gen/`).
+
+### Windows corpus (`win/`)
+
+Files in `win/` are smoke-test programs specifically for the Windows MSVC ABI target (ADR-0021, v0.8.0). They are **not** checked by the default `check.sh` (which targets the host platform). They are run by the `release-gate-windows` CI job (`.github/workflows/release-gate.yml`, "Windows corpus" steps) and can also be compiled manually with:
+
+```powershell
+.\target\debug\tyra.exe build bench\static-corpus\win\01-hello-win.tyra
+.\target\debug\hello-win.exe   # gc.dll must be in the same directory
+```
+
+| File | What it tests |
+|------|---------------|
+| `win/01-hello-win.tyra` | Minimal binary runs; gc.dll loads from same-dir (ADR-0021) |
+| `win/02-gc-alloc-win.tyra` | GC allocation via `List<Int>` — Boehm GC initialises correctly |
 
 ### Negative corpus
 

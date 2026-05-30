@@ -1,0 +1,10 @@
+# 27-hm-inference-empty-map.tyra
+# Validates: HM unification resolves Map<K,V> from empty literal via type annotation
+# The expected type flows from the annotation into the empty literal,
+# concretising the Ty::Var without a Ty::Error cascade (ADR-0020).
+
+fn main() -> Unit
+  let m: Map<String, Int> = {}
+  let m2 = m.insert("hello", 42)
+  print("len=#{m2.len()}")
+end

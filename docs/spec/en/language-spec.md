@@ -1,6 +1,6 @@
 # Tyra Language Specification
 
-- **Version**: 0.7
+- **Version**: 0.8
 - **Status**: Stable
 - **Last updated**: 2026-05-27
 
@@ -847,6 +847,8 @@ Standard collections (design target):
 - `List<T>`
 - `Map<K, V>` — fully generalized in v0.6.0 for arbitrary `K: Eq + Hash` / arbitrary `V` (§17.3.6)
 - `Set<T>` — added in v0.6.0 for arbitrary `T: Eq + Hash` (§17.3.7)
+- `LinkedMap<K, V>` — added in v0.8.0; insertion-order-preserving persistent Map (ADR-0019)
+- `LinkedSet<T>` — added in v0.8.0; insertion-order-preserving persistent Set (ADR-0019)
 
 Literals:
 
@@ -872,6 +874,55 @@ let z = items.get(0)?      # Option early return (when the enclosing function re
 > - `List<T>`: generic `[]` / `.get(index)` / `for` are available. The `list` module functions (`list.push` / `sum` / `max` / `min` / `contains` / `index_of`) are frozen for **`List<Int>` only** (§17.3.5). `List<String>` and other element types can be iterated with `for` but the `list.*` functions do not apply.
 > - `Map<K, V>`: fully generalized in v0.6.0 for arbitrary K / V (§17.3.6). `remove` / iteration are a later release.
 > - `Set<T>`: added in v0.6.0 (§17.3.7). Set-literal syntax and set operations are a later release.
+> - `LinkedMap<K, V>`: added in v0.8.0 (ADR-0019). `K: Eq + Hash`, arbitrary `V`. Insertion-order iteration supported. Requires `import linked_map`.
+> - `LinkedSet<T>`: added in v0.8.0 (ADR-0019). `T: Eq + Hash`. Insertion-order iteration supported. Requires `import linked_set`.
+
+### 11.1 LinkedMap — insertion-order Map (v0.8.0, ADR-0019)
+
+`LinkedMap<K, V>` is a persistent map that preserves insertion order. Unlike `Map<K, V>` (HAMT-based; iteration order undefined), `for k, v in lm` always yields entries in the order of the first `.insert()` call.
+
+```tyra
+import linked_map
+
+let lm = LinkedMap.new()
+  .insert("a", 1)
+  .insert("b", 2)
+  .insert("c", 3)
+
+for k, v in lm
+  print("#{k}=#{v}")   # prints: a=1, b=2, c=3 (in this order)
+end
+
+let v = lm.get("b")        # Option<Int> — Some(2)
+let lm2 = lm.remove("a")  # LinkedMap<String, Int>; "b", "c" remain
+let ok = lm.contains_key("c")  # Bool — true
+let n = lm.len()                # Int — 3
+```
+
+**Constraint**: `K` must satisfy the `Eq + Hash` ability constraint. `Float` keys are not permitted.
+
+### 11.2 LinkedSet — insertion-order Set (v0.8.0, ADR-0019)
+
+`LinkedSet<T>` is a persistent set that preserves insertion order.
+
+```tyra
+import linked_set
+
+let ls = LinkedSet.new()
+  .insert(10)
+  .insert(20)
+  .insert(30)
+
+for x in ls
+  print(x)   # prints: 10, 20, 30 (in this order)
+end
+
+let ok = ls.contains(20)  # Bool — true
+let ls2 = ls.remove(20)   # LinkedSet<Int>; 10, 30 remain
+let n = ls.len()           # Int — 3
+```
+
+**Constraint**: `T` must satisfy the `Eq + Hash` ability constraint. `Float` elements are not permitted.
 
 ---
 

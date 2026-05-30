@@ -699,11 +699,15 @@ fn pre_scan_struct_types(
                             struct_temps.insert(dest.clone(), mono_name);
                         }
                     }
-                    // Generic struct returns: List<T>, Set<T>, Map<K,V>.
+                    // Generic struct returns: List<T>, Set<T>, Map<K,V>,
+                    // LinkedMap<K,V>, LinkedSet<T>.
                     // Propagate the monomorphized struct type so downstream
                     // Copy / Store uses the struct-aware codegen path.
                     if let Ty::Generic(name, _) = &sig.return_type {
-                        if matches!(name.as_str(), "List" | "Set" | "Map") {
+                        if matches!(
+                            name.as_str(),
+                            "List" | "Set" | "Map" | "LinkedMap" | "LinkedSet"
+                        ) {
                             let mono_name = sig.return_type.monomorphized_name();
                             if struct_map.contains_key(mono_name.as_str()) {
                                 struct_temps.insert(dest.clone(), mono_name);

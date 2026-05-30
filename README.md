@@ -2,7 +2,7 @@
 
 A statically-typed, AI-friendly programming language for backend services, CLI tools, and business applications.
 
-> **v0.7.0** — HAMT-persistent `Map<K,V>` and `Set<T>` with `insert`/`remove`/iteration, E0308 diagnostic improvements (help hints, secondary labels), `for k, v in m` syntax, and post-release diagnostic hardening (E0204 hard error, E0213, E0110/E0211 help hints). AI-gen benchmark: 98/100 pass. [See known limitations](#known-limitations) before using in production.
+> **v0.8.0** — Hindley-Milner type inference (rank-1), E0500 LLVM crash eliminated (E9001 ICE guard), `LinkedMap<K,V>` / `LinkedSet<T>` (insertion-order-preserving), E0308 heuristic iv (ADT variant suggestion), Windows native support (MSVC ABI, `vcpkg` + `lld-link`). **E0500 occurrences: 0** in AI-gen benchmark Run 18 (86/100 pass, seed=18 — seed differs from Run 17's seed=2, so pass-count comparison is not direct; see [`bench/ai-gen/results/SUMMARY.md`](bench/ai-gen/results/SUMMARY.md)). [See known limitations](#known-limitations) before using in production.
 
 ---
 
@@ -100,6 +100,41 @@ let p1 = Point(x: 1.0, y: 2.0)
 let p2 = p1.copy(x: 3.0)
 ```
 
+## New in v0.8.0 — LinkedMap and LinkedSet
+
+`LinkedMap<K,V>` and `LinkedSet<T>` preserve insertion order during iteration, unlike the HAMT-based `Map`/`Set` which iterate in hash order.
+
+```tyra
+import linked_map
+
+fn main() -> Unit
+  let scores: LinkedMap<String, Int> = LinkedMap.new()
+  let scores = scores.insert("alice", 95)
+  let scores = scores.insert("bob",   87)
+  let scores = scores.insert("carol", 92)
+  for name, score in scores
+    print("#{name}: #{score}")   # alice, bob, carol — insertion order guaranteed
+  end
+  let after = scores.remove("bob")
+  print("len=#{after.len()}")    # 2
+end
+```
+
+```tyra
+import linked_set
+
+fn main() -> Unit
+  let seen: LinkedSet<String> = LinkedSet.new()
+  let seen = seen.insert("apple")
+  let seen = seen.insert("banana")
+  let seen = seen.insert("apple")   # duplicate — no-op
+  print("len=#{seen.len()}")        # 2
+  for item in seen
+    print(item)                     # apple, banana — insertion order
+  end
+end
+```
+
 ## Quick start: testing
 
 Create a `*_test.tyra` file and run `tyra test`:
@@ -126,7 +161,7 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 
 ## Status
 
-**Stable in v0.7.0** — supported and tested:
+**Stable in v0.8.0** — supported and tested:
 
 | Component | Notes |
 | --- | --- |
@@ -159,7 +194,7 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | `Tyra.lock` + floating `branch` constraints + transitive dep resolution | ✅ Complete |
 | LSP server (`tyra-lsp`) + VS Code extension | ✅ Development install |
 | DAP debugger (DWARF + lldb-dap + VS Code breakpoints/locals) | ✅ Complete (v0.6.0+) |
-| Static conformance corpus (25 positive programs + 19 error cases) | ✅ CI-gated |
+| Static conformance corpus (33 positive programs + 21 error cases) | ✅ CI-gated |
 
 ## Platform support
 
@@ -170,7 +205,7 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | Linux x86_64 (glibc) | Dynamic | Supported |
 | Linux x86_64 (musl) | Static | Supported (v0.5.0+) |
 | macOS arm64 | Dynamic | Supported |
-| Windows | — | Unguaranteed (tracking) |
+| Windows x86_64 (MSVC) | Dynamic (`gc.dll` same-dir) | Supported (v0.8.0+, MSVC ABI, `gc.dll` same-dir) |
 
 **Using the musl static release artifact:**
 
@@ -205,7 +240,9 @@ tyra build --static myprogram.tyra
 
 ## Known limitations
 
-- **Windows**: untested. Build via WSL2 is recommended. A non-blocking tracking CI job surfaces toolchain drift.
+- **Windows**: supported on x86_64-pc-windows-msvc (v0.8.0+, MSVC ABI). `tyra build` auto-copies `gc.dll` next to the output binary; no PATH change needed. MinGW GNU ABI is not supported. Windows ARM64 and native PDB debug symbols are v0.9+.
+- **`LinkedMap.remove` / `LinkedSet.remove` is O(n)**: the entries array is rebuilt on each remove. For workloads with frequent removals, use `Map` / `Set` instead.
+- **HM unification is conservative**: `types_compatible()` uses a per-call throw-away substitution rather than propagating the substitution across the full checker. Full substitution threading is deferred to v0.9. Most programs are unaffected; edge cases may surface unexpected type errors.
 - **`tyra build --static`**: only reliable on musl. glibc static linking is unsupported (breaks `getaddrinfo`).
 - **`http.server`**: experimental. Single-threaded, no TLS, no middleware. Do not use in production.
 - **Breaking changes**: expect breaking changes before v1.0.
@@ -290,8 +327,8 @@ The compiler always declares which spec version it implements:
 
 ```console
 $ tyra --version
-tyra 0.7.0
-implementing language spec 0.7
+tyra 0.8.0
+implementing language spec 0.8
 ```
 
 While Tyra is at v0.x, **breaking changes are allowed in MINOR version bumps**. After v1.0, breaking changes will use the Edition model (similar to Rust editions).

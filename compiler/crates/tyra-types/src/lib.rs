@@ -8,7 +8,7 @@ mod checker;
 mod ty;
 
 pub use checker::{TypeEnv, TypeIndex, check, infer_expr};
-pub use ty::{Ty, types_compatible};
+pub use ty::{Substitution, Ty, TyVarId, UnifyError, types_compatible, unify};
 
 #[cfg(test)]
 mod tests {
@@ -1608,6 +1608,68 @@ end
         assert!(
             helps.is_empty(),
             "no heuristic hint should fire when actual type is Error; got: {:?}",
+            helps
+        );
+    }
+
+    // Heuristic (iv): expected ADT `Color`, found `Red` which is a variant of `Color`.
+    // Scenario: fn declared to return `Red` (variant name misused as type name) is called
+    // where `Color` is expected. The type checker sees expected=Color, found=Red.
+    #[test]
+    fn e0308_help_adt_variant_suggestion() {
+        // `Red` is a variant of `Color`. A fn is declared as `-> Red` (misusing the
+        // variant name as a type), and its return value is bound to `let c: Color`.
+        // check_type_match sees expected=Ty::Named("Color"), actual=Ty::Named("Red").
+        // Heuristic (iv) should suggest `Color.Red`.
+        let source = r#"
+type Color =
+  | Red
+  | Green
+  | Blue
+
+fn get_red() -> Red
+  Color.Red
+end
+
+let c: Color = get_red()
+"#;
+        let report = check_str(source);
+        // E0308 must fire: get_red() returns Ty::Named("Red"), but c: Color expects Ty::Named("Color")
+        assert!(
+            has_e0308(&report),
+            "expected E0308 for Color vs Red; got: {:?}",
+            report.diagnostics()
+        );
+        let helps = get_e0308_help(&report);
+        assert!(
+            helps.iter().any(|h| h.contains("Color.Red")),
+            "expected 'did you mean `Color.Red`?' help; got: {:?}",
+            helps
+        );
+    }
+
+    // Heuristic (iv) negative: same variant name in two ADTs → no suggestion (ambiguous)
+    #[test]
+    fn e0308_no_hint_for_ambiguous_variant() {
+        // Both `A` and `B` have a variant named `Foo`.
+        // heuristic (iv) must NOT fire to avoid false positives.
+        let source = r#"
+type A =
+  | Foo
+  | Bar
+
+type B =
+  | Foo
+  | Baz
+
+let x: A = Foo
+"#;
+        let report = check_str(source);
+        // If E0308 fires, there must be no "did you mean" help (ambiguous Foo).
+        let helps = get_e0308_help(&report);
+        assert!(
+            !helps.iter().any(|h| h.contains("did you mean")),
+            "heuristic (iv) must not fire for ambiguous variant `Foo`; got: {:?}",
             helps
         );
     }

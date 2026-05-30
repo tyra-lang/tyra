@@ -1,0 +1,9 @@
+# bench/static-corpus/win/02-gc-alloc-win.tyra
+# Smoke test: exercises GC allocation on Windows (verifies gc.dll loads correctly
+# and Boehm GC initialises without crashing). Creates a list to force GC_malloc.
+# SPEC_REF: ADR-0021 (Windows MSVC ABI) + ADR-0007 (Boehm GC reference impl)
+
+fn main() -> Unit
+  let items: List<Int> = [1, 2, 3, 4, 5]
+  print("gc_ok=#{items.len()}")
+end

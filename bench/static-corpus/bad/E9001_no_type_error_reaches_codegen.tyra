@@ -1,0 +1,24 @@
+# E9001_no_type_error_reaches_codegen.tyra
+#
+# This file intentionally uses an underscore separator after the code prefix
+# (`E9001_`) rather than the standard `Exxxx-` form, so the corpus runner
+# (bench/static-corpus/check.sh) skips it.  It is a documentation-only fixture.
+#
+# Purpose: assert that programs containing type errors are diagnosed via the
+# normal E0xxx codes (E0204, E0308, ...) and never escape to the E9001 ICE
+# guard at codegen entry (tyra_codegen_llvm::check_no_type_errors).
+#
+# E9001 means "internal compiler error: unresolved type reached code
+# generation".  If `tyra check` ever emits E9001 for this file, that is a
+# checker bug — every type error here should already be reported as E0xxx.
+#
+# SPEC_REF: §8 (type system), ADR-0017 (diagnostic quality)
+#
+# To verify manually:
+#   tyra check bench/static-corpus/bad/E9001_no_type_error_reaches_codegen.tyra
+# Expected: exit non-zero, stderr contains `error[E0308]` (and/or `error[E0204]`)
+#           and does NOT contain `error[E9001]`.
+
+# Map value-type mismatch: literal contains an unsupported value type.
+# Triggers MapLit branch in checker.rs which now emits E0308 (was: silent Ty::Error).
+let m = { "k": [1, 2, 3] }

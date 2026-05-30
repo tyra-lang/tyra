@@ -1169,6 +1169,7 @@ impl<'a> LowerCtx<'a> {
         &mut self,
         iter_id: u32,
         is_map: bool,
+        fn_prefix: Option<&str>,
         bindings: &[String],
         binding_tys: &[Ty],
         body_stmts: &[Stmt],
@@ -1205,7 +1206,7 @@ impl<'a> LowerCtx<'a> {
         self.bool_vars = saved_bool_vars.clone();
         self.generic_var_types = saved_generic_var.clone();
 
-        let prefix = if is_map { "__map_iter" } else { "__set_iter" };
+        let prefix = fn_prefix.unwrap_or(if is_map { "__map_iter" } else { "__set_iter" });
         let fn_name = format!("{prefix}_{iter_id}");
 
         // Build params: __env (ptr) + one or two box params.

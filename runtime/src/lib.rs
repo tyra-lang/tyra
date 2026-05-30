@@ -66,6 +66,18 @@ pub use stdlib_set::{
     tyra_set_remove,
 };
 
+pub mod stdlib_linked_map;
+pub use stdlib_linked_map::{
+    tyra_linked_map_contains_key, tyra_linked_map_for_each, tyra_linked_map_get,
+    tyra_linked_map_insert, tyra_linked_map_len, tyra_linked_map_new, tyra_linked_map_remove,
+};
+
+pub mod stdlib_linked_set;
+pub use stdlib_linked_set::{
+    tyra_linked_set_contains, tyra_linked_set_for_each, tyra_linked_set_insert,
+    tyra_linked_set_len, tyra_linked_set_new, tyra_linked_set_remove,
+};
+
 mod stdlib_string;
 pub use stdlib_string::{
     tyra_string_byte_at, tyra_string_contains, tyra_string_ends_with, tyra_string_from_byte,

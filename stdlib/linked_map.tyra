@@ -1,0 +1,26 @@
+# stdlib/linked_map.tyra — Insertion-order-preserving LinkedMap<K,V> (§11, ADR-0019).
+#
+# LinkedMap<K,V> is a persistent map that iterates in insertion order.
+# Unlike Map<K,V> (HAMT; undefined iteration order), LinkedMap<K,V>
+# preserves the order in which keys were first inserted.
+#
+# K must satisfy the Eq + Hash ability constraints; V is unconstrained.
+# Float keys are not permitted (Float is not Hash).
+#
+# v0.8 API:
+#   Construction:  LinkedMap.new()          — returns an empty LinkedMap<K,V>
+#   lm.insert(k, v) -> LinkedMap<K,V>       — non-mutating; new key appended at end;
+#                                            existing key: value updated, order preserved
+#   lm.get(k)        -> Option<V>           — None if absent
+#   lm.remove(k)     -> LinkedMap<K,V>      — non-mutating; preserves remaining order
+#   lm.contains_key(k) -> Bool
+#   lm.len()         -> Int
+#   for k, v in lm { ... }                  — iterates in insertion order (ADR-0019)
+#
+# All operations are non-mutating from the language's perspective.
+# The underlying GC_malloc'd table is managed by Boehm GC (ADR-0007).
+#
+# This module currently has no exported functions — all LinkedMap operations are
+# accessed via LinkedMap.new() construction and method-call syntax on
+# LinkedMap<K,V> values.  The module exists to document the built-in API and
+# reserve the `linked_map` namespace for future additions.

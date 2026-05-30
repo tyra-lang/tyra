@@ -1,0 +1,24 @@
+# stdlib/linked_set.tyra — Insertion-order-preserving LinkedSet<T> (§11, ADR-0019).
+#
+# LinkedSet<T> is a persistent set that iterates in insertion order.
+# Unlike Set<T> (HAMT; undefined iteration order), LinkedSet<T>
+# preserves the order in which elements were first inserted.
+#
+# T must satisfy the Eq + Hash ability constraints.
+# Float elements are not permitted (Float is not Hash).
+#
+# v0.8 API:
+#   Construction:  LinkedSet.new()     — returns an empty LinkedSet<T>
+#   ls.insert(x)   -> LinkedSet<T>     — idempotent; new element appended at end;
+#                                       existing element: order unchanged
+#   ls.remove(x)   -> LinkedSet<T>     — non-mutating; preserves remaining order
+#   ls.contains(x) -> Bool
+#   ls.len()       -> Int
+#   for x in ls { ... }                — iterates in insertion order (ADR-0019)
+#
+# All operations are non-mutating from the language's perspective;
+# `insert` returns a new binding (same underlying GC_malloc'd table).
+# Managed by Boehm GC (ADR-0007) — no manual free needed.
+#
+# This module has no exported functions — all LinkedSet operations are accessed
+# via `LinkedSet.new()` construction and method-call syntax on LinkedSet<T> values.

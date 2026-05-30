@@ -1,5 +1,8 @@
 // Internal type representation for the Tyra type checker.
 // spec reference: §7.2 (primitives), §8 (type system), §9.4 (function types)
+// ADR reference: docs/design/0020-hm-inference.md (HM rank-1 inference, v0.8)
+
+use std::collections::HashMap;
 
 /// Abilities a type can have (§8). Auto-derived for value/data/ADT per
 /// the spec's structural rules; primitives get theirs from the prelude.
@@ -130,6 +133,34 @@ impl Ty {
         }
     }
 
+    /// Check if this is a LinkedMap<K,V> type (§11, ADR-0019).
+    pub fn is_linked_map(&self) -> bool {
+        matches!(self, Ty::Generic(name, args) if name == "LinkedMap" && args.len() == 2)
+    }
+
+    /// Extract (K, V) from LinkedMap<K,V>.
+    pub fn linked_map_kv(&self) -> Option<(&Ty, &Ty)> {
+        match self {
+            Ty::Generic(name, args) if name == "LinkedMap" && args.len() == 2 => {
+                Some((&args[0], &args[1]))
+            }
+            _ => None,
+        }
+    }
+
+    /// Check if this is a LinkedSet<T> type (§11, ADR-0019).
+    pub fn is_linked_set(&self) -> bool {
+        matches!(self, Ty::Generic(name, args) if name == "LinkedSet" && args.len() == 1)
+    }
+
+    /// Extract T from LinkedSet<T>.
+    pub fn linked_set_elem(&self) -> Option<&Ty> {
+        match self {
+            Ty::Generic(name, args) if name == "LinkedSet" && args.len() == 1 => Some(&args[0]),
+            _ => None,
+        }
+    }
+
     /// Generate a monomorphized name for codegen.
     /// e.g., Option<Int> → "Option__Int", Result<String, AppError> → "Result__String__AppError"
     pub fn monomorphized_name(&self) -> String {
@@ -208,38 +239,217 @@ impl std::fmt::Display for Ty {
     }
 }
 
+// ============================================================================
+// Hindley-Milner rank-1 type inference (ADR 0020)
+// ============================================================================
+//
+// `Ty::Var(u32)` carries a `TyVarId` payload (the `u32` is the wrapped id).
+// We keep the variant as `Ty::Var(u32)` rather than `Ty::Var(TyVarId)` to
+// avoid touching every downstream pattern-match in tyra-mir / tyra-codegen-llvm
+// — `TyVarId` is a thin newtype that converts to/from `u32` cheaply.
+
+/// Unique identifier for a type-inference variable.
+///
+/// Each fresh variable produced during type checking gets a distinct id;
+/// `Substitution` maps these ids to their resolved types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TyVarId(pub u32);
+
+impl TyVarId {
+    /// Wrap this id in a `Ty::Var` variant.
+    pub fn into_ty(self) -> Ty {
+        Ty::Var(self.0)
+    }
+}
+
+impl From<u32> for TyVarId {
+    fn from(v: u32) -> Self {
+        TyVarId(v)
+    }
+}
+
+impl From<TyVarId> for u32 {
+    fn from(v: TyVarId) -> u32 {
+        v.0
+    }
+}
+
+/// Substitution map: maps each `TyVarId` to its resolved type.
+///
+/// Built up incrementally by `unify`.  Use `apply` to obtain a ground type
+/// after unification completes.
+#[derive(Debug, Default, Clone)]
+pub struct Substitution {
+    map: HashMap<TyVarId, Ty>,
+}
+
+impl Substitution {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Walk a type one level: if it is a variable with a binding, follow
+    /// the chain until we hit a non-variable or an unbound variable.
+    pub fn walk(&self, ty: &Ty) -> Ty {
+        let mut current = ty.clone();
+        loop {
+            match current {
+                Ty::Var(id) => match self.map.get(&TyVarId(id)) {
+                    Some(t) => current = t.clone(),
+                    None => return Ty::Var(id),
+                },
+                other => return other,
+            }
+        }
+    }
+
+    /// Bind a variable to a type. Caller is responsible for performing the
+    /// occurs check before calling.
+    pub fn bind(&mut self, id: TyVarId, ty: Ty) {
+        self.map.insert(id, ty);
+    }
+
+    /// Apply the substitution deeply to a type, recursing into composite
+    /// types so the result contains no resolved-but-unwalked variables.
+    pub fn apply(&self, ty: &Ty) -> Ty {
+        match self.walk(ty) {
+            Ty::Generic(name, args) => {
+                Ty::Generic(name, args.iter().map(|a| self.apply(a)).collect())
+            }
+            Ty::Fn(params, ret) => Ty::Fn(
+                params.iter().map(|p| self.apply(p)).collect(),
+                Box::new(self.apply(&ret)),
+            ),
+            t => t,
+        }
+    }
+
+    /// Has this id been bound?
+    pub fn is_bound(&self, id: TyVarId) -> bool {
+        self.map.contains_key(&id)
+    }
+}
+
+/// Errors that can arise during unification.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnifyError {
+    /// `expected` and `found` are structurally incompatible.
+    Mismatch { expected: Ty, found: Ty },
+    /// Binding `id` to `ty` would create an infinite type.
+    OccursCheck { id: TyVarId, ty: Ty },
+}
+
+/// Does the variable `id` occur anywhere in `ty` (after walking)?
+///
+/// Required to reject infinite types like `a = List<a>`.
+fn occurs(id: TyVarId, ty: &Ty, subst: &Substitution) -> bool {
+    let ty = subst.walk(ty);
+    match &ty {
+        Ty::Var(other) => *other == id.0,
+        Ty::Generic(_, args) => args.iter().any(|a| occurs(id, a, subst)),
+        Ty::Fn(params, ret) => {
+            params.iter().any(|p| occurs(id, p, subst)) || occurs(id, ret, subst)
+        }
+        _ => false,
+    }
+}
+
+/// Unify two types under the current substitution.
+///
+/// On success the substitution is updated in place; on failure the
+/// substitution may be partially updated (callers that want atomicity
+/// should clone first).
+///
+/// `Ty::Error` is treated as compatible with anything to avoid cascading
+/// diagnostics — the upstream error already produced a report.
+/// `Ty::Never` is similarly compatible (bottom type).
+pub fn unify(a: &Ty, b: &Ty, subst: &mut Substitution) -> Result<(), UnifyError> {
+    let a = subst.walk(a);
+    let b = subst.walk(b);
+
+    // Error / Never short-circuit: don't cascade.
+    if matches!(a, Ty::Error) || matches!(b, Ty::Error) {
+        return Ok(());
+    }
+    if matches!(a, Ty::Never) || matches!(b, Ty::Never) {
+        return Ok(());
+    }
+
+    match (&a, &b) {
+        // Same variable on both sides
+        (Ty::Var(ia), Ty::Var(ib)) if ia == ib => Ok(()),
+        // Variable on left → bind (with occurs check)
+        (Ty::Var(id), _) => {
+            let tvar = TyVarId(*id);
+            if occurs(tvar, &b, subst) {
+                return Err(UnifyError::OccursCheck { id: tvar, ty: b });
+            }
+            subst.bind(tvar, b);
+            Ok(())
+        }
+        // Variable on right → bind (with occurs check)
+        (_, Ty::Var(id)) => {
+            let tvar = TyVarId(*id);
+            if occurs(tvar, &a, subst) {
+                return Err(UnifyError::OccursCheck { id: tvar, ty: a });
+            }
+            subst.bind(tvar, a);
+            Ok(())
+        }
+        // Concrete primitives
+        (Ty::Int, Ty::Int)
+        | (Ty::Float, Ty::Float)
+        | (Ty::Bool, Ty::Bool)
+        | (Ty::String, Ty::String)
+        | (Ty::Rune, Ty::Rune)
+        | (Ty::Bytes, Ty::Bytes)
+        | (Ty::Unit, Ty::Unit) => Ok(()),
+        // Named types: must match by name (no parameters yet).
+        (Ty::Named(n1), Ty::Named(n2)) if n1 == n2 => Ok(()),
+        // Generic types: head + arity match, recursively unify args.
+        (Ty::Generic(n1, a1), Ty::Generic(n2, a2)) if n1 == n2 && a1.len() == a2.len() => {
+            for (x, y) in a1.iter().zip(a2.iter()) {
+                unify(x, y, subst)?;
+            }
+            Ok(())
+        }
+        // Function types: arity match, recursively unify params + return.
+        (Ty::Fn(p1, r1), Ty::Fn(p2, r2)) if p1.len() == p2.len() => {
+            for (x, y) in p1.iter().zip(p2.iter()) {
+                unify(x, y, subst)?;
+            }
+            unify(r1, r2, subst)
+        }
+        // Anything else is a structural mismatch.
+        _ => Err(UnifyError::Mismatch {
+            expected: a,
+            found: b,
+        }),
+    }
+}
+
 /// Check if two types are compatible (assignable).
-/// Never is compatible with everything (bottom type).
-/// Error is compatible with everything (to suppress cascading errors).
-/// `Ty::Var` (unresolved type variable) is compatible with anything
-/// — it represents a type we couldn't infer yet, not a mismatch.
-/// This is what makes `let xs: List<Int> = []` type-check: the empty
-/// `ListLit` produces `List<Var(0)>` which must match `List<Int>`
-/// through structural compatibility.
+///
+/// This is the public predicate used throughout the checker. It is a thin
+/// wrapper around `unify`: two types are compatible iff they unify under
+/// a fresh substitution.
+///
+/// Special cases preserved from the v0.7 behavior:
+/// - `Ty::Never` is compatible with everything (bottom type).
+/// - `Ty::Error` is compatible with everything (avoids cascading
+///   diagnostics — the upstream error already produced a report).
+/// - `Ty::Var` unifies with anything by binding the substitution; since
+///   the substitution is discarded here, this behaves as "wildcard"
+///   compatibility, matching the v0.7 semantics that lets
+///   `let xs: List<Int> = []` type-check (the empty list literal has
+///   type `List<Var(_)>`).
+///
+/// For diagnostics that *require* a binding to be remembered (and the
+/// `unify` failure mode to be inspected), callers should invoke `unify`
+/// directly with a persistent `Substitution`.
 pub fn types_compatible(expected: &Ty, actual: &Ty) -> bool {
-    if actual.is_never() || actual.is_error() || expected.is_error() {
-        return true;
-    }
-    match (expected, actual) {
-        (Ty::Var(_), _) | (_, Ty::Var(_)) => true,
-        (Ty::Generic(e_name, e_args), Ty::Generic(a_name, a_args)) => {
-            e_name == a_name
-                && e_args.len() == a_args.len()
-                && e_args
-                    .iter()
-                    .zip(a_args.iter())
-                    .all(|(e, a)| types_compatible(e, a))
-        }
-        (Ty::Fn(e_params, e_ret), Ty::Fn(a_params, a_ret)) => {
-            e_params.len() == a_params.len()
-                && e_params
-                    .iter()
-                    .zip(a_params.iter())
-                    .all(|(e, a)| types_compatible(e, a))
-                && types_compatible(e_ret, a_ret)
-        }
-        _ => expected == actual,
-    }
+    let mut subst = Substitution::new();
+    unify(expected, actual, &mut subst).is_ok()
 }
 
 #[cfg(test)]
@@ -367,5 +577,166 @@ mod tests {
             vec![Ty::Generic("List".into(), vec![Ty::Int])],
         );
         assert_eq!(nested.monomorphized_name(), "Option__List__Int");
+    }
+
+    // ========================================================================
+    // HM unification (ADR 0020)
+    // ========================================================================
+
+    #[test]
+    fn unify_concrete_same() {
+        let mut s = Substitution::new();
+        assert!(unify(&Ty::Int, &Ty::Int, &mut s).is_ok());
+    }
+
+    #[test]
+    fn unify_concrete_mismatch() {
+        let mut s = Substitution::new();
+        let err = unify(&Ty::Int, &Ty::String, &mut s).unwrap_err();
+        assert!(matches!(err, UnifyError::Mismatch { .. }));
+    }
+
+    #[test]
+    fn unify_var_with_concrete_binds() {
+        let mut s = Substitution::new();
+        let v = Ty::Var(0);
+        assert!(unify(&v, &Ty::Int, &mut s).is_ok());
+        assert_eq!(s.apply(&v), Ty::Int);
+    }
+
+    #[test]
+    fn unify_concrete_with_var_binds() {
+        let mut s = Substitution::new();
+        let v = Ty::Var(7);
+        assert!(unify(&Ty::String, &v, &mut s).is_ok());
+        assert_eq!(s.apply(&v), Ty::String);
+    }
+
+    #[test]
+    fn unify_generic_recursive() {
+        let mut s = Substitution::new();
+        let v = Ty::Var(0);
+        let lhs = Ty::Generic("List".into(), vec![v.clone()]);
+        let rhs = Ty::Generic("List".into(), vec![Ty::Int]);
+        assert!(unify(&lhs, &rhs, &mut s).is_ok());
+        assert_eq!(s.apply(&v), Ty::Int);
+        assert_eq!(s.apply(&lhs), rhs);
+    }
+
+    #[test]
+    fn unify_generic_name_mismatch() {
+        let mut s = Substitution::new();
+        let lhs = Ty::Generic("List".into(), vec![Ty::Int]);
+        let rhs = Ty::Generic("Option".into(), vec![Ty::Int]);
+        assert!(unify(&lhs, &rhs, &mut s).is_err());
+    }
+
+    #[test]
+    fn unify_generic_arity_mismatch() {
+        let mut s = Substitution::new();
+        let lhs = Ty::Generic("Result".into(), vec![Ty::Int]);
+        let rhs = Ty::Generic("Result".into(), vec![Ty::Int, Ty::String]);
+        assert!(unify(&lhs, &rhs, &mut s).is_err());
+    }
+
+    #[test]
+    fn unify_occurs_check_rejects_infinite_type() {
+        // a = List<a> must be rejected.
+        let mut s = Substitution::new();
+        let v = Ty::Var(0);
+        let recursive = Ty::Generic("List".into(), vec![v.clone()]);
+        let err = unify(&v, &recursive, &mut s).unwrap_err();
+        assert!(matches!(err, UnifyError::OccursCheck { .. }));
+    }
+
+    #[test]
+    fn unify_var_var_same_id_ok() {
+        let mut s = Substitution::new();
+        assert!(unify(&Ty::Var(3), &Ty::Var(3), &mut s).is_ok());
+    }
+
+    #[test]
+    fn unify_var_var_distinct_binds_one_to_other() {
+        let mut s = Substitution::new();
+        assert!(unify(&Ty::Var(1), &Ty::Var(2), &mut s).is_ok());
+        // After unification both variables walk to the same representative.
+        assert_eq!(s.walk(&Ty::Var(1)), s.walk(&Ty::Var(2)));
+    }
+
+    #[test]
+    fn unify_chain_through_substitution() {
+        // Var(0) := Var(1), then Var(1) := Int → walking Var(0) yields Int.
+        let mut s = Substitution::new();
+        assert!(unify(&Ty::Var(0), &Ty::Var(1), &mut s).is_ok());
+        assert!(unify(&Ty::Var(1), &Ty::Int, &mut s).is_ok());
+        assert_eq!(s.apply(&Ty::Var(0)), Ty::Int);
+    }
+
+    #[test]
+    fn unify_fn_types() {
+        let mut s = Substitution::new();
+        let lhs = Ty::Fn(vec![Ty::Var(0)], Box::new(Ty::Var(1)));
+        let rhs = Ty::Fn(vec![Ty::Int], Box::new(Ty::Bool));
+        assert!(unify(&lhs, &rhs, &mut s).is_ok());
+        assert_eq!(s.apply(&Ty::Var(0)), Ty::Int);
+        assert_eq!(s.apply(&Ty::Var(1)), Ty::Bool);
+    }
+
+    #[test]
+    fn unify_fn_arity_mismatch() {
+        let mut s = Substitution::new();
+        let lhs = Ty::Fn(vec![Ty::Int], Box::new(Ty::Unit));
+        let rhs = Ty::Fn(vec![Ty::Int, Ty::Int], Box::new(Ty::Unit));
+        assert!(unify(&lhs, &rhs, &mut s).is_err());
+    }
+
+    #[test]
+    fn unify_error_short_circuits() {
+        // Error should not cascade as a mismatch.
+        let mut s = Substitution::new();
+        assert!(unify(&Ty::Error, &Ty::Int, &mut s).is_ok());
+        assert!(unify(&Ty::String, &Ty::Error, &mut s).is_ok());
+    }
+
+    #[test]
+    fn unify_never_short_circuits() {
+        let mut s = Substitution::new();
+        assert!(unify(&Ty::Never, &Ty::Int, &mut s).is_ok());
+        assert!(unify(&Ty::Int, &Ty::Never, &mut s).is_ok());
+    }
+
+    #[test]
+    fn substitution_apply_recurses_into_generics() {
+        let mut s = Substitution::new();
+        s.bind(TyVarId(0), Ty::Int);
+        let nested = Ty::Generic(
+            "Option".into(),
+            vec![Ty::Generic("List".into(), vec![Ty::Var(0)])],
+        );
+        let applied = s.apply(&nested);
+        assert_eq!(
+            applied,
+            Ty::Generic(
+                "Option".into(),
+                vec![Ty::Generic("List".into(), vec![Ty::Int])]
+            )
+        );
+    }
+
+    #[test]
+    fn types_compatible_uses_unify_for_concrete_match() {
+        assert!(types_compatible(&Ty::Int, &Ty::Int));
+        assert!(!types_compatible(&Ty::Int, &Ty::Bool));
+    }
+
+    #[test]
+    fn types_compatible_var_acts_as_wildcard() {
+        // Preserved v0.7 semantics: an unresolved var unifies with any type.
+        assert!(types_compatible(&Ty::Var(0), &Ty::Int));
+        assert!(types_compatible(&Ty::Int, &Ty::Var(0)));
+        assert!(types_compatible(
+            &Ty::Generic("List".into(), vec![Ty::Var(0)]),
+            &Ty::Generic("List".into(), vec![Ty::Int])
+        ));
     }
 }

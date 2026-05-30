@@ -1,0 +1,24 @@
+# 28-linked-set.tyra
+# Validates: LinkedSet API type-checks and compiles (contains, remove, len,
+# for-loop). Runtime correctness (contains, remove persistent semantics, len)
+# is asserted in linked_set_test.tyra. Insertion-order iteration is verified
+# in stdlib_linked_set.rs (runtime unit tests).
+# SPEC_REF: §11 (LinkedSet — insertion-order-preserving persistent collection, ADR-0019, v0.8.0)
+import linked_set
+
+fn main() -> Unit
+  let s: LinkedSet<String> = LinkedSet.new()
+  let s = s.insert("x")
+  let s = s.insert("y")
+  let s = s.insert("z")
+  print("len=#{s.len()}")
+  print("has_x=#{s.contains("x")}")
+  print("has_w=#{s.contains("w")}")
+  for v in s
+    print(v)
+  end
+  let s2 = s.remove("y")
+  for v in s2
+    print(v)
+  end
+end

@@ -358,6 +358,21 @@ fn emit_llvm_ir_impl(program: &Program, cov_map: Option<&CovMap>, emit_dwarf: bo
     writeln!(out, "declare i32 @tyra_set_contains(ptr, ptr)").unwrap();
     writeln!(out, "declare i64 @tyra_set_len(ptr)").unwrap();
     writeln!(out, "declare void @tyra_set_for_each(ptr, ptr, ptr)").unwrap();
+    // §11 / ADR-0019: LinkedMap<K,V> insertion-order map runtime.
+    writeln!(out, "declare ptr @tyra_linked_map_new(ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_linked_map_insert(ptr, ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_linked_map_remove(ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_linked_map_get(ptr, ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_linked_map_contains_key(ptr, ptr)").unwrap();
+    writeln!(out, "declare i64 @tyra_linked_map_len(ptr)").unwrap();
+    writeln!(out, "declare void @tyra_linked_map_for_each(ptr, ptr, ptr)").unwrap();
+    // §11 / ADR-0019: LinkedSet<T> insertion-order set runtime.
+    writeln!(out, "declare ptr @tyra_linked_set_new(ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_linked_set_insert(ptr, ptr)").unwrap();
+    writeln!(out, "declare ptr @tyra_linked_set_remove(ptr, ptr)").unwrap();
+    writeln!(out, "declare i32 @tyra_linked_set_contains(ptr, ptr)").unwrap();
+    writeln!(out, "declare i64 @tyra_linked_set_len(ptr)").unwrap();
+    writeln!(out, "declare void @tyra_linked_set_for_each(ptr, ptr, ptr)").unwrap();
     // Zero-slot for null-safe map-get unboxing (read-only; never written).
     writeln!(
         out,
@@ -369,8 +384,9 @@ fn emit_llvm_ir_impl(program: &Program, cov_map: Option<&CovMap>, emit_dwarf: bo
     writeln!(out, "declare i32 @strcmp(ptr, ptr)").unwrap();
     // §18.8: bench clock intrinsic (v0.4.0). See runtime/src/lib.rs.
     writeln!(out, "declare i64 @__bench_clock_ns()").unwrap();
-    // strtol returns long (i64 on LP64 platforms). TODO: use strtoll for Windows LLP64.
-    writeln!(out, "declare i64 @strtol(ptr, ptr, i32)").unwrap();
+    // strtoll returns long long (i64 on both LP64 and Windows LLP64), ensuring
+    // correct 64-bit behaviour regardless of platform ABI.
+    writeln!(out, "declare i64 @strtoll(ptr, ptr, i32)").unwrap();
     writeln!(out).unwrap();
 
     // Build function signature map for cross-function type resolution
@@ -491,8 +507,25 @@ fn collect_elem_types_stmt(stmt: &MirStmt, keys: &mut std::collections::HashSet<
         } else if let Some(t) = func.strip_prefix("__set_contains__") {
             keys.insert(t.to_string());
         }
+        // LinkedMap (ADR-0019): __linked_map_new__K__V  or  __linked_map_contains__K
+        if let Some(rest) = func.strip_prefix("__linked_map_new__") {
+            if let Some(k) = rest.split("__").next() {
+                keys.insert(k.to_string());
+            }
+        } else if let Some(rest) = func.strip_prefix("__linked_map_contains__") {
+            keys.insert(rest.to_string());
+        }
+        // LinkedSet (ADR-0019): __linked_set_new__T  or  __linked_set_contains__T
+        if let Some(t) = func.strip_prefix("__linked_set_new__") {
+            keys.insert(t.to_string());
+        } else if let Some(t) = func.strip_prefix("__linked_set_contains__") {
+            keys.insert(t.to_string());
+        }
     }
     if let Instruction::MapGetOption { key_ty, .. } = instr {
+        keys.insert(key_ty.monomorphized_name());
+    }
+    if let Instruction::LinkedMapGetOption { key_ty, .. } = instr {
         keys.insert(key_ty.monomorphized_name());
     }
 }

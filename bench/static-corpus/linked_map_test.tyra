@@ -1,0 +1,62 @@
+# bench/static-corpus/linked_map_test.tyra
+# Tests LinkedMap get, contains_key, remove (persistent semantics), and len.
+# Insertion-order iteration is compile-verified in 26-linked-map-order.tyra
+# (for-loop compiles); accumulation across for-loop iterations requires mut
+# capture, which is constrained by ADR-0011 (E0402).
+# SPEC_REF: §11 (LinkedMap — insertion-order-preserving persistent collection, ADR-0019, v0.8.0)
+import assert
+import linked_map
+
+fn test_linked_map_get() -> Result<Unit, String>
+  let m: LinkedMap<String, Int> = LinkedMap.new()
+  let m = m.insert("a", 1)
+  let m = m.insert("b", 2)
+  match m.get("a")
+  when Some(v)
+    assert.eq(v, 1)?
+  when None
+    Err("expected Some(1) for key 'a', got None")?
+  end
+  match m.get("b")
+  when Some(v)
+    assert.eq(v, 2)?
+  when None
+    Err("expected Some(2) for key 'b', got None")?
+  end
+  match m.get("z")
+  when Some(_)
+    Err("expected None for key 'z', got Some")?
+  when None
+    Ok(())
+  end
+end
+
+fn test_linked_map_contains_key() -> Result<Unit, String>
+  let m: LinkedMap<String, Int> = LinkedMap.new()
+  let m = m.insert("x", 10)
+  assert.eq(m.contains_key("x"), true)?
+  assert.eq(m.contains_key("y"), false)?
+  Ok(())
+end
+
+fn test_linked_map_len() -> Result<Unit, String>
+  let m: LinkedMap<String, Int> = LinkedMap.new()
+  assert.eq(m.len(), 0)?
+  let m = m.insert("a", 1)
+  let m = m.insert("b", 2)
+  assert.eq(m.len(), 2)?
+  Ok(())
+end
+
+fn test_linked_map_remove_persistent() -> Result<Unit, String>
+  let m: LinkedMap<String, Int> = LinkedMap.new()
+  let m = m.insert("a", 1)
+  let m = m.insert("b", 2)
+  let m = m.insert("c", 3)
+  let m2 = m.remove("b")
+  assert.eq(m.contains_key("b"), true)?
+  assert.eq(m2.contains_key("b"), false)?
+  assert.eq(m.len(), 3)?
+  assert.eq(m2.len(), 2)?
+  Ok(())
+end

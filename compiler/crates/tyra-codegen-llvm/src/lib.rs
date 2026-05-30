@@ -16,6 +16,181 @@ mod type_scan;
 pub use codegen::{emit_llvm_ir, emit_llvm_ir_coverage, emit_llvm_ir_debug};
 pub use coverage::{CovMap, format_report, merge_covraw, parse_covmap, write_covmap_text};
 
+use tyra_diagnostics::Diagnostic;
+use tyra_mir::{Instruction, Program};
+use tyra_types::Ty;
+
+/// Guard: `Ty::Error` or an unresolved `Ty::Var` must never reach codegen.
+///
+/// Walks the MIR Program looking for unresolved types in function signatures,
+/// struct definitions, local metadata, and instruction operands.  If any are
+/// found, returns a `Vec<Diagnostic>` containing one or more E9001 entries
+/// (Internal Compiler Error).  Returning `Err` keeps LLVM from crashing on
+/// malformed IR and presents the user with a normal compiler error instead of
+/// a Rust panic / backtrace.
+///
+/// Why this is an ICE (E9001) and not a regular error:
+///   By the time MIR is generated, the type checker should have either fully
+///   resolved every type or emitted a user-facing diagnostic (E0xxx) and
+///   refused to proceed.  An unresolved type at this stage therefore signals
+///   a checker bug, not user error.
+pub fn check_no_type_errors(program: &Program) -> Result<(), Vec<Diagnostic>> {
+    let mut diags: Vec<Diagnostic> = Vec::new();
+
+    fn push_ice(ctx: &str, ty: &Ty, diags: &mut Vec<Diagnostic>) {
+        if has_unresolved(ty) {
+            diags.push(
+                Diagnostic::error(format!(
+                    "internal compiler error: unresolved type reached code generation \
+                     ({ctx}: `{}`)",
+                    ty.display_name()
+                ))
+                .with_code("E9001")
+                .with_help(
+                    "This is a compiler bug. Please report at \
+                     https://github.com/tyra-lang/tyra/issues",
+                ),
+            );
+        }
+    }
+
+    for sd in &program.struct_defs {
+        for (fname, fty) in &sd.fields {
+            push_ice(
+                &format!("struct `{}` field `{}`", sd.name, fname),
+                fty,
+                &mut diags,
+            );
+        }
+    }
+
+    for func in &program.functions {
+        for (pname, pty) in &func.params {
+            push_ice(
+                &format!("function `{}` parameter `{}`", func.name, pname),
+                pty,
+                &mut diags,
+            );
+        }
+        push_ice(
+            &format!("function `{}` return type", func.name),
+            &func.return_type,
+            &mut diags,
+        );
+        for lm in &func.local_metas {
+            push_ice(
+                &format!("function `{}` local `{}`", func.name, lm.name),
+                &lm.ty,
+                &mut diags,
+            );
+        }
+        for stmt in &func.body {
+            for ty in instruction_types(&stmt.instr) {
+                push_ice(
+                    &format!("function `{}` instruction", func.name),
+                    ty,
+                    &mut diags,
+                );
+            }
+        }
+    }
+
+    if diags.is_empty() { Ok(()) } else { Err(diags) }
+}
+
+/// Recursively check whether `ty` contains a `Ty::Error` or an unresolved
+/// `Ty::Var` placeholder.
+fn has_unresolved(ty: &Ty) -> bool {
+    match ty {
+        Ty::Error | Ty::Var(_) => true,
+        Ty::Generic(_, args) => args.iter().any(has_unresolved),
+        Ty::Fn(params, ret) => params.iter().any(has_unresolved) || has_unresolved(ret),
+        _ => false,
+    }
+}
+
+/// Extract every `Ty` carried by a single MIR `Instruction`.
+///
+/// Exhaustive over all instruction variants that embed a `Ty`. When a new
+/// instruction variant with a `Ty` field is added to `ir.rs`, this function
+/// must be updated — the explicit wildcard-free match below ensures the
+/// compiler will flag the omission.
+fn instruction_types(instr: &Instruction) -> Vec<&Ty> {
+    match instr {
+        Instruction::PtrLoad { ty, .. } => vec![ty],
+
+        Instruction::ListInit { elem_type, .. }
+        | Instruction::ListGet { elem_type, .. }
+        | Instruction::ListGetSafe { elem_type, .. }
+        | Instruction::ListPush { elem_type, .. }
+        | Instruction::JoinAll { elem_type, .. }
+        | Instruction::Select { elem_type, .. } => vec![elem_type],
+
+        Instruction::MapGetOption { key_ty, val_ty, .. }
+        | Instruction::LinkedMapGetOption { key_ty, val_ty, .. } => vec![key_ty, val_ty],
+
+        Instruction::Spawn {
+            arg_types,
+            result_type,
+            ..
+        } => {
+            let mut tys: Vec<&Ty> = arg_types.iter().collect();
+            tys.push(result_type);
+            tys
+        }
+
+        Instruction::Await { result_type, .. } => vec![result_type],
+
+        Instruction::ClosureBuild {
+            param_types,
+            return_type,
+            ..
+        } => {
+            let mut tys: Vec<&Ty> = param_types.iter().collect();
+            tys.push(return_type);
+            tys
+        }
+
+        Instruction::IndirectCall {
+            param_types,
+            return_type,
+            ..
+        } => {
+            let mut tys: Vec<&Ty> = param_types.iter().collect();
+            tys.push(return_type);
+            tys
+        }
+
+        // No embedded Ty fields:
+        Instruction::Const { .. }
+        | Instruction::Call { .. }
+        | Instruction::BinOp { .. }
+        | Instruction::Neg { .. }
+        | Instruction::Not { .. }
+        | Instruction::Copy { .. }
+        | Instruction::Return { .. }
+        | Instruction::Label { .. }
+        | Instruction::BranchIf { .. }
+        | Instruction::Jump { .. }
+        | Instruction::Phi { .. }
+        | Instruction::Alloca { .. }
+        | Instruction::Store { .. }
+        | Instruction::Load { .. }
+        | Instruction::StructInit { .. }
+        | Instruction::FieldGet { .. }
+        | Instruction::FieldSet { .. }
+        | Instruction::AdtInit { .. }
+        | Instruction::AdtTag { .. }
+        | Instruction::AdtPayload { .. }
+        | Instruction::StringFormat { .. }
+        | Instruction::ListLen { .. }
+        | Instruction::MapForEachCall { .. }
+        | Instruction::SetForEachCall { .. }
+        | Instruction::LinkedMapForEachCall { .. }
+        | Instruction::LinkedSetForEachCall { .. } => Vec::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

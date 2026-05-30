@@ -461,6 +461,60 @@ impl super::LowerCtx<'_> {
                 );
                 return dest;
             }
+            // §11 / ADR-0019: LinkedMap<K,V>.len()
+            if let Some(lm_ty) = self.infer_linked_map_type(obj) {
+                let lm_struct = lm_ty.monomorphized_name();
+                let obj_val = self.lower_expr(obj, body);
+                let handle = self.fresh_temp();
+                self.emit(
+                    body,
+                    Instruction::FieldGet {
+                        dest: handle.clone(),
+                        obj: Operand::Var(obj_val),
+                        type_name: lm_struct,
+                        field_index: 0,
+                    },
+                );
+                self.string_vars.insert(handle.clone());
+                let dest = self.fresh_temp();
+                self.emit_at(
+                    body,
+                    call_loc,
+                    Instruction::Call {
+                        dest: Some(dest.clone()),
+                        func: "__linked_map_len".to_string(),
+                        args: vec![Operand::Var(handle)],
+                    },
+                );
+                return dest;
+            }
+            // §11 / ADR-0019: LinkedSet<T>.len()
+            if let Some(ls_ty) = self.infer_linked_set_type(obj) {
+                let ls_struct = ls_ty.monomorphized_name();
+                let obj_val = self.lower_expr(obj, body);
+                let handle = self.fresh_temp();
+                self.emit(
+                    body,
+                    Instruction::FieldGet {
+                        dest: handle.clone(),
+                        obj: Operand::Var(obj_val),
+                        type_name: ls_struct,
+                        field_index: 0,
+                    },
+                );
+                self.string_vars.insert(handle.clone());
+                let dest = self.fresh_temp();
+                self.emit_at(
+                    body,
+                    call_loc,
+                    Instruction::Call {
+                        dest: Some(dest.clone()),
+                        func: "__linked_set_len".to_string(),
+                        args: vec![Operand::Var(handle)],
+                    },
+                );
+                return dest;
+            }
         }
 
         // §17.3.x Set<T> method dispatch (ADR-0015).
@@ -602,6 +656,365 @@ impl super::LowerCtx<'_> {
             self.string_vars.insert(dest.clone());
             self.var_types.insert(dest.clone(), set_struct);
             self.generic_var_types.insert(dest.clone(), set_ty);
+            return dest;
+        }
+
+        // §11 / ADR-0019: LinkedMap<K,V> method dispatch.
+        // - lm.insert(k, v)    → LinkedMap<K,V>
+        // - lm.remove(k)       → LinkedMap<K,V>
+        // - lm.get(k)          → Option<V>
+        // - lm.contains_key(k) → Bool
+        if let ExprKind::FieldAccess(obj, method) = &callee.kind
+            && method.as_str() == "insert"
+            && args.len() == 2
+        {
+            if let Some(lm_ty) = self.infer_linked_map_type(obj) {
+                let (key_ty, val_ty) = match &lm_ty {
+                    Ty::Generic(_, a) if a.len() == 2 => (a[0].clone(), a[1].clone()),
+                    _ => (Ty::String, Ty::Int),
+                };
+                let lm_struct = lm_ty.monomorphized_name();
+                let k_name = key_ty.monomorphized_name();
+                let v_name = val_ty.monomorphized_name();
+                let obj_val = self.lower_expr(obj, body);
+                let handle = self.fresh_temp();
+                self.emit(
+                    body,
+                    Instruction::FieldGet {
+                        dest: handle.clone(),
+                        obj: Operand::Var(obj_val),
+                        type_name: lm_struct.clone(),
+                        field_index: 0,
+                    },
+                );
+                self.string_vars.insert(handle.clone());
+                let key_val = self.lower_expr(&args[0].value, body);
+                let val_val = self.lower_expr(&args[1].value, body);
+                let new_handle = self.fresh_temp();
+                self.emit_at(
+                    body,
+                    call_loc,
+                    Instruction::Call {
+                        dest: Some(new_handle.clone()),
+                        func: format!("__linked_map_insert__{k_name}__{v_name}"),
+                        args: vec![
+                            Operand::Var(handle),
+                            Operand::Var(key_val),
+                            Operand::Var(val_val),
+                        ],
+                    },
+                );
+                self.string_vars.insert(new_handle.clone());
+                let dest = self.fresh_temp();
+                self.emit(
+                    body,
+                    Instruction::StructInit {
+                        dest: dest.clone(),
+                        type_name: lm_struct.clone(),
+                        fields: vec![Operand::Var(new_handle)],
+                    },
+                );
+                self.string_vars.insert(dest.clone());
+                self.var_types.insert(dest.clone(), lm_struct);
+                self.generic_var_types.insert(dest.clone(), lm_ty);
+                return dest;
+            }
+        }
+        if let ExprKind::FieldAccess(obj, method) = &callee.kind
+            && method.as_str() == "remove"
+            && args.len() == 1
+        {
+            if let Some(lm_ty) = self.infer_linked_map_type(obj) {
+                let (key_ty, _val_ty) = match &lm_ty {
+                    Ty::Generic(_, a) if a.len() == 2 => (a[0].clone(), a[1].clone()),
+                    _ => (Ty::String, Ty::Int),
+                };
+                let lm_struct = lm_ty.monomorphized_name();
+                let k_name = key_ty.monomorphized_name();
+                let obj_val = self.lower_expr(obj, body);
+                let handle = self.fresh_temp();
+                self.emit(
+                    body,
+                    Instruction::FieldGet {
+                        dest: handle.clone(),
+                        obj: Operand::Var(obj_val),
+                        type_name: lm_struct.clone(),
+                        field_index: 0,
+                    },
+                );
+                self.string_vars.insert(handle.clone());
+                let key_val = self.lower_expr(&args[0].value, body);
+                let new_handle = self.fresh_temp();
+                self.emit_at(
+                    body,
+                    call_loc,
+                    Instruction::Call {
+                        dest: Some(new_handle.clone()),
+                        func: format!("__linked_map_remove__{k_name}"),
+                        args: vec![Operand::Var(handle), Operand::Var(key_val)],
+                    },
+                );
+                self.string_vars.insert(new_handle.clone());
+                let dest = self.fresh_temp();
+                self.emit(
+                    body,
+                    Instruction::StructInit {
+                        dest: dest.clone(),
+                        type_name: lm_struct.clone(),
+                        fields: vec![Operand::Var(new_handle)],
+                    },
+                );
+                self.string_vars.insert(dest.clone());
+                self.var_types.insert(dest.clone(), lm_struct);
+                self.generic_var_types.insert(dest.clone(), lm_ty);
+                return dest;
+            }
+        }
+        if let ExprKind::FieldAccess(obj, method) = &callee.kind {
+            if matches!(method.as_str(), "get" | "contains_key") && args.len() == 1 {
+                if let Some(lm_ty) = self.infer_linked_map_type(obj) {
+                    let (key_ty, val_ty) = match &lm_ty {
+                        Ty::Generic(_, a) if a.len() == 2 => (a[0].clone(), a[1].clone()),
+                        _ => (Ty::String, Ty::Int),
+                    };
+                    let lm_struct = lm_ty.monomorphized_name();
+                    let obj_val = self.lower_expr(obj, body);
+                    let handle = self.fresh_temp();
+                    self.emit(
+                        body,
+                        Instruction::FieldGet {
+                            dest: handle.clone(),
+                            obj: Operand::Var(obj_val),
+                            type_name: lm_struct,
+                            field_index: 0,
+                        },
+                    );
+                    self.string_vars.insert(handle.clone());
+                    let key_val = self.lower_expr(&args[0].value, body);
+                    let k_name = key_ty.monomorphized_name();
+                    match method.as_str() {
+                        "contains_key" => {
+                            let dest = self.fresh_temp();
+                            self.emit_at(
+                                body,
+                                call_loc,
+                                Instruction::Call {
+                                    dest: Some(dest.clone()),
+                                    func: format!("__linked_map_contains__{k_name}"),
+                                    args: vec![Operand::Var(handle), Operand::Var(key_val)],
+                                },
+                            );
+                            return dest;
+                        }
+                        "get" => {
+                            let opt_ty = Ty::Generic("Option".into(), vec![val_ty.clone()]);
+                            self.register_adt_type(&opt_ty);
+                            let dest = self.fresh_temp();
+                            self.emit_at(
+                                body,
+                                call_loc,
+                                Instruction::LinkedMapGetOption {
+                                    dest: dest.clone(),
+                                    handle: Operand::Var(handle),
+                                    key: Operand::Var(key_val),
+                                    key_ty,
+                                    val_ty,
+                                },
+                            );
+                            self.generic_var_types.insert(dest.clone(), opt_ty.clone());
+                            self.var_types
+                                .insert(dest.clone(), opt_ty.monomorphized_name());
+                            return dest;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        // §11 / ADR-0019: LinkedMap<K,V>.len() handled in the general .len() arm below.
+
+        // §11 / ADR-0019: LinkedSet<T> method dispatch.
+        // - ls.insert(x)   → LinkedSet<T>
+        // - ls.remove(x)   → LinkedSet<T>
+        // - ls.contains(x) → Bool
+        if let ExprKind::FieldAccess(obj, method) = &callee.kind {
+            if matches!(method.as_str(), "insert" | "remove" | "contains") && args.len() == 1 {
+                if let Some(ls_ty) = self.infer_linked_set_type(obj) {
+                    let elem_ty = ls_ty.linked_set_elem().cloned().unwrap_or(Ty::Int);
+                    let ls_struct = ls_ty.monomorphized_name();
+                    let t_name = elem_ty.monomorphized_name();
+                    let obj_val = self.lower_expr(obj, body);
+                    let handle = self.fresh_temp();
+                    self.emit(
+                        body,
+                        Instruction::FieldGet {
+                            dest: handle.clone(),
+                            obj: Operand::Var(obj_val),
+                            type_name: ls_struct.clone(),
+                            field_index: 0,
+                        },
+                    );
+                    self.string_vars.insert(handle.clone());
+                    let key_val = self.lower_expr(&args[0].value, body);
+                    match method.as_str() {
+                        "contains" => {
+                            let dest = self.fresh_temp();
+                            self.emit_at(
+                                body,
+                                call_loc,
+                                Instruction::Call {
+                                    dest: Some(dest.clone()),
+                                    func: format!("__linked_set_contains__{t_name}"),
+                                    args: vec![Operand::Var(handle), Operand::Var(key_val)],
+                                },
+                            );
+                            return dest;
+                        }
+                        "insert" => {
+                            let new_handle = self.fresh_temp();
+                            self.emit_at(
+                                body,
+                                call_loc,
+                                Instruction::Call {
+                                    dest: Some(new_handle.clone()),
+                                    func: format!("__linked_set_insert__{t_name}"),
+                                    args: vec![Operand::Var(handle), Operand::Var(key_val)],
+                                },
+                            );
+                            self.string_vars.insert(new_handle.clone());
+                            let dest = self.fresh_temp();
+                            self.emit(
+                                body,
+                                Instruction::StructInit {
+                                    dest: dest.clone(),
+                                    type_name: ls_struct.clone(),
+                                    fields: vec![Operand::Var(new_handle)],
+                                },
+                            );
+                            self.string_vars.insert(dest.clone());
+                            self.var_types.insert(dest.clone(), ls_struct);
+                            self.generic_var_types.insert(dest.clone(), ls_ty);
+                            return dest;
+                        }
+                        "remove" => {
+                            let new_handle = self.fresh_temp();
+                            self.emit_at(
+                                body,
+                                call_loc,
+                                Instruction::Call {
+                                    dest: Some(new_handle.clone()),
+                                    func: format!("__linked_set_remove__{t_name}"),
+                                    args: vec![Operand::Var(handle), Operand::Var(key_val)],
+                                },
+                            );
+                            self.string_vars.insert(new_handle.clone());
+                            let dest = self.fresh_temp();
+                            self.emit(
+                                body,
+                                Instruction::StructInit {
+                                    dest: dest.clone(),
+                                    type_name: ls_struct.clone(),
+                                    fields: vec![Operand::Var(new_handle)],
+                                },
+                            );
+                            self.string_vars.insert(dest.clone());
+                            self.var_types.insert(dest.clone(), ls_struct);
+                            self.generic_var_types.insert(dest.clone(), ls_ty);
+                            return dest;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        // LinkedMap.new() — creates an empty LinkedMap<K,V>.
+        if let ExprKind::FieldAccess(obj, method) = &callee.kind
+            && let ExprKind::Ident(module_name) = &obj.kind
+            && module_name == "LinkedMap"
+            && method == "new"
+            && args.is_empty()
+        {
+            let (k_ty, v_ty) = self
+                .binding_type_hint
+                .as_ref()
+                .and_then(|h| h.linked_map_kv())
+                .or_else(|| self.current_fn_return_type.linked_map_kv())
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .unwrap_or((Ty::String, Ty::Int));
+            let lm_ty = Ty::Generic("LinkedMap".into(), vec![k_ty.clone(), v_ty.clone()]);
+            self.register_adt_type(&lm_ty);
+            let lm_struct = lm_ty.monomorphized_name();
+            let k_name = k_ty.monomorphized_name();
+            let v_name = v_ty.monomorphized_name();
+            let handle = self.fresh_temp();
+            self.emit_at(
+                body,
+                call_loc,
+                Instruction::Call {
+                    dest: Some(handle.clone()),
+                    func: format!("__linked_map_new__{k_name}__{v_name}"),
+                    args: vec![],
+                },
+            );
+            self.string_vars.insert(handle.clone());
+            let dest = self.fresh_temp();
+            self.emit(
+                body,
+                Instruction::StructInit {
+                    dest: dest.clone(),
+                    type_name: lm_struct.clone(),
+                    fields: vec![Operand::Var(handle)],
+                },
+            );
+            self.string_vars.insert(dest.clone());
+            self.var_types.insert(dest.clone(), lm_struct);
+            self.generic_var_types.insert(dest.clone(), lm_ty);
+            return dest;
+        }
+
+        // LinkedSet.new() — creates an empty LinkedSet<T>.
+        if let ExprKind::FieldAccess(obj, method) = &callee.kind
+            && let ExprKind::Ident(module_name) = &obj.kind
+            && module_name == "LinkedSet"
+            && method == "new"
+            && args.is_empty()
+        {
+            let elem_ty = self
+                .binding_type_hint
+                .as_ref()
+                .and_then(|h| h.linked_set_elem())
+                .or_else(|| self.current_fn_return_type.linked_set_elem())
+                .cloned()
+                .unwrap_or(Ty::Int);
+            let ls_ty = Ty::Generic("LinkedSet".into(), vec![elem_ty.clone()]);
+            self.register_adt_type(&ls_ty);
+            let ls_struct = ls_ty.monomorphized_name();
+            let t_name = elem_ty.monomorphized_name();
+            let handle = self.fresh_temp();
+            self.emit_at(
+                body,
+                call_loc,
+                Instruction::Call {
+                    dest: Some(handle.clone()),
+                    func: format!("__linked_set_new__{t_name}"),
+                    args: vec![],
+                },
+            );
+            self.string_vars.insert(handle.clone());
+            let dest = self.fresh_temp();
+            self.emit(
+                body,
+                Instruction::StructInit {
+                    dest: dest.clone(),
+                    type_name: ls_struct.clone(),
+                    fields: vec![Operand::Var(handle)],
+                },
+            );
+            self.string_vars.insert(dest.clone());
+            self.var_types.insert(dest.clone(), ls_struct);
+            self.generic_var_types.insert(dest.clone(), ls_ty);
             return dest;
         }
 

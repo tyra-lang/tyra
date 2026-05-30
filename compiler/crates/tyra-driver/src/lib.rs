@@ -273,6 +273,25 @@ fn compile_to_ir_impl(
         );
     }
 
+    // ICE guard (E9001): refuse to invoke LLVM codegen on a MIR that still
+    // carries `Ty::Error` or unresolved `Ty::Var`. Such types signal a bug in
+    // the type checker; without this guard they would crash LLVM with an opaque
+    // type-mismatch (the previous E0500 LLVM-IR failure mode).
+    if let Err(diags) = tyra_codegen_llvm::check_no_type_errors(&mir) {
+        for d in diags {
+            report.add(d);
+        }
+        return (
+            CompileResult {
+                success: false,
+                report,
+                sources,
+                llvm_ir: None,
+            },
+            None,
+        );
+    }
+
     // LLVM IR generation
     if coverage {
         let (llvm_ir, covmap_text) = tyra_codegen_llvm::emit_llvm_ir_coverage(&mir);
@@ -1742,6 +1761,26 @@ fn compile_to_binary_opts(
         };
     }
 
+    // Route to platform-specific linker invocation.
+    #[cfg(target_os = "windows")]
+    {
+        build_link_cmd_windows(result, &ir_path, output_path, release, static_link)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        build_link_cmd_unix(result, &ir_path, output_path, release, static_link)
+    }
+}
+
+/// Unix (Linux/macOS) linker path: compile IR via clang and link libgc + runtime staticlib.
+#[cfg(not(target_os = "windows"))]
+fn build_link_cmd_unix(
+    result: CompileResult,
+    ir_path: &Path,
+    output_path: &Path,
+    release: bool,
+    static_link: bool,
+) -> CompileResult {
     // Compile with clang, linking Boehm GC (libgc, ADR-0007) and the Tyra
     // async runtime staticlib (libtyra_runtime.a, M9). The runtime is built
     // by cargo into the same target/ directory as the `tyra` binary itself,
@@ -1793,7 +1832,7 @@ fn compile_to_binary_opts(
                 ))
                 .with_code("E0502"),
             );
-            let _ = std::fs::remove_file(&ir_path);
+            let _ = std::fs::remove_file(ir_path);
             return CompileResult {
                 success: false,
                 report,
@@ -1834,7 +1873,7 @@ fn compile_to_binary_opts(
     let clang_result = Command::new("clang").args(&clang_args).output();
 
     // Clean up IR file
-    let _ = std::fs::remove_file(&ir_path);
+    let _ = std::fs::remove_file(ir_path);
 
     match clang_result {
         Ok(output) => {
@@ -1883,6 +1922,236 @@ fn compile_to_binary_opts(
             }
         }
     }
+}
+
+/// Windows linker path: LLVM IR -> obj via `llc.exe`, then link via `lld-link.exe`.
+///
+/// Dependencies are resolved via vcpkg:
+///   - `VCPKG_ROOT` env var  ->  `$VCPKG_ROOT/installed/x64-windows/`
+///   - fallback: `./vcpkg_installed/x64-windows/` (relative to cwd)
+///   - fallback: `LIBGC_PREFIX` env var  ->  `$LIBGC_PREFIX/`
+///
+/// After a successful link, `gc.dll` is copied from the vcpkg `bin/` directory
+/// to the output directory so the resulting `.exe` can find it at runtime.
+/// If `gc.dll` cannot be located, a warning is printed but the build succeeds
+/// (gc.dll may be installed system-wide or copied manually).
+#[cfg(target_os = "windows")]
+fn build_link_cmd_windows(
+    result: CompileResult,
+    ir_path: &Path,
+    output_path: &Path,
+    release: bool,
+    _static_link: bool,
+) -> CompileResult {
+    // Step 1: LLVM IR -> native object file via llc.
+    let obj_path = output_path.with_extension("obj");
+    let opt_level = if release { "-O2" } else { "-O0" };
+    let llc_status = Command::new("llc.exe")
+        .args([
+            opt_level,
+            "-filetype=obj",
+            "-mtriple=x86_64-pc-windows-msvc",
+            ir_path.to_str().unwrap(),
+            "-o",
+            obj_path.to_str().unwrap(),
+        ])
+        .status();
+
+    // Clean up IR file regardless of llc outcome.
+    let _ = std::fs::remove_file(ir_path);
+
+    let llc_ok = match llc_status {
+        Ok(s) => s.success(),
+        Err(e) => {
+            let mut report = result.report;
+            report.add(
+                tyra_diagnostics::Diagnostic::error(format!(
+                    "cannot run llc.exe: {e}. Is LLVM installed and on PATH?"
+                ))
+                .with_code("E0500"),
+            );
+            return CompileResult {
+                success: false,
+                report,
+                sources: result.sources,
+                llvm_ir: result.llvm_ir,
+            };
+        }
+    };
+    if !llc_ok {
+        let mut report = result.report;
+        report.add(
+            tyra_diagnostics::Diagnostic::error(
+                "llc.exe failed to compile LLVM IR to object file.".to_string(),
+            )
+            .with_code("E0500"),
+        );
+        return CompileResult {
+            success: false,
+            report,
+            sources: result.sources,
+            llvm_ir: result.llvm_ir,
+        };
+    }
+
+    // Step 2: Resolve vcpkg install root for gc.lib / gc.dll.
+    // Priority: VCPKG_ROOT env -> ./vcpkg_installed (cwd) -> LIBGC_PREFIX env.
+    let vcpkg_dir: Option<std::path::PathBuf> = std::env::var("VCPKG_ROOT")
+        .ok()
+        .map(|root| {
+            std::path::PathBuf::from(root)
+                .join("installed")
+                .join("x64-windows")
+        })
+        .or_else(|| {
+            let cwd_candidate = std::path::PathBuf::from("vcpkg_installed").join("x64-windows");
+            if cwd_candidate.is_dir() {
+                Some(cwd_candidate)
+            } else {
+                None
+            }
+        })
+        .or_else(|| {
+            std::env::var("LIBGC_PREFIX")
+                .ok()
+                .map(std::path::PathBuf::from)
+        });
+
+    // Step 3: Locate tyra_runtime.lib next to the running compiler.
+    let runtime_lib_path = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|d| d.join("tyra_runtime.lib")));
+
+    // Step 4: Build lld-link.exe argument list.
+    // Output is always an .exe on Windows.
+    //
+    // CRT resolution: lld-link does not auto-discover CRT/Windows SDK libraries; the LIB
+    // environment variable must cover them (set by VsDevCmd.bat / vcvarsall.bat in CI).
+    // We explicitly request the standard MSVC dynamic CRT libraries so the linker can
+    // resolve them even when only a subset of the LIB paths is populated:
+    //   ucrt.lib     — Universal CRT (printf, malloc, …)
+    //   msvcrt.lib   — MSVC runtime startup / glue
+    //   vcruntime.lib — MSVC compiler-support intrinsics
+    //   kernel32.lib — core Win32 API (ExitProcess, VirtualAlloc, …)
+    //   ole32.lib    — COM basics required by some Windows init paths
+    // These are /DEFAULTLIB (weaker than direct reference) so the linker uses them only
+    // when the symbol would otherwise be unresolved.
+    let exe_path = output_path.with_extension("exe");
+    let mut link_args: Vec<String> = vec![
+        obj_path.to_str().unwrap().into(),
+        format!("/OUT:{}", exe_path.display()),
+        "/DEFAULTLIB:gc.lib".into(),
+        "/DEFAULTLIB:ucrt.lib".into(),
+        "/DEFAULTLIB:msvcrt.lib".into(),
+        "/DEFAULTLIB:vcruntime.lib".into(),
+        "/DEFAULTLIB:kernel32.lib".into(),
+        "/DEFAULTLIB:ole32.lib".into(),
+        "/SUBSYSTEM:CONSOLE".into(),
+    ];
+
+    if let Some(ref vdir) = vcpkg_dir {
+        let lib_dir = vdir.join("lib");
+        if lib_dir.is_dir() {
+            link_args.push(format!("/LIBPATH:{}", lib_dir.display()));
+        }
+    }
+
+    // Include runtime staticlib if present; emit diagnostic if missing.
+    match runtime_lib_path.as_ref() {
+        Some(p) if p.exists() => {
+            link_args.push(p.to_string_lossy().into_owned());
+        }
+        _ => {
+            let mut report = result.report;
+            report.add(
+                tyra_diagnostics::Diagnostic::error(format!(
+                    "Tyra runtime staticlib not found (expected at {}).\n\
+                     Build the full workspace with `cargo build` (not `-p tyra-cli`).",
+                    runtime_lib_path
+                        .as_deref()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|| "<unknown>".into())
+                ))
+                .with_code("E0502"),
+            );
+            let _ = std::fs::remove_file(&obj_path);
+            return CompileResult {
+                success: false,
+                report,
+                sources: result.sources,
+                llvm_ir: result.llvm_ir,
+            };
+        }
+    }
+
+    let link_result = Command::new("lld-link.exe").args(&link_args).output();
+
+    // Clean up obj file.
+    let _ = std::fs::remove_file(&obj_path);
+
+    match link_result {
+        Ok(output) if !output.status.success() => {
+            let mut report = result.report;
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let msg = if stderr.contains("gc.lib") || stderr.contains("cannot open input file") {
+                format!(
+                    "gc.lib (Boehm GC) not found. Install via vcpkg:\n  \
+                     vcpkg install bdw-gc:x64-windows\n\n\
+                     Original linker error:\n{stderr}"
+                )
+            } else {
+                format!("lld-link.exe failed: {stderr}")
+            };
+            report.add(tyra_diagnostics::Diagnostic::error(msg).with_code("E0500"));
+            return CompileResult {
+                success: false,
+                report,
+                sources: result.sources,
+                llvm_ir: result.llvm_ir,
+            };
+        }
+        Err(e) => {
+            let mut report = result.report;
+            report.add(
+                tyra_diagnostics::Diagnostic::error(format!(
+                    "cannot run lld-link.exe: {e}. Is LLVM installed and on PATH?"
+                ))
+                .with_code("E0500"),
+            );
+            return CompileResult {
+                success: false,
+                report,
+                sources: result.sources,
+                llvm_ir: result.llvm_ir,
+            };
+        }
+        Ok(_) => {} // success — fall through to DLL copy
+    }
+
+    // Step 5: Copy gc.dll to the output directory so the .exe can find it at runtime.
+    // Non-fatal: a warning is emitted if the DLL cannot be found.
+    if let Some(ref vdir) = vcpkg_dir {
+        let gc_dll_src = vdir.join("bin").join("gc.dll");
+        if let Some(out_dir) = exe_path.parent() {
+            let gc_dll_dst = out_dir.join("gc.dll");
+            if let Err(e) = std::fs::copy(&gc_dll_src, &gc_dll_dst) {
+                eprintln!(
+                    "warning: could not copy gc.dll to output directory: {e}\n\
+                     Ensure gc.dll is on PATH or in the same directory as the output binary.\n\
+                     Expected source: {}",
+                    gc_dll_src.display()
+                );
+            }
+        }
+    } else {
+        eprintln!(
+            "warning: VCPKG_ROOT not set and vcpkg_installed/ not found; \
+             gc.dll was not copied to the output directory. \
+             Set VCPKG_ROOT or ensure gc.dll is on PATH."
+        );
+    }
+
+    result
 }
 
 /// Compile a Tyra source file to a binary with coverage instrumentation.

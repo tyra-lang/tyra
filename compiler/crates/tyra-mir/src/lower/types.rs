@@ -409,6 +409,91 @@ impl super::LowerCtx<'_> {
         }
     }
 
+    /// Returns the full LinkedMap<K,V> Ty for type inference (ADR-0019).
+    pub(super) fn infer_linked_map_type(&self, expr: &Expr) -> Option<Ty> {
+        match &expr.kind {
+            ExprKind::Ident(name) => self
+                .generic_var_types
+                .get(name)
+                .filter(|t| t.is_linked_map())
+                .cloned(),
+            ExprKind::Call(callee, args) => {
+                if let ExprKind::FieldAccess(obj, method) = &callee.kind {
+                    // lm.insert(k, v) returns LinkedMap<K,V>: recurse to unwrap chain.
+                    if method == "insert" {
+                        return self.infer_linked_map_type(obj);
+                    }
+                    // LinkedMap.new() as a receiver
+                    if let ExprKind::Ident(mod_name) = &obj.kind
+                        && mod_name == "LinkedMap"
+                        && method == "new"
+                        && args.is_empty()
+                    {
+                        let (k_ty, v_ty) = self
+                            .binding_type_hint
+                            .as_ref()
+                            .and_then(|h| h.linked_map_kv())
+                            .map(|(k, v)| (k.clone(), v.clone()))
+                            .unwrap_or((Ty::String, Ty::Int));
+                        return Some(Ty::Generic("LinkedMap".into(), vec![k_ty, v_ty]));
+                    }
+                }
+                if let ExprKind::Ident(func_name) = &callee.kind {
+                    if let Some(ret_ty) = self.fn_return_types.get(func_name.as_str()) {
+                        if ret_ty.is_linked_map() {
+                            return Some(ret_ty.clone());
+                        }
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// Returns the full LinkedSet<T> Ty for type inference (ADR-0019).
+    pub(super) fn infer_linked_set_type(&self, expr: &Expr) -> Option<Ty> {
+        match &expr.kind {
+            ExprKind::Ident(name) => self
+                .generic_var_types
+                .get(name)
+                .filter(|t| t.is_linked_set())
+                .cloned(),
+            ExprKind::Call(callee, args) => {
+                if let ExprKind::FieldAccess(obj, method) = &callee.kind {
+                    // ls.insert(x) returns LinkedSet<T>: recurse to unwrap chain.
+                    if method == "insert" {
+                        return self.infer_linked_set_type(obj);
+                    }
+                    // LinkedSet.new() as a receiver
+                    if let ExprKind::Ident(mod_name) = &obj.kind
+                        && mod_name == "LinkedSet"
+                        && method == "new"
+                        && args.is_empty()
+                    {
+                        let elem_ty = self
+                            .binding_type_hint
+                            .as_ref()
+                            .and_then(|h| h.linked_set_elem())
+                            .or_else(|| self.current_fn_return_type.linked_set_elem())
+                            .cloned()
+                            .unwrap_or(Ty::Int);
+                        return Some(Ty::Generic("LinkedSet".into(), vec![elem_ty]));
+                    }
+                }
+                if let ExprKind::Ident(func_name) = &callee.kind {
+                    if let Some(ret_ty) = self.fn_return_types.get(func_name.as_str()) {
+                        if ret_ty.is_linked_set() {
+                            return Some(ret_ty.clone());
+                        }
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
     pub(super) fn infer_set_type(&self, expr: &Expr) -> Option<Ty> {
         match &expr.kind {
             ExprKind::Ident(name) => self
@@ -604,13 +689,20 @@ impl super::LowerCtx<'_> {
                             self.generic_var_types.get(var_name.as_str())
                         {
                             match (gname.as_str(), variant.as_str()) {
-                                ("Map", "contains_key") | ("Set", "contains") => {
+                                ("Map", "contains_key")
+                                | ("Set", "contains")
+                                | ("LinkedMap", "contains_key")
+                                | ("LinkedSet", "contains") => {
                                     return Some(Ty::Bool);
                                 }
-                                ("Map", "len") | ("Set", "len") | ("List", "len") => {
+                                ("Map", "len")
+                                | ("Set", "len")
+                                | ("List", "len")
+                                | ("LinkedMap", "len")
+                                | ("LinkedSet", "len") => {
                                     return Some(Ty::Int);
                                 }
-                                ("Map", "get") => {
+                                ("Map", "get") | ("LinkedMap", "get") => {
                                     let val_ty = gargs.get(1).cloned().unwrap_or(Ty::Int);
                                     return Some(Ty::Generic("Option".into(), vec![val_ty]));
                                 }

@@ -2,7 +2,7 @@
 
 バックエンドサービス、CLI ツール、業務アプリケーションのための、AI フレンドリーな静的型付け言語。
 
-> **v0.4.0 — プレアルファ (既知の制限あり)。** ラムダ / クロージャ、ジェネリック `List<T>`、`Tyra.lock` を追加。本番利用前に [既知の制限](#既知の制限) をご確認ください。
+> **v0.8.0** — Hindley-Milner 型推論 (rank-1)、E0500 LLVM クラッシュ撲滅 (E9001 ICE ガード)、`LinkedMap<K,V>` / `LinkedSet<T>` (挿入順保持)、E0308 ヒューリスティック iv (ADT バリアント提案)、Windows ネイティブサポート (MSVC ABI)。本番利用前に [既知の制限](#既知の制限) をご確認ください。
 
 ---
 
@@ -99,28 +99,68 @@ let p1 = Point(x: 1.0, y: 2.0)
 let p2 = p1.copy(x: 3.0)
 ```
 
+## v0.8.0 の新機能 — LinkedMap と LinkedSet
+
+`LinkedMap<K,V>` と `LinkedSet<T>` はイテレーション時に挿入順を保持します。HAMT ベースの `Map` / `Set` がハッシュ順でイテレートするのと異なります。
+
+```tyra
+import linked_map
+
+fn main() -> Unit
+  let scores: LinkedMap<String, Int> = LinkedMap.new()
+  let scores = scores.insert("alice", 95)
+  let scores = scores.insert("bob",   87)
+  let scores = scores.insert("carol", 92)
+  for name, score in scores
+    print("#{name}: #{score}")   # alice, bob, carol の順が保証される
+  end
+  print("len=#{scores.remove("bob").len()}")  # 2
+end
+```
+
+```tyra
+import linked_set
+
+fn main() -> Unit
+  let seen: LinkedSet<String> = LinkedSet.new()
+  let seen = seen.insert("apple")
+  let seen = seen.insert("banana")
+  let seen = seen.insert("apple")   # 重複は無視される
+  print("len=#{seen.len()}")        # 2
+  for item in seen
+    print(item)                     # apple, banana の順が保証される
+  end
+end
+```
+
 ## 開発状況
 
-**v0.4.0 で安定** — サポート済み・テスト済み:
+**v0.8.0 で安定** — サポート済み・テスト済み:
 
 | コンポーネント | 備考 |
 | --- | --- |
-| 言語仕様 v0.4 | ✅ 完成 |
+| 言語仕様 v0.8 | ✅ 完成 |
 | Lexer / Parser / 型検査器 | ✅ 完成 |
-| LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 |
-| 標準ライブラリ: string, list, fs, io, float, json, assert | ✅ 完成 |
+| Hindley-Milner 型推論 (rank-1)、E9001 ICE ガード | ✅ 完成 (v0.8.0+) |
+| E0308 ヒューリスティック iv — ADT バリアント提案 | ✅ 完成 (v0.8.0+) |
+| `LinkedMap<K,V>` / `LinkedSet<T>` — 挿入順保持 永続コレクション | ✅ 完成 (v0.8.0+) |
+| Windows ネイティブサポート (MSVC ABI、vcpkg + lld-link) | ✅ 完成 (v0.8.0+) |
+| LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 / Windows x86_64 |
+| 標準ライブラリ: string, list, fs, io, float, json, assert, time, log | ✅ 完成 |
 | `tyra check / run / build / fmt / test / new / mod / bench` CLI | ✅ 完成 |
-| `tyra test --timeout` / `--jobs N` — タイムアウト・並列実行 | ✅ 完成 |
+| `tyra test --timeout` / `--jobs N` / `--coverage` | ✅ 完成 |
 | `tyra bench <dir>` — 汎用 wall-clock ベンチランナー | ✅ 完成 |
 | ラムダ / クロージャ (spec §9.4, ADR 0011) | ✅ 完成 |
 | ジェネリック `List<T>` + `map`/`filter`/`fold` | ✅ 完成 |
-| `assert.eq` / `assert.ne` ジェネリック多重定義 (Int, String, Bool) | ✅ 完成 |
 | `Tyra.lock` + floating `branch` 制約 + 推移的依存解決 | ✅ 完成 |
 | `Tyra.toml` マニフェスト + `tyra mod` 依存管理 (`--locked` CI モード) | ✅ 完成 |
+| HAMT 永続 `Map<K,V>` / `Set<T>` + `for k, v in m` / `for v in s` | ✅ 完成 (v0.7.0+) |
+| DAP デバッガ (DWARF + lldb-dap + VS Code ブレークポイント / ローカル変数) | ✅ 完成 (v0.6.0+) |
+| `tyra test --coverage` — ライン / 関数カバレッジレポート | ✅ 完成 (v0.6.0+) |
 | LSP サーバ (`tyra-lsp`) + VS Code 拡張 | ✅ 開発インストール可 |
-| 静的適合コーパス (19 本 + エラー事例) | ✅ CI ゲート済み |
+| 静的適合コーパス (33 本 + エラー事例 21 本) | ✅ CI ゲート済み |
 
-**v0.4.0 で実験的** — 含まれているが本番利用不可:
+**実験的** — 含まれているが本番利用不可:
 
 | コンポーネント | 備考 |
 | --- | --- |
@@ -130,15 +170,19 @@ let p2 = p1.copy(x: 3.0)
 
 | コンポーネント | 備考 |
 | --- | --- |
-| registry-backed SemVer リゾルバ、`tyra publish` | ⏳ v0.5+ 予定 |
-| `assert.panics` | ⏳ テスト分離が必要 |
-| `test "name"` 言語構文 | ⏳ 別途 ADR が必要 |
-| ビルド済みバイナリ (homebrew, apt) | ⏳ 将来予定 |
+| registry-backed SemVer リゾルバ、`tyra publish` | ⏳ 将来予定 |
+| inkwell IR 生成への移行 (writeln! → builder API) | ⏳ v0.9 予定 |
+| Windows ARM64 / MSVC PDB デバッグシンボル | ⏳ v0.9 予定 |
+| `SortedMap` / `SortedSet` (ソート順コレクション) | ⏳ v0.9 予定 |
+| ビルド済みバイナリ (Homebrew, apt) | ⏳ 将来予定 |
 | VS Code Marketplace 公開 | ⏳ 将来予定 |
 
 ## 既知の制限
 
-- **Windows**: 未テスト。WSL2 経由のビルドを推奨します。
+- **Windows**: x86_64-pc-windows-msvc でサポート (v0.8.0+, MSVC ABI)。`tyra build` が `gc.dll` を出力バイナリと同じディレクトリに自動コピーします。PATH の変更は不要です。MinGW GNU ABI は非対応。Windows ARM64 とネイティブ PDB デバッグシンボルは v0.9 以降。
+- **`LinkedMap.remove` / `LinkedSet.remove` は O(n)**: entries 配列を毎回再構築します。削除が頻繁なユースケースには `Map` / `Set` を使ってください。
+- **HM 型推論は保守的**: `types_compatible()` は現在、呼び出しごとに使い捨ての substitution を使っており、チェッカー全体に伝播させていません。完全な推論伝播は v0.9 予定。ほとんどのプログラムには影響ありませんが、稀に予期しない型エラーが出る可能性があります。
+- **`tyra build --static`**: musl 上のみ信頼できます。glibc 静的リンクは非対応 (`getaddrinfo` が壊れます)。
 - **`http.server`**: 実験的。シングルスレッド、TLS なし、ミドルウェアなし。本番で使用しないでください。
 - **破壊的変更**: v1.0 までは破壊的変更が予想されます。
 

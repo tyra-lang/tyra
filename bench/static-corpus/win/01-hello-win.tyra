@@ -1,0 +1,6 @@
+# bench/static-corpus/win/01-hello-win.tyra
+# Smoke test: verifies the binary produced by `tyra build` runs on Windows.
+# Assumes gc.dll is in the same directory as the .exe (auto-copied by tyra-driver).
+# SPEC_REF: ADR-0021 (Windows MSVC ABI, gc.dll same-dir deployment, v0.8.0)
+
+print("hello, tyra")
