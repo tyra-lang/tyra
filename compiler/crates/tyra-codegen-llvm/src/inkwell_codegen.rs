@@ -57,6 +57,8 @@ pub(crate) struct CodeGen<'ctx> {
     /// Load type for each alloca slot (slots are `alloca i64` for size, but
     /// loads use the stored value's type). Reset per function (I2b).
     pub(crate) slot_types: HashMap<String, BasicTypeEnum<'ctx>>,
+    /// Per-struct "is field a recursive self-reference" flags (ADT boxing, I2d).
+    pub(crate) recursive_fields: HashMap<String, Vec<bool>>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -74,6 +76,7 @@ impl<'ctx> CodeGen<'ctx> {
             blocks: HashMap::new(),
             addr_slots: HashMap::new(),
             slot_types: HashMap::new(),
+            recursive_fields: HashMap::new(),
         }
     }
 
@@ -137,6 +140,8 @@ impl<'ctx> CodeGen<'ctx> {
             }
             let st = self.ctx.opaque_struct_type(&format!("struct.{}", sd.name));
             self.struct_types.insert(sd.name.clone(), st);
+            self.recursive_fields
+                .insert(sd.name.clone(), sd.recursive_fields.clone());
         }
     }
 
@@ -791,6 +796,69 @@ mod tests {
         let ir = cg.module.print_to_string().to_string();
         assert!(ir.contains("insertvalue"), "missing insertvalue:\n{ir}");
         assert!(ir.contains("extractvalue"), "missing extractvalue:\n{ir}");
+    }
+
+    #[test]
+    fn i2d_adt_init_tag_payload() {
+        // Option<Int>-like ADT: struct { i8 tag, i64 value }.
+        // fn unwrap_or(o: OptionInt) -> Int { t = adt_tag o; p = adt_payload o[1]; ... return p }
+        // Build Some(7), then read tag + payload, return payload.
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "mk_some".into(),
+                params: vec![("v".into(), Ty::Int)],
+                return_type: Ty::Int,
+                body: vec![
+                    MirStmt::synthetic(Instruction::AdtInit {
+                        dest: "o".into(),
+                        type_name: "OptionInt".into(),
+                        tag: 1,
+                        // Param payload (not a constant) so the insertvalue is
+                        // not constant-folded away by the IR builder.
+                        fields: vec![Operand::Var("v".into())],
+                    }),
+                    MirStmt::synthetic(Instruction::AdtTag {
+                        dest: "tg".into(),
+                        obj: Operand::Var("o".into()),
+                        type_name: "OptionInt".into(),
+                    }),
+                    MirStmt::synthetic(Instruction::AdtPayload {
+                        dest: "p".into(),
+                        obj: Operand::Var("o".into()),
+                        type_name: "OptionInt".into(),
+                        field_index: 1,
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("p".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![tyra_mir::StructDef {
+                // field 0 named "tag" → ADT; i8 tag + i64 payload.
+                name: "OptionInt".into(),
+                fields: vec![("tag".into(), Ty::Int), ("value".into(), Ty::Int)],
+                is_data: false,
+                recursive_fields: vec![false, false],
+            }],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        assert!(
+            cg.module.verify().is_ok(),
+            "ADT module failed to verify:\n{}",
+            cg.module.print_to_string().to_string()
+        );
+        // verify() above is the real gate (it checks types flow correctly
+        // through insert/extract). Constant tag/extracts may be folded, so only
+        // the non-constant payload insertvalue is reliably present.
+        let ir = cg.module.print_to_string().to_string();
+        assert!(ir.contains("insertvalue"), "missing adt insertvalue:\n{ir}");
     }
 
     #[test]

@@ -15,6 +15,7 @@
 
 use std::collections::HashSet;
 
+use inkwell::types::BasicTypeEnum;
 use inkwell::values::{AggregateValueEnum, BasicMetadataValueEnum, BasicValueEnum, PhiValue};
 use inkwell::{FloatPredicate, IntPredicate};
 
@@ -76,7 +77,10 @@ impl<'ctx> CodeGen<'ctx> {
                 | Instruction::PtrLoad { .. }
                 | Instruction::StructInit { .. }
                 | Instruction::FieldGet { .. }
-                | Instruction::FieldSet { .. } => true,
+                | Instruction::FieldSet { .. }
+                | Instruction::AdtInit { .. }
+                | Instruction::AdtTag { .. }
+                | Instruction::AdtPayload { .. } => true,
                 Instruction::Call { func, .. } => self.fn_values.contains_key(func),
                 _ => false,
             };
@@ -145,6 +149,8 @@ impl<'ctx> CodeGen<'ctx> {
             Instruction::StructInit { fields, .. } => fields.iter().collect(),
             Instruction::FieldGet { obj, .. } => vec![obj],
             Instruction::FieldSet { obj, value, .. } => vec![obj, value],
+            Instruction::AdtInit { fields, .. } => fields.iter().collect(),
+            Instruction::AdtTag { obj, .. } | Instruction::AdtPayload { obj, .. } => vec![obj],
             _ => vec![],
         }
     }
@@ -345,6 +351,98 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 self.builder.build_store(gep, v).unwrap();
             }
+            Instruction::AdtInit { dest, type_name, tag, fields } => {
+                let st = self.struct_types[type_name];
+                let recursive = self.recursive_fields.get(type_name).cloned().unwrap_or_default();
+                let num_fields = st.count_fields() as usize;
+                // Field 0 is the i8 tag.
+                let mut agg: AggregateValueEnum = st.get_undef().into();
+                let tag_v = self.ctx.i8_type().const_int(*tag as u64, false);
+                agg = self.builder.build_insert_value(agg, tag_v, 0, "adt.tag").unwrap();
+                // Payload fields: AdtInit.fields excludes the tag, so field
+                // struct-index `fi` maps to fields[fi - 1].
+                for fi in 1..num_fields {
+                    let fty = st.get_field_type_at_index(fi as u32).unwrap();
+                    let is_rec = recursive.get(fi).copied().unwrap_or(false);
+                    let field_op = fields.get(fi - 1);
+                    let v: BasicValueEnum = if is_rec {
+                        // Recursive self-reference: boxed GC-heap ptr. A zero
+                        // placeholder (inactive variant) becomes null.
+                        match field_op {
+                            Some(Operand::Const(Constant::Int(0))) | None => {
+                                self.ptr().const_null().into()
+                            }
+                            Some(op) => {
+                                let inner = self.operand(op);
+                                let size = st.size_of().expect("sized ADT");
+                                let gc = self.module.get_function("GC_malloc").unwrap();
+                                let box_ptr = self
+                                    .builder
+                                    .build_call(gc, &[size.into()], "adt.box")
+                                    .unwrap()
+                                    .try_as_basic_value()
+                                    .basic()
+                                    .unwrap()
+                                    .into_pointer_value();
+                                self.builder.build_store(box_ptr, inner).unwrap();
+                                box_ptr.into()
+                            }
+                        }
+                    } else {
+                        match field_op {
+                            // A 0-placeholder on a non-int field is the inactive
+                            // variant's zero (null / 0.0 / zeroinitializer).
+                            Some(Operand::Const(Constant::Int(0))) if !fty.is_int_type() => {
+                                self.zero_of(fty)
+                            }
+                            Some(op) => self.operand(op),
+                            None => self.zero_of(fty),
+                        }
+                    };
+                    agg = self
+                        .builder
+                        .build_insert_value(agg, v, fi as u32, &format!("adt.f{fi}"))
+                        .unwrap();
+                }
+                self.values.insert(dest.clone(), agg.into_struct_value().into());
+            }
+            Instruction::AdtTag { dest, obj, .. } => {
+                let o = self.operand(obj).into_struct_value();
+                let tag_i8 = self
+                    .builder
+                    .build_extract_value(o, 0, &format!("{dest}.i8"))
+                    .unwrap()
+                    .into_int_value();
+                let v = self
+                    .builder
+                    .build_int_z_extend(tag_i8, self.ctx.i64_type(), dest)
+                    .unwrap();
+                self.values.insert(dest.clone(), v.into());
+            }
+            Instruction::AdtPayload { dest, obj, type_name, field_index } => {
+                let st = self.struct_types[type_name];
+                let o = self.operand(obj).into_struct_value();
+                let extracted = self
+                    .builder
+                    .build_extract_value(o, *field_index, dest)
+                    .unwrap();
+                let idx = *field_index as usize;
+                let is_rec = self
+                    .recursive_fields
+                    .get(type_name)
+                    .and_then(|r| r.get(idx).copied())
+                    .unwrap_or(false);
+                if is_rec {
+                    // Boxed self-reference: load the referenced ADT struct back.
+                    let v = self
+                        .builder
+                        .build_load(st, extracted.into_pointer_value(), dest)
+                        .unwrap();
+                    self.values.insert(dest.clone(), v);
+                } else {
+                    self.values.insert(dest.clone(), extracted);
+                }
+            }
             Instruction::BinOp { dest, op, lhs, rhs } => {
                 let v = self.emit_binop(*op, lhs, rhs, dest);
                 self.values.insert(dest.clone(), v);
@@ -487,6 +585,19 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
+    /// Zero/null value of a basic type (for inactive ADT variant fields).
+    fn zero_of(&self, ty: BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {
+        match ty {
+            BasicTypeEnum::IntType(t) => t.const_zero().into(),
+            BasicTypeEnum::FloatType(t) => t.const_zero().into(),
+            BasicTypeEnum::PointerType(t) => t.const_null().into(),
+            BasicTypeEnum::StructType(t) => t.const_zero().into(),
+            BasicTypeEnum::ArrayType(t) => t.const_zero().into(),
+            BasicTypeEnum::VectorType(t) => t.const_zero().into(),
+            BasicTypeEnum::ScalableVectorType(t) => t.const_zero().into(),
+        }
+    }
+
     /// Call a no-return-value runtime function declared in I1.
     fn call_runtime_void(&self, name: &str, args: &[BasicMetadataValueEnum<'ctx>]) {
         let f = self
@@ -510,7 +621,10 @@ fn instr_dest(inst: &Instruction) -> Option<&str> {
         | Instruction::Load { dest, .. }
         | Instruction::PtrLoad { dest, .. }
         | Instruction::StructInit { dest, .. }
-        | Instruction::FieldGet { dest, .. } => Some(dest),
+        | Instruction::FieldGet { dest, .. }
+        | Instruction::AdtInit { dest, .. }
+        | Instruction::AdtTag { dest, .. }
+        | Instruction::AdtPayload { dest, .. } => Some(dest),
         Instruction::Call { dest, .. } => dest.as_deref(),
         _ => None,
     }
