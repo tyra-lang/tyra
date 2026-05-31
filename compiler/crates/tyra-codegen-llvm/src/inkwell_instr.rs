@@ -80,7 +80,8 @@ impl<'ctx> CodeGen<'ctx> {
                 | Instruction::FieldSet { .. }
                 | Instruction::AdtInit { .. }
                 | Instruction::AdtTag { .. }
-                | Instruction::AdtPayload { .. } => true,
+                | Instruction::AdtPayload { .. }
+                | Instruction::StringFormat { .. } => true,
                 Instruction::Call { func, .. } => self.fn_values.contains_key(func),
                 _ => false,
             };
@@ -151,6 +152,7 @@ impl<'ctx> CodeGen<'ctx> {
             Instruction::FieldSet { obj, value, .. } => vec![obj, value],
             Instruction::AdtInit { fields, .. } => fields.iter().collect(),
             Instruction::AdtTag { obj, .. } | Instruction::AdtPayload { obj, .. } => vec![obj],
+            Instruction::StringFormat { args, .. } => args.iter().collect(),
             _ => vec![],
         }
     }
@@ -511,7 +513,50 @@ impl<'ctx> CodeGen<'ctx> {
                     }
                 }
             }
-            // Not in I2a scope; is_i2_emittable guarantees we never reach here.
+            Instruction::StringFormat { dest, format_ref, args } => {
+                // GC-allocate a 1024-byte buffer and snprintf into it. The
+                // legacy backend adds a defensive GC_malloc null check + abort
+                // branch; it is omitted here because Boehm GC_malloc never
+                // returns null (its OOM handler aborts internally), and adding
+                // the branch would split the current basic block — which would
+                // break phi-predecessor bookkeeping. Observable behavior is
+                // identical (abort on OOM either way).
+                let i64t = self.ctx.i64_type();
+                let size = i64t.const_int(1024, false);
+                let gc = self.module.get_function("GC_malloc").unwrap();
+                let buf = self
+                    .builder
+                    .build_call(gc, &[size.into()], dest)
+                    .unwrap()
+                    .try_as_basic_value()
+                    .basic()
+                    .unwrap()
+                    .into_pointer_value();
+                let fmt = self
+                    .module
+                    .get_global(&format!(".str.{format_ref}"))
+                    .expect("format string global (I1)")
+                    .as_pointer_value();
+                let mut call_args: Vec<BasicMetadataValueEnum<'ctx>> =
+                    vec![buf.into(), size.into(), fmt.into()];
+                for arg in args {
+                    let v = self.operand(arg);
+                    // i1 (bool) must be widened to i64 for printf-family varargs.
+                    if v.is_int_value() && v.into_int_value().get_type().get_bit_width() == 1 {
+                        let w = self
+                            .builder
+                            .build_int_z_extend(v.into_int_value(), i64t, "fmt.b")
+                            .unwrap();
+                        call_args.push(w.into());
+                    } else {
+                        call_args.push(v.into());
+                    }
+                }
+                let snprintf = self.module.get_function("snprintf").unwrap();
+                self.builder.build_call(snprintf, &call_args, "fmt").unwrap();
+                self.values.insert(dest.clone(), buf.into());
+            }
+            // Not in I2 scope; is_i2_emittable guarantees we never reach here.
             other => unreachable!("emit_instr called on unsupported instruction: {other:?}"),
         }
     }
@@ -626,7 +671,8 @@ fn instr_dest(inst: &Instruction) -> Option<&str> {
         | Instruction::FieldGet { dest, .. }
         | Instruction::AdtInit { dest, .. }
         | Instruction::AdtTag { dest, .. }
-        | Instruction::AdtPayload { dest, .. } => Some(dest),
+        | Instruction::AdtPayload { dest, .. }
+        | Instruction::StringFormat { dest, .. } => Some(dest),
         Instruction::Call { dest, .. } => dest.as_deref(),
         _ => None,
     }

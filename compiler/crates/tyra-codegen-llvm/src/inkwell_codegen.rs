@@ -911,6 +911,45 @@ mod tests {
     }
 
     #[test]
+    fn i2e_string_format_emits_snprintf() {
+        // fn fmt(n: Int) -> String { s = StringFormat(0, [n]); return s }
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "fmt".into(),
+                params: vec![("n".into(), Ty::Int)],
+                return_type: Ty::String,
+                body: vec![
+                    MirStmt::synthetic(Instruction::StringFormat {
+                        dest: "s".into(),
+                        format_ref: 0,
+                        args: vec![Operand::Var("n".into())],
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("s".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec!["n=%ld".into()],
+            struct_defs: vec![],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        assert!(
+            cg.module.verify().is_ok(),
+            "StringFormat module failed to verify:\n{}",
+            cg.module.print_to_string().to_string()
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(ir.contains("@GC_malloc"), "missing buffer alloc:\n{ir}");
+        assert!(ir.contains("@snprintf"), "missing snprintf:\n{ir}");
+    }
+
+    #[test]
     fn i2a_unsupported_instruction_falls_back_to_unreachable() {
         use tyra_mir::{Function, Instruction, MirStmt, Operand};
         let ctx = Context::create();
