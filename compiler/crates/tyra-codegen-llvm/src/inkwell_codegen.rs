@@ -862,6 +862,55 @@ mod tests {
     }
 
     #[test]
+    fn i2d_adt_bool_payload_inactive_zero_verifies() {
+        // ADT { i8 tag, i1 value }. The None-like variant fills the i1 payload
+        // with the MIR Int(0) placeholder — it must become i1 0, not i64 0.
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "mk_none".into(),
+                params: vec![],
+                return_type: Ty::Bool,
+                body: vec![
+                    MirStmt::synthetic(Instruction::AdtInit {
+                        dest: "o".into(),
+                        type_name: "BoolOpt".into(),
+                        tag: 0,
+                        fields: vec![Operand::Const(Constant::Int(0))],
+                    }),
+                    MirStmt::synthetic(Instruction::AdtPayload {
+                        dest: "p".into(),
+                        obj: Operand::Var("o".into()),
+                        type_name: "BoolOpt".into(),
+                        field_index: 1,
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("p".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![tyra_mir::StructDef {
+                name: "BoolOpt".into(),
+                fields: vec![("tag".into(), Ty::Int), ("value".into(), Ty::Bool)],
+                is_data: false,
+                recursive_fields: vec![false, false],
+            }],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        assert!(
+            cg.module.verify().is_ok(),
+            "Bool-payload ADT failed to verify (i64 0 into i1 field?):\n{}",
+            cg.module.print_to_string().to_string()
+        );
+    }
+
+    #[test]
     fn i2a_unsupported_instruction_falls_back_to_unreachable() {
         use tyra_mir::{Function, Instruction, MirStmt, Operand};
         let ctx = Context::create();

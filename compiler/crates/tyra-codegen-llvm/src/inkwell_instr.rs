@@ -390,11 +390,13 @@ impl<'ctx> CodeGen<'ctx> {
                         }
                     } else {
                         match field_op {
-                            // A 0-placeholder on a non-int field is the inactive
-                            // variant's zero (null / 0.0 / zeroinitializer).
-                            Some(Operand::Const(Constant::Int(0))) if !fty.is_int_type() => {
-                                self.zero_of(fty)
-                            }
+                            // MIR fills inactive variant fields with Int(0)
+                            // regardless of the field's real type (incl. i1
+                            // Bool, i8, ptr, double, struct). The value-handle
+                            // backend keeps the real type, so always materialize
+                            // the field-typed zero — this also equals the real
+                            // value for an active integer 0.
+                            Some(Operand::Const(Constant::Int(0))) => self.zero_of(fty),
                             Some(op) => self.operand(op),
                             None => self.zero_of(fty),
                         }
