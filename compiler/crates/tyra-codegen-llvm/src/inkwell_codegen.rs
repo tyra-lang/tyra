@@ -54,6 +54,9 @@ pub(crate) struct CodeGen<'ctx> {
     pub(crate) blocks: HashMap<String, BasicBlock<'ctx>>,
     /// alloca slots (param/local addresses) by name. Reset per function (I2).
     pub(crate) addr_slots: HashMap<String, PointerValue<'ctx>>,
+    /// Load type for each alloca slot (slots are `alloca i64` for size, but
+    /// loads use the stored value's type). Reset per function (I2b).
+    pub(crate) slot_types: HashMap<String, BasicTypeEnum<'ctx>>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -70,6 +73,7 @@ impl<'ctx> CodeGen<'ctx> {
             fn_values: HashMap::new(),
             blocks: HashMap::new(),
             addr_slots: HashMap::new(),
+            slot_types: HashMap::new(),
         }
     }
 
@@ -675,6 +679,68 @@ mod tests {
             cg.module.print_to_string().to_string()
         );
         assert!(cg.module.print_to_string().to_string().contains("phi i64"));
+    }
+
+    #[test]
+    fn i2b_mutable_local_emits_alloca_store_load() {
+        // fn f() -> Int { mut x = 5; x = x + 1; return x }
+        use tyra_mir::{Constant, Function, Instruction, MirBinOp, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![],
+                return_type: Ty::Int,
+                body: vec![
+                    MirStmt::synthetic(Instruction::Alloca { dest: "x".into() }),
+                    MirStmt::synthetic(Instruction::Const {
+                        dest: "c5".into(),
+                        value: Constant::Int(5),
+                    }),
+                    MirStmt::synthetic(Instruction::Store {
+                        dest: "x".into(),
+                        value: Operand::Var("c5".into()),
+                    }),
+                    MirStmt::synthetic(Instruction::Load {
+                        dest: "cur".into(),
+                        source: "x".into(),
+                    }),
+                    MirStmt::synthetic(Instruction::BinOp {
+                        dest: "inc".into(),
+                        op: MirBinOp::AddInt,
+                        lhs: Operand::Var("cur".into()),
+                        rhs: Operand::Const(Constant::Int(1)),
+                    }),
+                    MirStmt::synthetic(Instruction::Store {
+                        dest: "x".into(),
+                        value: Operand::Var("inc".into()),
+                    }),
+                    MirStmt::synthetic(Instruction::Load {
+                        dest: "r".into(),
+                        source: "x".into(),
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("r".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        assert!(
+            cg.module.verify().is_ok(),
+            "mut-local module failed to verify:\n{}",
+            cg.module.print_to_string().to_string()
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(ir.contains("alloca i64"), "missing alloca:\n{ir}");
+        assert!(ir.contains("store i64"), "missing store:\n{ir}");
+        assert!(ir.contains("load i64"), "missing load:\n{ir}");
     }
 
     #[test]

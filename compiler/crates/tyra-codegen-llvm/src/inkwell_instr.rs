@@ -69,7 +69,11 @@ impl<'ctx> CodeGen<'ctx> {
                 | Instruction::Label(_)
                 | Instruction::Jump { .. }
                 | Instruction::BranchIf { .. }
-                | Instruction::Phi { .. } => true,
+                | Instruction::Phi { .. }
+                | Instruction::Alloca { .. }
+                | Instruction::Store { .. }
+                | Instruction::Load { .. }
+                | Instruction::PtrLoad { .. } => true,
                 Instruction::Call { func, .. } => self.fn_values.contains_key(func),
                 _ => false,
             };
@@ -94,9 +98,17 @@ impl<'ctx> CodeGen<'ctx> {
                     }) {
                         return false;
                     }
-                    // Copy's source is a `String`, not an `Operand`.
-                    if let Instruction::Copy { source, .. } = inst {
-                        if !seen.contains(source.as_str()) {
+                    // Slot/source names referenced by name (not Operand) must
+                    // already be defined (an Alloca dest or a param).
+                    let name_ref: Option<&str> = match inst {
+                        Instruction::Copy { source, .. } => Some(source),
+                        Instruction::Store { dest, .. } => Some(dest),
+                        Instruction::Load { source, .. } => Some(source),
+                        Instruction::PtrLoad { ptr, .. } => Some(ptr),
+                        _ => None,
+                    };
+                    if let Some(n) = name_ref {
+                        if !seen.contains(n) {
                             return false;
                         }
                     }
@@ -125,6 +137,7 @@ impl<'ctx> CodeGen<'ctx> {
             Instruction::Neg { operand, .. } | Instruction::Not { operand, .. } => vec![operand],
             Instruction::Return { value: Some(v) } => vec![v],
             Instruction::BranchIf { cond, .. } => vec![cond],
+            Instruction::Store { value, .. } => vec![value],
             Instruction::Call { args, .. } => args.iter().collect(),
             _ => vec![],
         }
@@ -133,6 +146,8 @@ impl<'ctx> CodeGen<'ctx> {
     fn emit_function_body(&mut self, f: &Function) {
         self.values.clear();
         self.blocks.clear();
+        self.addr_slots.clear();
+        self.slot_types.clear();
         let fv = self.fn_values[&f.name];
 
         // Entry block, then pre-create every labeled block so forward jumps and
@@ -146,6 +161,38 @@ impl<'ctx> CodeGen<'ctx> {
         }
         self.builder.position_at_end(entry);
 
+        // Parameters: bind the SSA arg for direct (immutable) operand refs and
+        // also create a `.addr` slot (matching the legacy backend) so mutation
+        // (Store) and `Copy`-from-param read the mutable view.
+        if !f.is_main {
+            let i64t = self.ctx.i64_type();
+            for (i, (name, ty)) in f.params.iter().enumerate() {
+                let p = fv.get_nth_param(i as u32).unwrap();
+                p.set_name(name);
+                self.values.insert(name.clone(), p);
+                let slot = self.builder.build_alloca(i64t, &format!("{name}.addr")).unwrap();
+                self.builder.build_store(slot, p).unwrap();
+                self.addr_slots.insert(name.clone(), slot);
+                let bt = self.ty_to_basic_type(ty);
+                self.slot_types.insert(name.clone(), bt);
+            }
+        }
+
+        // Hoist every local alloca slot to the entry block (allocated once, not
+        // per loop iteration). Slots are `alloca i64` (8 bytes covers every
+        // scalar/ptr local an I2b-emittable function can hold); the load type is
+        // tracked per-slot via `slot_types` (refined on Store).
+        let i64t = self.ctx.i64_type();
+        for stmt in &f.body {
+            if let Instruction::Alloca { dest } = &stmt.instr {
+                if !self.addr_slots.contains_key(dest) {
+                    let slot = self.builder.build_alloca(i64t, dest).unwrap();
+                    self.addr_slots.insert(dest.clone(), slot);
+                    self.slot_types.insert(dest.clone(), i64t.into());
+                }
+            }
+        }
+
         if f.is_main {
             // C entry: i32 @main(i32 %argc, ptr %argv). Initialize GC + runtime
             // and capture argc/argv for sys.args() (ADR-0007 / sys.args).
@@ -157,12 +204,6 @@ impl<'ctx> CodeGen<'ctx> {
             self.builder.build_store(argc_g, argc).unwrap();
             let argv_g = self.module.get_global(".tyra.argv").unwrap().as_pointer_value();
             self.builder.build_store(argv_g, argv).unwrap();
-        } else {
-            for (i, (name, _)) in f.params.iter().enumerate() {
-                let p = fv.get_nth_param(i as u32).unwrap();
-                p.set_name(name);
-                self.values.insert(name.clone(), p);
-            }
         }
 
         let mut pending: Vec<(PhiValue<'ctx>, Vec<(Operand, String)>)> = Vec::new();
@@ -192,7 +233,43 @@ impl<'ctx> CodeGen<'ctx> {
                 self.values.insert(dest.clone(), v);
             }
             Instruction::Copy { dest, source } => {
-                let v = self.values[source];
+                // From a param: load the mutable `.addr` view (matches legacy,
+                // so post-mutation reads see the new value). From an SSA temp:
+                // alias the value handle.
+                let v = if is_param(f, source) {
+                    let ty = self.slot_types[source];
+                    let slot = self.addr_slots[source];
+                    self.builder.build_load(ty, slot, dest).unwrap()
+                } else {
+                    self.values[source]
+                };
+                self.values.insert(dest.clone(), v);
+            }
+            // Slots are pre-allocated and hoisted to the entry block.
+            Instruction::Alloca { .. } => {}
+            Instruction::Store { dest, value } => {
+                let v = self.operand(value);
+                let slot = self.addr_slots[dest];
+                self.builder.build_store(slot, v).unwrap();
+                // Refine the slot's load type to the stored value's type. LLVM
+                // requires store/load type annotations to match the value, not
+                // the (i64) alloca declaration (opaque pointers).
+                self.slot_types.insert(dest.clone(), v.get_type());
+            }
+            Instruction::Load { dest, source } => {
+                let ty = self
+                    .slot_types
+                    .get(source)
+                    .copied()
+                    .unwrap_or_else(|| self.ctx.i64_type().into());
+                let slot = self.addr_slots[source];
+                let v = self.builder.build_load(ty, slot, dest).unwrap();
+                self.values.insert(dest.clone(), v);
+            }
+            Instruction::PtrLoad { dest, ptr, ty } => {
+                let bt = self.ty_to_basic_type(ty);
+                let p = self.values[ptr].into_pointer_value();
+                let v = self.builder.build_load(bt, p, dest).unwrap();
                 self.values.insert(dest.clone(), v);
             }
             Instruction::BinOp { dest, op, lhs, rhs } => {
@@ -355,7 +432,10 @@ fn instr_dest(inst: &Instruction) -> Option<&str> {
         | Instruction::Neg { dest, .. }
         | Instruction::Not { dest, .. }
         | Instruction::Copy { dest, .. }
-        | Instruction::Phi { dest, .. } => Some(dest),
+        | Instruction::Phi { dest, .. }
+        | Instruction::Alloca { dest }
+        | Instruction::Load { dest, .. }
+        | Instruction::PtrLoad { dest, .. } => Some(dest),
         Instruction::Call { dest, .. } => dest.as_deref(),
         _ => None,
     }
@@ -363,4 +443,8 @@ fn instr_dest(inst: &Instruction) -> Option<&str> {
 
 fn is_void_ret(f: &Function) -> bool {
     matches!(f.return_type, tyra_types::Ty::Unit | tyra_types::Ty::Never)
+}
+
+fn is_param(f: &Function, name: &str) -> bool {
+    f.params.iter().any(|(n, _)| n == name)
 }
