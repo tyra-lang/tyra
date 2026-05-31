@@ -398,15 +398,6 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    /// I1: fill every declared function with a single `unreachable` entry block
-    /// so `Module::verify()` passes. I2 replaces these with real bodies.
-    fn emit_unreachable_bodies(&self) {
-        for fv in self.fn_values.values() {
-            let entry = self.ctx.append_basic_block(*fv, "entry");
-            self.builder.position_at_end(entry);
-            self.builder.build_unreachable().unwrap();
-        }
-    }
 }
 
 /// Compact extern signature kinds for the data-driven `declare_externs` table.
@@ -446,7 +437,7 @@ fn build_module<'ctx>(ctx: &'ctx Context, program: &Program) -> CodeGen<'ctx> {
     cg.declare_globals(program);
     cg.declare_externs();
     cg.declare_functions(program);
-    cg.emit_unreachable_bodies();
+    cg.emit_bodies(program);
     cg
 }
 
@@ -588,6 +579,135 @@ mod tests {
             "module failed to verify:\n{}",
             cg.module.print_to_string().to_string()
         );
+    }
+
+    #[test]
+    fn i2a_add_function_emits_real_body() {
+        use tyra_mir::{Function, Instruction, MirBinOp, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "add".into(),
+                params: vec![("a".into(), Ty::Int), ("b".into(), Ty::Int)],
+                return_type: Ty::Int,
+                body: vec![
+                    MirStmt::synthetic(Instruction::BinOp {
+                        dest: "r".into(),
+                        op: MirBinOp::AddInt,
+                        lhs: Operand::Var("a".into()),
+                        rhs: Operand::Var("b".into()),
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("r".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        assert!(
+            cg.module.verify().is_ok(),
+            "module failed to verify:\n{}",
+            cg.module.print_to_string().to_string()
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(ir.contains("add i64"), "missing real add instruction:\n{ir}");
+        assert!(ir.contains("ret i64"), "missing typed return:\n{ir}");
+    }
+
+    #[test]
+    fn i2a_if_expression_emits_phi() {
+        // fn pick(c: Bool) -> Int = if c then 1 else 2  (Phi over two consts)
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "pick".into(),
+                params: vec![("c".into(), Ty::Bool)],
+                return_type: Ty::Int,
+                body: vec![
+                    MirStmt::synthetic(Instruction::BranchIf {
+                        cond: Operand::Var("c".into()),
+                        true_label: "then".into(),
+                        false_label: "els".into(),
+                    }),
+                    MirStmt::synthetic(Instruction::Label("then".into())),
+                    MirStmt::synthetic(Instruction::Const {
+                        dest: "t".into(),
+                        value: Constant::Int(1),
+                    }),
+                    MirStmt::synthetic(Instruction::Jump { label: "merge".into() }),
+                    MirStmt::synthetic(Instruction::Label("els".into())),
+                    MirStmt::synthetic(Instruction::Const {
+                        dest: "e".into(),
+                        value: Constant::Int(2),
+                    }),
+                    MirStmt::synthetic(Instruction::Jump { label: "merge".into() }),
+                    MirStmt::synthetic(Instruction::Label("merge".into())),
+                    MirStmt::synthetic(Instruction::Phi {
+                        dest: "r".into(),
+                        branches: vec![
+                            (Operand::Var("t".into()), "then".into()),
+                            (Operand::Var("e".into()), "els".into()),
+                        ],
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("r".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        assert!(
+            cg.module.verify().is_ok(),
+            "phi module failed to verify:\n{}",
+            cg.module.print_to_string().to_string()
+        );
+        assert!(cg.module.print_to_string().to_string().contains("phi i64"));
+    }
+
+    #[test]
+    fn i2a_unsupported_instruction_falls_back_to_unreachable() {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        // StructInit is not in I2a scope → function must fall back to unreachable.
+        let program = Program {
+            functions: vec![Function {
+                name: "mk".into(),
+                params: vec![],
+                return_type: Ty::Named("Pair".into()),
+                body: vec![MirStmt::synthetic(Instruction::StructInit {
+                    dest: "p".into(),
+                    type_name: "Pair".into(),
+                    fields: vec![Operand::Const(tyra_mir::Constant::Int(1))],
+                })],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![tyra_mir::StructDef {
+                name: "Pair".into(),
+                fields: vec![("a".into(), Ty::Int)],
+                is_data: false,
+                recursive_fields: vec![false],
+            }],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        assert!(cg.module.verify().is_ok());
+        assert!(cg.module.print_to_string().to_string().contains("unreachable"));
     }
 
     #[test]
