@@ -15,7 +15,7 @@
 
 use std::collections::HashSet;
 
-use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, PhiValue};
+use inkwell::values::{AggregateValueEnum, BasicMetadataValueEnum, BasicValueEnum, PhiValue};
 use inkwell::{FloatPredicate, IntPredicate};
 
 use tyra_mir::{Constant, Function, Instruction, MirBinOp, Operand, Program};
@@ -73,7 +73,10 @@ impl<'ctx> CodeGen<'ctx> {
                 | Instruction::Alloca { .. }
                 | Instruction::Store { .. }
                 | Instruction::Load { .. }
-                | Instruction::PtrLoad { .. } => true,
+                | Instruction::PtrLoad { .. }
+                | Instruction::StructInit { .. }
+                | Instruction::FieldGet { .. }
+                | Instruction::FieldSet { .. } => true,
                 Instruction::Call { func, .. } => self.fn_values.contains_key(func),
                 _ => false,
             };
@@ -139,6 +142,9 @@ impl<'ctx> CodeGen<'ctx> {
             Instruction::BranchIf { cond, .. } => vec![cond],
             Instruction::Store { value, .. } => vec![value],
             Instruction::Call { args, .. } => args.iter().collect(),
+            Instruction::StructInit { fields, .. } => fields.iter().collect(),
+            Instruction::FieldGet { obj, .. } => vec![obj],
+            Instruction::FieldSet { obj, value, .. } => vec![obj, value],
             _ => vec![],
         }
     }
@@ -271,6 +277,73 @@ impl<'ctx> CodeGen<'ctx> {
                 let p = self.values[ptr].into_pointer_value();
                 let v = self.builder.build_load(bt, p, dest).unwrap();
                 self.values.insert(dest.clone(), v);
+            }
+            Instruction::StructInit { dest, type_name, fields } => {
+                let st = self.struct_types[type_name];
+                if self.data_types.contains(type_name) {
+                    // data type (§8.6): heap-allocate, then store each field.
+                    let size = st.size_of().expect("data struct must be sized");
+                    let gc = self.module.get_function("GC_malloc").unwrap();
+                    let raw = self
+                        .builder
+                        .build_call(gc, &[size.into()], dest)
+                        .unwrap()
+                        .try_as_basic_value()
+                        .basic()
+                        .unwrap()
+                        .into_pointer_value();
+                    for (i, fop) in fields.iter().enumerate() {
+                        let v = self.operand(fop);
+                        let gep = self
+                            .builder
+                            .build_struct_gep(st, raw, i as u32, &format!("{dest}.f{i}"))
+                            .unwrap();
+                        self.builder.build_store(gep, v).unwrap();
+                    }
+                    self.values.insert(dest.clone(), raw.into());
+                } else {
+                    // value type: insertvalue chain from undef.
+                    let mut agg: AggregateValueEnum = st.get_undef().into();
+                    for (i, fop) in fields.iter().enumerate() {
+                        let v = self.operand(fop);
+                        agg = self
+                            .builder
+                            .build_insert_value(agg, v, i as u32, &format!("{dest}.s{i}"))
+                            .unwrap();
+                    }
+                    self.values.insert(dest.clone(), agg.into_struct_value().into());
+                }
+            }
+            Instruction::FieldGet { dest, obj, type_name, field_index } => {
+                let st = self.struct_types[type_name];
+                let o = self.operand(obj);
+                if self.data_types.contains(type_name) {
+                    let ptr = o.into_pointer_value();
+                    let gep = self
+                        .builder
+                        .build_struct_gep(st, ptr, *field_index, &format!("{dest}.gep"))
+                        .unwrap();
+                    let fty = st.get_field_type_at_index(*field_index).unwrap();
+                    let v = self.builder.build_load(fty, gep, dest).unwrap();
+                    self.values.insert(dest.clone(), v);
+                } else {
+                    let v = self
+                        .builder
+                        .build_extract_value(o.into_struct_value(), *field_index, dest)
+                        .unwrap();
+                    self.values.insert(dest.clone(), v);
+                }
+            }
+            Instruction::FieldSet { obj, type_name, field_index, value } => {
+                // In-place data-type field mutation (§8.6): GEP + store.
+                let st = self.struct_types[type_name];
+                let ptr = self.operand(obj).into_pointer_value();
+                let v = self.operand(value);
+                let gep = self
+                    .builder
+                    .build_struct_gep(st, ptr, *field_index, "fset")
+                    .unwrap();
+                self.builder.build_store(gep, v).unwrap();
             }
             Instruction::BinOp { dest, op, lhs, rhs } => {
                 let v = self.emit_binop(*op, lhs, rhs, dest);
@@ -435,7 +508,9 @@ fn instr_dest(inst: &Instruction) -> Option<&str> {
         | Instruction::Phi { dest, .. }
         | Instruction::Alloca { dest }
         | Instruction::Load { dest, .. }
-        | Instruction::PtrLoad { dest, .. } => Some(dest),
+        | Instruction::PtrLoad { dest, .. }
+        | Instruction::StructInit { dest, .. }
+        | Instruction::FieldGet { dest, .. } => Some(dest),
         Instruction::Call { dest, .. } => dest.as_deref(),
         _ => None,
     }

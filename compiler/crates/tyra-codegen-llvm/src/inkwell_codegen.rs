@@ -744,6 +744,56 @@ mod tests {
     }
 
     #[test]
+    fn i2c_struct_init_and_field_get() {
+        // fn first(a: Int, b: Int) -> Int { p = Pair{a,b}; return p.0 }
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "first".into(),
+                params: vec![("a".into(), Ty::Int), ("b".into(), Ty::Int)],
+                return_type: Ty::Int,
+                body: vec![
+                    MirStmt::synthetic(Instruction::StructInit {
+                        dest: "p".into(),
+                        type_name: "Pair".into(),
+                        fields: vec![Operand::Var("a".into()), Operand::Var("b".into())],
+                    }),
+                    MirStmt::synthetic(Instruction::FieldGet {
+                        dest: "x".into(),
+                        obj: Operand::Var("p".into()),
+                        type_name: "Pair".into(),
+                        field_index: 0,
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("x".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![tyra_mir::StructDef {
+                name: "Pair".into(),
+                fields: vec![("a".into(), Ty::Int), ("b".into(), Ty::Int)],
+                is_data: false,
+                recursive_fields: vec![false, false],
+            }],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        assert!(
+            cg.module.verify().is_ok(),
+            "struct module failed to verify:\n{}",
+            cg.module.print_to_string().to_string()
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(ir.contains("insertvalue"), "missing insertvalue:\n{ir}");
+        assert!(ir.contains("extractvalue"), "missing extractvalue:\n{ir}");
+    }
+
+    #[test]
     fn i2a_unsupported_instruction_falls_back_to_unreachable() {
         use tyra_mir::{Function, Instruction, MirStmt, Operand};
         let ctx = Context::create();
