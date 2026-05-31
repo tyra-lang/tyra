@@ -1385,6 +1385,12 @@ impl<'a> LowerCtx<'a> {
         self.local_binding_names.clear();
         self.generic_var_types.clear();
         self.deferred_exprs.clear();
+        // Closure tracking is per-function: a `let`-bound or param closure in
+        // one function must not leak into the next (which could wrongly turn a
+        // same-named direct call into an IndirectCall). Lambda bodies save and
+        // restore these via mem::take; top-level fns reset them here.
+        self.closure_vars.clear();
+        self.closure_fn_types.clear();
 
         let params: Vec<(String, Ty)> = f
             .params
@@ -1443,6 +1449,16 @@ impl<'a> LowerCtx<'a> {
                     {
                         self.var_types.insert(name.clone(), type_name.clone());
                     }
+                }
+                Ty::Fn(..) => {
+                    // A function-typed parameter is passed as a closure fat
+                    // pointer (ADR-0011). Register it so calls to it (`f(x)`)
+                    // lower to IndirectCall instead of a direct `call @f` to a
+                    // nonexistent global. Without this, higher-order functions
+                    // like `fn apply(f: fn(Int)->Int, x: Int) f(x) end` emit
+                    // invalid IR (`call i64 @f(...)`, undefined `@f`).
+                    self.closure_vars.insert(name.clone());
+                    self.closure_fn_types.insert(name.clone(), ty.clone());
                 }
                 _ => {}
             }
