@@ -803,7 +803,7 @@ mod tests {
         // Option<Int>-like ADT: struct { i8 tag, i64 value }.
         // fn unwrap_or(o: OptionInt) -> Int { t = adt_tag o; p = adt_payload o[1]; ... return p }
         // Build Some(7), then read tag + payload, return payload.
-        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
         let ctx = Context::create();
         let program = Program {
             functions: vec![Function {
