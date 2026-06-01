@@ -116,7 +116,13 @@ impl<'ctx> CodeGen<'ctx> {
                 }
                 _ => {
                     if !self.operands_of(inst).iter().all(|op| match op {
-                        Operand::Var(n) => seen.contains(n.as_str()),
+                        // A top-level function name is always resolvable (its
+                        // global pointer exists regardless of local flow), so it
+                        // counts as defined even without a `seen` entry — this is
+                        // how a bare handler identifier (http route) is admitted.
+                        Operand::Var(n) => {
+                            seen.contains(n.as_str()) || self.fn_values.contains_key(n.as_str())
+                        }
                         Operand::Const(_) => true,
                     }) {
                         return false;
@@ -131,7 +137,13 @@ impl<'ctx> CodeGen<'ctx> {
                         _ => None,
                     };
                     if let Some(n) = name_ref {
-                        if !seen.contains(n) {
+                        // `Copy::source` may name a top-level function (a
+                        // `let`-bound function reference, resolved to its global
+                        // pointer); `Store`/`Load`/`PtrLoad` names are always
+                        // slots/pointers, so they still require a `seen` entry.
+                        let is_copy_fn_ref =
+                            matches!(inst, Instruction::Copy { .. }) && self.fn_values.contains_key(n);
+                        if !seen.contains(n) && !is_copy_fn_ref {
                             return false;
                         }
                     }
@@ -175,7 +187,7 @@ impl<'ctx> CodeGen<'ctx> {
     fn operand_resolvable_now(&self, op: &Operand, seen: &HashSet<&str>) -> bool {
         match op {
             Operand::Const(_) => true,
-            Operand::Var(n) => seen.contains(n.as_str()),
+            Operand::Var(n) => seen.contains(n.as_str()) || self.fn_values.contains_key(n.as_str()),
         }
     }
 
@@ -321,7 +333,9 @@ impl<'ctx> CodeGen<'ctx> {
                     let slot = self.addr_slots[source];
                     self.builder.build_load(ty, slot, dest).unwrap()
                 } else {
-                    self.values[source]
+                    // An SSA temp, or a `let`-bound top-level function reference
+                    // (`let h = my_handler`) that resolves to the fn global ptr.
+                    self.value_by_name(source)
                 };
                 self.values.insert(dest.clone(), v);
             }
@@ -700,8 +714,25 @@ impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn operand(&self, op: &Operand) -> BasicValueEnum<'ctx> {
         match op {
             Operand::Const(c) => self.const_value(c),
-            Operand::Var(name) => self.values[name],
+            Operand::Var(name) => self.value_by_name(name),
         }
+    }
+
+    /// Resolve a value-producing name to its LLVM handle: a live SSA value if
+    /// one exists, else a top-level function's global pointer. The latter lets a
+    /// function reference used as a *value* — passed bare to a call, or first
+    /// `let`-bound (`Copy`) then used — resolve to `@name`, mirroring the legacy
+    /// backend (instr_emit::emit_call_args_typed). The stdlib types such slots
+    /// as a ptr (e.g. an http route handler).
+    pub(crate) fn value_by_name(&self, name: &str) -> BasicValueEnum<'ctx> {
+        self.values.get(name).copied().unwrap_or_else(|| {
+            self.fn_values
+                .get(name)
+                .unwrap_or_else(|| panic!("unbound operand `{name}`"))
+                .as_global_value()
+                .as_pointer_value()
+                .into()
+        })
     }
 
     fn const_value(&self, c: &Constant) -> BasicValueEnum<'ctx> {

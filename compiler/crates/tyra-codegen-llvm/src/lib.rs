@@ -11,6 +11,7 @@ pub mod dwarf;
 mod helpers;
 mod inkwell_builtins;
 mod inkwell_codegen;
+mod inkwell_http_builtins;
 mod inkwell_instr;
 mod inkwell_list;
 mod inkwell_list_builtins;

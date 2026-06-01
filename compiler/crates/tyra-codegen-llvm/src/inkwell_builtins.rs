@@ -147,6 +147,7 @@ impl<'ctx> CodeGen<'ctx> {
             || SIMPLE.iter().any(|(f, _, _)| *f == name)
             || Self::is_list_int_builtin(name)
             || Self::is_string_list_builtin(name)
+            || Self::is_http_server_builtin(name)
     }
 
     /// Emit a builtin call. Returns `false` if `fname` is not supported (caller
@@ -166,6 +167,9 @@ impl<'ctx> CodeGen<'ctx> {
         }
         if Self::is_string_list_builtin(fname) {
             return self.emit_string_list_builtin(dest, fname, args);
+        }
+        if Self::is_http_server_builtin(fname) {
+            return self.emit_http_server_builtin(dest, fname, args);
         }
         self.emit_simple_builtin(dest, fname, args)
     }

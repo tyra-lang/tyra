@@ -1983,4 +1983,226 @@ mod tests {
         assert!(cg.module.verify().is_ok(), "replace failed to verify:\n{ir}");
         assert!(ir.contains("call ptr @tyra_string_replace"), "must call replace runtime fn:\n{ir}");
     }
+
+    // ---- I4b slice D: http server builtins (handle ptr↔int round-trip) ----
+
+    #[test]
+    fn i4b_http_server_new_ptrtoint() {
+        let ctx = Context::create();
+        let program = builtin_call_program("f", vec![], Ty::Int, "__http_server_new", vec![]);
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "server_new failed to verify:\n{ir}");
+        assert!(ir.contains("call ptr @tyra_http_server_new"), "must call the runtime fn:\n{ir}");
+        assert!(ir.contains("ptrtoint"), "handle must be stored as Int via ptrtoint:\n{ir}");
+    }
+
+    #[test]
+    fn i4b_http_server_listen_inttoptr_sext() {
+        use tyra_mir::Operand;
+        let ctx = Context::create();
+        let program = builtin_call_program(
+            "f",
+            vec![("srv".into(), Ty::Int), ("port".into(), Ty::Int)],
+            Ty::Int,
+            "__http_server_listen",
+            vec![Operand::Var("srv".into()), Operand::Var("port".into())],
+        );
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "server_listen failed to verify:\n{ir}");
+        assert!(ir.contains("inttoptr"), "handle must be cast back to ptr:\n{ir}");
+        assert!(ir.contains("call i32 @tyra_http_server_listen"), "must call the runtime fn:\n{ir}");
+        assert!(ir.contains("sext i32"), "i32 result must sext to the Tyra Int:\n{ir}");
+    }
+
+    #[test]
+    fn i4b_http_server_route_passes_handler_ptr() {
+        // fn f(srv: Int, method: String, path: String, handler: Fn) {
+        //   route(srv, method, path, handler)
+        // }
+        // The handler is a function-typed param (→ ptr), so it passes straight
+        // through without needing ClosureBuild support.
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let handler_ty = Ty::Fn(vec![], Box::new(Ty::Unit));
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![
+                    ("srv".into(), Ty::Int),
+                    ("method".into(), Ty::String),
+                    ("path".into(), Ty::String),
+                    ("handler".into(), handler_ty),
+                ],
+                return_type: Ty::Unit,
+                body: vec![
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: None,
+                        func: "__http_server_route".into(),
+                        args: vec![
+                            Operand::Var("srv".into()),
+                            Operand::Var("method".into()),
+                            Operand::Var("path".into()),
+                            Operand::Var("handler".into()),
+                        ],
+                    }),
+                    MirStmt::synthetic(Instruction::Return { value: None }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "server_route failed to verify:\n{ir}");
+        assert!(ir.contains("inttoptr"), "handle must be cast back to ptr:\n{ir}");
+        assert!(
+            ir.contains("call void @tyra_http_server_route"),
+            "must call the void runtime fn with four ptrs:\n{ir}"
+        );
+    }
+
+    #[test]
+    fn i4b_http_server_route_bare_top_level_handler() {
+        // The REAL stdlib path: app.get("/foo", my_handler) lowers the handler
+        // as a bare Operand::Var("my_handler") — a top-level function name that
+        // is never a temp or a param (call.rs:1343, expr.rs:152). The gate must
+        // admit it (a function name is always resolvable) and operand() must
+        // resolve it to the function's global pointer (@my_handler), mirroring
+        // the legacy `emit_call_args_typed`. Without this, `f` would fall back
+        // to a single `unreachable` block and never emit the route call.
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![
+                // The handler itself (its signature is irrelevant to passing its
+                // address; the runtime casts the ptr to fn(*Request)->*Response).
+                Function {
+                    name: "my_handler".into(),
+                    params: vec![("req".into(), Ty::String)],
+                    return_type: Ty::String,
+                    body: vec![MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("req".into())),
+                    })],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+                Function {
+                    name: "f".into(),
+                    params: vec![
+                        ("srv".into(), Ty::Int),
+                        ("method".into(), Ty::String),
+                        ("path".into(), Ty::String),
+                    ],
+                    return_type: Ty::Unit,
+                    body: vec![
+                        MirStmt::synthetic(Instruction::Call {
+                            dest: None,
+                            func: "__http_server_route".into(),
+                            args: vec![
+                                Operand::Var("srv".into()),
+                                Operand::Var("method".into()),
+                                Operand::Var("path".into()),
+                                // Bare top-level function name, NOT a param/temp.
+                                Operand::Var("my_handler".into()),
+                            ],
+                        }),
+                        MirStmt::synthetic(Instruction::Return { value: None }),
+                    ],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+            ],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "bare-handler route failed to verify:\n{ir}");
+        // `f` must be emitted (not a fallback): the route call is present...
+        assert!(
+            ir.contains("call void @tyra_http_server_route"),
+            "real handler path must emit the route call, not fall back to unreachable:\n{ir}"
+        );
+        // ...with the handler resolved to the function's global pointer.
+        assert!(
+            ir.contains("ptr @my_handler)"),
+            "handler must be passed as the @my_handler global pointer:\n{ir}"
+        );
+    }
+
+    #[test]
+    fn i4b_let_bound_function_reference_resolves_to_global() {
+        // `let h = my_handler; route(srv, method, path, h)` — the binding lowers
+        // to Instruction::Copy { dest: "h", source: "my_handler" }. Both the gate
+        // and the Copy emitter must treat a top-level function name as a value
+        // (resolving to @my_handler), else `f` falls back to unreachable / panics.
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![
+                Function {
+                    name: "my_handler".into(),
+                    params: vec![("req".into(), Ty::String)],
+                    return_type: Ty::String,
+                    body: vec![MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("req".into())),
+                    })],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+                Function {
+                    name: "f".into(),
+                    params: vec![
+                        ("srv".into(), Ty::Int),
+                        ("method".into(), Ty::String),
+                        ("path".into(), Ty::String),
+                    ],
+                    return_type: Ty::Unit,
+                    body: vec![
+                        // let h = my_handler
+                        MirStmt::synthetic(Instruction::Copy {
+                            dest: "h".into(),
+                            source: "my_handler".into(),
+                        }),
+                        MirStmt::synthetic(Instruction::Call {
+                            dest: None,
+                            func: "__http_server_route".into(),
+                            args: vec![
+                                Operand::Var("srv".into()),
+                                Operand::Var("method".into()),
+                                Operand::Var("path".into()),
+                                Operand::Var("h".into()),
+                            ],
+                        }),
+                        MirStmt::synthetic(Instruction::Return { value: None }),
+                    ],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+            ],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "let-bound handler route failed to verify:\n{ir}");
+        assert!(
+            ir.contains("call void @tyra_http_server_route"),
+            "let-bound handler path must emit the route call, not fall back:\n{ir}"
+        );
+        assert!(
+            ir.contains("ptr @my_handler)"),
+            "the let-bound handler must resolve to the @my_handler global pointer:\n{ir}"
+        );
+    }
 }
