@@ -1383,4 +1383,175 @@ mod tests {
             "back-edge must target loop entry %loop (not the split %e.ok block):\n{ir}"
         );
     }
+
+    // ---- I4a: table-driven mechanical builtins ----
+
+    /// Build a one-function program whose body is a single builtin Call (with
+    /// `dest`) followed by `return dest`, for exercising the I4a table.
+    fn builtin_call_program(
+        fn_name: &str,
+        params: Vec<(String, Ty)>,
+        ret: Ty,
+        builtin: &str,
+        args: Vec<tyra_mir::Operand>,
+    ) -> Program {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        Program {
+            functions: vec![Function {
+                name: fn_name.into(),
+                params,
+                return_type: ret,
+                body: vec![
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: Some("r".into()),
+                        func: builtin.into(),
+                        args,
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("r".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec![],
+            lower_errors: vec![],
+        }
+    }
+
+    #[test]
+    fn i4a_string_len_direct_i64() {
+        use tyra_mir::Operand;
+        let ctx = Context::create();
+        let program = builtin_call_program(
+            "f",
+            vec![("s".into(), Ty::String)],
+            Ty::Int,
+            "__string_len",
+            vec![Operand::Var("s".into())],
+        );
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
+        assert!(ir.contains("call i64 @tyra_string_len"), "missing runtime call:\n{ir}");
+    }
+
+    #[test]
+    fn i4a_string_contains_bool_from_i32() {
+        use tyra_mir::Operand;
+        let ctx = Context::create();
+        let program = builtin_call_program(
+            "f",
+            vec![("a".into(), Ty::String), ("b".into(), Ty::String)],
+            Ty::Bool,
+            "__string_contains",
+            vec![Operand::Var("a".into()), Operand::Var("b".into())],
+        );
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
+        assert!(ir.contains("call i32 @tyra_string_contains"), "missing runtime call:\n{ir}");
+        assert!(ir.contains("icmp ne i32"), "missing i32→i1 bool conversion:\n{ir}");
+    }
+
+    #[test]
+    fn i4a_fs_errno_sext_to_i64() {
+        let ctx = Context::create();
+        let program = builtin_call_program("f", vec![], Ty::Int, "__fs_errno", vec![]);
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
+        assert!(ir.contains("call i32 @tyra_fs_errno"), "missing runtime call:\n{ir}");
+        assert!(ir.contains("sext i32"), "missing i32→i64 sext:\n{ir}");
+    }
+
+    #[test]
+    fn i4a_float_abs_direct_double() {
+        use tyra_mir::Operand;
+        let ctx = Context::create();
+        let program = builtin_call_program(
+            "f",
+            vec![("x".into(), Ty::Float)],
+            Ty::Float,
+            "__float_abs",
+            vec![Operand::Var("x".into())],
+        );
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
+        assert!(ir.contains("call double @tyra_float_abs"), "missing runtime call:\n{ir}");
+    }
+
+    #[test]
+    fn i4a_log_info_void_call() {
+        // fn f(m: String) -> Unit { __log_info(m) }  — void runtime call, no dest.
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![("m".into(), Ty::String)],
+                return_type: Ty::Unit,
+                body: vec![
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: None,
+                        func: "__log_info".into(),
+                        args: vec![Operand::Var("m".into())],
+                    }),
+                    MirStmt::synthetic(Instruction::Return { value: None }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
+        assert!(ir.contains("call void @tyra_log_info"), "missing void runtime call:\n{ir}");
+    }
+
+    #[test]
+    fn i4a_deferred_builtin_falls_back_to_unreachable() {
+        // `print` is NOT in the I4a table → the function must fall back to a
+        // single `unreachable` block (coverage grows in later I4 sub-phases).
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![("m".into(), Ty::String)],
+                return_type: Ty::Unit,
+                body: vec![
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: None,
+                        func: "print".into(),
+                        args: vec![Operand::Var("m".into())],
+                    }),
+                    MirStmt::synthetic(Instruction::Return { value: None }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        assert!(cg.module.verify().is_ok());
+        let ir = cg.module.print_to_string().to_string();
+        assert!(ir.contains("unreachable"), "deferred builtin should fall back:\n{ir}");
+        // The externs are always *declared* (I1); the fallback must just not
+        // emit a *call* to any of them in the body.
+        assert!(
+            !ir.contains("call void @tyra_log"),
+            "must not emit a runtime call for the deferred print builtin:\n{ir}"
+        );
+    }
 }

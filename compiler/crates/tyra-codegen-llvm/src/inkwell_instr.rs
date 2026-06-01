@@ -87,7 +87,9 @@ impl<'ctx> CodeGen<'ctx> {
                 | Instruction::ListGet { .. }
                 | Instruction::ListGetSafe { .. }
                 | Instruction::ListPush { .. } => true,
-                Instruction::Call { func, .. } => self.fn_values.contains_key(func),
+                Instruction::Call { func, .. } => {
+                    self.fn_values.contains_key(func) || Self::is_simple_builtin(func)
+                }
                 _ => false,
             };
             if !supported {
@@ -530,17 +532,22 @@ impl<'ctx> CodeGen<'ctx> {
                 pending.push((phi, branches.clone()));
             }
             Instruction::Call { dest, func, args } => {
-                let callee = self.fn_values[func];
-                let argvals: Vec<BasicMetadataValueEnum<'ctx>> =
-                    args.iter().map(|a| self.operand(a).into()).collect();
-                let cs = self
-                    .builder
-                    .build_call(callee, &argvals, dest.as_deref().unwrap_or(""))
-                    .unwrap();
-                if let Some(d) = dest {
-                    if let Some(rv) = cs.try_as_basic_value().basic() {
-                        self.values.insert(d.clone(), rv);
+                if let Some(&callee) = self.fn_values.get(func) {
+                    let argvals: Vec<BasicMetadataValueEnum<'ctx>> =
+                        args.iter().map(|a| self.operand(a).into()).collect();
+                    let cs = self
+                        .builder
+                        .build_call(callee, &argvals, dest.as_deref().unwrap_or(""))
+                        .unwrap();
+                    if let Some(d) = dest {
+                        if let Some(rv) = cs.try_as_basic_value().basic() {
+                            self.values.insert(d.clone(), rv);
+                        }
                     }
+                } else {
+                    // Builtin (the gate admitted only supported ones, I4a+).
+                    let handled = self.emit_simple_builtin(dest, func, args);
+                    debug_assert!(handled, "gate admitted unsupported builtin `{func}`");
                 }
             }
             Instruction::ListInit { dest, elem_type, elements } => {

@@ -9,6 +9,7 @@ mod codegen;
 pub mod coverage;
 pub mod dwarf;
 mod helpers;
+mod inkwell_builtins;
 mod inkwell_codegen;
 mod inkwell_instr;
 mod inkwell_list;
