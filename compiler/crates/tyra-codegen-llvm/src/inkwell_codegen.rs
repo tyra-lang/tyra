@@ -1721,4 +1721,152 @@ mod tests {
         assert!(ir.contains("unreachable"), "print(struct) should fall back:\n{ir}");
         assert!(!ir.contains("call i32 @puts"), "must not emit a print for a struct arg:\n{ir}");
     }
+
+    // ---- I4b slice A: scalar __list_int_* builtins ----
+
+    /// Build `fn f() -> ret { l = [10, 20, 30]; r = <builtin>(l, extra...); r }`.
+    /// The list is a local SSA temp (no struct-param slot), exercising the
+    /// builtin's struct-handle reads directly.
+    fn list_int_builtin_program(
+        builtin: &str,
+        extra_args: Vec<tyra_mir::Operand>,
+        ret: Ty,
+        structs: Vec<tyra_mir::StructDef>,
+    ) -> Program {
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
+        let mut call_args = vec![Operand::Var("l".into())];
+        call_args.extend(extra_args);
+        Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![],
+                return_type: ret,
+                body: vec![
+                    MirStmt::synthetic(Instruction::ListInit {
+                        dest: "l".into(),
+                        elem_type: Ty::Int,
+                        elements: vec![
+                            Operand::Const(Constant::Int(10)),
+                            Operand::Const(Constant::Int(20)),
+                            Operand::Const(Constant::Int(30)),
+                        ],
+                    }),
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: Some("r".into()),
+                        func: builtin.into(),
+                        args: call_args,
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("r".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: structs,
+            source_files: vec![],
+            lower_errors: vec![],
+        }
+    }
+
+    #[test]
+    fn i4b_list_int_sum_verifies_and_loops() {
+        let ctx = Context::create();
+        let cg = build_module(&ctx, &list_int_builtin_program("__list_int_sum", vec![], Ty::Int, vec![list_int_def()]));
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "list_int_sum failed to verify:\n{ir}");
+        // Accumulator loop: a back-edge and an i64 add must be present.
+        assert!(ir.contains("add i64"), "sum must accumulate with i64 add:\n{ir}");
+    }
+
+    #[test]
+    fn i4b_list_int_contains_returns_bool() {
+        use tyra_mir::{Constant, Operand};
+        let ctx = Context::create();
+        let cg = build_module(
+            &ctx,
+            &list_int_builtin_program(
+                "__list_int_contains",
+                vec![Operand::Const(Constant::Int(20))],
+                Ty::Bool,
+                vec![list_int_def()],
+            ),
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "list_int_contains failed to verify:\n{ir}");
+        assert!(ir.contains("icmp eq i64"), "contains must compare elements:\n{ir}");
+    }
+
+    #[test]
+    fn i4b_list_int_index_of_returns_option() {
+        use tyra_mir::{Constant, Operand};
+        let ctx = Context::create();
+        let cg = build_module(
+            &ctx,
+            &list_int_builtin_program(
+                "__list_int_index_of",
+                vec![Operand::Const(Constant::Int(20))],
+                Ty::Generic("Option".into(), vec![Ty::Int]),
+                vec![list_int_def(), option_int_def()],
+            ),
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "list_int_index_of failed to verify:\n{ir}");
+        assert!(ir.contains("insertvalue"), "index_of must build an Option struct:\n{ir}");
+    }
+
+    #[test]
+    fn i4b_list_int_max_returns_option() {
+        let ctx = Context::create();
+        let cg = build_module(
+            &ctx,
+            &list_int_builtin_program(
+                "__list_int_max",
+                vec![],
+                Ty::Generic("Option".into(), vec![Ty::Int]),
+                vec![list_int_def(), option_int_def()],
+            ),
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "list_int_max failed to verify:\n{ir}");
+        assert!(ir.contains("icmp sgt i64"), "max must use a signed-greater compare:\n{ir}");
+    }
+
+    #[test]
+    fn i4b_list_int_min_returns_option() {
+        let ctx = Context::create();
+        let cg = build_module(
+            &ctx,
+            &list_int_builtin_program(
+                "__list_int_min",
+                vec![],
+                Ty::Generic("Option".into(), vec![Ty::Int]),
+                vec![list_int_def(), option_int_def()],
+            ),
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "list_int_min failed to verify:\n{ir}");
+        assert!(ir.contains("icmp slt i64"), "min must use a signed-less compare:\n{ir}");
+    }
+
+    #[test]
+    fn i4b_list_int_push_appends_and_verifies() {
+        use tyra_mir::{Constant, Operand};
+        let ctx = Context::create();
+        let cg = build_module(
+            &ctx,
+            &list_int_builtin_program(
+                "__list_int_push",
+                vec![Operand::Const(Constant::Int(40))],
+                Ty::Generic("List".into(), vec![Ty::Int]),
+                vec![list_int_def()],
+            ),
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "list_int_push failed to verify:\n{ir}");
+        // Delegates to the ListPush emitter: GC_malloc + memcpy prefix.
+        assert!(ir.contains("@GC_malloc"), "push must allocate a new buffer:\n{ir}");
+        assert!(ir.contains("memcpy"), "push must copy the prefix:\n{ir}");
+    }
 }

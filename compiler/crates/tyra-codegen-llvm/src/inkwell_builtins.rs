@@ -142,7 +142,9 @@ impl<'ctx> CodeGen<'ctx> {
     /// emittability gate so a function calling only supported builtins (and
     /// user fns) gets a real body instead of the `unreachable` fallback.
     pub(crate) fn is_supported_builtin(name: &str) -> bool {
-        PRINT.contains(&name) || SIMPLE.iter().any(|(f, _, _)| *f == name)
+        PRINT.contains(&name)
+            || SIMPLE.iter().any(|(f, _, _)| *f == name)
+            || Self::is_list_int_builtin(name)
     }
 
     /// Emit a builtin call. Returns `false` if `fname` is not supported (caller
@@ -156,6 +158,9 @@ impl<'ctx> CodeGen<'ctx> {
         if PRINT.contains(&fname) {
             self.emit_print(dest, fname, args);
             return true;
+        }
+        if Self::is_list_int_builtin(fname) {
+            return self.emit_list_int_builtin(dest, fname, args);
         }
         self.emit_simple_builtin(dest, fname, args)
     }
