@@ -29,6 +29,12 @@ impl<'ctx> CodeGen<'ctx> {
     /// verifies while instruction coverage grows phase by phase).
     pub(crate) fn emit_bodies(&mut self, program: &Program) {
         for f in &program.functions {
+            // I4c: per-function type scan (operand Tyra types for `print`
+            // routing + the emittability gate's printability check). Computed
+            // into a local first so the immutable borrows of struct_map/fn_sigs
+            // end before the mutable store into self.scan.
+            let scan = crate::type_scan::scan_function_types(f, &self.struct_map, &self.fn_sigs);
+            self.scan = Some(scan);
             if self.is_i2_emittable(f) {
                 self.emit_function_body(f);
             } else {
@@ -87,8 +93,10 @@ impl<'ctx> CodeGen<'ctx> {
                 | Instruction::ListGet { .. }
                 | Instruction::ListGetSafe { .. }
                 | Instruction::ListPush { .. } => true,
-                Instruction::Call { func, .. } => {
-                    self.fn_values.contains_key(func) || Self::is_simple_builtin(func)
+                Instruction::Call { func, args, .. } => {
+                    self.fn_values.contains_key(func)
+                        || (Self::is_supported_builtin(func)
+                            && self.builtin_args_emittable(f, func, args))
                 }
                 _ => false,
             };
@@ -135,6 +143,33 @@ impl<'ctx> CodeGen<'ctx> {
             }
         }
         true
+    }
+
+    /// Gate check for a supported builtin's arguments. `print`/`println`/… can
+    /// only be emitted for printable scalar/String values; a struct-valued arg
+    /// (List/Option/closure/value-struct) has no printf form, so the function
+    /// must fall back to `unreachable` rather than reach `emit_print` (which
+    /// would otherwise panic coercing a struct to int). Non-print builtins place
+    /// no constraint here.
+    fn builtin_args_emittable(&self, f: &Function, func: &str, args: &[Operand]) -> bool {
+        if Self::is_print_builtin(func) {
+            return args.iter().all(|a| !self.operand_is_struct(f, a));
+        }
+        true
+    }
+
+    /// Does the operand hold an LLVM struct value (vs a scalar/ptr)? A struct
+    /// temp per the type scan, or a struct-typed parameter.
+    fn operand_is_struct(&self, f: &Function, op: &Operand) -> bool {
+        let Operand::Var(name) = op else { return false };
+        if self.scan.as_ref().is_some_and(|s| s.struct_temps.contains_key(name)) {
+            return true;
+        }
+        f.params
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, ty)| self.ty_to_basic_type(ty).is_struct_type())
+            .unwrap_or(false)
     }
 
     fn operand_resolvable_now(&self, op: &Operand, seen: &HashSet<&str>) -> bool {
@@ -546,7 +581,7 @@ impl<'ctx> CodeGen<'ctx> {
                     }
                 } else {
                     // Builtin (the gate admitted only supported ones, I4a+).
-                    let handled = self.emit_simple_builtin(dest, func, args);
+                    let handled = self.emit_builtin(dest, func, args);
                     debug_assert!(handled, "gate admitted unsupported builtin `{func}`");
                 }
             }

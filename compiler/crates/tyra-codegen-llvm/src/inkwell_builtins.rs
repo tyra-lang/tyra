@@ -18,11 +18,20 @@
 //! fold (closure callbacks), and Int/Bool conversions.
 
 use inkwell::IntPredicate;
-use inkwell::values::BasicMetadataValueEnum;
+use inkwell::values::{BasicMetadataValueEnum, CallSiteValue, PointerValue};
 
-use tyra_mir::Operand;
+use tyra_mir::{Constant, Operand};
 
 use crate::inkwell_codegen::CodeGen;
+
+/// Printable scalar kind for a `print` argument (selects the printf format).
+#[derive(Clone, Copy)]
+enum PrintKind {
+    Str,
+    Float,
+    Bool,
+    Int,
+}
 
 /// How to adapt a runtime call's result to the Tyra value the MIR expects.
 #[derive(Clone, Copy)]
@@ -118,17 +127,151 @@ const SIMPLE: &[(&str, &str, Conv)] = &[
     ("__bench_clock_ns", "__bench_clock_ns", Direct),
 ];
 
+/// I4c: the print family. Routed separately from the table — the format and
+/// call shape depend on the argument's *Tyra* type (via the type scan), which
+/// the LLVM value handle alone can't recover (String vs other ptr).
+const PRINT: &[&str] = &["print", "eprint", "println", "eprintln"];
+
 impl<'ctx> CodeGen<'ctx> {
-    /// Is `name` a builtin handled by the I4a table? Used by the emittability
-    /// gate so a function calling only supported builtins (and user fns) gets a
-    /// real body instead of the `unreachable` fallback.
-    pub(crate) fn is_simple_builtin(name: &str) -> bool {
-        SIMPLE.iter().any(|(f, _, _)| *f == name)
+    /// Is `name` a print-family builtin?
+    pub(crate) fn is_print_builtin(name: &str) -> bool {
+        PRINT.contains(&name)
+    }
+
+    /// Is `name` a builtin the inkwell backend can emit yet? Used by the
+    /// emittability gate so a function calling only supported builtins (and
+    /// user fns) gets a real body instead of the `unreachable` fallback.
+    pub(crate) fn is_supported_builtin(name: &str) -> bool {
+        PRINT.contains(&name) || SIMPLE.iter().any(|(f, _, _)| *f == name)
+    }
+
+    /// Emit a builtin call. Returns `false` if `fname` is not supported (caller
+    /// falls through to the fallback path).
+    pub(crate) fn emit_builtin(
+        &mut self,
+        dest: &Option<String>,
+        fname: &str,
+        args: &[Operand],
+    ) -> bool {
+        if PRINT.contains(&fname) {
+            self.emit_print(dest, fname, args);
+            return true;
+        }
+        self.emit_simple_builtin(dest, fname, args)
+    }
+
+    /// `print`/`println`/`eprint`/`eprintln`. The argument's *Tyra* type (from
+    /// the type scan) selects the format, mirroring the legacy `emit_print_call`
+    /// EXACTLY (the migration's correctness bar is parity, not "fix print"):
+    /// - `string_temps` → `%s` (`puts` when newline-terminated). NOTE the scan
+    ///   puts **data types in `string_temps`** too (type_scan.rs:154/182, "data
+    ///   ptr treated as ptr"), so `print(dataObject)` routes to `%s` and the
+    ///   runtime reads its bytes as a C string — a latent legacy behavior,
+    ///   faithfully preserved here (revisit only post-I7, when both backends are
+    ///   one). Struct *value* args (List/Option/closure) are a different case:
+    ///   rejected upstream by the gate so they never reach here.
+    /// - Float → `%g`(`_ln`); Bool → widened-i64 `%ld`(`_ln`).
+    /// - else → `%ld` (Int). An untracked non-String ptr (e.g. a fn pointer) is
+    ///   *not* in `string_temps`, so it lands here and prints as its address via
+    ///   the varargs `%ld` — never dereferenced (matches legacy intent; legacy
+    ///   itself would have emitted invalid `i64 %ptr` IR, but this backend's
+    ///   varargs accept the ptr and print the address).
+    /// printf/puts return i32; a dest (byte count, Int) is sign-extended to i64.
+    fn emit_print(&mut self, dest: &Option<String>, fname: &str, args: &[Operand]) {
+        let is_println = fname == "println" || fname == "eprintln";
+
+        // Empty args: `println()` prints a blank line (legacy `puts(@.fmt.str)`);
+        // `print()` is a no-op.
+        if args.is_empty() {
+            if is_println {
+                let puts = self.module.get_function("puts").unwrap();
+                let fmt = self.global_ptr(".fmt.str");
+                let cs = self.builder.build_call(puts, &[fmt.into()], "").unwrap();
+                self.store_print_result(dest, cs);
+            }
+            return;
+        }
+
+        let arg = &args[0];
+        let v = self.operand(arg);
+        let cs = match self.print_arg_kind(arg) {
+            PrintKind::Str if is_println => {
+                // String + newline: puts(s).
+                let puts = self.module.get_function("puts").unwrap();
+                self.builder.build_call(puts, &[v.into()], "").unwrap()
+            }
+            kind => {
+                let (fmt_name, val): (&str, BasicMetadataValueEnum<'ctx>) = match kind {
+                    PrintKind::Str => (".fmt.str", v.into()),
+                    PrintKind::Float => {
+                        (if is_println { ".fmt.float_ln" } else { ".fmt.float" }, v.into())
+                    }
+                    PrintKind::Bool => {
+                        let wide = self
+                            .builder
+                            .build_int_z_extend(v.into_int_value(), self.ctx.i64_type(), "p.wide")
+                            .unwrap();
+                        (if is_println { ".fmt.int_ln" } else { ".fmt.int" }, wide.into())
+                    }
+                    PrintKind::Int => {
+                        (if is_println { ".fmt.int_ln" } else { ".fmt.int" }, v.into())
+                    }
+                };
+                let printf = self.module.get_function("printf").unwrap();
+                let fmt = self.global_ptr(fmt_name);
+                self.builder.build_call(printf, &[fmt.into(), val], "").unwrap()
+            }
+        };
+        self.store_print_result(dest, cs);
+    }
+
+    /// Classify a print argument by its Tyra type, mirroring the legacy
+    /// `string_temps`/`float_temps`/`bool_temps` scan (data types live in
+    /// `string_temps`, so they route to `%s` exactly as the legacy does).
+    fn print_arg_kind(&self, op: &Operand) -> PrintKind {
+        match op {
+            Operand::Const(Constant::StringRef(_)) => PrintKind::Str,
+            Operand::Const(Constant::Float(_)) => PrintKind::Float,
+            Operand::Const(Constant::Bool(_)) => PrintKind::Bool,
+            Operand::Const(_) => PrintKind::Int,
+            Operand::Var(name) => {
+                let scan = self.scan.as_ref().expect("type scan set per function (I4c)");
+                if scan.string_temps.contains(name) {
+                    PrintKind::Str
+                } else if scan.float_temps.contains(name) {
+                    PrintKind::Float
+                } else if scan.bool_temps.contains(name) {
+                    PrintKind::Bool
+                } else {
+                    PrintKind::Int
+                }
+            }
+        }
+    }
+
+    /// A `ptr` to a module global by name (format string / constant).
+    fn global_ptr(&self, name: &str) -> PointerValue<'ctx> {
+        self.module
+            .get_global(name)
+            .unwrap_or_else(|| panic!("global `{name}` must be declared (I1)"))
+            .as_pointer_value()
+    }
+
+    /// printf/puts return i32; store the sign-extended i64 byte count if the
+    /// call carries a dest.
+    fn store_print_result(&mut self, dest: &Option<String>, cs: CallSiteValue<'ctx>) {
+        let Some(d) = dest else { return };
+        let Some(rv) = cs.try_as_basic_value().basic() else { return };
+        let v = self
+            .builder
+            .build_int_s_extend(rv.into_int_value(), self.ctx.i64_type(), d)
+            .unwrap();
+        self.values.insert(d.clone(), v.into());
     }
 
     /// Emit a table-driven builtin call. Returns `false` if `fname` is not in
     /// the I4a table (caller falls through to the fallback path).
-    pub(crate) fn emit_simple_builtin(
+    fn emit_simple_builtin(
         &mut self,
         dest: &Option<String>,
         fname: &str,

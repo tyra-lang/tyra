@@ -72,6 +72,17 @@ pub(crate) struct CodeGen<'ctx> {
     /// entry region). Set on `Label`; after each instruction `pred_blocks` for
     /// this label is re-synced to the builder's current block. Reset per function.
     pub(crate) cur_label: Option<String>,
+    /// I4c type-scan bridge (ADR-0018 Theme A, Option A). The legacy text
+    /// backend's `StructInfo`/`FnSig` maps + per-function `type_scan` results
+    /// give the inkwell backend an operand's *Tyra* type, which the opaque-`ptr`
+    /// value handle cannot recover (String vs data/fn/handle ptr). Needed by
+    /// `print` routing (String→%s vs other). Transitional coupling to the legacy
+    /// structures; removed when the legacy backend is deleted (I7).
+    pub(crate) struct_map: HashMap<String, crate::codegen::StructInfo>,
+    pub(crate) fn_sigs: HashMap<String, crate::codegen::FnSig>,
+    /// Type scan for the function currently being emitted (set per function in
+    /// `emit_bodies`, consumed by the emittability gate and `print`).
+    pub(crate) scan: Option<crate::type_scan::ScanResult>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -92,6 +103,9 @@ impl<'ctx> CodeGen<'ctx> {
             slot_types: HashMap::new(),
             recursive_fields: HashMap::new(),
             cur_label: None,
+            struct_map: HashMap::new(),
+            fn_sigs: HashMap::new(),
+            scan: None,
         }
     }
 
@@ -143,6 +157,40 @@ impl<'ctx> CodeGen<'ctx> {
             // Unit / Never / unresolved → i64 in value position.
             _ => self.ctx.i64_type().into(),
         }
+    }
+
+    /// I4c: build the legacy-shaped `StructInfo`/`FnSig` maps that
+    /// `type_scan::scan_function_types` consumes, so the inkwell backend can
+    /// recover an operand's Tyra type (see the `scan` field). Mirrors the inline
+    /// builders in `codegen.rs` (the legacy text path).
+    fn build_type_scan_maps(&mut self, program: &Program) {
+        use crate::codegen::{FnSig, StructInfo};
+        self.struct_map = program
+            .struct_defs
+            .iter()
+            .map(|sd| {
+                let is_adt = sd.fields.first().map(|(n, _)| n == "tag").unwrap_or(false);
+                let info = StructInfo {
+                    llvm_name: format!("%struct.{}", sd.name),
+                    field_types: sd.fields.iter().map(|(_, ty)| ty.clone()).collect(),
+                    is_adt,
+                    is_data: sd.is_data,
+                    recursive_fields: sd.recursive_fields.clone(),
+                };
+                (sd.name.clone(), info)
+            })
+            .collect();
+        self.fn_sigs = program
+            .functions
+            .iter()
+            .map(|f| {
+                let sig = FnSig {
+                    param_types: f.params.iter().map(|(_, ty)| ty.clone()).collect(),
+                    return_type: f.return_type.clone(),
+                };
+                (f.name.clone(), sig)
+            })
+            .collect();
     }
 
     /// Register an (opaque) named struct type for every struct/ADT definition
@@ -456,6 +504,7 @@ pub(crate) fn emit_inkwell(program: &Program) -> String {
 fn build_module<'ctx>(ctx: &'ctx Context, program: &Program) -> CodeGen<'ctx> {
     let mut cg = CodeGen::new(ctx, "tyra");
     cg.register_struct_types(program);
+    cg.build_type_scan_maps(program);
     cg.declare_closure_type();
     cg.set_struct_bodies(program);
     cg.declare_globals(program);
@@ -1518,8 +1567,9 @@ mod tests {
 
     #[test]
     fn i4a_deferred_builtin_falls_back_to_unreachable() {
-        // `print` is NOT in the I4a table → the function must fall back to a
-        // single `unreachable` block (coverage grows in later I4 sub-phases).
+        // `panic` is NOT yet ported (needs source-location threading, I4+/I6) →
+        // the function must fall back to a single `unreachable` block. Coverage
+        // grows in later I4 sub-phases.
         use tyra_mir::{Function, Instruction, MirStmt, Operand};
         let ctx = Context::create();
         let program = Program {
@@ -1530,7 +1580,7 @@ mod tests {
                 body: vec![
                     MirStmt::synthetic(Instruction::Call {
                         dest: None,
-                        func: "print".into(),
+                        func: "panic".into(),
                         args: vec![Operand::Var("m".into())],
                     }),
                     MirStmt::synthetic(Instruction::Return { value: None }),
@@ -1547,11 +1597,128 @@ mod tests {
         assert!(cg.module.verify().is_ok());
         let ir = cg.module.print_to_string().to_string();
         assert!(ir.contains("unreachable"), "deferred builtin should fall back:\n{ir}");
-        // The externs are always *declared* (I1); the fallback must just not
-        // emit a *call* to any of them in the body.
         assert!(
-            !ir.contains("call void @tyra_log"),
-            "must not emit a runtime call for the deferred print builtin:\n{ir}"
+            !ir.contains("call void @exit"),
+            "must not emit a runtime call for the deferred panic builtin:\n{ir}"
         );
+    }
+
+    // ---- I4c: print family (type-scan-routed) ----
+
+    /// Build `fn f(p: ty) -> Unit { <builtin>(p) }` for print-family tests.
+    fn print_program(builtin: &str, arg_ty: Ty, structs: Vec<tyra_mir::StructDef>) -> Program {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![("p".into(), arg_ty)],
+                return_type: Ty::Unit,
+                body: vec![
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: None,
+                        func: builtin.into(),
+                        args: vec![Operand::Var("p".into())],
+                    }),
+                    MirStmt::synthetic(Instruction::Return { value: None }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: structs,
+            source_files: vec![],
+            lower_errors: vec![],
+        }
+    }
+
+    #[test]
+    fn i4c_println_string_uses_puts() {
+        let ctx = Context::create();
+        let cg = build_module(&ctx, &print_program("println", Ty::String, vec![]));
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
+        assert!(ir.contains("call i32 @puts"), "println(String) should use puts:\n{ir}");
+    }
+
+    #[test]
+    fn i4c_print_string_uses_printf_s() {
+        let ctx = Context::create();
+        let cg = build_module(&ctx, &print_program("print", Ty::String, vec![]));
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
+        assert!(ir.contains("@printf"), "print(String) should use printf:\n{ir}");
+        assert!(ir.contains("@.fmt.str"), "print(String) should use the %s format:\n{ir}");
+    }
+
+    #[test]
+    fn i4c_print_int_uses_printf_ld() {
+        let ctx = Context::create();
+        let cg = build_module(&ctx, &print_program("print", Ty::Int, vec![]));
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
+        assert!(ir.contains("@.fmt.int"), "print(Int) should use the %ld format:\n{ir}");
+    }
+
+    #[test]
+    fn i4c_println_float_uses_float_ln() {
+        let ctx = Context::create();
+        let cg = build_module(&ctx, &print_program("println", Ty::Float, vec![]));
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
+        assert!(ir.contains("@.fmt.float_ln"), "println(Float) should use %g\\n:\n{ir}");
+    }
+
+    #[test]
+    fn i4c_println_bool_widens_to_i64() {
+        let ctx = Context::create();
+        let cg = build_module(&ctx, &print_program("println", Ty::Bool, vec![]));
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
+        assert!(ir.contains("zext i1"), "println(Bool) should widen i1→i64:\n{ir}");
+        assert!(ir.contains("@.fmt.int_ln"), "println(Bool) should print via %ld\\n:\n{ir}");
+    }
+
+    #[test]
+    fn i4c_println_data_type_uses_puts_legacy_parity() {
+        // A `data` type lowers to a ptr and the type scan puts it in
+        // string_temps (type_scan.rs:154), so println(dataObject) routes to
+        // `puts` — the runtime reads its bytes as a C string. This is a latent
+        // legacy behavior; the inkwell backend reproduces it faithfully (parity,
+        // not "fix print"). Documented here so the routing is intentional, not
+        // accidental, and so the data-ptr path is covered.
+        let data_foo = tyra_mir::StructDef {
+            name: "Foo".into(),
+            fields: vec![("x".into(), Ty::Int)],
+            is_data: true,
+            recursive_fields: vec![false],
+        };
+        let ctx = Context::create();
+        let cg = build_module(
+            &ctx,
+            &print_program("println", Ty::Named("Foo".into()), vec![data_foo]),
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
+        // data ptr → %s/puts (legacy parity), NOT the %ld address path.
+        assert!(
+            ir.contains("call i32 @puts"),
+            "println(data) must route to puts like legacy (data ∈ string_temps):\n{ir}"
+        );
+    }
+
+    #[test]
+    fn i4c_print_struct_arg_falls_back_to_unreachable() {
+        // print(List<Int>) is not printable (no printf form for a struct value);
+        // the gate must reject it so the function falls back to `unreachable`
+        // rather than reaching emit_print (which would panic coercing a struct).
+        let ctx = Context::create();
+        let cg = build_module(
+            &ctx,
+            &print_program("println", Ty::Generic("List".into(), vec![Ty::Int]), vec![list_int_def()]),
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
+        assert!(ir.contains("unreachable"), "print(struct) should fall back:\n{ir}");
+        assert!(!ir.contains("call i32 @puts"), "must not emit a print for a struct arg:\n{ir}");
     }
 }
