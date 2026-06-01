@@ -1869,4 +1869,118 @@ mod tests {
         assert!(ir.contains("@GC_malloc"), "push must allocate a new buffer:\n{ir}");
         assert!(ir.contains("memcpy"), "push must copy the prefix:\n{ir}");
     }
+
+    // ---- I4b slice B: string builtins passing List<String> by reference ----
+
+    /// `List<String>` (`{ ptr, i64 }`) struct def for split/join tests.
+    fn list_string_def() -> tyra_mir::StructDef {
+        tyra_mir::StructDef {
+            name: "List__String".into(),
+            fields: vec![("data".into(), Ty::String), ("len".into(), Ty::Int)],
+            is_data: false,
+            recursive_fields: vec![false, false],
+        }
+    }
+
+    #[test]
+    fn i4b_string_split_whitespace_out_param() {
+        use tyra_mir::Operand;
+        let ctx = Context::create();
+        let program = builtin_call_program(
+            "f",
+            vec![("s".into(), Ty::String)],
+            Ty::Generic("List".into(), vec![Ty::String]),
+            "__string_split_whitespace",
+            vec![Operand::Var("s".into())],
+        );
+        let mut program = program;
+        program.struct_defs = vec![list_string_def()];
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "split_whitespace failed to verify:\n{ir}");
+        assert!(
+            ir.contains("call void @tyra_string_split_whitespace"),
+            "must call the void out-param runtime fn:\n{ir}"
+        );
+    }
+
+    #[test]
+    fn i4b_string_split_with_sep_out_param() {
+        use tyra_mir::Operand;
+        let ctx = Context::create();
+        let mut program = builtin_call_program(
+            "f",
+            vec![("s".into(), Ty::String), ("sep".into(), Ty::String)],
+            Ty::Generic("List".into(), vec![Ty::String]),
+            "__string_split",
+            vec![Operand::Var("s".into()), Operand::Var("sep".into())],
+        );
+        program.struct_defs = vec![list_string_def()];
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "split failed to verify:\n{ir}");
+        assert!(ir.contains("call void @tyra_string_split"), "must call split runtime fn:\n{ir}");
+    }
+
+    #[test]
+    fn i4b_string_join_passes_list_by_ref() {
+        // fn f(s: String) -> String { t = split_whitespace(s); join(t, s) }
+        // Chaining split→join exercises both producing and consuming a
+        // List<String> value without needing string-constant setup.
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![("s".into(), Ty::String)],
+                return_type: Ty::String,
+                body: vec![
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: Some("t".into()),
+                        func: "__string_split_whitespace".into(),
+                        args: vec![Operand::Var("s".into())],
+                    }),
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: Some("r".into()),
+                        func: "__string_join".into(),
+                        args: vec![Operand::Var("t".into()), Operand::Var("s".into())],
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("r".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![list_string_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "join failed to verify:\n{ir}");
+        assert!(ir.contains("call ptr @tyra_string_join"), "must call join runtime fn:\n{ir}");
+        // The list value is stored into a slot before the by-ref call.
+        assert!(ir.contains("store"), "join must store the list into a slot:\n{ir}");
+    }
+
+    #[test]
+    fn i4b_string_replace_rides_simple_table() {
+        // __string_replace returns String (not a list), so it uses the SIMPLE
+        // table's plain build_call path: ptr×3 → ptr, Direct.
+        use tyra_mir::Operand;
+        let ctx = Context::create();
+        let program = builtin_call_program(
+            "f",
+            vec![("s".into(), Ty::String), ("from".into(), Ty::String), ("to".into(), Ty::String)],
+            Ty::String,
+            "__string_replace",
+            vec![Operand::Var("s".into()), Operand::Var("from".into()), Operand::Var("to".into())],
+        );
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "replace failed to verify:\n{ir}");
+        assert!(ir.contains("call ptr @tyra_string_replace"), "must call replace runtime fn:\n{ir}");
+    }
 }

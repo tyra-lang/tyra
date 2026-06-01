@@ -13,7 +13,7 @@
 //! float / bench — every builtin whose legacy helper is a single runtime call
 //! plus at most a trivial result conversion. Deferred to later I4 sub-phases:
 //! print/panic/sys (formatting + sentinels), the http *server* handle round
-//! trips (ptr↔int), string split/join/replace (build List results), Map/Set/
+//! trips (ptr↔int), string split/join build List results (I4b-B), Map/Set/
 //! LinkedMap/LinkedSet (dynamic names + eq/hash fn addresses), list map/filter/
 //! fold (closure callbacks), and Int/Bool conversions.
 
@@ -85,7 +85,7 @@ const SIMPLE: &[(&str, &str, Conv)] = &[
     ("__io_read_line",   "tyra_io_read_line",   Direct),
     ("__io_read_to_end", "tyra_io_read_to_end", Direct),
     ("__io_eof",         "tyra_io_eof",         Bool),
-    // string (scalar; split/join/replace build Lists → deferred)
+    // string (scalar; split/join build Lists → I4b-B dedicated module)
     ("__string_len",         "tyra_string_len",         Direct),
     ("__string_is_empty",    "tyra_string_is_empty",    Bool),
     ("__string_trim",        "tyra_string_trim",        Direct),
@@ -100,6 +100,7 @@ const SIMPLE: &[(&str, &str, Conv)] = &[
     ("__string_substring",   "tyra_string_substring",   Direct),
     ("__string_reverse",     "tyra_string_reverse",     Direct),
     ("__string_from_byte",   "tyra_string_from_byte",   Direct),
+    ("__string_replace",     "tyra_string_replace",     Direct), // I4b-B: ptr×3 → ptr
     // time
     ("__time_now_unix",         "tyra_time_now_unix",         Direct),
     ("__time_monotonic_millis", "tyra_time_monotonic_millis", Direct),
@@ -145,6 +146,7 @@ impl<'ctx> CodeGen<'ctx> {
         PRINT.contains(&name)
             || SIMPLE.iter().any(|(f, _, _)| *f == name)
             || Self::is_list_int_builtin(name)
+            || Self::is_string_list_builtin(name)
     }
 
     /// Emit a builtin call. Returns `false` if `fname` is not supported (caller
@@ -161,6 +163,9 @@ impl<'ctx> CodeGen<'ctx> {
         }
         if Self::is_list_int_builtin(fname) {
             return self.emit_list_int_builtin(dest, fname, args);
+        }
+        if Self::is_string_list_builtin(fname) {
+            return self.emit_string_list_builtin(dest, fname, args);
         }
         self.emit_simple_builtin(dest, fname, args)
     }

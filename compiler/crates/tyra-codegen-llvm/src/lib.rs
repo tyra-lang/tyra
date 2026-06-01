@@ -14,6 +14,7 @@ mod inkwell_codegen;
 mod inkwell_instr;
 mod inkwell_list;
 mod inkwell_list_builtins;
+mod inkwell_string_builtins;
 mod instr_emit;
 mod list_codegen;
 mod type_scan;
