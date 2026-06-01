@@ -81,7 +81,12 @@ impl<'ctx> CodeGen<'ctx> {
                 | Instruction::AdtInit { .. }
                 | Instruction::AdtTag { .. }
                 | Instruction::AdtPayload { .. }
-                | Instruction::StringFormat { .. } => true,
+                | Instruction::StringFormat { .. }
+                | Instruction::ListInit { .. }
+                | Instruction::ListLen { .. }
+                | Instruction::ListGet { .. }
+                | Instruction::ListGetSafe { .. }
+                | Instruction::ListPush { .. } => true,
                 Instruction::Call { func, .. } => self.fn_values.contains_key(func),
                 _ => false,
             };
@@ -153,6 +158,12 @@ impl<'ctx> CodeGen<'ctx> {
             Instruction::AdtInit { fields, .. } => fields.iter().collect(),
             Instruction::AdtTag { obj, .. } | Instruction::AdtPayload { obj, .. } => vec![obj],
             Instruction::StringFormat { args, .. } => args.iter().collect(),
+            Instruction::ListInit { elements, .. } => elements.iter().collect(),
+            Instruction::ListLen { list, .. } => vec![list],
+            Instruction::ListGet { list, index, .. } | Instruction::ListGetSafe { list, index, .. } => {
+                vec![list, index]
+            }
+            Instruction::ListPush { list, elem, .. } => vec![list, elem],
             _ => vec![],
         }
     }
@@ -160,8 +171,10 @@ impl<'ctx> CodeGen<'ctx> {
     fn emit_function_body(&mut self, f: &Function) {
         self.values.clear();
         self.blocks.clear();
+        self.pred_blocks.clear();
         self.addr_slots.clear();
         self.slot_types.clear();
+        self.cur_label = None;
         let fv = self.fn_values[&f.name];
 
         // Entry block, then pre-create every labeled block so forward jumps and
@@ -223,13 +236,29 @@ impl<'ctx> CodeGen<'ctx> {
         let mut pending: Vec<(PhiValue<'ctx>, Vec<(Operand, String)>)> = Vec::new();
         for stmt in &f.body {
             self.emit_instr(&stmt.instr, f, &mut pending);
+            // Track the *exit* block of the current label (for phi predecessors)
+            // without touching `blocks` (the jump-*target* table). For a
+            // non-splitting instruction this is idempotent; for ListGet/
+            // ListGetSafe (which branch mid-instruction) it advances to the
+            // actual block the region's terminator will branch from.
+            if let Some(label) = &self.cur_label {
+                if let Some(bb) = self.builder.get_insert_block() {
+                    self.pred_blocks.insert(label.clone(), bb);
+                }
+            }
         }
 
-        // Resolve phi incomings now that every value and block exists.
+        // Resolve phi incomings now that every value and block exists. Use the
+        // label's *exit* block (`pred_blocks`) — the real predecessor — falling
+        // back to the entry block for any label whose region was never split.
         for (phi, branches) in pending {
             for (op, label) in &branches {
                 let v = self.operand(op);
-                let bb = self.blocks[label];
+                let bb = self
+                    .pred_blocks
+                    .get(label)
+                    .copied()
+                    .unwrap_or_else(|| self.blocks[label]);
                 phi.add_incoming(&[(&v, bb)]);
             }
         }
@@ -483,6 +512,7 @@ impl<'ctx> CodeGen<'ctx> {
             }
             Instruction::Label(name) => {
                 self.builder.position_at_end(self.blocks[name]);
+                self.cur_label = Some(name.clone());
             }
             Instruction::Jump { label } => {
                 self.builder.build_unconditional_branch(self.blocks[label]).unwrap();
@@ -512,6 +542,21 @@ impl<'ctx> CodeGen<'ctx> {
                         self.values.insert(d.clone(), rv);
                     }
                 }
+            }
+            Instruction::ListInit { dest, elem_type, elements } => {
+                self.emit_list_init(dest, elem_type, elements);
+            }
+            Instruction::ListLen { dest, list } => {
+                self.emit_list_len(dest, list);
+            }
+            Instruction::ListGet { dest, list, index, elem_type } => {
+                self.emit_list_get(dest, list, index, elem_type);
+            }
+            Instruction::ListGetSafe { dest, list, index, elem_type } => {
+                self.emit_list_get_safe(dest, list, index, elem_type);
+            }
+            Instruction::ListPush { dest, list, elem, elem_type } => {
+                self.emit_list_push(dest, list, elem, elem_type);
             }
             Instruction::StringFormat { dest, format_ref, args } => {
                 // GC-allocate a 1024-byte buffer and snprintf into it. The
@@ -610,7 +655,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     /// Resolve a MIR operand to its SSA value handle.
-    fn operand(&self, op: &Operand) -> BasicValueEnum<'ctx> {
+    pub(crate) fn operand(&self, op: &Operand) -> BasicValueEnum<'ctx> {
         match op {
             Operand::Const(c) => self.const_value(c),
             Operand::Var(name) => self.values[name],
@@ -633,7 +678,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     /// Zero/null value of a basic type (for inactive ADT variant fields).
-    fn zero_of(&self, ty: BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {
+    pub(crate) fn zero_of(&self, ty: BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {
         match ty {
             BasicTypeEnum::IntType(t) => t.const_zero().into(),
             BasicTypeEnum::FloatType(t) => t.const_zero().into(),
@@ -672,7 +717,12 @@ fn instr_dest(inst: &Instruction) -> Option<&str> {
         | Instruction::AdtInit { dest, .. }
         | Instruction::AdtTag { dest, .. }
         | Instruction::AdtPayload { dest, .. }
-        | Instruction::StringFormat { dest, .. } => Some(dest),
+        | Instruction::StringFormat { dest, .. }
+        | Instruction::ListInit { dest, .. }
+        | Instruction::ListLen { dest, .. }
+        | Instruction::ListGet { dest, .. }
+        | Instruction::ListGetSafe { dest, .. }
+        | Instruction::ListPush { dest, .. } => Some(dest),
         Instruction::Call { dest, .. } => dest.as_deref(),
         _ => None,
     }

@@ -11,6 +11,7 @@ pub mod dwarf;
 mod helpers;
 mod inkwell_codegen;
 mod inkwell_instr;
+mod inkwell_list;
 mod instr_emit;
 mod list_codegen;
 mod type_scan;

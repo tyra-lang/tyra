@@ -50,8 +50,17 @@ pub(crate) struct CodeGen<'ctx> {
     pub(crate) data_types: HashSet<String>,
     /// Declared functions by name.
     pub(crate) fn_values: HashMap<String, FunctionValue<'ctx>>,
-    /// Basic blocks by MIR label name. Reset per function (I2).
+    /// **Entry** block of each MIR label — the branch *target* for
+    /// `Jump`/`BranchIf`. Built once (pre-creation) and never overwritten, so a
+    /// jump to a label always lands at the region's start. Reset per function (I2).
     pub(crate) blocks: HashMap<String, BasicBlock<'ctx>>,
+    /// **Exit** block of each MIR label — the block its terminator actually
+    /// branches *from*, used only for deferred phi predecessor resolution. For
+    /// an unsplit region this equals `blocks[label]`; when an instruction splits
+    /// the block mid-emission (I3 ListGet/ListGetSafe bounds checks) it advances
+    /// to the final block. Kept separate from `blocks` so the jump-target table
+    /// stays intact. Reset per function.
+    pub(crate) pred_blocks: HashMap<String, BasicBlock<'ctx>>,
     /// alloca slots (param/local addresses) by name. Reset per function (I2).
     pub(crate) addr_slots: HashMap<String, PointerValue<'ctx>>,
     /// Load type for each alloca slot (slots are `alloca i64` for size, but
@@ -59,6 +68,10 @@ pub(crate) struct CodeGen<'ctx> {
     pub(crate) slot_types: HashMap<String, BasicTypeEnum<'ctx>>,
     /// Per-struct "is field a recursive self-reference" flags (ADT boxing, I2d).
     pub(crate) recursive_fields: HashMap<String, Vec<bool>>,
+    /// MIR label of the block currently being emitted, if any (None in the
+    /// entry region). Set on `Label`; after each instruction `pred_blocks` for
+    /// this label is re-synced to the builder's current block. Reset per function.
+    pub(crate) cur_label: Option<String>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -74,9 +87,11 @@ impl<'ctx> CodeGen<'ctx> {
             data_types: HashSet::new(),
             fn_values: HashMap::new(),
             blocks: HashMap::new(),
+            pred_blocks: HashMap::new(),
             addr_slots: HashMap::new(),
             slot_types: HashMap::new(),
             recursive_fields: HashMap::new(),
+            cur_label: None,
         }
     }
 
@@ -1003,5 +1018,369 @@ mod tests {
         assert!(ir.contains("@.str.0")); // "hello"
         // Unit-returning fn lowers to void
         assert!(ir.contains("@noop"));
+    }
+
+    // ---- I3: List<T> instructions ----
+
+    /// `List<Int> = { data: ptr, len: i64 }` (§11). `data` is `Ty::String`
+    /// (a pointer in LLVM), matching the MIR lowering in `lower/adt.rs`.
+    fn list_int_def() -> tyra_mir::StructDef {
+        tyra_mir::StructDef {
+            name: "List__Int".into(),
+            fields: vec![("data".into(), Ty::String), ("len".into(), Ty::Int)],
+            is_data: false,
+            recursive_fields: vec![false, false],
+        }
+    }
+
+    /// `Option<Int>` ADT: field 0 named "tag" (→ i8), payload `value: Int`.
+    fn option_int_def() -> tyra_mir::StructDef {
+        tyra_mir::StructDef {
+            name: "Option__Int".into(),
+            fields: vec![("tag".into(), Ty::Int), ("value".into(), Ty::Int)],
+            is_data: false,
+            recursive_fields: vec![false, false],
+        }
+    }
+
+    #[test]
+    fn i3_list_init_emits_gc_malloc_and_verifies() {
+        // fn mk() -> List<Int> = [10, 20, 30]
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "mk".into(),
+                params: vec![],
+                return_type: Ty::Generic("List".into(), vec![Ty::Int]),
+                body: vec![
+                    MirStmt::synthetic(Instruction::ListInit {
+                        dest: "l".into(),
+                        elem_type: Ty::Int,
+                        elements: vec![
+                            Operand::Const(Constant::Int(10)),
+                            Operand::Const(Constant::Int(20)),
+                            Operand::Const(Constant::Int(30)),
+                        ],
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("l".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![list_int_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        assert!(
+            cg.module.verify().is_ok(),
+            "ListInit module failed to verify:\n{}",
+            cg.module.print_to_string().to_string()
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(ir.contains("@GC_malloc"), "missing GC_malloc:\n{ir}");
+        assert!(ir.contains("insertvalue"), "missing struct build:\n{ir}");
+    }
+
+    #[test]
+    fn i3_empty_list_init_is_null_zero() {
+        // fn mk() -> List<Int> = []  → { null, 0 }, no GC_malloc.
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "mk".into(),
+                params: vec![],
+                return_type: Ty::Generic("List".into(), vec![Ty::Int]),
+                body: vec![
+                    MirStmt::synthetic(Instruction::ListInit {
+                        dest: "l".into(),
+                        elem_type: Ty::Int,
+                        elements: vec![],
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("l".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![list_int_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        assert!(
+            cg.module.verify().is_ok(),
+            "empty ListInit failed to verify:\n{}",
+            cg.module.print_to_string().to_string()
+        );
+    }
+
+    #[test]
+    fn i3_list_len_and_get_bounds_check_verify() {
+        // fn at0(xs: List<Int>) -> Int { n = len xs; _unused; return xs[0] }
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "at0".into(),
+                params: vec![("xs".into(), Ty::Generic("List".into(), vec![Ty::Int]))],
+                return_type: Ty::Int,
+                body: vec![
+                    MirStmt::synthetic(Instruction::ListLen {
+                        dest: "n".into(),
+                        list: Operand::Var("xs".into()),
+                    }),
+                    MirStmt::synthetic(Instruction::ListGet {
+                        dest: "e".into(),
+                        list: Operand::Var("xs".into()),
+                        index: Operand::Const(Constant::Int(0)),
+                        elem_type: Ty::Int,
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("e".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![list_int_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        assert!(
+            cg.module.verify().is_ok(),
+            "ListLen/ListGet failed to verify:\n{}",
+            cg.module.print_to_string().to_string()
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(ir.contains("extractvalue"), "missing len extract:\n{ir}");
+        assert!(ir.contains("icmp ult"), "missing bounds compare:\n{ir}");
+        assert!(ir.contains("@exit"), "missing OOB exit:\n{ir}");
+    }
+
+    #[test]
+    fn i3_list_get_safe_emits_option_phi() {
+        // fn safe(xs: List<Int>) -> Option<Int> = xs.get(0)
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "safe".into(),
+                params: vec![("xs".into(), Ty::Generic("List".into(), vec![Ty::Int]))],
+                return_type: Ty::Generic("Option".into(), vec![Ty::Int]),
+                body: vec![
+                    MirStmt::synthetic(Instruction::ListGetSafe {
+                        dest: "o".into(),
+                        list: Operand::Var("xs".into()),
+                        index: Operand::Const(Constant::Int(0)),
+                        elem_type: Ty::Int,
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("o".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![list_int_def(), option_int_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        assert!(
+            cg.module.verify().is_ok(),
+            "ListGetSafe failed to verify:\n{}",
+            cg.module.print_to_string().to_string()
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(ir.contains("phi"), "missing Some/None merge phi:\n{ir}");
+    }
+
+    #[test]
+    fn i3_list_push_emits_memcpy() {
+        // fn add(xs: List<Int>, v: Int) -> List<Int> = xs.push(v)
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "add".into(),
+                params: vec![
+                    ("xs".into(), Ty::Generic("List".into(), vec![Ty::Int])),
+                    ("v".into(), Ty::Int),
+                ],
+                return_type: Ty::Generic("List".into(), vec![Ty::Int]),
+                body: vec![
+                    MirStmt::synthetic(Instruction::ListPush {
+                        dest: "l2".into(),
+                        list: Operand::Var("xs".into()),
+                        elem: Operand::Var("v".into()),
+                        elem_type: Ty::Int,
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("l2".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![list_int_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        assert!(
+            cg.module.verify().is_ok(),
+            "ListPush failed to verify:\n{}",
+            cg.module.print_to_string().to_string()
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(ir.contains("@GC_malloc"), "missing alloc:\n{ir}");
+        assert!(ir.contains("llvm.memcpy"), "missing prefix memcpy:\n{ir}");
+    }
+
+    #[test]
+    fn i3_list_get_in_phi_predecessor_block_verifies() {
+        // The phi-predecessor regression: a ListGet whose bounds check splits a
+        // block that is itself a phi predecessor. Without the per-instruction
+        // label→block sync, the phi would record the *entry* of the `then`
+        // region as its predecessor, but the branch actually leaves from the
+        // split `e.ok` block — and Module::verify() would reject the mismatch.
+        //
+        // fn pick(xs: List<Int>, c: Bool) -> Int {
+        //   branch c ? then : els
+        //   then: a = xs[0]; jump merge
+        //   els:        jump merge
+        //   merge: r = phi [a, then], [0, els]; return r
+        // }
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "pick".into(),
+                params: vec![
+                    ("xs".into(), Ty::Generic("List".into(), vec![Ty::Int])),
+                    ("c".into(), Ty::Bool),
+                ],
+                return_type: Ty::Int,
+                body: vec![
+                    MirStmt::synthetic(Instruction::BranchIf {
+                        cond: Operand::Var("c".into()),
+                        true_label: "then".into(),
+                        false_label: "els".into(),
+                    }),
+                    MirStmt::synthetic(Instruction::Label("then".into())),
+                    MirStmt::synthetic(Instruction::ListGet {
+                        dest: "a".into(),
+                        list: Operand::Var("xs".into()),
+                        index: Operand::Const(Constant::Int(0)),
+                        elem_type: Ty::Int,
+                    }),
+                    MirStmt::synthetic(Instruction::Jump { label: "merge".into() }),
+                    MirStmt::synthetic(Instruction::Label("els".into())),
+                    MirStmt::synthetic(Instruction::Jump { label: "merge".into() }),
+                    MirStmt::synthetic(Instruction::Label("merge".into())),
+                    MirStmt::synthetic(Instruction::Phi {
+                        dest: "r".into(),
+                        branches: vec![
+                            (Operand::Var("a".into()), "then".into()),
+                            (Operand::Const(Constant::Int(0)), "els".into()),
+                        ],
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("r".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![list_int_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        assert!(
+            cg.module.verify().is_ok(),
+            "ListGet-in-phi-predecessor failed to verify (block-sync regression?):\n{}",
+            cg.module.print_to_string().to_string()
+        );
+    }
+
+    #[test]
+    fn i3_backedge_to_split_label_targets_entry() {
+        // Regression: a back-edge that jumps to a label whose region was split
+        // by a ListGet must land at the region *entry* (re-running the bounds
+        // check + extractvalue), NOT at the split `.ok` block. If the
+        // jump-target table is corrupted by the phi-predecessor sync, the
+        // back-edge enters `.ok` directly — and the `data`/`len` extractvalues
+        // (defined in the entry block) no longer dominate their uses in `.ok`,
+        // so Module::verify() rejects the function.
+        //
+        // fn f(xs: List<Int>, c: Bool) -> Int {
+        //   jump loop
+        //   loop: e = xs[0]; branch c ? loop : done   // loop is split by ListGet
+        //   done: return 0
+        // }
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![
+                    ("xs".into(), Ty::Generic("List".into(), vec![Ty::Int])),
+                    ("c".into(), Ty::Bool),
+                ],
+                return_type: Ty::Int,
+                body: vec![
+                    MirStmt::synthetic(Instruction::Jump { label: "loop".into() }),
+                    MirStmt::synthetic(Instruction::Label("loop".into())),
+                    MirStmt::synthetic(Instruction::ListGet {
+                        dest: "e".into(),
+                        list: Operand::Var("xs".into()),
+                        index: Operand::Const(Constant::Int(0)),
+                        elem_type: Ty::Int,
+                    }),
+                    MirStmt::synthetic(Instruction::BranchIf {
+                        cond: Operand::Var("c".into()),
+                        true_label: "loop".into(),
+                        false_label: "done".into(),
+                    }),
+                    MirStmt::synthetic(Instruction::Label("done".into())),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Const(Constant::Int(0))),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![list_int_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        // `verify()` does NOT catch this: corrupting the jump target to `%e.ok`
+        // still produces dominator-valid IR (every path to `%e.ok` enters via
+        // the loop entry), it just miscompiles control flow. The guard is
+        // structural: the back-edge (the conditional branch in the bounds-check
+        // `.ok` block) must target the loop *entry* `%loop`, which re-runs the
+        // bounds check each iteration — the buggy sync would emit `label %e.ok`.
+        assert!(cg.module.verify().is_ok(), "back-edge module failed to verify:\n{ir}");
+        assert!(
+            ir.contains("br i1 %c, label %loop, label %done"),
+            "back-edge must target loop entry %loop (not the split %e.ok block):\n{ir}"
+        );
     }
 }
