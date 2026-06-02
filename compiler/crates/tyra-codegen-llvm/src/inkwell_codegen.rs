@@ -2924,6 +2924,41 @@ mod tests {
         assert!(ir.contains("DW_TAG_pointer_type, name: \"String\""), "String DIType is a pointer:\n{ir}");
     }
 
+    #[test]
+    fn i6b_generic_local_does_not_panic() {
+        // G2 found a debug-path panic on programs with Option/Result locals;
+        // i6b only covered Int/String. A generic value-type local must emit a
+        // DIType + dbg.declare without panicking and verify.
+        use tyra_mir::{Constant, Function, Instruction, LocalMeta, MirStmt, Operand, SourceLoc};
+        let loc = |line| SourceLoc { file_id: 0, line, col: 1 };
+        let program = Program {
+            functions: vec![Function {
+                name: "g".into(),
+                params: vec![],
+                return_type: Ty::Int,
+                body: vec![
+                    MirStmt::new(loc(2), Instruction::Alloca { dest: "o".into() }),
+                    MirStmt::new(loc(3), Instruction::Return { value: Some(Operand::Const(Constant::Int(0))) }),
+                ],
+                is_main: false,
+                local_metas: vec![LocalMeta {
+                    name: "o".into(),
+                    ty: Ty::Generic("Option".into(), vec![Ty::Int]),
+                    alloca_name: "o".into(),
+                }],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![option_int_def()],
+            source_files: vec!["src/app.tyra".into()],
+            lower_errors: vec![],
+        };
+        let ctx = Context::create();
+        let cg = build_module_opts(&ctx, &program, None, true);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "generic local debug failed to verify:\n{ir}");
+        assert!(ir.contains("!DILocalVariable(name: \"o\""), "must describe the Option local:\n{ir}");
+    }
+
     // ---- I5: coverage instrumentation (ADR-0014) ----
 
     #[test]
