@@ -1593,21 +1593,22 @@ mod tests {
 
     #[test]
     fn i4a_deferred_builtin_falls_back_to_unreachable() {
-        // A still-deferred builtin (`parse__Int`, which lowers to strtoll +
-        // endptr → Option<Int>) is not in the supported set, so the function
-        // must fall back to a single `unreachable` block. Coverage grows in
-        // later I4 sub-phases.
+        // As of I4i + parse__Int every *known* builtin is supported, so this
+        // guards the remaining fallback branch: an unknown builtin name (neither
+        // a user function nor a recognized intrinsic) is rejected by the gate and
+        // the function falls back to a single `unreachable` block rather than
+        // emitting a call to an undeclared function.
         use tyra_mir::{Function, Instruction, MirStmt, Operand};
         let ctx = Context::create();
         let program = Program {
             functions: vec![Function {
                 name: "f".into(),
-                params: vec![("m".into(), Ty::String)],
-                return_type: Ty::Generic("Option".into(), vec![Ty::Int]),
+                params: vec![("m".into(), Ty::Int)],
+                return_type: Ty::Int,
                 body: vec![
                     MirStmt::synthetic(Instruction::Call {
                         dest: Some("r".into()),
-                        func: "parse__Int".into(),
+                        func: "__unsupported_builtin_probe".into(),
                         args: vec![Operand::Var("m".into())],
                     }),
                     MirStmt::synthetic(Instruction::Return {
@@ -2709,6 +2710,41 @@ mod tests {
         // print(List<Int>) has no printf form → gate rejects → fallback body.
         assert!(ir.contains("unreachable"), "print of a map result list must fall back:\n{ir}");
         assert!(!ir.contains("call i32 @puts"), "a struct list must not be printed as a value:\n{ir}");
+    }
+
+    /// `parse__Int(s) -> Option<Int>` — strtoll + endptr, branchless via select.
+    #[test]
+    fn i4_parse_int_builds_option_via_select() {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![("s".into(), Ty::String)],
+                return_type: Ty::Generic("Option".into(), vec![Ty::Int]),
+                body: vec![
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: Some("r".into()),
+                        func: "parse__Int".into(),
+                        args: vec![Operand::Var("s".into())],
+                    }),
+                    MirStmt::synthetic(Instruction::Return { value: Some(Operand::Var("r".into())) }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![option_int_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "parse__Int failed to verify:\n{ir}");
+        assert!(ir.contains("call i64 @strtoll"), "parse must call strtoll:\n{ir}");
+        // Branchless: tag/value chosen by select, then assembled into Option<Int>.
+        assert!(ir.contains("select i1"), "parse must pick the result branchlessly:\n{ir}");
+        assert!(ir.contains("insertvalue"), "parse must build the Option struct:\n{ir}");
     }
 
     // ---- I4i: async concurrency (spawn / await / join_all / select) ----

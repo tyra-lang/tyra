@@ -153,6 +153,7 @@ impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn is_supported_builtin(name: &str) -> bool {
         PRINT.contains(&name)
             || SENTINEL.contains(&name)
+            || name == "parse__Int"
             || SIMPLE.iter().any(|(f, _, _)| *f == name)
             || Self::is_list_int_builtin(name)
             || Self::is_list_higher_builtin(name)
@@ -184,6 +185,10 @@ impl<'ctx> CodeGen<'ctx> {
             }
             "sys__args" => {
                 self.emit_sys_args(dest);
+                return true;
+            }
+            "parse__Int" => {
+                self.emit_parse_int(dest, args);
                 return true;
             }
             _ => {}
@@ -547,5 +552,63 @@ impl<'ctx> CodeGen<'ctx> {
         };
         self.values.insert(d.clone(), v);
         true
+    }
+
+    /// `parse__Int(s) -> Option<Int>` (§17.3). `strtoll(s, &endptr, 10)` with
+    /// endptr validation: a failed parse is `endptr == s` (no digits consumed)
+    /// OR `*endptr != '\0'` (trailing garbage / partial parse). Mirrors the
+    /// legacy `emit_parse_int` semantics but stays branchless via `select`
+    /// (single basic block, like I4f Map.get) instead of a none/some/merge
+    /// split — `*endptr` is always in-bounds (endptr points into `s`, at worst
+    /// at its NUL terminator), so the `i8` load is safe on the failure path too.
+    /// `strtoll` (not `strtol`) guarantees i64 on Windows LLP64 as well.
+    fn emit_parse_int(&mut self, dest: &Option<String>, args: &[Operand]) {
+        let d = dest.as_deref().unwrap_or("_parse");
+        let i8t = self.ctx.i8_type();
+        let i64t = self.ctx.i64_type();
+        let i32t = self.ctx.i32_type();
+        let ptr = self.ptr();
+        let opt_ty = self.struct_types["Option__Int"];
+
+        let s = self.operand(&args[0]).into_pointer_value();
+        let endp = self.builder.build_alloca(ptr, &format!("{d}.endp")).unwrap();
+        let strtoll = self.module.get_function("strtoll").unwrap();
+        let v = self
+            .builder
+            .build_call(
+                strtoll,
+                &[s.into(), endp.into(), i32t.const_int(10, false).into()],
+                &format!("{d}.val"),
+            )
+            .unwrap()
+            .try_as_basic_value()
+            .basic()
+            .unwrap()
+            .into_int_value();
+        let ep = self.builder.build_load(ptr, endp, &format!("{d}.ep")).unwrap().into_pointer_value();
+        // No conversion: endptr unmoved from the start of the string.
+        let nconv = self.builder.build_int_compare(IntPredicate::EQ, ep, s, &format!("{d}.nconv")).unwrap();
+        // Trailing garbage: the char at endptr is not the NUL terminator.
+        let epch = self.builder.build_load(i8t, ep, &format!("{d}.epch")).unwrap().into_int_value();
+        let partial = self
+            .builder
+            .build_int_compare(IntPredicate::NE, epch, i8t.const_zero(), &format!("{d}.partial"))
+            .unwrap();
+        let fail = self.builder.build_or(nconv, partial, &format!("{d}.fail")).unwrap();
+        // tag = fail ? 1 (None) : 0 (Some); value = fail ? 0 : parsed.
+        let tag = self
+            .builder
+            .build_select(fail, i8t.const_int(1, false), i8t.const_zero(), &format!("{d}.tag"))
+            .unwrap()
+            .into_int_value();
+        let value = self
+            .builder
+            .build_select(fail, i64t.const_zero(), v, &format!("{d}.value"))
+            .unwrap()
+            .into_int_value();
+        let mut agg: AggregateValueEnum = opt_ty.get_undef().into();
+        agg = self.builder.build_insert_value(agg, tag, 0, &format!("{d}.s0")).unwrap();
+        agg = self.builder.build_insert_value(agg, value, 1, &format!("{d}.s1")).unwrap();
+        self.values.insert(d.to_string(), agg.into_struct_value().into());
     }
 }
