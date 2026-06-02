@@ -155,6 +155,7 @@ impl<'ctx> CodeGen<'ctx> {
             || SENTINEL.contains(&name)
             || SIMPLE.iter().any(|(f, _, _)| *f == name)
             || Self::is_list_int_builtin(name)
+            || Self::is_list_higher_builtin(name)
             || Self::is_string_list_builtin(name)
             || Self::is_http_server_builtin(name)
             || Self::is_collection_builtin(name)
@@ -189,6 +190,9 @@ impl<'ctx> CodeGen<'ctx> {
         }
         if Self::is_list_int_builtin(fname) {
             return self.emit_list_int_builtin(dest, fname, args);
+        }
+        if Self::is_list_higher_builtin(fname) {
+            return self.emit_list_higher_builtin(dest, fname, args);
         }
         if Self::is_string_list_builtin(fname) {
             return self.emit_string_list_builtin(dest, fname, args);

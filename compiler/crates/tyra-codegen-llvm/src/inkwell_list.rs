@@ -252,7 +252,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     /// Build a `{ data, len }` list struct value via the insertvalue chain.
-    fn build_list_struct(
+    pub(crate) fn build_list_struct(
         &self,
         list_ty: StructType<'ctx>,
         data: BasicValueEnum<'ctx>,

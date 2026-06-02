@@ -68,6 +68,13 @@ fn builtin_primitive_return(fname: &str) -> Option<Ty> {
         // Option<Int> returns are tracked via struct_temps in
         // pre_scan_struct_types; only the Bool return needs registration here.
         "__list_int_contains" => Some(Ty::Bool),
+        // I4h: list higher-order builtins. `__list_fold_str` folds to a String,
+        // so its result temp must land in `string_temps` (a ptr) — without this
+        // a downstream `print(folded)` / string-builtin re-entry / String-slot
+        // Store would treat the ptr as i64. `__list_fold_int` returns Int
+        // (default i64, no tracking); `__list_map_*` / `__list_filter_*` return
+        // List<T> structs, tracked in `pre_scan_struct_types` below.
+        "__list_fold_str" => Some(Ty::String),
         name if name.starts_with("__map_contains__") => Some(Ty::Bool),
         name if name.starts_with("__set_contains__") => Some(Ty::Bool),
         _ => None,
@@ -678,6 +685,20 @@ fn pre_scan_struct_types(
                     "__list_int_max" | "__list_int_min" | "__list_int_index_of" => {
                         if struct_map.contains_key("Option__Int") {
                             struct_temps.insert(dest.clone(), "Option__Int".into());
+                        }
+                    }
+                    // I4h: list higher-order map/filter return a new List<T>.
+                    // Register the result temp so downstream Copy / Store / print
+                    // takes the struct-aware path (else `let ys = xs.map(f)` would
+                    // misclassify `ys` as a scalar, the legacy list/option bug).
+                    "__list_map_int" | "__list_filter_int" => {
+                        if struct_map.contains_key("List__Int") {
+                            struct_temps.insert(dest.clone(), "List__Int".into());
+                        }
+                    }
+                    "__list_map_str" | "__list_filter_str" => {
+                        if struct_map.contains_key("List__String") {
+                            struct_temps.insert(dest.clone(), "List__String".into());
                         }
                     }
                     _ => {}

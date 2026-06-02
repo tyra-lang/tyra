@@ -1574,20 +1574,21 @@ mod tests {
 
     #[test]
     fn i4a_deferred_builtin_falls_back_to_unreachable() {
-        // A still-deferred builtin (`__list_fold_int`, a higher-order list op —
-        // I4f) is not in the supported set, so the function must fall back to a
-        // single `unreachable` block. Coverage grows in later I4 sub-phases.
+        // A still-deferred builtin (`parse__Int`, which lowers to strtoll +
+        // endptr → Option<Int>) is not in the supported set, so the function
+        // must fall back to a single `unreachable` block. Coverage grows in
+        // later I4 sub-phases.
         use tyra_mir::{Function, Instruction, MirStmt, Operand};
         let ctx = Context::create();
         let program = Program {
             functions: vec![Function {
                 name: "f".into(),
-                params: vec![("m".into(), Ty::Int)],
-                return_type: Ty::Int,
+                params: vec![("m".into(), Ty::String)],
+                return_type: Ty::Generic("Option".into(), vec![Ty::Int]),
                 body: vec![
                     MirStmt::synthetic(Instruction::Call {
                         dest: Some("r".into()),
-                        func: "__list_fold_int".into(),
+                        func: "parse__Int".into(),
                         args: vec![Operand::Var("m".into())],
                     }),
                     MirStmt::synthetic(Instruction::Return {
@@ -2318,6 +2319,377 @@ mod tests {
         assert!(ir.contains("@GC_malloc"), "capturing closure must allocate an env:\n{ir}");
         // and the env pointer (not null) is threaded into the fat pointer.
         assert!(ir.contains("store ptr @cb2"), "closure must store the target fn pointer:\n{ir}");
+    }
+
+    // ---- I4h: list higher-order builtins (map/filter/fold) + collection forEach ----
+
+    /// A closure target `fn <name>(env, <params>) -> ret { return <ret_expr> }`.
+    /// `params` excludes the implicit env pointer (typed as a ptr via `String`).
+    /// `ret_var` returns that param; `None` returns a `Bool(true)` constant (used
+    /// by filter predicates, whose Int param can't be returned from an i1 fn).
+    fn cb_target(name: &str, params: Vec<(&str, Ty)>, ret: Ty, ret_var: Option<&str>) -> tyra_mir::Function {
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
+        let mut full_params = vec![("env".to_string(), Ty::String)];
+        full_params.extend(params.into_iter().map(|(n, t)| (n.to_string(), t)));
+        let value = match ret_var {
+            Some(v) => Operand::Var(v.to_string()),
+            None => Operand::Const(Constant::Bool(true)),
+        };
+        Function {
+            name: name.into(),
+            params: full_params,
+            return_type: ret,
+            body: vec![MirStmt::synthetic(Instruction::Return { value: Some(value) })],
+            is_main: false,
+            local_metas: vec![],
+        }
+    }
+
+    /// Build `fn f() -> ret { l = [e0,e1,e2]; cl = closure(target); r = builtin(l, mid.., cl); r }`.
+    /// `mid_args` are inserted between the list and the closure (fold's `init`).
+    fn list_higher_program(
+        builtin: &str,
+        targets: Vec<tyra_mir::Function>,
+        target_name: &str,
+        cb_param_types: Vec<Ty>,
+        cb_return: Ty,
+        elem_ty: Ty,
+        elems: Vec<tyra_mir::Operand>,
+        mid_args: Vec<tyra_mir::Operand>,
+        ret: Ty,
+        structs: Vec<tyra_mir::StructDef>,
+    ) -> Program {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let mut functions = targets;
+        let mut call_args = vec![Operand::Var("l".into())];
+        call_args.extend(mid_args);
+        call_args.push(Operand::Var("cl".into()));
+        functions.push(Function {
+            name: "f".into(),
+            params: vec![],
+            return_type: ret,
+            body: vec![
+                MirStmt::synthetic(Instruction::ListInit { dest: "l".into(), elem_type: elem_ty, elements: elems }),
+                MirStmt::synthetic(Instruction::ClosureBuild {
+                    dest: "cl".into(),
+                    fn_name: target_name.into(),
+                    env_fields: vec![],
+                    env_struct_name: String::new(),
+                    param_types: cb_param_types,
+                    return_type: cb_return,
+                }),
+                MirStmt::synthetic(Instruction::Call { dest: Some("r".into()), func: builtin.into(), args: call_args }),
+                MirStmt::synthetic(Instruction::Return { value: Some(Operand::Var("r".into())) }),
+            ],
+            is_main: false,
+            local_metas: vec![],
+        });
+        Program {
+            functions,
+            // One constant so `String` element tests can reference `StringRef(0)`.
+            string_constants: vec!["x".into()],
+            struct_defs: structs,
+            source_files: vec![],
+            lower_errors: vec![],
+        }
+    }
+
+    fn int_elems() -> Vec<tyra_mir::Operand> {
+        use tyra_mir::{Constant, Operand};
+        vec![
+            Operand::Const(Constant::Int(10)),
+            Operand::Const(Constant::Int(20)),
+            Operand::Const(Constant::Int(30)),
+        ]
+    }
+
+    #[test]
+    fn i4h_list_map_int_applies_closure_per_element() {
+        let ctx = Context::create();
+        let cg = build_module(
+            &ctx,
+            &list_higher_program(
+                "__list_map_int",
+                vec![cb_target("dbl", vec![("x", Ty::Int)], Ty::Int, Some("x"))],
+                "dbl",
+                vec![Ty::Int],
+                Ty::Int,
+                Ty::Int,
+                int_elems(),
+                vec![],
+                Ty::Generic("List".into(), vec![Ty::Int]),
+                vec![list_int_def()],
+            ),
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "list_map_int failed to verify:\n{ir}");
+        // A fresh data buffer is allocated and the closure is dispatched per element.
+        assert!(ir.contains("@GC_malloc"), "map must allocate a new buffer:\n{ir}");
+        assert!(ir.contains("call i64 %"), "map must apply the closure via an indirect call:\n{ir}");
+        // The result is reassembled into a List struct.
+        assert!(ir.contains("insertvalue"), "map must build the result list:\n{ir}");
+    }
+
+    #[test]
+    fn i4h_list_filter_int_keeps_by_predicate() {
+        let ctx = Context::create();
+        let cg = build_module(
+            &ctx,
+            &list_higher_program(
+                "__list_filter_int",
+                vec![cb_target("keep", vec![("x", Ty::Int)], Ty::Bool, None)],
+                "keep",
+                vec![Ty::Int],
+                Ty::Bool,
+                Ty::Int,
+                int_elems(),
+                vec![],
+                Ty::Generic("List".into(), vec![Ty::Int]),
+                vec![list_int_def()],
+            ),
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "list_filter_int failed to verify:\n{ir}");
+        // The predicate returns i1, branching keep/skip.
+        assert!(ir.contains("call i1 %"), "filter must call an i1-returning predicate:\n{ir}");
+        // A separate output counter compacts the kept elements.
+        assert!(ir.contains(".outctr"), "filter must track an output counter:\n{ir}");
+    }
+
+    #[test]
+    fn i4h_list_fold_int_left_fold() {
+        use tyra_mir::{Constant, Operand};
+        let ctx = Context::create();
+        let cg = build_module(
+            &ctx,
+            &list_higher_program(
+                "__list_fold_int",
+                vec![cb_target("add", vec![("acc", Ty::Int), ("x", Ty::Int)], Ty::Int, Some("acc"))],
+                "add",
+                vec![Ty::Int, Ty::Int],
+                Ty::Int,
+                Ty::Int,
+                int_elems(),
+                vec![Operand::Const(Constant::Int(0))],
+                Ty::Int,
+                vec![list_int_def()],
+            ),
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "list_fold_int failed to verify:\n{ir}");
+        // The accumulator threads through a `T (ptr, T, T)` callback.
+        assert!(ir.contains("call i64 %"), "fold must apply the closure via an indirect call:\n{ir}");
+        assert!(ir.contains(".acc"), "fold must keep an accumulator slot:\n{ir}");
+    }
+
+    #[test]
+    fn i4h_list_map_str_uses_ptr_elements() {
+        use tyra_mir::{Constant, Operand};
+        let ctx = Context::create();
+        let cg = build_module(
+            &ctx,
+            &list_higher_program(
+                "__list_map_str",
+                vec![cb_target("ids", vec![("s", Ty::String)], Ty::String, Some("s"))],
+                "ids",
+                vec![Ty::String],
+                Ty::String,
+                Ty::String,
+                vec![Operand::Const(Constant::StringRef(0)), Operand::Const(Constant::StringRef(0))],
+                vec![],
+                Ty::Generic("List".into(), vec![Ty::String]),
+                vec![list_string_def()],
+            ),
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "list_map_str failed to verify:\n{ir}");
+        // String elements are pointers; the closure returns a ptr.
+        assert!(ir.contains("call ptr %"), "map_str must dispatch a ptr-returning closure:\n{ir}");
+    }
+
+    #[test]
+    fn i4h_map_for_each_passes_callback_to_runtime() {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![
+                // Iteration callback `fn cbk(env, kbox, vbox) -> Unit { return }`.
+                Function {
+                    name: "cbk".into(),
+                    params: vec![("env".into(), Ty::String), ("k".into(), Ty::String), ("v".into(), Ty::String)],
+                    return_type: Ty::Unit,
+                    body: vec![MirStmt::synthetic(Instruction::Return { value: None })],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+                Function {
+                    name: "f".into(),
+                    params: vec![("k".into(), Ty::Int), ("v".into(), Ty::Int)],
+                    return_type: Ty::Unit,
+                    body: vec![
+                        MirStmt::synthetic(Instruction::Call {
+                            dest: Some("m0".into()),
+                            func: "__map_new__Int__Int".into(),
+                            args: vec![],
+                        }),
+                        MirStmt::synthetic(Instruction::Call {
+                            dest: Some("m1".into()),
+                            func: "__map_insert__Int__Int".into(),
+                            args: vec![Operand::Var("m0".into()), Operand::Var("k".into()), Operand::Var("v".into())],
+                        }),
+                        MirStmt::synthetic(Instruction::ClosureBuild {
+                            dest: "cl".into(),
+                            fn_name: "cbk".into(),
+                            env_fields: vec![],
+                            env_struct_name: String::new(),
+                            param_types: vec![Ty::String, Ty::String],
+                            return_type: Ty::Unit,
+                        }),
+                        MirStmt::synthetic(Instruction::MapForEachCall {
+                            handle: Operand::Var("m1".into()),
+                            fat_ptr: Operand::Var("cl".into()),
+                        }),
+                        MirStmt::synthetic(Instruction::Return { value: None }),
+                    ],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+            ],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "map for_each failed to verify:\n{ir}");
+        // The fat pointer's fn_ptr/env_ptr are loaded and handed to the runtime
+        // iterator as `tyra_map_for_each(handle, env_ptr, fn_ptr)`.
+        assert!(
+            ir.contains("call void @tyra_map_for_each(ptr"),
+            "for_each must call the runtime iterator:\n{ir}"
+        );
+        assert!(ir.contains("getelementptr"), "for_each must load the closure fields:\n{ir}");
+    }
+
+    /// `__list_fold_str` returns a String, so `builtin_primitive_return` must put
+    /// the result in `string_temps` — otherwise `println(folded)` routes through
+    /// the `%ld`/Int path instead of `puts`. Exercises the "use the return value"
+    /// path the scalar-fold tests don't.
+    #[test]
+    fn i4h_fold_str_result_prints_as_string() {
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![
+                cb_target("cat", vec![("acc", Ty::String), ("x", Ty::String)], Ty::String, Some("acc")),
+                Function {
+                    name: "f".into(),
+                    params: vec![],
+                    return_type: Ty::Unit,
+                    body: vec![
+                        MirStmt::synthetic(Instruction::ListInit {
+                            dest: "l".into(),
+                            elem_type: Ty::String,
+                            elements: vec![Operand::Const(Constant::StringRef(0))],
+                        }),
+                        MirStmt::synthetic(Instruction::ClosureBuild {
+                            dest: "cl".into(),
+                            fn_name: "cat".into(),
+                            env_fields: vec![],
+                            env_struct_name: String::new(),
+                            param_types: vec![Ty::String, Ty::String],
+                            return_type: Ty::String,
+                        }),
+                        MirStmt::synthetic(Instruction::Call {
+                            dest: Some("folded".into()),
+                            func: "__list_fold_str".into(),
+                            args: vec![
+                                Operand::Var("l".into()),
+                                Operand::Const(Constant::StringRef(0)),
+                                Operand::Var("cl".into()),
+                            ],
+                        }),
+                        MirStmt::synthetic(Instruction::Call {
+                            dest: None,
+                            func: "println".into(),
+                            args: vec![Operand::Var("folded".into())],
+                        }),
+                        MirStmt::synthetic(Instruction::Return { value: None }),
+                    ],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+            ],
+            string_constants: vec!["x".into()],
+            struct_defs: vec![list_string_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "fold_str + print failed to verify:\n{ir}");
+        // String result → puts, not the %ld integer path.
+        assert!(ir.contains("call i32 @puts"), "fold_str result must print as a String:\n{ir}");
+    }
+
+    /// `__list_map_int` returns a `List<Int>`, so `pre_scan_struct_types` must
+    /// register the result temp as a struct — then `println(ys)` is rejected by
+    /// the gate (no printf form for a list) and the function falls back to
+    /// `unreachable`, exactly like `print(List<Int>)`. Without the registration
+    /// `ys` would be misclassified as a scalar and mis-emitted.
+    #[test]
+    fn i4h_map_result_tracked_as_struct() {
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![
+                cb_target("dbl", vec![("x", Ty::Int)], Ty::Int, Some("x")),
+                Function {
+                    name: "f".into(),
+                    params: vec![],
+                    return_type: Ty::Unit,
+                    body: vec![
+                        MirStmt::synthetic(Instruction::ListInit {
+                            dest: "l".into(),
+                            elem_type: Ty::Int,
+                            elements: vec![Operand::Const(Constant::Int(10)), Operand::Const(Constant::Int(20))],
+                        }),
+                        MirStmt::synthetic(Instruction::ClosureBuild {
+                            dest: "cl".into(),
+                            fn_name: "dbl".into(),
+                            env_fields: vec![],
+                            env_struct_name: String::new(),
+                            param_types: vec![Ty::Int],
+                            return_type: Ty::Int,
+                        }),
+                        MirStmt::synthetic(Instruction::Call {
+                            dest: Some("ys".into()),
+                            func: "__list_map_int".into(),
+                            args: vec![Operand::Var("l".into()), Operand::Var("cl".into())],
+                        }),
+                        MirStmt::synthetic(Instruction::Call {
+                            dest: None,
+                            func: "println".into(),
+                            args: vec![Operand::Var("ys".into())],
+                        }),
+                        MirStmt::synthetic(Instruction::Return { value: None }),
+                    ],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+            ],
+            string_constants: vec![],
+            struct_defs: vec![list_int_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "map + print(list) failed to verify:\n{ir}");
+        // print(List<Int>) has no printf form → gate rejects → fallback body.
+        assert!(ir.contains("unreachable"), "print of a map result list must fall back:\n{ir}");
+        assert!(!ir.contains("call i32 @puts"), "a struct list must not be printed as a value:\n{ir}");
     }
 
     // ---- I4c: print family (type-scan-routed) ----

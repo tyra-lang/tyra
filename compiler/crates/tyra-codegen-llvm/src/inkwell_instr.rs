@@ -95,6 +95,10 @@ impl<'ctx> CodeGen<'ctx> {
                 | Instruction::ListPush { .. }
                 | Instruction::MapGetOption { .. }
                 | Instruction::LinkedMapGetOption { .. }
+                | Instruction::MapForEachCall { .. }
+                | Instruction::SetForEachCall { .. }
+                | Instruction::LinkedMapForEachCall { .. }
+                | Instruction::LinkedSetForEachCall { .. }
                 | Instruction::IndirectCall { .. } => true,
                 // A closure can only be built for a function we have a value
                 // for (mirrors the user-Call admission below).
@@ -221,6 +225,10 @@ impl<'ctx> CodeGen<'ctx> {
             Instruction::ListPush { list, elem, .. } => vec![list, elem],
             Instruction::MapGetOption { handle, key, .. }
             | Instruction::LinkedMapGetOption { handle, key, .. } => vec![handle, key],
+            Instruction::MapForEachCall { handle, fat_ptr }
+            | Instruction::SetForEachCall { handle, fat_ptr }
+            | Instruction::LinkedMapForEachCall { handle, fat_ptr }
+            | Instruction::LinkedSetForEachCall { handle, fat_ptr } => vec![handle, fat_ptr],
             // ClosureBuild's `fn_name` is a top-level function (always
             // resolvable), so only the captured env fields are operands.
             Instruction::ClosureBuild { env_fields, .. } => env_fields.iter().collect(),
@@ -657,6 +665,18 @@ impl<'ctx> CodeGen<'ctx> {
             }
             Instruction::IndirectCall { dest, fat_ptr, args, param_types, return_type } => {
                 self.emit_indirect_call(dest, fat_ptr, args, param_types, return_type);
+            }
+            Instruction::MapForEachCall { handle, fat_ptr } => {
+                self.emit_for_each(handle, fat_ptr, "tyra_map_for_each", "__mfe");
+            }
+            Instruction::SetForEachCall { handle, fat_ptr } => {
+                self.emit_for_each(handle, fat_ptr, "tyra_set_for_each", "__sfe");
+            }
+            Instruction::LinkedMapForEachCall { handle, fat_ptr } => {
+                self.emit_for_each(handle, fat_ptr, "tyra_linked_map_for_each", "__lmfe");
+            }
+            Instruction::LinkedSetForEachCall { handle, fat_ptr } => {
+                self.emit_for_each(handle, fat_ptr, "tyra_linked_set_for_each", "__lsfe");
             }
             Instruction::StringFormat { dest, format_ref, args } => {
                 // GC-allocate a 1024-byte buffer and snprintf into it. The

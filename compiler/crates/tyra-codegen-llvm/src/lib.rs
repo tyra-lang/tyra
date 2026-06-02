@@ -16,6 +16,7 @@ mod inkwell_http_builtins;
 mod inkwell_instr;
 mod inkwell_list;
 mod inkwell_list_builtins;
+mod inkwell_list_higher;
 mod inkwell_map_builtins;
 mod inkwell_string_builtins;
 mod instr_emit;

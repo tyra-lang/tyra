@@ -78,8 +78,10 @@ impl<'ctx> CodeGen<'ctx> {
             .unwrap_or_else(|| panic!("`{mono}` struct must be registered for list_int index/min/max"))
     }
 
-    /// Extract `(data, len)` from a `List<Int>` operand handle.
-    fn list_int_data_len(&mut self, list: &Operand, d: &str) -> (PointerValue<'ctx>, IntValue<'ctx>) {
+    /// Extract `(data, len)` from a list operand handle. Layout-agnostic — the
+    /// physical struct is `{ ptr data, i64 len }` for every element type, so the
+    /// I4h `List<String>` higher-order builtins reuse it directly.
+    pub(crate) fn list_data_len(&mut self, list: &Operand, d: &str) -> (PointerValue<'ctx>, IntValue<'ctx>) {
         let lv = self.operand(list).into_struct_value();
         let data = self
             .builder
@@ -98,7 +100,7 @@ impl<'ctx> CodeGen<'ctx> {
     fn emit_list_int_sum(&mut self, dest: Option<&str>, args: &[Operand]) {
         let d = dest.unwrap_or("_list_sum");
         let i64t = self.ctx.i64_type();
-        let (data, len) = self.list_int_data_len(&args[0], d);
+        let (data, len) = self.list_data_len(&args[0], d);
 
         let acc = self.builder.build_alloca(i64t, &format!("{d}.acc")).unwrap();
         self.builder.build_store(acc, i64t.const_zero()).unwrap();
@@ -138,7 +140,7 @@ impl<'ctx> CodeGen<'ctx> {
         let d = dest.unwrap_or("_list_contains");
         let i64t = self.ctx.i64_type();
         let i1t = self.ctx.bool_type();
-        let (data, len) = self.list_int_data_len(&args[0], d);
+        let (data, len) = self.list_data_len(&args[0], d);
         let x = self.operand(&args[1]).into_int_value();
 
         let res = self.builder.build_alloca(i1t, &format!("{d}.res")).unwrap();
@@ -187,7 +189,7 @@ impl<'ctx> CodeGen<'ctx> {
         let d = dest.unwrap_or("_list_index_of");
         let i64t = self.ctx.i64_type();
         let opt_ty = self.option_int_ty();
-        let (data, len) = self.list_int_data_len(&args[0], d);
+        let (data, len) = self.list_data_len(&args[0], d);
         let x = self.operand(&args[1]).into_int_value();
 
         let slot = self.builder.build_alloca(opt_ty, &format!("{d}.slot")).unwrap();
@@ -239,7 +241,7 @@ impl<'ctx> CodeGen<'ctx> {
         let i64t = self.ctx.i64_type();
         let opt_ty = self.option_int_ty();
         let pred = if is_max { IntPredicate::SGT } else { IntPredicate::SLT };
-        let (data, len) = self.list_int_data_len(&args[0], d);
+        let (data, len) = self.list_data_len(&args[0], d);
 
         let slot = self.builder.build_alloca(opt_ty, &format!("{d}.slot")).unwrap();
         let empty = self
@@ -314,7 +316,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     /// `ctr = i + 1` store; shared loop-counter increment.
-    fn incr_counter(&self, ctr: PointerValue<'ctx>, i: IntValue<'ctx>, d: &str) {
+    pub(crate) fn incr_counter(&self, ctr: PointerValue<'ctx>, i: IntValue<'ctx>, d: &str) {
         let i64t = self.ctx.i64_type();
         let next = self.builder.build_int_add(i, i64t.const_int(1, false), &format!("{d}.next")).unwrap();
         self.builder.build_store(ctr, next).unwrap();

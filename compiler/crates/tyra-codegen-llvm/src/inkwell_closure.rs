@@ -13,7 +13,7 @@
 //! per-field store types (the operand handle carries its own type).
 
 use inkwell::types::{BasicMetadataTypeEnum, BasicType};
-use inkwell::values::BasicMetadataValueEnum;
+use inkwell::values::{BasicMetadataValueEnum, PointerValue};
 
 use tyra_mir::Operand;
 use tyra_types::Ty;
@@ -24,6 +24,62 @@ use crate::inkwell_codegen::CodeGen;
 const CLOSURE_FAT: &str = "__closure_fat";
 
 impl<'ctx> CodeGen<'ctx> {
+    /// Load `(fn_ptr, env_ptr)` from a `__closure_fat` operand (fields 0 and 1).
+    /// Shared by `IndirectCall` dispatch and the `*ForEachCall` iterators (I4h);
+    /// `pfx` only names the temporaries (LLVM disambiguates collisions).
+    pub(crate) fn load_closure_fields(
+        &mut self,
+        fat_ptr: &Operand,
+        pfx: &str,
+    ) -> (PointerValue<'ctx>, PointerValue<'ctx>) {
+        let fat = self.operand(fat_ptr).into_pointer_value();
+        let fat_ty = self.struct_types[CLOSURE_FAT];
+        let ptr = self.ptr();
+        let fnp_gep = self
+            .builder
+            .build_struct_gep(fat_ty, fat, 0, &format!("{pfx}.fnp_gep"))
+            .unwrap();
+        let fnp = self
+            .builder
+            .build_load(ptr, fnp_gep, &format!("{pfx}.fnp"))
+            .unwrap()
+            .into_pointer_value();
+        let envp_gep = self
+            .builder
+            .build_struct_gep(fat_ty, fat, 1, &format!("{pfx}.envp_gep"))
+            .unwrap();
+        let envp = self
+            .builder
+            .build_load(ptr, envp_gep, &format!("{pfx}.envp"))
+            .unwrap()
+            .into_pointer_value();
+        (fnp, envp)
+    }
+
+    /// `{map,set,linked_map,linked_set}.forEach(closure)` — extract the
+    /// `fn_ptr`/`env_ptr` from the fat-pointer closure and call the runtime
+    /// iterator `runtime_fn(handle, env_ptr, fn_ptr)` (signature
+    /// `void(ptr, ptr, ptr)`, declared in I1). Mirrors the legacy emit for the
+    /// four `*ForEachCall` MIR instructions (instr_emit.rs); the runtime invokes
+    /// the callback per entry (kbox/vbox or elembox), so no loop is emitted here.
+    pub(crate) fn emit_for_each(
+        &mut self,
+        handle: &Operand,
+        fat_ptr: &Operand,
+        runtime_fn: &str,
+        pfx: &str,
+    ) {
+        let h = self.operand(handle).into_pointer_value();
+        let (fnp, envp) = self.load_closure_fields(fat_ptr, pfx);
+        let f = self
+            .module
+            .get_function(runtime_fn)
+            .unwrap_or_else(|| panic!("runtime extern `{runtime_fn}` must be declared (I1)"));
+        self.builder
+            .build_call(f, &[h.into(), envp.into(), fnp.into()], "")
+            .unwrap();
+    }
+
     /// `dest = closure(fn_name, env_fields...)` — build a fat-pointer closure.
     /// `env_struct_name` is the (registered) environment struct; empty / no
     /// fields means a non-capturing lambda (env_ptr = null).
@@ -99,30 +155,10 @@ impl<'ctx> CodeGen<'ctx> {
         param_types: &[Ty],
         return_type: &Ty,
     ) {
-        let fat = self.operand(fat_ptr).into_pointer_value();
-        let fat_ty = self.struct_types[CLOSURE_FAT];
         let ptr = self.ptr();
         // For a void call there is no dest SSA value; reuse the legacy prefix.
         let pfx = dest.as_deref().unwrap_or("__ic");
-
-        let fnp_gep = self
-            .builder
-            .build_struct_gep(fat_ty, fat, 0, &format!("{pfx}.fnp_gep"))
-            .unwrap();
-        let fnp = self
-            .builder
-            .build_load(ptr, fnp_gep, &format!("{pfx}.fnp"))
-            .unwrap()
-            .into_pointer_value();
-        let envp_gep = self
-            .builder
-            .build_struct_gep(fat_ty, fat, 1, &format!("{pfx}.envp_gep"))
-            .unwrap();
-        let envp = self
-            .builder
-            .build_load(ptr, envp_gep, &format!("{pfx}.envp"))
-            .unwrap()
-            .into_pointer_value();
+        let (fnp, envp) = self.load_closure_fields(fat_ptr, pfx);
 
         // Signature: ret (ptr env, param_types...).
         let mut sig: Vec<BasicMetadataTypeEnum<'ctx>> = vec![ptr.into()];
