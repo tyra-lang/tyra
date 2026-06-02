@@ -94,7 +94,11 @@ impl<'ctx> CodeGen<'ctx> {
                 | Instruction::ListGetSafe { .. }
                 | Instruction::ListPush { .. }
                 | Instruction::MapGetOption { .. }
-                | Instruction::LinkedMapGetOption { .. } => true,
+                | Instruction::LinkedMapGetOption { .. }
+                | Instruction::IndirectCall { .. } => true,
+                // A closure can only be built for a function we have a value
+                // for (mirrors the user-Call admission below).
+                Instruction::ClosureBuild { fn_name, .. } => self.fn_values.contains_key(fn_name),
                 Instruction::Call { func, args, .. } => {
                     self.fn_values.contains_key(func)
                         || (Self::is_supported_builtin(func)
@@ -217,6 +221,14 @@ impl<'ctx> CodeGen<'ctx> {
             Instruction::ListPush { list, elem, .. } => vec![list, elem],
             Instruction::MapGetOption { handle, key, .. }
             | Instruction::LinkedMapGetOption { handle, key, .. } => vec![handle, key],
+            // ClosureBuild's `fn_name` is a top-level function (always
+            // resolvable), so only the captured env fields are operands.
+            Instruction::ClosureBuild { env_fields, .. } => env_fields.iter().collect(),
+            Instruction::IndirectCall { fat_ptr, args, .. } => {
+                let mut v = vec![fat_ptr];
+                v.extend(args.iter());
+                v
+            }
             _ => vec![],
         }
     }
@@ -640,6 +652,12 @@ impl<'ctx> CodeGen<'ctx> {
             Instruction::LinkedMapGetOption { dest, handle, key, key_ty, val_ty } => {
                 self.emit_map_get_option(dest, handle, key, key_ty, val_ty, "tyra_linked_map_get");
             }
+            Instruction::ClosureBuild { dest, fn_name, env_fields, env_struct_name, .. } => {
+                self.emit_closure_build(dest, fn_name, env_fields, env_struct_name);
+            }
+            Instruction::IndirectCall { dest, fat_ptr, args, param_types, return_type } => {
+                self.emit_indirect_call(dest, fat_ptr, args, param_types, return_type);
+            }
             Instruction::StringFormat { dest, format_ref, args } => {
                 // GC-allocate a 1024-byte buffer and snprintf into it. The
                 // legacy backend adds a defensive GC_malloc null check + abort
@@ -823,8 +841,9 @@ fn instr_dest(inst: &Instruction) -> Option<&str> {
         | Instruction::ListGetSafe { dest, .. }
         | Instruction::ListPush { dest, .. }
         | Instruction::MapGetOption { dest, .. }
-        | Instruction::LinkedMapGetOption { dest, .. } => Some(dest),
-        Instruction::Call { dest, .. } => dest.as_deref(),
+        | Instruction::LinkedMapGetOption { dest, .. }
+        | Instruction::ClosureBuild { dest, .. } => Some(dest),
+        Instruction::Call { dest, .. } | Instruction::IndirectCall { dest, .. } => dest.as_deref(),
         _ => None,
     }
 }

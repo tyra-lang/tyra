@@ -2143,6 +2143,139 @@ mod tests {
         }
     }
 
+    // ---- I4g: closures + indirect calls (ADR-0011 fat pointer) ----
+
+    /// A trivial closure target `fn <name>(env, x: Int) -> Int { return x }`.
+    /// The first param is the env pointer (typed as a ptr via `String`); the
+    /// body ignores it. Used so `fn_values` holds the target a ClosureBuild
+    /// references and the indirect-call signature `i64 (ptr, i64)` matches.
+    fn closure_target(name: &str) -> tyra_mir::Function {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        Function {
+            name: name.into(),
+            params: vec![("env".into(), Ty::String), ("x".into(), Ty::Int)],
+            return_type: Ty::Int,
+            body: vec![MirStmt::synthetic(Instruction::Return {
+                value: Some(Operand::Var("x".into())),
+            })],
+            is_main: false,
+            local_metas: vec![],
+        }
+    }
+
+    /// I4g: a non-capturing closure builds a fat pointer with a null env, then
+    /// dispatches through it. Verifies the fn pointer is stored, env is null,
+    /// and the indirect call loads both fields.
+    #[test]
+    fn i4g_non_capturing_closure_build_and_indirect_call() {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![
+                closure_target("cb"),
+                Function {
+                    name: "f".into(),
+                    params: vec![("x".into(), Ty::Int)],
+                    return_type: Ty::Int,
+                    body: vec![
+                        MirStmt::synthetic(Instruction::ClosureBuild {
+                            dest: "c".into(),
+                            fn_name: "cb".into(),
+                            env_fields: vec![],
+                            env_struct_name: String::new(),
+                            param_types: vec![Ty::Int],
+                            return_type: Ty::Int,
+                        }),
+                        MirStmt::synthetic(Instruction::IndirectCall {
+                            dest: Some("r".into()),
+                            fat_ptr: Operand::Var("c".into()),
+                            args: vec![Operand::Var("x".into())],
+                            param_types: vec![Ty::Int],
+                            return_type: Ty::Int,
+                        }),
+                        MirStmt::synthetic(Instruction::Return {
+                            value: Some(Operand::Var("r".into())),
+                        }),
+                    ],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+            ],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "closure build/call failed to verify:\n{ir}");
+        // fat pointer allocated and the target fn pointer stored,
+        assert!(ir.contains("store ptr @cb"), "closure must store the target fn pointer:\n{ir}");
+        // non-capturing => env field is null,
+        assert!(ir.contains("store ptr null"), "non-capturing closure must null its env:\n{ir}");
+        // and the indirect call dereferences the fat struct.
+        assert!(
+            ir.contains("getelementptr") && ir.contains("call i64 %"),
+            "indirect call must load fn ptr and dispatch:\n{ir}"
+        );
+    }
+
+    /// I4g: a capturing closure allocates its env struct, stores the capture,
+    /// and threads the env pointer into the fat pointer's field 1.
+    #[test]
+    fn i4g_capturing_closure_allocates_env() {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand, StructDef};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![
+                closure_target("cb2"),
+                Function {
+                    name: "f".into(),
+                    params: vec![("c0".into(), Ty::Int), ("x".into(), Ty::Int)],
+                    return_type: Ty::Int,
+                    body: vec![
+                        MirStmt::synthetic(Instruction::ClosureBuild {
+                            dest: "c".into(),
+                            fn_name: "cb2".into(),
+                            env_fields: vec![Operand::Var("c0".into())],
+                            env_struct_name: "__closure_env_0".into(),
+                            param_types: vec![Ty::Int],
+                            return_type: Ty::Int,
+                        }),
+                        MirStmt::synthetic(Instruction::IndirectCall {
+                            dest: Some("r".into()),
+                            fat_ptr: Operand::Var("c".into()),
+                            args: vec![Operand::Var("x".into())],
+                            param_types: vec![Ty::Int],
+                            return_type: Ty::Int,
+                        }),
+                        MirStmt::synthetic(Instruction::Return {
+                            value: Some(Operand::Var("r".into())),
+                        }),
+                    ],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+            ],
+            string_constants: vec![],
+            struct_defs: vec![StructDef {
+                name: "__closure_env_0".into(),
+                fields: vec![("value".into(), Ty::Int)],
+                is_data: true,
+                recursive_fields: vec![false],
+            }],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "capturing closure failed to verify:\n{ir}");
+        // The captured value is stored into the heap env struct,
+        assert!(ir.contains("@GC_malloc"), "capturing closure must allocate an env:\n{ir}");
+        // and the env pointer (not null) is threaded into the fat pointer.
+        assert!(ir.contains("store ptr @cb2"), "closure must store the target fn pointer:\n{ir}");
+    }
+
     // ---- I4c: print family (type-scan-routed) ----
 
     /// Build `fn f(p: ty) -> Unit { <builtin>(p) }` for print-family tests.
