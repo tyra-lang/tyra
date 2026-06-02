@@ -393,10 +393,23 @@ impl<'ctx> CodeGen<'ctx> {
         let mut seen = std::collections::HashSet::new();
         for f in &program.functions {
             for stmt in &f.body {
-                let Instruction::Call { func, .. } = &stmt.instr else { continue };
-                let Some(k) = key_type_of_call(func) else { continue };
-                if seen.insert(k.to_string()) {
-                    keys.push(k.to_string());
+                // Two sources of a key type needing eq/hash: a `*_new`/`*_contains`
+                // builtin Call, and a `Map`/`LinkedMap` `.get(k)` instruction
+                // (MapGetOption/LinkedMapGetOption boxes its key). A function that
+                // only receives a map by param and calls `.get` has no `*_new` of
+                // its own, so the latter is required for legacy parity — mirrors
+                // codegen.rs collect_elem_types_stmt.
+                let k: Option<String> = match &stmt.instr {
+                    Instruction::Call { func, .. } => key_type_of_call(func).map(str::to_string),
+                    Instruction::MapGetOption { key_ty, .. }
+                    | Instruction::LinkedMapGetOption { key_ty, .. } => {
+                        Some(key_ty.monomorphized_name())
+                    }
+                    _ => None,
+                };
+                let Some(k) = k else { continue };
+                if seen.insert(k.clone()) {
+                    keys.push(k);
                 }
             }
         }

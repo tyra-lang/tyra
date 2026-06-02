@@ -2133,6 +2133,50 @@ mod tests {
         assert!(ir.contains("trunc i8"), "Bool value must be truncated i8->i1:\n{ir}");
     }
 
+    /// I4f parity: a function that only RETRIEVES from a map (no `*_new` /
+    /// `*_contains` anywhere in the program) must still emit the key type's
+    /// eq/hash functions — the runtime getter boxes the key, and legacy collects
+    /// eq/hash from MapGetOption's `key_ty` too (codegen.rs
+    /// collect_elem_types_stmt). The map handle is modeled here as a bare ptr
+    /// param (a stand-in for the opaque runtime handle, which in real code is a
+    /// `*_new` result rather than a typed param).
+    #[test]
+    fn i4f_get_only_still_emits_key_eq_hash() {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "lookup".into(),
+                params: vec![("m".into(), Ty::String), ("k".into(), Ty::Int)],
+                return_type: Ty::Generic("Option".into(), vec![Ty::Int]),
+                body: vec![
+                    MirStmt::synthetic(Instruction::MapGetOption {
+                        dest: "r".into(),
+                        handle: Operand::Var("m".into()),
+                        key: Operand::Var("k".into()),
+                        key_ty: Ty::Int,
+                        val_ty: Ty::Int,
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("r".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![option_int_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "get-only failed to verify:\n{ir}");
+        // No `*_new` exists, yet the key's eq/hash must still be emitted.
+        assert!(ir.contains("@tyra_eq_Int("), "get-only must still emit eq_Int:\n{ir}");
+        assert!(ir.contains("@tyra_hash_Int("), "get-only must still emit hash_Int:\n{ir}");
+    }
+
     /// `Option<Bool>` ADT: field 0 named "tag" (→ i8), payload `value: Bool`.
     fn option_bool_def() -> tyra_mir::StructDef {
         tyra_mir::StructDef {
