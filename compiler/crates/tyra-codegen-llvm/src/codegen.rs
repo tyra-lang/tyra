@@ -41,10 +41,22 @@ pub(crate) struct StructInfo {
     pub(crate) recursive_fields: Vec<bool>,
 }
 
+/// I7 (transitional): opt into the inkwell value-handle backend by setting the
+/// `TYRA_INKWELL` environment variable (any value). Default is the legacy text
+/// backend; this toggle exists so the G2 codegen-equivalence harness can compare
+/// the two paths' runtime behavior on the corpus before the legacy path is
+/// removed. Removed once inkwell becomes the sole backend.
+fn inkwell_enabled() -> bool {
+    std::env::var_os("TYRA_INKWELL").is_some()
+}
+
 /// Generate LLVM IR text with coverage instrumentation (non-debug build).
 /// Returns `(llvm_ir, covmap_text)`.  The covmap text must be written to
 /// `<output_binary>.tyra-covmap` by the caller (e.g. the driver).
 pub fn emit_llvm_ir_coverage(program: &Program) -> (String, String) {
+    if inkwell_enabled() {
+        return crate::inkwell_codegen::emit_inkwell_coverage(program);
+    }
     let cov_map = build_cov_map(program);
     let covmap_text = write_covmap_text(&cov_map, &program.source_files);
     let ir = emit_llvm_ir_impl(program, Some(&cov_map), false);
@@ -54,11 +66,17 @@ pub fn emit_llvm_ir_coverage(program: &Program) -> (String, String) {
 /// Generate LLVM IR text with DWARF debug info (ADR-0014 §4a).
 /// Use for debug (non-release) builds to enable lldb breakpoints and step.
 pub fn emit_llvm_ir_debug(program: &Program) -> String {
+    if inkwell_enabled() {
+        return crate::inkwell_codegen::emit_inkwell_debug(program);
+    }
     emit_llvm_ir_impl(program, None, true)
 }
 
 /// Generate LLVM IR text (non-coverage, non-debug build).
 pub fn emit_llvm_ir(program: &Program) -> String {
+    if inkwell_enabled() {
+        return crate::inkwell_codegen::emit_inkwell(program);
+    }
     emit_llvm_ir_impl(program, None, false)
 }
 
