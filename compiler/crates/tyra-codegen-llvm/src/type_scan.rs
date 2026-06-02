@@ -396,9 +396,18 @@ fn scan_primitive_temps(
                         string_temps.insert(dest.clone());
                     }
                 }
-                Ty::Generic(_, _) => {
-                    // Task<Option<..>>/Task<Result<..>> unbox to ADT ptrs.
-                    string_temps.insert(dest.clone());
+                Ty::Generic(..) => {
+                    // A generic *data* type unboxes to a ptr (string_temp);
+                    // value-type generics (Option/Result/List/Set/Map/...) unbox
+                    // to struct *values* — `emit_await` loads them via
+                    // `ty_to_basic_type`, so they are tracked by
+                    // `pre_scan_struct_types`, exactly like a direct `Call`
+                    // returning the same generic. (Marking them string_temp here
+                    // would misroute a reused await result to the ptr path.)
+                    let mono = result_type.monomorphized_name();
+                    if struct_map.get(&mono).map(|i| i.is_data).unwrap_or(false) {
+                        string_temps.insert(dest.clone());
+                    }
                 }
                 _ => {}
             },
@@ -584,6 +593,30 @@ fn propagate_types(
     }
 }
 
+/// Register `dest` as a struct temp when `ty` is a value-type generic whose
+/// monomorphized struct is known (`Option`/`Result`/`List`/`Set`/`Map`/
+/// `LinkedMap`/`LinkedSet`). Shared by the `Call` / `Await` / `IndirectCall`
+/// return-type tracking so all three classify a reused generic result the same.
+/// Data generics are ptrs (tracked as `string_temps` in the primitive scan), so
+/// they are not registered here.
+fn register_generic_value_struct(
+    struct_temps: &mut HashMap<String, String>,
+    struct_map: &HashMap<String, StructInfo>,
+    dest: &str,
+    ty: &Ty,
+) {
+    let is_value_generic = ty.is_option()
+        || ty.is_result()
+        || matches!(ty, Ty::Generic(name, _) if matches!(name.as_str(), "List" | "Set" | "Map" | "LinkedMap" | "LinkedSet"));
+    if !is_value_generic {
+        return;
+    }
+    let mono = ty.monomorphized_name();
+    if struct_map.contains_key(mono.as_str()) {
+        struct_temps.insert(dest.to_string(), mono);
+    }
+}
+
 /// Pre-scan function body to track which SSA temps hold struct-typed values.
 /// Returns struct_temps: SSA temp name → MIR struct type name.
 ///
@@ -736,6 +769,18 @@ fn pre_scan_struct_types(
                         }
                     }
                 }
+            }
+            // I4i/I4g: a value-type generic result loaded as a struct value by
+            // `emit_await` / `emit_indirect_call` must be tracked the same way as
+            // a direct `Call` returning it, so a reused result (`let ys = cl(...)`
+            // / `await t`) takes the struct-aware Copy/Store/print path instead of
+            // a scalar/ptr misclassification. Data generics stay ptrs (string_temps
+            // in the primitive scan), so they are intentionally not registered here.
+            Instruction::Await { dest, result_type, .. } => {
+                register_generic_value_struct(&mut struct_temps, struct_map, dest, result_type);
+            }
+            Instruction::IndirectCall { dest: Some(dest), return_type, .. } => {
+                register_generic_value_struct(&mut struct_temps, struct_map, dest, return_type);
             }
             Instruction::ListInit {
                 dest, elem_type, ..

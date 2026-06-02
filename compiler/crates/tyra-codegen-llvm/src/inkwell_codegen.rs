@@ -2938,6 +2938,111 @@ mod tests {
         assert!(ir.contains("ptrtoint"), "select handle must be cast to i64:\n{ir}");
     }
 
+    /// Awaiting a `Task<Option<Int>>` yields an `Option<Int>` *struct value*
+    /// (emit_await loads it via ty_to_basic_type), so the type scan must track
+    /// the result as a struct — then `println(r)` is gate-rejected (no printf
+    /// form for a struct) and the function falls back to `unreachable`. Without
+    /// the struct tracking `r` would be misclassified and mis-emitted.
+    #[test]
+    fn i4i_await_generic_result_tracked_as_struct() {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![("h".into(), Ty::Int)],
+                return_type: Ty::Unit,
+                body: vec![
+                    MirStmt::synthetic(Instruction::Await {
+                        dest: "r".into(),
+                        task: Operand::Var("h".into()),
+                        result_type: Ty::Generic("Option".into(), vec![Ty::Int]),
+                    }),
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: None,
+                        func: "println".into(),
+                        args: vec![Operand::Var("r".into())],
+                    }),
+                    MirStmt::synthetic(Instruction::Return { value: None }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![option_int_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "await(Option<Int>) + print failed to verify:\n{ir}");
+        assert!(ir.contains("unreachable"), "print of an await'd struct must fall back:\n{ir}");
+        assert!(!ir.contains("call i32 @puts"), "a struct must not be printed as a value:\n{ir}");
+    }
+
+    /// An `IndirectCall` returning a value-type generic (`Option<Int>`) yields a
+    /// struct value, so its result must be struct-tracked exactly like a direct
+    /// `Call` — `println(r)` then falls back rather than mis-emitting `r`.
+    #[test]
+    fn i4g_indirect_call_generic_result_tracked_as_struct() {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![
+                // fn cb(env, x: Int) -> Option<Int> — a stub: an empty body makes
+                // it fall back to `unreachable` (only `f` is under test; the
+                // indirect call references cb's global ptr, never its body).
+                Function {
+                    name: "cb".into(),
+                    params: vec![("env".into(), Ty::String), ("x".into(), Ty::Int)],
+                    return_type: Ty::Generic("Option".into(), vec![Ty::Int]),
+                    body: vec![],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+                Function {
+                    name: "f".into(),
+                    params: vec![("x".into(), Ty::Int)],
+                    return_type: Ty::Unit,
+                    body: vec![
+                        MirStmt::synthetic(Instruction::ClosureBuild {
+                            dest: "cl".into(),
+                            fn_name: "cb".into(),
+                            env_fields: vec![],
+                            env_struct_name: String::new(),
+                            param_types: vec![Ty::Int],
+                            return_type: Ty::Generic("Option".into(), vec![Ty::Int]),
+                        }),
+                        MirStmt::synthetic(Instruction::IndirectCall {
+                            dest: Some("r".into()),
+                            fat_ptr: Operand::Var("cl".into()),
+                            args: vec![Operand::Var("x".into())],
+                            param_types: vec![Ty::Int],
+                            return_type: Ty::Generic("Option".into(), vec![Ty::Int]),
+                        }),
+                        MirStmt::synthetic(Instruction::Call {
+                            dest: None,
+                            func: "println".into(),
+                            args: vec![Operand::Var("r".into())],
+                        }),
+                        MirStmt::synthetic(Instruction::Return { value: None }),
+                    ],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+            ],
+            string_constants: vec![],
+            struct_defs: vec![option_int_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "indirect call(Option<Int>) + print failed to verify:\n{ir}");
+        assert!(ir.contains("unreachable"), "print of an indirect-call struct result must fall back:\n{ir}");
+        assert!(!ir.contains("call i32 @puts"), "a struct must not be printed as a value:\n{ir}");
+    }
+
     // ---- I4c: print family (type-scan-routed) ----
 
     /// Build `fn f(p: ty) -> Unit { <builtin>(p) }` for print-family tests.
