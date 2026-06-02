@@ -284,6 +284,22 @@ impl<'ctx> CodeGen<'ctx> {
 
         let mut pending: Vec<(PhiValue<'ctx>, Vec<(Operand, String)>)> = Vec::new();
         for stmt in &f.body {
+            // Dead code after an in-block terminator: `panic`/`sys.exit` emit
+            // `unreachable` mid-block, so the lowering-appended trailing `Return`
+            // (lower/mod.rs always closes a body with one) is unreachable. A
+            // genuine terminator (Jump/BranchIf/Return) is always followed by a
+            // `Label` which repositions the builder, so only such dead tails are
+            // skipped here — existing emittable functions are unaffected.
+            if !matches!(stmt.instr, Instruction::Label(_))
+                && self
+                    .builder
+                    .get_insert_block()
+                    .and_then(|b| b.get_terminator())
+                    .is_some()
+            {
+                continue;
+            }
+            self.cur_loc = stmt.loc;
             self.emit_instr(&stmt.instr, f, &mut pending);
             // Track the *exit* block of the current label (for phi predecessors)
             // without touching `blocks` (the jump-*target* table). For a

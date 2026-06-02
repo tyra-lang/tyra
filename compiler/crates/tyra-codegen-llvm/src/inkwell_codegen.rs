@@ -24,7 +24,7 @@ use inkwell::targets::TargetTriple;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, PointerType, StructType};
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 
-use tyra_mir::Program;
+use tyra_mir::{Program, SourceLoc};
 use tyra_types::Ty;
 
 use crate::helpers::target_triple;
@@ -83,6 +83,11 @@ pub(crate) struct CodeGen<'ctx> {
     /// Type scan for the function currently being emitted (set per function in
     /// `emit_bodies`, consumed by the emittability gate and `print`).
     pub(crate) scan: Option<crate::type_scan::ScanResult>,
+    /// Source location of the instruction currently being emitted (set per stmt
+    /// in `emit_bodies`). Consumed by `panic` for the "panic at FILE:LINE"
+    /// diagnostic; the forthcoming I6 DWARF wiring will read it too. Reset to
+    /// `dummy()` per function (set before each instruction).
+    pub(crate) cur_loc: SourceLoc,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -106,6 +111,7 @@ impl<'ctx> CodeGen<'ctx> {
             struct_map: HashMap::new(),
             fn_sigs: HashMap::new(),
             scan: None,
+            cur_loc: SourceLoc::dummy(),
         }
     }
 
@@ -1567,9 +1573,99 @@ mod tests {
 
     #[test]
     fn i4a_deferred_builtin_falls_back_to_unreachable() {
-        // `panic` is NOT yet ported (needs source-location threading, I4+/I6) →
-        // the function must fall back to a single `unreachable` block. Coverage
-        // grows in later I4 sub-phases.
+        // A still-deferred builtin (`__map_len`, a boxed-collection op — I4e) is
+        // not in the supported set, so the function must fall back to a single
+        // `unreachable` block. Coverage grows in later I4 sub-phases.
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![("m".into(), Ty::Int)],
+                return_type: Ty::Int,
+                body: vec![
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: Some("r".into()),
+                        func: "__map_len".into(),
+                        args: vec![Operand::Var("m".into())],
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("r".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        assert!(cg.module.verify().is_ok());
+        let ir = cg.module.print_to_string().to_string();
+        assert!(ir.contains("unreachable"), "deferred builtin should fall back:\n{ir}");
+        assert!(
+            !ir.contains("call i64 @tyra_map_len"),
+            "must not emit a runtime call for the deferred builtin:\n{ir}"
+        );
+    }
+
+    // ---- I4d: control-flow / process sentinels (panic / sys.exit / sys.args) ----
+
+    #[test]
+    fn i4d_panic_emits_loc_msg_sentinel_and_exit101() {
+        // panic(msg) with a real source loc → "panic at FILE:LINE", message,
+        // sentinel (all to fd 2), then exit(101) + unreachable. The trailing
+        // `Return` is dead code and must be skipped (no `ret` in the body).
+        use tyra_mir::{Function, Instruction, MirStmt, Operand, SourceLoc};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![("m".into(), Ty::String)],
+                return_type: Ty::Unit,
+                body: vec![
+                    MirStmt::new(
+                        SourceLoc { file_id: 0, line: 7, col: 3 },
+                        Instruction::Call {
+                            dest: None,
+                            func: "panic".into(),
+                            args: vec![Operand::Var("m".into())],
+                        },
+                    ),
+                    MirStmt::synthetic(Instruction::Return { value: None }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec!["main.tyra".into()],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "panic body failed to verify:\n{ir}");
+        // `ptr @.fmt.panic_loc` / `ptr @.src.0` appear only when used as a call
+        // argument (the global *definitions* are `@... = private ...`), so these
+        // assert the loc line is actually emitted, not merely declared.
+        assert!(ir.contains("ptr @.fmt.panic_loc"), "panic-loc format must be used:\n{ir}");
+        assert!(ir.contains("ptr @.src.0"), "source-file global must be passed:\n{ir}");
+        assert!(ir.contains("@.fmt.str_ln"), "missing message+newline format:\n{ir}");
+        assert!(ir.contains("@.str.panic_sentinel"), "missing panic sentinel:\n{ir}");
+        assert!(ir.contains("call void @exit(i32 101)"), "panic must exit(101):\n{ir}");
+        assert!(ir.contains("unreachable"), "panic must end in unreachable:\n{ir}");
+        assert!(
+            !ir.contains("ret "),
+            "the dead trailing Return after panic must be skipped:\n{ir}"
+        );
+    }
+
+    #[test]
+    fn i4d_panic_without_loc_skips_file_line() {
+        // A synthetic (dummy) loc omits the "panic at FILE:LINE" line but still
+        // prints the message, sentinel, and exits.
         use tyra_mir::{Function, Instruction, MirStmt, Operand};
         let ctx = Context::create();
         let program = Program {
@@ -1590,17 +1686,87 @@ mod tests {
             }],
             string_constants: vec![],
             struct_defs: vec![],
+            source_files: vec!["main.tyra".into()],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "panic body failed to verify:\n{ir}");
+        assert!(
+            !ir.contains("ptr @.fmt.panic_loc"),
+            "dummy loc must skip the FILE:LINE line:\n{ir}"
+        );
+        assert!(ir.contains("@.str.panic_sentinel"), "missing panic sentinel:\n{ir}");
+        assert!(ir.contains("call void @exit(i32 101)"), "panic must exit(101):\n{ir}");
+    }
+
+    #[test]
+    fn i4d_sys_exit_truncates_code_and_exits() {
+        // sys.exit(3): truncate the Int (i64) code to i32, exit, unreachable.
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![],
+                return_type: Ty::Unit,
+                body: vec![
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: None,
+                        func: "sys__exit".into(),
+                        args: vec![Operand::Const(Constant::Int(3))],
+                    }),
+                    MirStmt::synthetic(Instruction::Return { value: None }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![],
             source_files: vec![],
             lower_errors: vec![],
         };
         let cg = build_module(&ctx, &program);
-        assert!(cg.module.verify().is_ok());
         let ir = cg.module.print_to_string().to_string();
-        assert!(ir.contains("unreachable"), "deferred builtin should fall back:\n{ir}");
-        assert!(
-            !ir.contains("call void @exit"),
-            "must not emit a runtime call for the deferred panic builtin:\n{ir}"
-        );
+        assert!(cg.module.verify().is_ok(), "sys.exit body failed to verify:\n{ir}");
+        assert!(ir.contains("call void @exit"), "sys.exit must call exit:\n{ir}");
+        assert!(ir.contains("unreachable"), "sys.exit must end in unreachable:\n{ir}");
+    }
+
+    #[test]
+    fn i4d_sys_args_builds_list_string() {
+        // sys.args() materializes a List<String> from argc/argv via a copy loop.
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![],
+                return_type: Ty::Generic("List".into(), vec![Ty::String]),
+                body: vec![
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: Some("a".into()),
+                        func: "sys__args".into(),
+                        args: vec![],
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("a".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![list_string_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "sys.args body failed to verify:\n{ir}");
+        assert!(ir.contains("@.tyra.argc"), "sys.args must load argc:\n{ir}");
+        assert!(ir.contains("@.tyra.argv"), "sys.args must load argv:\n{ir}");
+        assert!(ir.contains("@GC_malloc"), "sys.args must allocate the data array:\n{ir}");
     }
 
     // ---- I4c: print family (type-scan-routed) ----

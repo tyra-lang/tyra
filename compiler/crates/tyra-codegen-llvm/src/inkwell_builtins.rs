@@ -18,7 +18,7 @@
 //! fold (closure callbacks), and Int/Bool conversions.
 
 use inkwell::IntPredicate;
-use inkwell::values::{BasicMetadataValueEnum, CallSiteValue, PointerValue};
+use inkwell::values::{AggregateValueEnum, BasicMetadataValueEnum, CallSiteValue, PointerValue};
 
 use tyra_mir::{Constant, Operand};
 
@@ -133,6 +133,14 @@ const SIMPLE: &[(&str, &str, Conv)] = &[
 /// the LLVM value handle alone can't recover (String vs other ptr).
 const PRINT: &[&str] = &["print", "eprint", "println", "eprintln"];
 
+/// I4d: control-flow / process sentinels. `panic` and `sys__exit` diverge —
+/// they emit `unreachable` and terminate the block (the lowering-appended
+/// trailing `Return` is skipped as dead code by `emit_function_body`).
+/// `sys__args` materializes a `List<String>` from the saved argc/argv globals.
+/// Routed separately from the I4a table: panic depends on the current source
+/// loc, and all three emit control flow / a loop rather than a single call.
+const SENTINEL: &[&str] = &["panic", "sys__exit", "sys__args"];
+
 impl<'ctx> CodeGen<'ctx> {
     /// Is `name` a print-family builtin?
     pub(crate) fn is_print_builtin(name: &str) -> bool {
@@ -144,6 +152,7 @@ impl<'ctx> CodeGen<'ctx> {
     /// user fns) gets a real body instead of the `unreachable` fallback.
     pub(crate) fn is_supported_builtin(name: &str) -> bool {
         PRINT.contains(&name)
+            || SENTINEL.contains(&name)
             || SIMPLE.iter().any(|(f, _, _)| *f == name)
             || Self::is_list_int_builtin(name)
             || Self::is_string_list_builtin(name)
@@ -161,6 +170,21 @@ impl<'ctx> CodeGen<'ctx> {
         if PRINT.contains(&fname) {
             self.emit_print(dest, fname, args);
             return true;
+        }
+        match fname {
+            "panic" => {
+                self.emit_panic(args);
+                return true;
+            }
+            "sys__exit" => {
+                self.emit_sys_exit(dest, args);
+                return true;
+            }
+            "sys__args" => {
+                self.emit_sys_args(dest);
+                return true;
+            }
+            _ => {}
         }
         if Self::is_list_int_builtin(fname) {
             return self.emit_list_int_builtin(dest, fname, args);
@@ -281,6 +305,189 @@ impl<'ctx> CodeGen<'ctx> {
             .build_int_s_extend(rv.into_int_value(), self.ctx.i64_type(), d)
             .unwrap();
         self.values.insert(d.clone(), v.into());
+    }
+
+    /// `panic(msg)` (§12.1 / ADR-0012). Mirrors the legacy `emit_panic_call`
+    /// EXACTLY (parity is the bar): to fd 2 (stderr) write the optional
+    /// `panic at FILE:LINE:` line (only when the current loc is real and its
+    /// `.src.N` global exists), then `msg` + newline, then the panic sentinel
+    /// that lets the test runner distinguish a panic from a plain
+    /// `sys.exit(101)`; finally `exit(101)` + `unreachable`. The trailing
+    /// `Return` the lowering appends is dead code, skipped by the emit loop's
+    /// terminator guard.
+    fn emit_panic(&mut self, args: &[Operand]) {
+        let dprintf = self
+            .module
+            .get_function("dprintf")
+            .unwrap_or_else(|| panic!("runtime extern `dprintf` must be declared (I1)"));
+        let i32t = self.ctx.i32_type();
+        let i64t = self.ctx.i64_type();
+        let fd2: BasicMetadataValueEnum<'ctx> = i32t.const_int(2, false).into();
+
+        // "panic at FILE:LINE:\n" — only with a real loc whose source-file
+        // global was declared in I1 (`.src.{file_id}`).
+        let loc = self.cur_loc;
+        let src_global = (!loc.is_dummy())
+            .then(|| self.module.get_global(&format!(".src.{}", loc.file_id)))
+            .flatten();
+        if let Some(src) = src_global {
+            let fmt = self.global_ptr(".fmt.panic_loc");
+            let line = i64t.const_int(loc.line as u64, false);
+            self.builder
+                .build_call(
+                    dprintf,
+                    &[fd2, fmt.into(), src.as_pointer_value().into(), line.into()],
+                    "",
+                )
+                .unwrap();
+        }
+        // Message + newline.
+        if let Some(arg) = args.first() {
+            let msg = self.operand(arg);
+            let fmt = self.global_ptr(".fmt.str_ln");
+            self.builder
+                .build_call(dprintf, &[fd2, fmt.into(), msg.into()], "")
+                .unwrap();
+        }
+        // Sentinel (ADR-0012: 2-stage panic identification).
+        let sentinel = self.global_ptr(".str.panic_sentinel");
+        self.builder
+            .build_call(dprintf, &[fd2, sentinel.into()], "")
+            .unwrap();
+        // exit(101) + unreachable.
+        let exit = self
+            .module
+            .get_function("exit")
+            .unwrap_or_else(|| panic!("runtime extern `exit` must be declared (I1)"));
+        self.builder
+            .build_call(exit, &[i32t.const_int(101, false).into()], "")
+            .unwrap();
+        self.builder.build_unreachable().unwrap();
+    }
+
+    /// `sys.exit(code)` (§17.1, returns `Never`). Truncates the `Int` (i64) code
+    /// to i32, calls `exit`, and terminates the block with `unreachable` — the
+    /// lowering-appended trailing `Return` is dead code (skipped by the emit
+    /// loop). With no argument, exits 0 (matches legacy).
+    fn emit_sys_exit(&mut self, dest: &Option<String>, args: &[Operand]) {
+        let i32t = self.ctx.i32_type();
+        let code = if let Some(arg) = args.first() {
+            let name = dest.as_deref().map(|d| format!("{d}.i32")).unwrap_or_default();
+            self.builder
+                .build_int_truncate(self.operand(arg).into_int_value(), i32t, &name)
+                .unwrap()
+        } else {
+            i32t.const_zero()
+        };
+        let exit = self
+            .module
+            .get_function("exit")
+            .unwrap_or_else(|| panic!("runtime extern `exit` must be declared (I1)"));
+        self.builder.build_call(exit, &[code.into()], "").unwrap();
+        self.builder.build_unreachable().unwrap();
+    }
+
+    /// `core.sys.args() -> List<String>` (§17.1). Builds a `List__String`
+    /// `{ptr data, i64 len}` from the saved `.tyra.argc`/`.tyra.argv` globals
+    /// (captured in `main`). `argc` is always ≥ 1 (argv[0] is the program name).
+    /// Mirrors the legacy `emit_sys_args` loop: GC-allocate `argc * 8` bytes,
+    /// copy each `argv[i]` pointer into the data array via a counter loop, then
+    /// assemble the list struct. Leaves the builder positioned at the loop's
+    /// exit block (like `ListGetSafe`), so following instructions continue there.
+    fn emit_sys_args(&mut self, dest: &Option<String>) {
+        let d = dest.clone().unwrap_or_else(|| "_sys_args".into());
+        let i32t = self.ctx.i32_type();
+        let i64t = self.ctx.i64_type();
+        let ptr = self.ptr();
+        let list_ty = *self
+            .struct_types
+            .get("List__String")
+            .unwrap_or_else(|| panic!("`List__String` struct must be registered for sys.args"));
+
+        // argc (i32 → i64) and argv (ptr) from the globals stored in main.
+        let argc_g = self.module.get_global(".tyra.argc").unwrap().as_pointer_value();
+        let argc = self
+            .builder
+            .build_load(i32t, argc_g, &format!("{d}.argc"))
+            .unwrap()
+            .into_int_value();
+        let argc64 = self
+            .builder
+            .build_int_s_extend(argc, i64t, &format!("{d}.argc64"))
+            .unwrap();
+        let argv_g = self.module.get_global(".tyra.argv").unwrap().as_pointer_value();
+        let argv = self
+            .builder
+            .build_load(ptr, argv_g, &format!("{d}.argv"))
+            .unwrap()
+            .into_pointer_value();
+
+        // data = GC_malloc(argc * 8)  (8 bytes per pointer slot).
+        let size = self
+            .builder
+            .build_int_mul(argc64, i64t.const_int(8, false), &format!("{d}.size"))
+            .unwrap();
+        let gc = self.module.get_function("GC_malloc").unwrap();
+        let data = self
+            .builder
+            .build_call(gc, &[size.into()], &format!("{d}.data"))
+            .unwrap()
+            .try_as_basic_value()
+            .basic()
+            .unwrap()
+            .into_pointer_value();
+
+        // Counter loop: for i in 0..argc { data[i] = argv[i] }. An alloca
+        // counter avoids phi predecessor bookkeeping in this self-contained loop.
+        let fv = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+        let ctr = self.builder.build_alloca(i64t, &format!("{d}.ctr")).unwrap();
+        self.builder.build_store(ctr, i64t.const_zero()).unwrap();
+        let loop_bb = self.ctx.append_basic_block(fv, &format!("{d}.loop"));
+        let body_bb = self.ctx.append_basic_block(fv, &format!("{d}.body"));
+        let end_bb = self.ctx.append_basic_block(fv, &format!("{d}.end"));
+        self.builder.build_unconditional_branch(loop_bb).unwrap();
+
+        self.builder.position_at_end(loop_bb);
+        let i = self
+            .builder
+            .build_load(i64t, ctr, &format!("{d}.i"))
+            .unwrap()
+            .into_int_value();
+        let done = self
+            .builder
+            .build_int_compare(IntPredicate::SGE, i, argc64, &format!("{d}.done"))
+            .unwrap();
+        self.builder.build_conditional_branch(done, end_bb, body_bb).unwrap();
+
+        self.builder.position_at_end(body_bb);
+        let argp = unsafe {
+            self.builder
+                .build_gep(ptr, argv, &[i], &format!("{d}.argp"))
+                .unwrap()
+        };
+        let arg = self.builder.build_load(ptr, argp, &format!("{d}.arg")).unwrap();
+        let dstp = unsafe {
+            self.builder
+                .build_gep(ptr, data, &[i], &format!("{d}.dstp"))
+                .unwrap()
+        };
+        self.builder.build_store(dstp, arg).unwrap();
+        let next = self
+            .builder
+            .build_int_add(i, i64t.const_int(1, false), &format!("{d}.next"))
+            .unwrap();
+        self.builder.build_store(ctr, next).unwrap();
+        self.builder.build_unconditional_branch(loop_bb).unwrap();
+
+        // Assemble the List struct { data, len }.
+        self.builder.position_at_end(end_bb);
+        let mut agg: AggregateValueEnum<'ctx> = list_ty.get_undef().into();
+        agg = self
+            .builder
+            .build_insert_value(agg, data, 0, &format!("{d}.s0"))
+            .unwrap();
+        agg = self.builder.build_insert_value(agg, argc64, 1, &d).unwrap();
+        self.values.insert(d.clone(), agg.into_struct_value().into());
     }
 
     /// Emit a table-driven builtin call. Returns `false` if `fname` is not in
