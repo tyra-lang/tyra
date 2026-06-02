@@ -2889,6 +2889,41 @@ mod tests {
         assert!(!ir.contains("!DILocation"), "no locations without --debug:\n{ir}");
     }
 
+    #[test]
+    fn i6b_local_var_emits_dbg_declare_and_ditype() {
+        use tyra_mir::{Function, Instruction, LocalMeta, MirStmt, Operand, SourceLoc};
+        let loc = |line| SourceLoc { file_id: 0, line, col: 1 };
+        let program = Program {
+            functions: vec![Function {
+                name: "g".into(),
+                params: vec![("x".into(), Ty::Int), ("s".into(), Ty::String)],
+                return_type: Ty::Int,
+                body: vec![MirStmt::new(loc(3), Instruction::Return { value: Some(Operand::Var("x".into())) })],
+                is_main: false,
+                local_metas: vec![
+                    LocalMeta { name: "x".into(), ty: Ty::Int, alloca_name: "x.addr".into() },
+                    LocalMeta { name: "s".into(), ty: Ty::String, alloca_name: "s.addr".into() },
+                ],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec!["src/app.tyra".into()],
+            lower_errors: vec![],
+        };
+        let ctx = Context::create();
+        let cg = build_module_opts(&ctx, &program, None, true);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "debug module with locals failed to verify:\n{ir}");
+        // LLVM 19+ prints the new debug-record form `#dbg_declare`; older
+        // versions print `call void @llvm.dbg.declare`. Match either.
+        assert!(ir.contains("dbg_declare"), "must emit dbg.declare for locals:\n{ir}");
+        assert!(ir.contains("!DILocalVariable(name: \"x\""), "must describe local x:\n{ir}");
+        assert!(ir.contains("!DILocalVariable(name: \"s\""), "must describe local s:\n{ir}");
+        // Int → signed basic type; String → a pointer derived type.
+        assert!(ir.contains("!DIBasicType(name: \"Int\", size: 64, encoding: DW_ATE_signed)"), "Int DIType:\n{ir}");
+        assert!(ir.contains("DW_TAG_pointer_type, name: \"String\""), "String DIType is a pointer:\n{ir}");
+    }
+
     // ---- I5: coverage instrumentation (ADR-0014) ----
 
     #[test]

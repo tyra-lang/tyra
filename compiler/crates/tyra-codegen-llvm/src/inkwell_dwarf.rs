@@ -21,17 +21,25 @@
 
 use std::collections::HashMap;
 
+use inkwell::basic_block::BasicBlock;
 use inkwell::debug_info::{
     AsDIScope, DIFile, DIFlags, DIFlagsConstants, DISubprogram, DIType, DebugInfoBuilder,
     DWARFEmissionKind, DWARFSourceLanguage,
 };
 use inkwell::module::FlagBehavior;
 
-use tyra_mir::Program;
+use tyra_mir::{Function, Program};
+use tyra_types::Ty;
 
 use crate::inkwell_codegen::CodeGen;
 
 const PRODUCER: &str = "Tyra";
+
+// DWARF base-type encodings (`DW_ATE_*`), not re-exported by inkwell.
+const DW_ATE_BOOLEAN: u32 = 0x02;
+const DW_ATE_FLOAT: u32 = 0x04;
+const DW_ATE_SIGNED: u32 = 0x05;
+const DW_ATE_UNSIGNED: u32 = 0x07;
 
 /// Debug-info state for a `--debug` build, owned by `CodeGen.di`.
 pub(crate) struct DebugInfo<'ctx> {
@@ -164,6 +172,83 @@ impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn clear_debug_line(&self) {
         if self.di.is_some() {
             self.builder.unset_current_debug_location();
+        }
+    }
+
+    /// I6b: a `DIType` for a Tyra type, cached by monomorphized name. Scalars
+    /// become `DIBasicType`s; everything else (String, value/data structs,
+    /// closures, handles) becomes a 64-bit pointer `DIDerivedType` over a shared
+    /// byte base type — matching the legacy `type_node` (`baseType: null` there;
+    /// a byte pointee here, as inkwell's `create_pointer_type` requires one).
+    /// `None` without debug info.
+    fn di_type(&mut self, ty: &Ty) -> Option<DIType<'ctx>> {
+        let key = ty.monomorphized_name();
+        if let Some(d) = &self.di
+            && let Some(&t) = d.type_cache.get(&key)
+        {
+            return Some(t);
+        }
+        let d = self.di.as_ref()?;
+        let b = &d.builder;
+        let t: DIType<'ctx> = match ty {
+            Ty::Int => b.create_basic_type("Int", 64, DW_ATE_SIGNED, DIFlags::ZERO).unwrap().as_type(),
+            Ty::Bool => b.create_basic_type("Bool", 8, DW_ATE_BOOLEAN, DIFlags::ZERO).unwrap().as_type(),
+            Ty::Float => b.create_basic_type("Float", 64, DW_ATE_FLOAT, DIFlags::ZERO).unwrap().as_type(),
+            _ => {
+                // Pointer types need a pointee; reuse one shared byte base type.
+                let byte = b.create_basic_type("u8", 8, DW_ATE_UNSIGNED, DIFlags::ZERO).unwrap();
+                let name = if matches!(ty, Ty::String) { "String".to_string() } else { key.clone() };
+                b.create_pointer_type(&name, byte.as_type(), 64, 0, inkwell::AddressSpace::default())
+                    .as_type()
+            }
+        };
+        if let Some(d) = &mut self.di {
+            d.type_cache.insert(key, t);
+        }
+        Some(t)
+    }
+
+    /// I6b: emit `llvm.dbg.declare` for each named local with an alloca slot,
+    /// binding it to its `DILocalVariable`. Appended to the entry block after
+    /// alloca hoisting (mirrors the legacy placement); no-op without debug info.
+    pub(crate) fn emit_local_var_decls(
+        &mut self,
+        f: &Function,
+        sp: DISubprogram<'ctx>,
+        entry: BasicBlock<'ctx>,
+    ) {
+        if self.di.is_none() {
+            return;
+        }
+        let first = f.body.iter().find(|s| !s.loc.is_dummy()).map(|s| s.loc);
+        let line = first.map(|l| l.line).unwrap_or(1);
+        let file_id = first.map(|l| l.file_id as usize).unwrap_or(0);
+
+        for meta in &f.local_metas {
+            if meta.alloca_name.is_empty() {
+                continue;
+            }
+            // The mutable alloca slot for this variable (param `.addr` or local).
+            let Some(&slot) = self.addr_slots.get(&meta.name) else {
+                continue;
+            };
+            let Some(dty) = self.di_type(&meta.ty) else {
+                continue;
+            };
+            let d = self.di.as_ref().unwrap();
+            let file = d.files.get(file_id).copied().unwrap_or(d.files[0]);
+            let var = d.builder.create_auto_variable(
+                sp.as_debug_info_scope(),
+                &meta.name,
+                file,
+                line,
+                dty,
+                true, // always_preserve
+                DIFlags::ZERO,
+                0, // align
+            );
+            let loc = d.builder.create_debug_location(self.ctx, line, 1, sp.as_debug_info_scope(), None);
+            d.builder.insert_declare_at_end(slot, Some(var), None, loc, entry);
         }
     }
 

@@ -350,6 +350,13 @@ impl<'ctx> CodeGen<'ctx> {
         // coverage). Mirrors the legacy entry increment.
         self.emit_cov_entry(f);
 
+        // I6b: bind each named local's alloca slot to its DILocalVariable via
+        // llvm.dbg.declare, appended to the entry block after alloca hoisting
+        // (no-op without debug info).
+        if let Some(sp) = sp {
+            self.emit_local_var_decls(f, sp, entry);
+        }
+
         let mut pending: Vec<(PhiValue<'ctx>, Vec<(Operand, String)>)> = Vec::new();
         for (si, stmt) in f.body.iter().enumerate() {
             // Dead code after an in-block terminator: `panic`/`sys.exit` emit
