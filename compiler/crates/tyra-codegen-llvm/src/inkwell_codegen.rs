@@ -515,6 +515,7 @@ fn build_module<'ctx>(ctx: &'ctx Context, program: &Program) -> CodeGen<'ctx> {
     cg.set_struct_bodies(program);
     cg.declare_globals(program);
     cg.declare_externs();
+    cg.emit_collection_eq_hash(program);
     cg.declare_functions(program);
     cg.emit_bodies(program);
     cg
@@ -1573,9 +1574,9 @@ mod tests {
 
     #[test]
     fn i4a_deferred_builtin_falls_back_to_unreachable() {
-        // A still-deferred builtin (`__map_len`, a boxed-collection op — I4e) is
-        // not in the supported set, so the function must fall back to a single
-        // `unreachable` block. Coverage grows in later I4 sub-phases.
+        // A still-deferred builtin (`__list_fold_int`, a higher-order list op —
+        // I4f) is not in the supported set, so the function must fall back to a
+        // single `unreachable` block. Coverage grows in later I4 sub-phases.
         use tyra_mir::{Function, Instruction, MirStmt, Operand};
         let ctx = Context::create();
         let program = Program {
@@ -1586,7 +1587,7 @@ mod tests {
                 body: vec![
                     MirStmt::synthetic(Instruction::Call {
                         dest: Some("r".into()),
-                        func: "__map_len".into(),
+                        func: "__list_fold_int".into(),
                         args: vec![Operand::Var("m".into())],
                     }),
                     MirStmt::synthetic(Instruction::Return {
@@ -1605,9 +1606,13 @@ mod tests {
         assert!(cg.module.verify().is_ok());
         let ir = cg.module.print_to_string().to_string();
         assert!(ir.contains("unreachable"), "deferred builtin should fall back:\n{ir}");
-        assert!(
-            !ir.contains("call i64 @tyra_map_len"),
-            "must not emit a runtime call for the deferred builtin:\n{ir}"
+        // A real body (loops etc.) would have >1 block; the fallback is exactly
+        // one block holding only `unreachable`.
+        let f = cg.module.get_function("f").unwrap();
+        assert_eq!(
+            f.count_basic_blocks(),
+            1,
+            "deferred builtin must not emit a real body:\n{ir}"
         );
     }
 
@@ -1767,6 +1772,196 @@ mod tests {
         assert!(ir.contains("@.tyra.argc"), "sys.args must load argc:\n{ir}");
         assert!(ir.contains("@.tyra.argv"), "sys.args must load argv:\n{ir}");
         assert!(ir.contains("@GC_malloc"), "sys.args must allocate the data array:\n{ir}");
+    }
+
+    // ---- I4e: boxed collections (Map/Set/LinkedMap/LinkedSet) ----
+
+    /// `fn f(<params>) { <calls>; return <ret_var?> }` for collection tests.
+    fn seq_program(
+        params: Vec<(String, Ty)>,
+        ret: Ty,
+        calls: Vec<(Option<&str>, &str, Vec<tyra_mir::Operand>)>,
+        ret_var: Option<&str>,
+    ) -> Program {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let mut body: Vec<MirStmt> = calls
+            .into_iter()
+            .map(|(d, f, a)| {
+                MirStmt::synthetic(Instruction::Call {
+                    dest: d.map(|s| s.to_string()),
+                    func: f.to_string(),
+                    args: a,
+                })
+            })
+            .collect();
+        body.push(MirStmt::synthetic(Instruction::Return {
+            value: ret_var.map(|v| Operand::Var(v.to_string())),
+        }));
+        Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params,
+                return_type: ret,
+                body,
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec![],
+            lower_errors: vec![],
+        }
+    }
+
+    #[test]
+    fn i4e_map_int_int_new_insert_contains_len() {
+        use tyra_mir::Operand;
+        let ctx = Context::create();
+        let cg = build_module(
+            &ctx,
+            &seq_program(
+                vec![("k".into(), Ty::Int), ("v".into(), Ty::Int)],
+                Ty::Int,
+                vec![
+                    (Some("m0"), "__map_new__Int__Int", vec![]),
+                    (
+                        Some("m1"),
+                        "__map_insert__Int__Int",
+                        vec![Operand::Var("m0".into()), Operand::Var("k".into()), Operand::Var("v".into())],
+                    ),
+                    (
+                        Some("has"),
+                        "__map_contains__Int",
+                        vec![Operand::Var("m1".into()), Operand::Var("k".into())],
+                    ),
+                    (Some("n"), "__map_len", vec![Operand::Var("m1".into())]),
+                ],
+                Some("n"),
+            ),
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "map ops failed to verify:\n{ir}");
+        // `new` threads the compiler-generated eq/hash fn pointers.
+        assert!(
+            ir.contains("@tyra_map_new(ptr @tyra_eq_Int, ptr @tyra_hash_Int)"),
+            "map.new must pass eq/hash fn pointers:\n{ir}"
+        );
+        assert!(ir.contains("call ptr @tyra_map_insert"), "missing map.insert:\n{ir}");
+        assert!(ir.contains("call i32 @tyra_map_contains"), "missing map.contains:\n{ir}");
+        assert!(ir.contains("call i64 @tyra_map_len"), "missing map.len:\n{ir}");
+        // eq/hash function bodies are emitted; Int hash uses the Knuth constant.
+        assert!(ir.contains("@tyra_eq_Int("), "eq_Int must be defined:\n{ir}");
+        assert!(ir.contains("-3932073806218323177"), "Int hash must use the Knuth multiply:\n{ir}");
+        // Boxing allocates 8-byte cells.
+        assert!(ir.contains("@GC_malloc"), "insert must box via GC_malloc:\n{ir}");
+    }
+
+    #[test]
+    fn i4e_set_bool_boxes_via_zext() {
+        use tyra_mir::Operand;
+        let ctx = Context::create();
+        let cg = build_module(
+            &ctx,
+            &seq_program(
+                vec![("b".into(), Ty::Bool)],
+                Ty::Bool,
+                vec![
+                    (Some("s0"), "__set_new__Bool", vec![]),
+                    (
+                        Some("s1"),
+                        "__set_insert__Bool",
+                        vec![Operand::Var("s0".into()), Operand::Var("b".into())],
+                    ),
+                    (
+                        Some("has"),
+                        "__set_contains__Bool",
+                        vec![Operand::Var("s1".into()), Operand::Var("b".into())],
+                    ),
+                ],
+                Some("has"),
+            ),
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "set ops failed to verify:\n{ir}");
+        assert!(
+            ir.contains("@tyra_set_new(ptr @tyra_eq_Bool, ptr @tyra_hash_Bool)"),
+            "set.new must pass Bool eq/hash:\n{ir}"
+        );
+        assert!(ir.contains("call ptr @tyra_set_insert"), "missing set.insert:\n{ir}");
+        // Bool boxing zero-extends the i1 to i8 before storing.
+        assert!(ir.contains("zext i1"), "Bool box must zext i1->i8:\n{ir}");
+    }
+
+    #[test]
+    fn i4e_linked_map_string_uses_contains_key() {
+        use tyra_mir::Operand;
+        let ctx = Context::create();
+        let cg = build_module(
+            &ctx,
+            &seq_program(
+                vec![("k".into(), Ty::String), ("v".into(), Ty::Int)],
+                Ty::Bool,
+                vec![
+                    (Some("m0"), "__linked_map_new__String__Int", vec![]),
+                    (
+                        Some("m1"),
+                        "__linked_map_insert__String__Int",
+                        vec![Operand::Var("m0".into()), Operand::Var("k".into()), Operand::Var("v".into())],
+                    ),
+                    (
+                        Some("has"),
+                        "__linked_map_contains__String",
+                        vec![Operand::Var("m1".into()), Operand::Var("k".into())],
+                    ),
+                ],
+                Some("has"),
+            ),
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "linked_map ops failed to verify:\n{ir}");
+        // contains routes to the `_contains_key` callee (the one naming divergence).
+        assert!(
+            ir.contains("call i32 @tyra_linked_map_contains_key"),
+            "linked_map.contains must call tyra_linked_map_contains_key:\n{ir}"
+        );
+        // String eq/hash delegate to the cstr runtime helpers.
+        assert!(ir.contains("@tyra_eq_String("), "eq_String must be defined:\n{ir}");
+        assert!(ir.contains("@tyra_cstr_eq"), "String eq must delegate to tyra_cstr_eq:\n{ir}");
+        assert!(ir.contains("@tyra_hash_cstr"), "String hash must delegate to tyra_hash_cstr:\n{ir}");
+    }
+
+    #[test]
+    fn i4e_linked_set_int_new_insert_remove_len() {
+        use tyra_mir::Operand;
+        let ctx = Context::create();
+        let cg = build_module(
+            &ctx,
+            &seq_program(
+                vec![("x".into(), Ty::Int)],
+                Ty::Int,
+                vec![
+                    (Some("s0"), "__linked_set_new__Int", vec![]),
+                    (
+                        Some("s1"),
+                        "__linked_set_insert__Int",
+                        vec![Operand::Var("s0".into()), Operand::Var("x".into())],
+                    ),
+                    (
+                        Some("s2"),
+                        "__linked_set_remove__Int",
+                        vec![Operand::Var("s1".into()), Operand::Var("x".into())],
+                    ),
+                    (Some("n"), "__linked_set_len", vec![Operand::Var("s2".into())]),
+                ],
+                Some("n"),
+            ),
+        );
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "linked_set ops failed to verify:\n{ir}");
+        assert!(ir.contains("call ptr @tyra_linked_set_new"), "missing linked_set.new:\n{ir}");
+        assert!(ir.contains("call ptr @tyra_linked_set_insert"), "missing linked_set.insert:\n{ir}");
+        assert!(ir.contains("call ptr @tyra_linked_set_remove"), "missing linked_set.remove:\n{ir}");
+        assert!(ir.contains("call i64 @tyra_linked_set_len"), "missing linked_set.len:\n{ir}");
     }
 
     // ---- I4c: print family (type-scan-routed) ----
