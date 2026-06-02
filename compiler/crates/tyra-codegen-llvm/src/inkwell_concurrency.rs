@@ -242,6 +242,9 @@ impl<'ctx> CodeGen<'ctx> {
     /// struct, call the target function, and box the result (or return null for
     /// `Unit`). Runs after all user bodies so the target functions are defined.
     pub(crate) fn emit_spawn_thunk_bodies(&mut self) {
+        // I6: thunks carry no subprogram, so their instructions must not inherit
+        // the last user function's debug scope.
+        self.clear_debug_line();
         let descs = self.spawn_thunks.clone();
         let ptr = self.ptr();
         for desc in &descs {

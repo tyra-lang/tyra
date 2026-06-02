@@ -39,6 +39,11 @@ impl<'ctx> CodeGen<'ctx> {
             // each `Spawn` site references the id pre-assigned by program order
             // (robust against earlier functions that fell back to `unreachable`).
             self.spawn_cursor = self.spawn_bases.get(fi).copied().unwrap_or(0);
+            // I6: clear any debug location left by the previous function so this
+            // function's instructions never inherit an out-of-scope `!dbg`. An
+            // emittable body resets it to its own subprogram below; a fallback
+            // `unreachable` needs none.
+            self.clear_debug_line();
             if self.is_i2_emittable(f) {
                 self.emit_function_body(f);
             } else {
@@ -282,6 +287,16 @@ impl<'ctx> CodeGen<'ctx> {
         }
         self.builder.position_at_end(entry);
 
+        // I6: this function's subprogram (None without debug info). Set an
+        // entry-line location now so every prologue instruction (param allocas,
+        // main init, alloca hoists) carries an in-scope `!dbg`; the body loop
+        // refines it per source statement.
+        let sp = self.di_subprogram(&f.name);
+        if let Some(sp) = sp {
+            let entry_line = f.body.iter().find(|s| !s.loc.is_dummy()).map(|s| s.loc.line).unwrap_or(1);
+            self.set_debug_line(sp, entry_line);
+        }
+
         // Parameters: bind the SSA arg for direct (immutable) operand refs and
         // also create a `.addr` slot (matching the legacy backend) so mutation
         // (Store) and `Copy`-from-param read the mutable view.
@@ -353,6 +368,14 @@ impl<'ctx> CodeGen<'ctx> {
                 continue;
             }
             self.cur_loc = stmt.loc;
+            // I6: refine the debug location to this statement's line (column 1),
+            // so the instructions it emits get its `!dbg`. A dummy-loc stmt
+            // keeps the previous in-scope location (still valid).
+            if let Some(sp) = sp
+                && !stmt.loc.is_dummy()
+            {
+                self.set_debug_line(sp, stmt.loc.line);
+            }
             self.emit_instr(&stmt.instr, f, &mut pending);
             // I5: a labeled basic block gets its own counter, incremented right
             // after the builder repositions onto it. Use the label's loc, or the

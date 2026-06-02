@@ -107,6 +107,11 @@ pub(crate) struct CodeGen<'ctx> {
     /// per-basic-block `atomicrmw add` counter increment. `None` for ordinary
     /// (non-`--coverage`) builds. Built once from the program before emission.
     pub(crate) cov_map: Option<crate::coverage::CovMap>,
+    /// I6 DWARF debug info (ADR-0014 §4a) via inkwell's `DebugInfoBuilder`.
+    /// `Some` for `--debug` builds: holds the compile unit, per-file `DIFile`s,
+    /// a shared subroutine type, and the per-function `DISubprogram`s. `None`
+    /// otherwise. Replaces the legacy text DWARF metadata (`dwarf.rs`).
+    pub(crate) di: Option<crate::inkwell_dwarf::DebugInfo<'ctx>>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -135,6 +140,7 @@ impl<'ctx> CodeGen<'ctx> {
             spawn_bases: Vec::new(),
             spawn_cursor: 0,
             cov_map: None,
+            di: None,
         }
     }
 
@@ -531,17 +537,21 @@ pub(crate) fn emit_inkwell(program: &Program) -> String {
 /// run `Module::verify()` on the result.
 #[allow(dead_code)]
 fn build_module<'ctx>(ctx: &'ctx Context, program: &Program) -> CodeGen<'ctx> {
-    build_module_opts(ctx, program, None)
+    build_module_opts(ctx, program, None, false)
 }
 
-/// `build_module` with optional I5 coverage instrumentation. When `cov_map` is
-/// `Some`, `declare_coverage` adds the counter global + `tyra_cov_init` extern
-/// and `emit_bodies` weaves per-basic-block `atomicrmw` increments.
+/// `build_module` with optional I5 coverage and I6 debug info. When `cov_map`
+/// is `Some`, `declare_coverage` adds the counter global + `tyra_cov_init`
+/// extern and `emit_bodies` weaves per-basic-block `atomicrmw` increments. When
+/// `debug` is set, `init_debug_info` builds the DWARF compile unit /
+/// subprograms and `emit_bodies` attaches per-statement `!dbg` locations
+/// (finalized after every body is emitted).
 #[allow(dead_code)]
 fn build_module_opts<'ctx>(
     ctx: &'ctx Context,
     program: &Program,
     cov_map: Option<crate::coverage::CovMap>,
+    debug: bool,
 ) -> CodeGen<'ctx> {
     let mut cg = CodeGen::new(ctx, "tyra");
     cg.cov_map = cov_map;
@@ -554,10 +564,26 @@ fn build_module_opts<'ctx>(
     cg.declare_externs();
     cg.emit_collection_eq_hash(program);
     cg.declare_functions(program);
+    if debug {
+        cg.init_debug_info(program);
+    }
     cg.declare_spawn_thunks(program);
     cg.emit_bodies(program);
     cg.emit_spawn_thunk_bodies();
+    cg.finalize_debug_info();
     cg
+}
+
+/// I6: emit LLVM IR text with DWARF debug info (no coverage). Mirrors the legacy
+/// `emit_llvm_ir_debug`. (Not yet wired to the public entry points — the legacy
+/// text path stays production until I7.)
+#[allow(dead_code)]
+pub(crate) fn emit_inkwell_debug(program: &Program) -> String {
+    let ctx = Context::create();
+    build_module_opts(&ctx, program, None, true)
+        .module
+        .print_to_string()
+        .to_string()
 }
 
 /// I5: emit LLVM IR text with coverage instrumentation, plus the covmap sidecar
@@ -569,7 +595,7 @@ pub(crate) fn emit_inkwell_coverage(program: &Program) -> (String, String) {
     let cov_map = crate::coverage::build_cov_map(program);
     let covmap_text = crate::coverage::write_covmap_text(&cov_map, &program.source_files);
     let ctx = Context::create();
-    let ir = build_module_opts(&ctx, program, Some(cov_map))
+    let ir = build_module_opts(&ctx, program, Some(cov_map), false)
         .module
         .print_to_string()
         .to_string();
@@ -2783,6 +2809,86 @@ mod tests {
         assert!(ir.contains("insertvalue"), "parse must build the Option struct:\n{ir}");
     }
 
+    // ---- I6: DWARF debug info (ADR-0014 §4a) ----
+
+    #[test]
+    fn i6_debug_emits_compile_unit_subprogram_and_locations() {
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand, SourceLoc};
+        let loc = |line| SourceLoc { file_id: 0, line, col: 1 };
+        let program = Program {
+            functions: vec![
+                Function {
+                    name: "main".into(),
+                    params: vec![],
+                    return_type: Ty::Unit,
+                    body: vec![
+                        MirStmt::new(loc(1), Instruction::Const { dest: "c".into(), value: Constant::Int(0) }),
+                        MirStmt::new(loc(2), Instruction::Return { value: None }),
+                    ],
+                    is_main: true,
+                    local_metas: vec![],
+                },
+                Function {
+                    name: "g".into(),
+                    params: vec![("x".into(), Ty::Int)],
+                    return_type: Ty::Int,
+                    body: vec![MirStmt::new(loc(5), Instruction::Return { value: Some(Operand::Var("x".into())) })],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+            ],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec!["src/app.tyra".into()],
+            lower_errors: vec![],
+        };
+        // The instrumented module must verify (catches out-of-scope !dbg etc.).
+        let ctx = Context::create();
+        let cg = build_module_opts(&ctx, &program, None, true);
+        assert!(cg.module.verify().is_ok(), "debug module failed to verify:\n{}", cg.module.print_to_string().to_string());
+
+        let ir = emit_inkwell_debug(&program);
+        // Compile unit + file + subprograms.
+        assert!(ir.contains("!DICompileUnit"), "must emit a compile unit:\n{ir}");
+        assert!(ir.contains("!DIFile(filename: \"app.tyra\", directory: \"src\")"), "must emit the source file:\n{ir}");
+        assert!(ir.contains("!DISubprogram(name: \"main\""), "main must have a subprogram:\n{ir}");
+        assert!(ir.contains("!DISubprogram(name: \"g\""), "g must have a subprogram:\n{ir}");
+        // Functions carry !dbg and statements get DILocations.
+        assert!(ir.contains("!dbg"), "definitions/instructions must carry !dbg:\n{ir}");
+        assert!(ir.contains("!DILocation(line: 5"), "g's return is on line 5:\n{ir}");
+        // Module flags for debug info.
+        assert!(ir.contains("\"Debug Info Version\""), "must set the Debug Info Version module flag:\n{ir}");
+    }
+
+    /// Without --debug the backend emits no debug metadata.
+    #[test]
+    fn i6_no_debug_when_disabled() {
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, SourceLoc};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "main".into(),
+                params: vec![],
+                return_type: Ty::Unit,
+                body: vec![
+                    MirStmt::new(SourceLoc { file_id: 0, line: 1, col: 1 }, Instruction::Const { dest: "c".into(), value: Constant::Int(0) }),
+                    MirStmt::synthetic(Instruction::Return { value: None }),
+                ],
+                is_main: true,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec!["src/app.tyra".into()],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
+        assert!(!ir.contains("!DICompileUnit"), "no debug metadata without --debug:\n{ir}");
+        assert!(!ir.contains("!DILocation"), "no locations without --debug:\n{ir}");
+    }
+
     // ---- I5: coverage instrumentation (ADR-0014) ----
 
     #[test]
@@ -2826,7 +2932,7 @@ mod tests {
         // The instrumented module must verify (catches a malformed atomicrmw/gep).
         let ctx = Context::create();
         let cov_map = crate::coverage::build_cov_map(&program);
-        let cg = build_module_opts(&ctx, &program, Some(cov_map));
+        let cg = build_module_opts(&ctx, &program, Some(cov_map), false);
         assert!(cg.module.verify().is_ok(), "instrumented module failed to verify:\n{}", cg.module.print_to_string().to_string());
 
         let (ir, covmap) = emit_inkwell_coverage(&program);
