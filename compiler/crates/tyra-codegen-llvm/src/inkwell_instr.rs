@@ -28,13 +28,17 @@ impl<'ctx> CodeGen<'ctx> {
     /// instructions; the rest get a single `unreachable` block (so the module
     /// verifies while instruction coverage grows phase by phase).
     pub(crate) fn emit_bodies(&mut self, program: &Program) {
-        for f in &program.functions {
+        for (fi, f) in program.functions.iter().enumerate() {
             // I4c: per-function type scan (operand Tyra types for `print`
             // routing + the emittability gate's printability check). Computed
             // into a local first so the immutable borrows of struct_map/fn_sigs
             // end before the mutable store into self.scan.
             let scan = crate::type_scan::scan_function_types(f, &self.struct_map, &self.fn_sigs);
             self.scan = Some(scan);
+            // I4i: reset the spawn-thunk id cursor to this function's base, so
+            // each `Spawn` site references the id pre-assigned by program order
+            // (robust against earlier functions that fell back to `unreachable`).
+            self.spawn_cursor = self.spawn_bases.get(fi).copied().unwrap_or(0);
             if self.is_i2_emittable(f) {
                 self.emit_function_body(f);
             } else {
@@ -99,7 +103,14 @@ impl<'ctx> CodeGen<'ctx> {
                 | Instruction::SetForEachCall { .. }
                 | Instruction::LinkedMapForEachCall { .. }
                 | Instruction::LinkedSetForEachCall { .. }
-                | Instruction::IndirectCall { .. } => true,
+                | Instruction::IndirectCall { .. }
+                // I4i concurrency: Await/JoinAll/Select dispatch to runtime
+                // externs; their handle/list operands are definedness-checked
+                // below. Spawn additionally needs the target function declared.
+                | Instruction::Await { .. }
+                | Instruction::JoinAll { .. }
+                | Instruction::Select { .. } => true,
+                Instruction::Spawn { func, .. } => self.fn_values.contains_key(func),
                 // A closure can only be built for a function we have a value
                 // for (mirrors the user-Call admission below).
                 Instruction::ClosureBuild { fn_name, .. } => self.fn_values.contains_key(fn_name),
@@ -108,6 +119,11 @@ impl<'ctx> CodeGen<'ctx> {
                         || (Self::is_supported_builtin(func)
                             && self.builtin_args_emittable(f, func, args))
                 }
+                // As of I4i the arms above cover every `Instruction` variant, so
+                // this is currently unreachable — kept as a defensive default
+                // (reject → `unreachable` fallback) for when tyra-mir adds a new
+                // variant cross-crate.
+                #[allow(unreachable_patterns)]
                 _ => false,
             };
             if !supported {
@@ -229,6 +245,11 @@ impl<'ctx> CodeGen<'ctx> {
             | Instruction::SetForEachCall { handle, fat_ptr }
             | Instruction::LinkedMapForEachCall { handle, fat_ptr }
             | Instruction::LinkedSetForEachCall { handle, fat_ptr } => vec![handle, fat_ptr],
+            // I4i concurrency. Spawn's `func` is a top-level function (resolvable
+            // via fn_values, like ClosureBuild), so only its args are operands.
+            Instruction::Spawn { args, .. } => args.iter().collect(),
+            Instruction::Await { task, .. } => vec![task],
+            Instruction::JoinAll { list, .. } | Instruction::Select { list, .. } => vec![list],
             // ClosureBuild's `fn_name` is a top-level function (always
             // resolvable), so only the captured env fields are operands.
             Instruction::ClosureBuild { env_fields, .. } => env_fields.iter().collect(),
@@ -678,6 +699,18 @@ impl<'ctx> CodeGen<'ctx> {
             Instruction::LinkedSetForEachCall { handle, fat_ptr } => {
                 self.emit_for_each(handle, fat_ptr, "tyra_linked_set_for_each", "__lsfe");
             }
+            Instruction::Spawn { dest, func, args, arg_types, result_type } => {
+                self.emit_spawn(dest, func, args, arg_types, result_type);
+            }
+            Instruction::Await { dest, task, result_type } => {
+                self.emit_await(dest, task, result_type);
+            }
+            Instruction::JoinAll { dest, list, elem_type } => {
+                self.emit_join_all(dest, list, elem_type);
+            }
+            Instruction::Select { dest, list, elem_type } => {
+                self.emit_select(dest, list, elem_type);
+            }
             Instruction::StringFormat { dest, format_ref, args } => {
                 // GC-allocate a 1024-byte buffer and snprintf into it. The
                 // legacy backend adds a defensive GC_malloc null check + abort
@@ -721,7 +754,11 @@ impl<'ctx> CodeGen<'ctx> {
                 self.builder.build_call(snprintf, &call_args, "fmt").unwrap();
                 self.values.insert(dest.clone(), buf.into());
             }
-            // Not in I2 scope; is_i2_emittable guarantees we never reach here.
+            // As of I4i every `Instruction` variant has a dispatch arm above, so
+            // this is currently unreachable. Kept as the gate↔dispatch coherence
+            // guard (and the cross-crate safety net for a future tyra-mir
+            // variant): the gate must never admit an instruction this can't emit.
+            #[allow(unreachable_patterns)]
             other => unreachable!("emit_instr called on unsupported instruction: {other:?}"),
         }
     }
@@ -862,7 +899,11 @@ fn instr_dest(inst: &Instruction) -> Option<&str> {
         | Instruction::ListPush { dest, .. }
         | Instruction::MapGetOption { dest, .. }
         | Instruction::LinkedMapGetOption { dest, .. }
-        | Instruction::ClosureBuild { dest, .. } => Some(dest),
+        | Instruction::ClosureBuild { dest, .. }
+        | Instruction::Spawn { dest, .. }
+        | Instruction::Await { dest, .. }
+        | Instruction::JoinAll { dest, .. }
+        | Instruction::Select { dest, .. } => Some(dest),
         Instruction::Call { dest, .. } | Instruction::IndirectCall { dest, .. } => dest.as_deref(),
         _ => None,
     }

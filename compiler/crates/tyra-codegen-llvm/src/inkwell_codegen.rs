@@ -88,6 +88,20 @@ pub(crate) struct CodeGen<'ctx> {
     /// diagnostic; the forthcoming I6 DWARF wiring will read it too. Reset to
     /// `dummy()` per function (set before each instruction).
     pub(crate) cur_loc: SourceLoc,
+    /// I4i concurrency: per-site spawn thunk descriptors, in program order (the
+    /// index is the thunk id). Pre-collected by `declare_spawn_thunks` so the
+    /// `__tyra_spawn_args_N` struct types and `@__tyra_spawn_thunk_N` functions
+    /// exist before any `Spawn` site references them; bodies are filled after
+    /// user bodies by `emit_spawn_thunk_bodies`.
+    pub(crate) spawn_thunks: Vec<crate::inkwell_concurrency::SpawnThunkDesc>,
+    /// Base thunk id for each function index (count of spawns in earlier
+    /// functions, program order). Reset `spawn_cursor` to `spawn_bases[fi]`
+    /// before emitting function `fi`, so a function that falls back to
+    /// `unreachable` (and never advances the cursor) cannot misalign the ids of
+    /// later emitted functions.
+    pub(crate) spawn_bases: Vec<usize>,
+    /// Next spawn thunk id to assign within the function currently emitting.
+    pub(crate) spawn_cursor: usize,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -112,6 +126,9 @@ impl<'ctx> CodeGen<'ctx> {
             fn_sigs: HashMap::new(),
             scan: None,
             cur_loc: SourceLoc::dummy(),
+            spawn_thunks: Vec::new(),
+            spawn_bases: Vec::new(),
+            spawn_cursor: 0,
         }
     }
 
@@ -517,7 +534,9 @@ fn build_module<'ctx>(ctx: &'ctx Context, program: &Program) -> CodeGen<'ctx> {
     cg.declare_externs();
     cg.emit_collection_eq_hash(program);
     cg.declare_functions(program);
+    cg.declare_spawn_thunks(program);
     cg.emit_bodies(program);
+    cg.emit_spawn_thunk_bodies();
     cg
 }
 
@@ -2690,6 +2709,197 @@ mod tests {
         // print(List<Int>) has no printf form → gate rejects → fallback body.
         assert!(ir.contains("unreachable"), "print of a map result list must fall back:\n{ir}");
         assert!(!ir.contains("call i32 @puts"), "a struct list must not be printed as a value:\n{ir}");
+    }
+
+    // ---- I4i: async concurrency (spawn / await / join_all / select) ----
+
+    /// `fn work(x: Int) -> Int { return x }` — a spawn target.
+    fn work_fn() -> tyra_mir::Function {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        Function {
+            name: "work".into(),
+            params: vec![("x".into(), Ty::Int)],
+            return_type: Ty::Int,
+            body: vec![MirStmt::synthetic(Instruction::Return { value: Some(Operand::Var("x".into())) })],
+            is_main: false,
+            local_metas: vec![],
+        }
+    }
+
+    #[test]
+    fn i4i_spawn_then_await_round_trips_handle() {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![
+                work_fn(),
+                Function {
+                    name: "f".into(),
+                    params: vec![("x".into(), Ty::Int)],
+                    return_type: Ty::Int,
+                    body: vec![
+                        MirStmt::synthetic(Instruction::Spawn {
+                            dest: "t".into(),
+                            func: "work".into(),
+                            args: vec![Operand::Var("x".into())],
+                            arg_types: vec![Ty::Int],
+                            result_type: Ty::Int,
+                        }),
+                        MirStmt::synthetic(Instruction::Await {
+                            dest: "r".into(),
+                            task: Operand::Var("t".into()),
+                            result_type: Ty::Int,
+                        }),
+                        MirStmt::synthetic(Instruction::Return { value: Some(Operand::Var("r".into())) }),
+                    ],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+            ],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "spawn/await failed to verify:\n{ir}");
+        // Spawn: boxes args, submits the per-site thunk, handle travels as i64.
+        assert!(ir.contains("call ptr @tyra_task_spawn(ptr @__tyra_spawn_thunk_0"), "spawn must submit the thunk:\n{ir}");
+        assert!(ir.contains("ptrtoint"), "spawn handle must be cast to i64:\n{ir}");
+        // Await: inttoptr the handle, await, load the boxed result.
+        assert!(ir.contains("call ptr @tyra_task_await"), "await must call the runtime:\n{ir}");
+        assert!(ir.contains("inttoptr"), "await must cast the i64 handle back to ptr:\n{ir}");
+        // The thunk body is emitted and calls the target.
+        assert!(ir.contains("define internal ptr @__tyra_spawn_thunk_0(ptr"), "thunk body must be defined:\n{ir}");
+        assert!(ir.contains("call i64 @work"), "thunk must call the target function:\n{ir}");
+    }
+
+    #[test]
+    fn i4i_spawn_unit_result_thunk_returns_null() {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![
+                // fn act(x: Int) -> Unit { return }
+                Function {
+                    name: "act".into(),
+                    params: vec![("x".into(), Ty::Int)],
+                    return_type: Ty::Unit,
+                    body: vec![MirStmt::synthetic(Instruction::Return { value: None })],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+                Function {
+                    name: "f".into(),
+                    params: vec![("x".into(), Ty::Int)],
+                    return_type: Ty::Unit,
+                    body: vec![
+                        MirStmt::synthetic(Instruction::Spawn {
+                            dest: "t".into(),
+                            func: "act".into(),
+                            args: vec![Operand::Var("x".into())],
+                            arg_types: vec![Ty::Int],
+                            result_type: Ty::Unit,
+                        }),
+                        MirStmt::synthetic(Instruction::Await {
+                            dest: "r".into(),
+                            task: Operand::Var("t".into()),
+                            result_type: Ty::Unit,
+                        }),
+                        MirStmt::synthetic(Instruction::Return { value: None }),
+                    ],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+            ],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "spawn(unit)/await failed to verify:\n{ir}");
+        // Unit thunk discards the result and returns a null box.
+        assert!(ir.contains("call void @act"), "unit thunk must call the void target:\n{ir}");
+        assert!(ir.contains("ret ptr null"), "unit thunk must return a null box:\n{ir}");
+    }
+
+    #[test]
+    fn i4i_join_all_awaits_each_and_builds_list() {
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![],
+                return_type: Ty::Generic("List".into(), vec![Ty::Int]),
+                body: vec![
+                    // A list of i64 task handles (handles travel as i64).
+                    MirStmt::synthetic(Instruction::ListInit {
+                        dest: "hs".into(),
+                        elem_type: Ty::Int,
+                        elements: vec![Operand::Const(Constant::Int(1)), Operand::Const(Constant::Int(2))],
+                    }),
+                    MirStmt::synthetic(Instruction::JoinAll {
+                        dest: "r".into(),
+                        list: Operand::Var("hs".into()),
+                        elem_type: Ty::Int,
+                    }),
+                    MirStmt::synthetic(Instruction::Return { value: Some(Operand::Var("r".into())) }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![list_int_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "join_all failed to verify:\n{ir}");
+        // Loops awaiting each handle and reassembles a List<Int>.
+        assert!(ir.contains("call ptr @tyra_task_await"), "join_all must await each handle:\n{ir}");
+        assert!(ir.contains("insertvalue"), "join_all must build the result list:\n{ir}");
+    }
+
+    #[test]
+    fn i4i_select_dispatches_to_runtime() {
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![],
+                return_type: Ty::Int,
+                body: vec![
+                    MirStmt::synthetic(Instruction::ListInit {
+                        dest: "hs".into(),
+                        elem_type: Ty::Int,
+                        elements: vec![Operand::Const(Constant::Int(1)), Operand::Const(Constant::Int(2))],
+                    }),
+                    MirStmt::synthetic(Instruction::Select {
+                        dest: "s".into(),
+                        list: Operand::Var("hs".into()),
+                        elem_type: Ty::Int,
+                    }),
+                    MirStmt::synthetic(Instruction::Return { value: Some(Operand::Var("s".into())) }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![list_int_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "select failed to verify:\n{ir}");
+        assert!(ir.contains("call ptr @tyra_task_select"), "select must dispatch to the runtime:\n{ir}");
+        assert!(ir.contains("ptrtoint"), "select handle must be cast to i64:\n{ir}");
     }
 
     // ---- I4c: print family (type-scan-routed) ----
