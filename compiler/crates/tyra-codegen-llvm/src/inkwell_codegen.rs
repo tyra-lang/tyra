@@ -102,6 +102,11 @@ pub(crate) struct CodeGen<'ctx> {
     pub(crate) spawn_bases: Vec<usize>,
     /// Next spawn thunk id to assign within the function currently emitting.
     pub(crate) spawn_cursor: usize,
+    /// I5 coverage (ADR-0014): when `Some`, the backend emits the
+    /// `.tyra_counters` global, the `tyra_cov_init` call in `main`, and a
+    /// per-basic-block `atomicrmw add` counter increment. `None` for ordinary
+    /// (non-`--coverage`) builds. Built once from the program before emission.
+    pub(crate) cov_map: Option<crate::coverage::CovMap>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -129,6 +134,7 @@ impl<'ctx> CodeGen<'ctx> {
             spawn_thunks: Vec::new(),
             spawn_bases: Vec::new(),
             spawn_cursor: 0,
+            cov_map: None,
         }
     }
 
@@ -525,12 +531,26 @@ pub(crate) fn emit_inkwell(program: &Program) -> String {
 /// run `Module::verify()` on the result.
 #[allow(dead_code)]
 fn build_module<'ctx>(ctx: &'ctx Context, program: &Program) -> CodeGen<'ctx> {
+    build_module_opts(ctx, program, None)
+}
+
+/// `build_module` with optional I5 coverage instrumentation. When `cov_map` is
+/// `Some`, `declare_coverage` adds the counter global + `tyra_cov_init` extern
+/// and `emit_bodies` weaves per-basic-block `atomicrmw` increments.
+#[allow(dead_code)]
+fn build_module_opts<'ctx>(
+    ctx: &'ctx Context,
+    program: &Program,
+    cov_map: Option<crate::coverage::CovMap>,
+) -> CodeGen<'ctx> {
     let mut cg = CodeGen::new(ctx, "tyra");
+    cg.cov_map = cov_map;
     cg.register_struct_types(program);
     cg.build_type_scan_maps(program);
     cg.declare_closure_type();
     cg.set_struct_bodies(program);
     cg.declare_globals(program);
+    cg.declare_coverage();
     cg.declare_externs();
     cg.emit_collection_eq_hash(program);
     cg.declare_functions(program);
@@ -538,6 +558,22 @@ fn build_module<'ctx>(ctx: &'ctx Context, program: &Program) -> CodeGen<'ctx> {
     cg.emit_bodies(program);
     cg.emit_spawn_thunk_bodies();
     cg
+}
+
+/// I5: emit LLVM IR text with coverage instrumentation, plus the covmap sidecar
+/// text. Mirrors the legacy `emit_llvm_ir_coverage`; the pure covmap building
+/// and serialization are reused from `crate::coverage`. (Not yet wired to the
+/// public entry points — the legacy text path stays production until I7.)
+#[allow(dead_code)]
+pub(crate) fn emit_inkwell_coverage(program: &Program) -> (String, String) {
+    let cov_map = crate::coverage::build_cov_map(program);
+    let covmap_text = crate::coverage::write_covmap_text(&cov_map, &program.source_files);
+    let ctx = Context::create();
+    let ir = build_module_opts(&ctx, program, Some(cov_map))
+        .module
+        .print_to_string()
+        .to_string();
+    (ir, covmap_text)
 }
 
 #[cfg(test)]
@@ -2745,6 +2781,97 @@ mod tests {
         // Branchless: tag/value chosen by select, then assembled into Option<Int>.
         assert!(ir.contains("select i1"), "parse must pick the result branchlessly:\n{ir}");
         assert!(ir.contains("insertvalue"), "parse must build the Option struct:\n{ir}");
+    }
+
+    // ---- I5: coverage instrumentation (ADR-0014) ----
+
+    #[test]
+    fn i5_coverage_emits_global_atomicrmw_and_init() {
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand, SourceLoc};
+        let loc = |line| SourceLoc { file_id: 0, line, col: 1 };
+        let program = Program {
+            functions: vec![
+                // main: entry counter + tyra_cov_init call.
+                Function {
+                    name: "main".into(),
+                    params: vec![],
+                    return_type: Ty::Unit,
+                    body: vec![
+                        MirStmt::new(loc(1), Instruction::Const { dest: "c".into(), value: Constant::Int(0) }),
+                        MirStmt::synthetic(Instruction::Return { value: None }),
+                    ],
+                    is_main: true,
+                    local_metas: vec![],
+                },
+                // g: an explicit Label block gets its own counter increment.
+                Function {
+                    name: "g".into(),
+                    params: vec![],
+                    return_type: Ty::Int,
+                    body: vec![
+                        MirStmt::new(loc(5), Instruction::Jump { label: "L".into() }),
+                        MirStmt::new(loc(6), Instruction::Label("L".into())),
+                        MirStmt::new(loc(6), Instruction::Const { dest: "r".into(), value: Constant::Int(1) }),
+                        MirStmt::synthetic(Instruction::Return { value: Some(Operand::Var("r".into())) }),
+                    ],
+                    is_main: false,
+                    local_metas: vec![],
+                },
+            ],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec!["test.tyra".into()],
+            lower_errors: vec![],
+        };
+        // The instrumented module must verify (catches a malformed atomicrmw/gep).
+        let ctx = Context::create();
+        let cov_map = crate::coverage::build_cov_map(&program);
+        let cg = build_module_opts(&ctx, &program, Some(cov_map));
+        assert!(cg.module.verify().is_ok(), "instrumented module failed to verify:\n{}", cg.module.print_to_string().to_string());
+
+        let (ir, covmap) = emit_inkwell_coverage(&program);
+        // The counter array global (3 counters: main entry, g entry, g's label).
+        assert!(ir.contains("@.tyra_counters ="), "must emit the counter global:\n{ir}");
+        assert!(ir.contains("x i64] zeroinitializer"), "counter global must be a zeroinit i64 array:\n{ir}");
+        // Per-BB increments use atomicrmw add … monotonic.
+        assert!(ir.contains("atomicrmw add ptr"), "must increment counters atomically:\n{ir}");
+        assert!(ir.contains("monotonic"), "increment must be monotonic-ordered:\n{ir}");
+        // main registers the array with the runtime.
+        assert!(ir.contains("declare void @tyra_cov_init"), "must declare the cov-init extern:\n{ir}");
+        assert!(ir.contains("call void @tyra_cov_init(ptr @.tyra_counters"), "main must call cov-init:\n{ir}");
+        // The covmap sidecar is produced alongside the IR.
+        assert!(covmap.starts_with("TYRA_COVMAP_V1"), "covmap sidecar must be emitted:\n{covmap}");
+        assert!(covmap.contains("FILE:0=test.tyra"), "covmap must list the source file:\n{covmap}");
+    }
+
+    /// Without a cov_map the backend emits no coverage artifacts (ordinary build).
+    #[test]
+    fn i5_no_coverage_when_disabled() {
+        use tyra_mir::{Constant, Function, Instruction, MirStmt, SourceLoc};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "main".into(),
+                params: vec![],
+                return_type: Ty::Unit,
+                body: vec![
+                    MirStmt::new(SourceLoc { file_id: 0, line: 1, col: 1 }, Instruction::Const { dest: "c".into(), value: Constant::Int(0) }),
+                    MirStmt::synthetic(Instruction::Return { value: None }),
+                ],
+                is_main: true,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![],
+            source_files: vec!["test.tyra".into()],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
+        assert!(!ir.contains("@.tyra_counters"), "no counter global without coverage:\n{ir}");
+        assert!(!ir.contains("atomicrmw"), "no increments without coverage:\n{ir}");
+        assert!(!ir.contains("tyra_cov_init"), "no cov-init without coverage:\n{ir}");
     }
 
     // ---- I4i: async concurrency (spawn / await / join_all / select) ----

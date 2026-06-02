@@ -325,10 +325,18 @@ impl<'ctx> CodeGen<'ctx> {
             self.builder.build_store(argc_g, argc).unwrap();
             let argv_g = self.module.get_global(".tyra.argv").unwrap().as_pointer_value();
             self.builder.build_store(argv_g, argv).unwrap();
+            // I5: register the counter array with the runtime atexit flusher
+            // before any user code runs (no-op without coverage).
+            self.emit_cov_init_call();
         }
 
+        // I5: the function's entry-block counter, in `tyra.entry` after init /
+        // alloca hoisting and before the first real instruction (no-op without
+        // coverage). Mirrors the legacy entry increment.
+        self.emit_cov_entry(f);
+
         let mut pending: Vec<(PhiValue<'ctx>, Vec<(Operand, String)>)> = Vec::new();
-        for stmt in &f.body {
+        for (si, stmt) in f.body.iter().enumerate() {
             // Dead code after an in-block terminator: `panic`/`sys.exit` emit
             // `unreachable` mid-block, so the lowering-appended trailing `Return`
             // (lower/mod.rs always closes a body with one) is unreachable. A
@@ -346,6 +354,22 @@ impl<'ctx> CodeGen<'ctx> {
             }
             self.cur_loc = stmt.loc;
             self.emit_instr(&stmt.instr, f, &mut pending);
+            // I5: a labeled basic block gets its own counter, incremented right
+            // after the builder repositions onto it. Use the label's loc, or the
+            // next non-dummy stmt's loc when the label itself is synthetic
+            // (no-op without coverage). Mirrors the legacy per-label increment.
+            if matches!(stmt.instr, Instruction::Label(_)) {
+                let loc = if !stmt.loc.is_dummy() {
+                    stmt.loc
+                } else {
+                    f.body[si + 1..]
+                        .iter()
+                        .find(|s| !s.loc.is_dummy())
+                        .map(|s| s.loc)
+                        .unwrap_or_else(tyra_mir::SourceLoc::dummy)
+                };
+                self.emit_cov_increment(loc);
+            }
             // Track the *exit* block of the current label (for phi predecessors)
             // without touching `blocks` (the jump-*target* table). For a
             // non-splitting instruction this is idempotent; for ListGet/

@@ -12,6 +12,7 @@ mod helpers;
 mod inkwell_builtins;
 mod inkwell_closure;
 mod inkwell_concurrency;
+mod inkwell_coverage;
 mod inkwell_codegen;
 mod inkwell_http_builtins;
 mod inkwell_instr;
