@@ -1964,6 +1964,185 @@ mod tests {
         assert!(ir.contains("call i64 @tyra_linked_set_len"), "missing linked_set.len:\n{ir}");
     }
 
+    /// I4f: `Map<K,V>.get(k) -> Option<V>` (the `MapGetOption` MIR instruction).
+    /// Builds the map, then retrieves a value and checks the Option is assembled
+    /// from a null-checked boxed `tyra_map_get` round-trip.
+    #[test]
+    fn i4f_map_get_option_int_builds_option() {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![("k".into(), Ty::Int), ("v".into(), Ty::Int)],
+                return_type: Ty::Generic("Option".into(), vec![Ty::Int]),
+                body: vec![
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: Some("m0".into()),
+                        func: "__map_new__Int__Int".into(),
+                        args: vec![],
+                    }),
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: Some("m1".into()),
+                        func: "__map_insert__Int__Int".into(),
+                        args: vec![
+                            Operand::Var("m0".into()),
+                            Operand::Var("k".into()),
+                            Operand::Var("v".into()),
+                        ],
+                    }),
+                    MirStmt::synthetic(Instruction::MapGetOption {
+                        dest: "r".into(),
+                        handle: Operand::Var("m1".into()),
+                        key: Operand::Var("k".into()),
+                        key_ty: Ty::Int,
+                        val_ty: Ty::Int,
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("r".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![option_int_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "map.get failed to verify:\n{ir}");
+        // The retrieval round-trips through the boxed runtime getter,
+        assert!(ir.contains("call ptr @tyra_map_get"), "map.get must call tyra_map_get:\n{ir}");
+        // null-checks the returned box (absent => None),
+        assert!(ir.contains("icmp ne ptr"), "map.get must null-check the value box:\n{ir}");
+        // and selects the zero slot as a null-safe load source when absent.
+        assert!(ir.contains("@.tyra_zero_slot"), "map.get must guard the load via zero slot:\n{ir}");
+    }
+
+    /// I4f: `LinkedMap<K,V>.get(k)` mirrors `MapGetOption` but calls the
+    /// insertion-ordered `tyra_linked_map_get` runtime getter.
+    #[test]
+    fn i4f_linked_map_get_option_calls_linked_getter() {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![("k".into(), Ty::String), ("v".into(), Ty::Int)],
+                return_type: Ty::Generic("Option".into(), vec![Ty::Int]),
+                body: vec![
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: Some("m0".into()),
+                        func: "__linked_map_new__String__Int".into(),
+                        args: vec![],
+                    }),
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: Some("m1".into()),
+                        func: "__linked_map_insert__String__Int".into(),
+                        args: vec![
+                            Operand::Var("m0".into()),
+                            Operand::Var("k".into()),
+                            Operand::Var("v".into()),
+                        ],
+                    }),
+                    MirStmt::synthetic(Instruction::LinkedMapGetOption {
+                        dest: "r".into(),
+                        handle: Operand::Var("m1".into()),
+                        key: Operand::Var("k".into()),
+                        key_ty: Ty::String,
+                        val_ty: Ty::Int,
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("r".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![option_int_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "linked_map.get failed to verify:\n{ir}");
+        assert!(
+            ir.contains("call ptr @tyra_linked_map_get"),
+            "linked_map.get must call tyra_linked_map_get:\n{ir}"
+        );
+    }
+
+    /// I4f: `Map<K,Bool>.get(k)` — the Bool value is boxed as i8 (zext of i1),
+    /// so retrieval must `load i8` then `trunc` back to the i1 `Option<Bool>`
+    /// payload. This guards the intentional divergence from the legacy text
+    /// backend (which loaded i8 straight into an i1 `select`, a malformed shape
+    /// that only escaped notice because no corpus used `Map<_,Bool>` values).
+    /// `Module::verify()` would reject any type mismatch here.
+    #[test]
+    fn i4f_map_get_option_bool_truncates_payload() {
+        use tyra_mir::{Function, Instruction, MirStmt, Operand};
+        let ctx = Context::create();
+        let program = Program {
+            functions: vec![Function {
+                name: "f".into(),
+                params: vec![("k".into(), Ty::Int), ("v".into(), Ty::Bool)],
+                return_type: Ty::Generic("Option".into(), vec![Ty::Bool]),
+                body: vec![
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: Some("m0".into()),
+                        func: "__map_new__Int__Bool".into(),
+                        args: vec![],
+                    }),
+                    MirStmt::synthetic(Instruction::Call {
+                        dest: Some("m1".into()),
+                        func: "__map_insert__Int__Bool".into(),
+                        args: vec![
+                            Operand::Var("m0".into()),
+                            Operand::Var("k".into()),
+                            Operand::Var("v".into()),
+                        ],
+                    }),
+                    MirStmt::synthetic(Instruction::MapGetOption {
+                        dest: "r".into(),
+                        handle: Operand::Var("m1".into()),
+                        key: Operand::Var("k".into()),
+                        key_ty: Ty::Int,
+                        val_ty: Ty::Bool,
+                    }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("r".into())),
+                    }),
+                ],
+                is_main: false,
+                local_metas: vec![],
+            }],
+            string_constants: vec![],
+            struct_defs: vec![option_bool_def()],
+            source_files: vec![],
+            lower_errors: vec![],
+        };
+        let cg = build_module(&ctx, &program);
+        let ir = cg.module.print_to_string().to_string();
+        assert!(cg.module.verify().is_ok(), "Bool map.get failed to verify:\n{ir}");
+        // i8 load (the boxed Bool) ...
+        assert!(ir.contains("load i8"), "Bool value must be loaded as i8:\n{ir}");
+        // ... truncated back to the i1 Option payload.
+        assert!(ir.contains("trunc i8"), "Bool value must be truncated i8->i1:\n{ir}");
+    }
+
+    /// `Option<Bool>` ADT: field 0 named "tag" (→ i8), payload `value: Bool`.
+    fn option_bool_def() -> tyra_mir::StructDef {
+        tyra_mir::StructDef {
+            name: "Option__Bool".into(),
+            fields: vec![("tag".into(), Ty::Int), ("value".into(), Ty::Bool)],
+            is_data: false,
+            recursive_fields: vec![false, false],
+        }
+    }
+
     // ---- I4c: print family (type-scan-routed) ----
 
     /// Build `fn f(p: ty) -> Unit { <builtin>(p) }` for print-family tests.

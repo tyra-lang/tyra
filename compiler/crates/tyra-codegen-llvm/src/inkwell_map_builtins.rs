@@ -24,9 +24,10 @@
 
 use inkwell::IntPredicate;
 use inkwell::module::Linkage;
-use inkwell::values::{CallSiteValue, FunctionValue, PointerValue};
+use inkwell::values::{AggregateValueEnum, CallSiteValue, FunctionValue, PointerValue};
 
 use tyra_mir::{Instruction, Operand, Program};
+use tyra_types::Ty;
 
 use crate::inkwell_codegen::CodeGen;
 
@@ -230,6 +231,109 @@ impl<'ctx> CodeGen<'ctx> {
             _ => return false,
         }
         true
+    }
+
+    /// Emit `Map`/`LinkedMap` value retrieval — the `MapGetOption` /
+    /// `LinkedMapGetOption` MIR instructions (ADR-0015 / ADR-0019). `getter` is
+    /// the runtime callee (`tyra_map_get` / `tyra_linked_map_get`), both
+    /// `fn(ptr coll, ptr keybox) -> ptr valuebox` returning null when absent.
+    ///
+    /// Shape (mirrors legacy `emit_instruction`'s `MapGetOption` arm, single
+    /// basic block via `select` rather than branches):
+    ///   1. box the key (same boxing as insert/contains);
+    ///   2. `vbox = getter(coll, kbox)`; `present = vbox != null`;
+    ///   3. `safe = present ? vbox : @.tyra_zero_slot` (null-safe load source);
+    ///   4. load the value through `safe` (`Bool` loads i8 then truncates to
+    ///      i1, matching the i8 box store);
+    ///   5. build `Option<V> { tag: present ? 0 : 1, value: present ? loaded : 0 }`.
+    pub(crate) fn emit_map_get_option(
+        &mut self,
+        dest: &str,
+        handle: &Operand,
+        key: &Operand,
+        key_ty: &Ty,
+        val_ty: &Ty,
+        getter: &str,
+    ) {
+        let coll = self.operand(handle).into_pointer_value();
+        let kbox = self.box_arg(key, &key_ty.monomorphized_name());
+
+        let get = self.runtime_fn(getter);
+        let vbox = self
+            .builder
+            .build_call(get, &[coll.into(), kbox.into()], &format!("{dest}.vbox"))
+            .unwrap()
+            .try_as_basic_value()
+            .basic()
+            .unwrap()
+            .into_pointer_value();
+        let null = self.ptr().const_null();
+        let present = self
+            .builder
+            .build_int_compare(IntPredicate::NE, vbox, null, &format!("{dest}.present"))
+            .unwrap();
+
+        // Null-safe load source: never dereference null in the not-found branch.
+        let zero_slot = self
+            .module
+            .get_global(".tyra_zero_slot")
+            .expect("zero slot global (I1)")
+            .as_pointer_value();
+        let safe = self
+            .builder
+            .build_select(present, vbox, zero_slot, &format!("{dest}.safe"))
+            .unwrap()
+            .into_pointer_value();
+
+        // Load the value with its payload type. `Bool` is boxed as i8 (zext of
+        // i1), so load i8 and truncate back to the i1 Option payload.
+        let payload_bt = self.ty_to_basic_type(val_ty);
+        let raw = if matches!(val_ty, Ty::Bool) {
+            let i8t = self.ctx.i8_type();
+            let byte = self
+                .builder
+                .build_load(i8t, safe, &format!("{dest}.raw8"))
+                .unwrap()
+                .into_int_value();
+            self.builder
+                .build_int_truncate(byte, self.ctx.bool_type(), &format!("{dest}.rawval"))
+                .unwrap()
+                .into()
+        } else {
+            self.builder
+                .build_load(payload_bt, safe, &format!("{dest}.rawval"))
+                .unwrap()
+        };
+
+        let i8t = self.ctx.i8_type();
+        let tag = self
+            .builder
+            .build_select(
+                present,
+                i8t.const_zero(),
+                i8t.const_int(1, false),
+                &format!("{dest}.tag"),
+            )
+            .unwrap();
+        let zero = self.zero_of(payload_bt);
+        let val = self
+            .builder
+            .build_select(present, raw, zero, &format!("{dest}.val"))
+            .unwrap();
+
+        // Build Option<V> = { tag: i8, value: payload }.
+        let opt_mono = Ty::Generic("Option".into(), vec![val_ty.clone()]).monomorphized_name();
+        let opt_ty = self.struct_types[&opt_mono];
+        let mut agg: AggregateValueEnum = opt_ty.get_undef().into();
+        agg = self
+            .builder
+            .build_insert_value(agg, tag, 0, &format!("{dest}.s0"))
+            .unwrap();
+        agg = self
+            .builder
+            .build_insert_value(agg, val, 1, dest)
+            .unwrap();
+        self.values.insert(dest.to_string(), agg.into_struct_value().into());
     }
 
     /// Store a collection call's basic return value (a `ptr` for

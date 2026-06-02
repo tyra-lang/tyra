@@ -92,7 +92,9 @@ impl<'ctx> CodeGen<'ctx> {
                 | Instruction::ListLen { .. }
                 | Instruction::ListGet { .. }
                 | Instruction::ListGetSafe { .. }
-                | Instruction::ListPush { .. } => true,
+                | Instruction::ListPush { .. }
+                | Instruction::MapGetOption { .. }
+                | Instruction::LinkedMapGetOption { .. } => true,
                 Instruction::Call { func, args, .. } => {
                     self.fn_values.contains_key(func)
                         || (Self::is_supported_builtin(func)
@@ -213,6 +215,8 @@ impl<'ctx> CodeGen<'ctx> {
                 vec![list, index]
             }
             Instruction::ListPush { list, elem, .. } => vec![list, elem],
+            Instruction::MapGetOption { handle, key, .. }
+            | Instruction::LinkedMapGetOption { handle, key, .. } => vec![handle, key],
             _ => vec![],
         }
     }
@@ -630,6 +634,12 @@ impl<'ctx> CodeGen<'ctx> {
             Instruction::ListPush { dest, list, elem, elem_type } => {
                 self.emit_list_push(dest, list, elem, elem_type);
             }
+            Instruction::MapGetOption { dest, handle, key, key_ty, val_ty } => {
+                self.emit_map_get_option(dest, handle, key, key_ty, val_ty, "tyra_map_get");
+            }
+            Instruction::LinkedMapGetOption { dest, handle, key, key_ty, val_ty } => {
+                self.emit_map_get_option(dest, handle, key, key_ty, val_ty, "tyra_linked_map_get");
+            }
             Instruction::StringFormat { dest, format_ref, args } => {
                 // GC-allocate a 1024-byte buffer and snprintf into it. The
                 // legacy backend adds a defensive GC_malloc null check + abort
@@ -811,7 +821,9 @@ fn instr_dest(inst: &Instruction) -> Option<&str> {
         | Instruction::ListLen { dest, .. }
         | Instruction::ListGet { dest, .. }
         | Instruction::ListGetSafe { dest, .. }
-        | Instruction::ListPush { dest, .. } => Some(dest),
+        | Instruction::ListPush { dest, .. }
+        | Instruction::MapGetOption { dest, .. }
+        | Instruction::LinkedMapGetOption { dest, .. } => Some(dest),
         Instruction::Call { dest, .. } => dest.as_deref(),
         _ => None,
     }

@@ -842,8 +842,11 @@ fn pre_scan_struct_types(
                     }
                 }
             }
-            // MapGetOption produces Option<V> — register the concrete struct name.
-            Instruction::MapGetOption { dest, val_ty, .. } => {
+            // Map/LinkedMap `.get(k)` produce Option<V> — register the concrete
+            // struct name so the dest is treated as a struct (e.g. print-family
+            // emittability) rather than a scalar.
+            Instruction::MapGetOption { dest, val_ty, .. }
+            | Instruction::LinkedMapGetOption { dest, val_ty, .. } => {
                 let opt_struct = format!("Option__{}", val_ty.monomorphized_name());
                 if struct_map.contains_key(&opt_struct) {
                     struct_temps.insert(dest.clone(), opt_struct);
