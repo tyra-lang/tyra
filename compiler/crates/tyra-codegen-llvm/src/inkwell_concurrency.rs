@@ -52,10 +52,12 @@ impl<'ctx> CodeGen<'ctx> {
             for stmt in &f.body {
                 if let Instruction::Spawn { func, arg_types, result_type, .. } = &stmt.instr {
                     let id = self.spawn_thunks.len();
-                    // Per-site argument struct (boxes the spawn arguments).
+                    // Per-site argument struct (named, so it appears in IR text).
                     let field_tys: Vec<BasicTypeEnum<'ctx>> =
                         arg_types.iter().map(|t| self.ty_to_basic_type(t)).collect();
-                    let args_st = self.ctx.struct_type(&field_tys, false);
+                    let st_name = format!("struct.__tyra_spawn_args_{id}");
+                    let args_st = self.ctx.opaque_struct_type(&st_name);
+                    args_st.set_body(&field_tys, false);
                     self.struct_types.insert(format!("__tyra_spawn_args_{id}"), args_st);
                     // Thunk function signature `ptr(ptr args)`.
                     let fn_ty = ptr.fn_type(&[ptr.into()], false);
@@ -253,6 +255,7 @@ impl<'ctx> CodeGen<'ctx> {
             let entry = self.ctx.append_basic_block(fv, "entry");
             self.builder.position_at_end(entry);
             let args_param = fv.get_nth_param(0).unwrap().into_pointer_value();
+            args_param.set_name("args");
 
             let mut call_args: Vec<BasicMetadataValueEnum<'ctx>> = Vec::with_capacity(desc.arg_types.len());
             if !desc.arg_types.is_empty() {

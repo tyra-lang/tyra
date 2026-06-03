@@ -26,7 +26,14 @@ use inkwell::debug_info::{
     AsDIScope, DIFile, DIFlags, DIFlagsConstants, DISubprogram, DIType, DebugInfoBuilder,
     DWARFEmissionKind, DWARFSourceLanguage,
 };
+// Raw LLVM 19+ API for inserting debug declare records. inkwell 0.9 wraps the
+// old `LLVMDIBuilderInsertDeclareAtEnd` (now aliased to return LLVMDbgRecordRef
+// on LLVM 19+) and casts the result to LLVMValueRef — UB that triggers
+// `debug_assert!(value.is_instruction())` in nondeterministic order.
+// Calling the new API directly and discarding the returned DbgRecordRef is correct.
+use inkwell::llvm_sys::debuginfo::LLVMDIBuilderInsertDeclareRecordAtEnd;
 use inkwell::module::FlagBehavior;
+use inkwell::values::AsValueRef;
 
 use tyra_mir::{Function, Program};
 use tyra_types::Ty;
@@ -248,7 +255,19 @@ impl<'ctx> CodeGen<'ctx> {
                 0, // align
             );
             let loc = d.builder.create_debug_location(self.ctx, line, 1, sp.as_debug_info_scope(), None);
-            d.builder.insert_declare_at_end(slot, Some(var), None, loc, entry);
+            let expr = d.builder.create_expression(vec![]);
+            // Bypass inkwell 0.9's insert_declare_at_end wrapper (UB on LLVM 19+):
+            // use the LLVM 19+ DbgRecord API directly and discard the return value.
+            unsafe {
+                LLVMDIBuilderInsertDeclareRecordAtEnd(
+                    d.builder.as_mut_ptr(),
+                    slot.as_value_ref(),
+                    var.as_mut_ptr(),
+                    expr.as_mut_ptr(),
+                    loc.as_mut_ptr(),
+                    entry.as_mut_ptr(),
+                );
+            }
         }
     }
 

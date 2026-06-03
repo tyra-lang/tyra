@@ -16,7 +16,7 @@
 use std::collections::HashSet;
 
 use inkwell::types::BasicTypeEnum;
-use inkwell::values::{AggregateValueEnum, BasicMetadataValueEnum, BasicValueEnum, PhiValue};
+use inkwell::values::{AggregateValueEnum, BasicMetadataValueEnum, BasicValueEnum, FunctionValue, PhiValue};
 use inkwell::{FloatPredicate, IntPredicate};
 
 use tyra_mir::{Constant, Function, Instruction, MirBinOp, Operand, Program};
@@ -336,6 +336,8 @@ impl<'ctx> CodeGen<'ctx> {
             self.call_runtime_void("tyra_rt_init", &[]);
             let argc = fv.get_nth_param(0).unwrap();
             let argv = fv.get_nth_param(1).unwrap();
+            argc.set_name("argc");
+            argv.set_name("argv");
             let argc_g = self.module.get_global(".tyra.argc").unwrap().as_pointer_value();
             self.builder.build_store(argc_g, argc).unwrap();
             let argv_g = self.module.get_global(".tyra.argv").unwrap().as_pointer_value();
@@ -506,12 +508,16 @@ impl<'ctx> CodeGen<'ctx> {
                     self.values.insert(dest.clone(), raw.into());
                 } else {
                     // value type: insertvalue chain from undef.
+                    // The last insertvalue is named `dest` so extractvalue/BinOp
+                    // references use the same name as the MIR temp (%_t2 not %_t2.s1).
+                    let n = fields.len();
                     let mut agg: AggregateValueEnum = st.get_undef().into();
                     for (i, fop) in fields.iter().enumerate() {
                         let v = self.operand(fop);
+                        let name = if i + 1 == n { dest.as_str() } else { &format!("{dest}.s{i}") };
                         agg = self
                             .builder
-                            .build_insert_value(agg, v, i as u32, &format!("{dest}.s{i}"))
+                            .build_insert_value(agg, v, i as u32, name)
                             .unwrap();
                     }
                     self.values.insert(dest.clone(), agg.into_struct_value().into());
@@ -643,6 +649,24 @@ impl<'ctx> CodeGen<'ctx> {
                 }
             }
             Instruction::BinOp { dest, op, lhs, rhs } => {
+                // EqInt/NeqInt with struct operands: field-by-field ADT comparison.
+                if matches!(op, MirBinOp::EqInt | MirBinOp::NeqInt) {
+                    let stype = self
+                        .scan
+                        .as_ref()
+                        .and_then(|s| {
+                            let ln = if let Operand::Var(n) = lhs { s.struct_temps.get(n.as_str()) } else { None };
+                            let rn = if let Operand::Var(n) = rhs { s.struct_temps.get(n.as_str()) } else { None };
+                            ln.or(rn)
+                        })
+                        .cloned();
+                    if let Some(stype) = stype {
+                        let fv = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+                        let v = self.emit_adt_compare(*op, lhs, rhs, dest, &stype, fv);
+                        self.values.insert(dest.clone(), v);
+                        return;
+                    }
+                }
                 let v = self.emit_binop(*op, lhs, rhs, dest);
                 self.values.insert(dest.clone(), v);
             }
@@ -862,6 +886,110 @@ impl<'ctx> CodeGen<'ctx> {
                 };
                 b.build_int_compare(pred, ci, zero, dest).unwrap().into()
             }
+        }
+    }
+
+    /// Field-by-field structural comparison for Option/Result ADT values
+    /// (EqInt/NeqInt with struct operands). Mirrors the legacy `instr_emit.rs`
+    /// BinOp struct path. Creates null-safe strcmp blocks for String fields.
+    fn emit_adt_compare(
+        &mut self,
+        op: MirBinOp,
+        lhs: &Operand,
+        rhs: &Operand,
+        dest: &str,
+        stype: &str,
+        fv: FunctionValue<'ctx>,
+    ) -> BasicValueEnum<'ctx> {
+        let info = &self.struct_map[stype];
+        let lv = self.operand(lhs).into_struct_value();
+        let rv = self.operand(rhs).into_struct_value();
+        let num_fields = info.field_types.len();
+        let i1t = self.ctx.bool_type();
+
+        // Classify each field.
+        enum FieldKind { Scalar, StrPtr, Unsupported }
+        let field_kinds: Vec<FieldKind> = (0..num_fields)
+            .map(|fi| {
+                if fi == 0 {
+                    FieldKind::Scalar // tag is always i8/i1/i64
+                } else if !info.recursive_fields.get(fi).copied().unwrap_or(false)
+                    && info.field_types.get(fi) == Some(&tyra_types::Ty::String)
+                {
+                    FieldKind::StrPtr
+                } else {
+                    match lv.get_type().get_field_type_at_index(fi as u32) {
+                        Some(t) if t.is_int_type() || t.is_float_type() => FieldKind::Scalar,
+                        _ => FieldKind::Unsupported,
+                    }
+                }
+            })
+            .collect();
+
+        let all_supported = field_kinds.iter().all(|k| !matches!(k, FieldKind::Unsupported));
+        if !all_supported {
+            // Fallback: tag-only comparison (unsupported payload — leave as explicit TODO).
+            let lt = self.builder.build_extract_value(lv, 0, &format!("{dest}.lt")).unwrap();
+            let rt = self.builder.build_extract_value(rv, 0, &format!("{dest}.rt")).unwrap();
+            let eq = self.builder.build_int_compare(IntPredicate::EQ, lt.into_int_value(), rt.into_int_value(), dest).unwrap();
+            return if matches!(op, MirBinOp::NeqInt) {
+                self.builder.build_xor(eq, i1t.const_all_ones(), &format!("{dest}.ne")).unwrap().into()
+            } else {
+                eq.into()
+            };
+        }
+
+        let strcmp = self.module.get_function("strcmp").unwrap();
+        let mut acc: Option<BasicValueEnum<'ctx>> = None;
+        for fi in 0..num_fields {
+            let lf = self.builder.build_extract_value(lv, fi as u32, &format!("{dest}.l{fi}")).unwrap();
+            let rf = self.builder.build_extract_value(rv, fi as u32, &format!("{dest}.r{fi}")).unwrap();
+            let cmp: BasicValueEnum<'ctx> = match &field_kinds[fi] {
+                FieldKind::StrPtr => {
+                    // Null guard: AdtInit zero-fills inactive variant String fields.
+                    let lp = lf.into_pointer_value();
+                    let rp = rf.into_pointer_value();
+                    let null = self.ptr().const_null();
+                    let ln = self.builder.build_int_compare(IntPredicate::EQ, lp, null, &format!("{dest}.ln{fi}")).unwrap();
+                    let rn = self.builder.build_int_compare(IntPredicate::EQ, rp, null, &format!("{dest}.rn{fi}")).unwrap();
+                    let any_null = self.builder.build_or(ln, rn, &format!("{dest}.anyn{fi}")).unwrap();
+                    let bb_snull = self.ctx.append_basic_block(fv, &format!("{dest}.snull{fi}"));
+                    let bb_scmp  = self.ctx.append_basic_block(fv, &format!("{dest}.scmp{fi}"));
+                    let bb_sdone = self.ctx.append_basic_block(fv, &format!("{dest}.sdone{fi}"));
+                    self.builder.build_conditional_branch(any_null, bb_snull, bb_scmp).unwrap();
+                    // snull: pointer equality (both null → equal, one null → not)
+                    self.builder.position_at_end(bb_snull);
+                    let pe = self.builder.build_int_compare(IntPredicate::EQ, lp, rp, &format!("{dest}.pe{fi}")).unwrap();
+                    self.builder.build_unconditional_branch(bb_sdone).unwrap();
+                    // scmp: strcmp
+                    self.builder.position_at_end(bb_scmp);
+                    let sc = self.builder.build_call(strcmp, &[lp.into(), rp.into()], &format!("{dest}.sc{fi}")).unwrap();
+                    let si = sc.try_as_basic_value().basic().unwrap().into_int_value();
+                    let se = self.builder.build_int_compare(IntPredicate::EQ, si, self.ctx.i32_type().const_zero(), &format!("{dest}.se{fi}")).unwrap();
+                    self.builder.build_unconditional_branch(bb_sdone).unwrap();
+                    // sdone: phi
+                    self.builder.position_at_end(bb_sdone);
+                    let phi = self.builder.build_phi(i1t, &format!("{dest}.e{fi}")).unwrap();
+                    phi.add_incoming(&[(&pe, bb_snull), (&se, bb_scmp)]);
+                    phi.as_basic_value()
+                }
+                FieldKind::Scalar => {
+                    let lfi = lf.into_int_value();
+                    let rfi = rf.into_int_value();
+                    self.builder.build_int_compare(IntPredicate::EQ, lfi, rfi, &format!("{dest}.f{fi}")).unwrap().into()
+                }
+                FieldKind::Unsupported => unreachable!(),
+            };
+            acc = Some(match acc {
+                None => cmp,
+                Some(prev) => self.builder.build_and(prev.into_int_value(), cmp.into_int_value(), &format!("{dest}.a{fi}")).unwrap().into(),
+            });
+        }
+        let eq = acc.unwrap_or_else(|| i1t.const_int(1, false).into());
+        if matches!(op, MirBinOp::NeqInt) {
+            self.builder.build_xor(eq.into_int_value(), i1t.const_all_ones(), &format!("{dest}.ne")).unwrap().into()
+        } else {
+            eq
         }
     }
 
