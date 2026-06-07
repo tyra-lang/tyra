@@ -300,31 +300,45 @@ impl<'ctx> CodeGen<'ctx> {
         // Parameters: bind the SSA arg for direct (immutable) operand refs and
         // also create a `.addr` slot (matching the legacy backend) so mutation
         // (Store) and `Copy`-from-param read the mutable view.
+        // IMPORTANT: use the parameter's actual LLVM type for the alloca, not
+        // a fixed `alloca i64`.  Struct-typed params (Option, Result, List,
+        // collection wrappers, ADT values) are wider than 8 bytes; allocating
+        // only 8 bytes then storing the full struct overflows into adjacent
+        // stack slots and silently corrupts later loads.
         if !f.is_main {
-            let i64t = self.ctx.i64_type();
             for (i, (name, ty)) in f.params.iter().enumerate() {
                 let p = fv.get_nth_param(i as u32).unwrap();
                 p.set_name(name);
                 self.values.insert(name.clone(), p);
-                let slot = self.builder.build_alloca(i64t, &format!("{name}.addr")).unwrap();
+                let bt = self.ty_to_basic_type(ty);
+                let slot = self.builder.build_alloca(bt, &format!("{name}.addr")).unwrap();
                 self.builder.build_store(slot, p).unwrap();
                 self.addr_slots.insert(name.clone(), slot);
-                let bt = self.ty_to_basic_type(ty);
                 self.slot_types.insert(name.clone(), bt);
             }
         }
 
         // Hoist every local alloca slot to the entry block (allocated once, not
-        // per loop iteration). Slots are `alloca i64` (8 bytes covers every
-        // scalar/ptr local an I2b-emittable function can hold); the load type is
-        // tracked per-slot via `slot_types` (refined on Store).
+        // per loop iteration). Use the type from the scan's alloca_llvm_types
+        // (derived from the first Store into each slot) so struct-typed locals
+        // (Option/Result/List/Map wrappers, ADT values) get correctly-sized
+        // slots. Scalar/unknown locals fall back to i64.
+        let alloca_type_strs: std::collections::HashMap<String, String> = self
+            .scan
+            .as_ref()
+            .map(|s| s.alloca_llvm_types.clone())
+            .unwrap_or_default();
         let i64t = self.ctx.i64_type();
         for stmt in &f.body {
             if let Instruction::Alloca { dest } = &stmt.instr {
                 if !self.addr_slots.contains_key(dest) {
-                    let slot = self.builder.build_alloca(i64t, dest).unwrap();
+                    let bt = alloca_type_strs
+                        .get(dest.as_str())
+                        .map(|s| self.basic_type_from_scan_str(s))
+                        .unwrap_or_else(|| i64t.into());
+                    let slot = self.builder.build_alloca(bt, dest).unwrap();
                     self.addr_slots.insert(dest.clone(), slot);
-                    self.slot_types.insert(dest.clone(), i64t.into());
+                    self.slot_types.insert(dest.clone(), bt);
                 }
             }
         }

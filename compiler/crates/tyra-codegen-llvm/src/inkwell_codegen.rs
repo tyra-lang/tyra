@@ -194,6 +194,51 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
+    /// Map a type-scan string ("i64", "ptr", "double", "i1", or a struct LLVM
+    /// name) to the corresponding inkwell `BasicTypeEnum`.  Used to size alloca
+    /// slots correctly for struct-typed locals (Option/Result/List/Map wrappers).
+    pub(crate) fn basic_type_from_scan_str(&self, s: &str) -> inkwell::types::BasicTypeEnum<'ctx> {
+        match s {
+            "i64" => self.ctx.i64_type().into(),
+            "ptr" => self.ptr().into(),
+            "double" => self.ctx.f64_type().into(),
+            "i1" => self.ctx.bool_type().into(),
+            name => self
+                .struct_types
+                .get(name)
+                .map(|st| (*st).into())
+                .unwrap_or_else(|| self.ctx.i64_type().into()),
+        }
+    }
+
+    /// Extract the raw runtime pointer from a collection (Map/Set/LinkedMap/
+    /// LinkedSet) operand. Collection values in `self.values` appear in two forms:
+    ///
+    /// 1. `PointerValue` — the raw ptr returned by a runtime call (tyra_map_new,
+    ///    tyra_map_insert, …) stored directly.
+    /// 2. `StructValue { ptr }` — when a MIR `StructInit` instruction wraps the
+    ///    raw ptr in the typed `Map__K__V` / `Set__T` / … struct.
+    ///
+    /// Both arise in the same program: `new` stores a raw ptr, then `StructInit`
+    /// wraps it, then `insert` returns a new raw ptr, which gets wrapped again, …
+    /// Runtime collection functions always expect the raw ptr, so callers MUST use
+    /// this helper instead of `.into_pointer_value()` directly.
+    pub(crate) fn collection_ptr(
+        &self,
+        op: &tyra_mir::Operand,
+    ) -> inkwell::values::PointerValue<'ctx> {
+        let v = self.operand(op);
+        match v {
+            inkwell::values::BasicValueEnum::PointerValue(p) => p,
+            inkwell::values::BasicValueEnum::StructValue(sv) => self
+                .builder
+                .build_extract_value(sv, 0, "coll.ptr")
+                .unwrap()
+                .into_pointer_value(),
+            other => panic!("collection handle must be ptr or {{ptr}} struct, got: {other:?}"),
+        }
+    }
+
     /// I4c: build the legacy-shaped `StructInfo`/`FnSig` maps that
     /// `type_scan::scan_function_types` consumes, so the inkwell backend can
     /// recover an operand's Tyra type (see the `scan` field). Mirrors the inline

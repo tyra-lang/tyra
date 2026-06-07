@@ -166,7 +166,7 @@ impl<'ctx> CodeGen<'ctx> {
             "insert" if fam.kv => {
                 // rest = "K__V". Box key and value, then insert(coll, kbox, vbox).
                 let (k, v) = rest.split_once("__").unwrap_or((rest, "Int"));
-                let coll = self.operand(&args[0]);
+                let coll = self.collection_ptr(&args[0]);
                 let kbox = self.box_arg(&args[1], k);
                 let vbox = self.box_arg(&args[2], v);
                 let f = self.runtime_fn(fam.insert);
@@ -182,7 +182,7 @@ impl<'ctx> CodeGen<'ctx> {
             }
             "insert" => {
                 // Set: rest = "T". Box the element, then insert(coll, ebox).
-                let coll = self.operand(&args[0]);
+                let coll = self.collection_ptr(&args[0]);
                 let ebox = self.box_arg(&args[1], rest);
                 let f = self.runtime_fn(fam.insert);
                 let cs = self
@@ -193,7 +193,7 @@ impl<'ctx> CodeGen<'ctx> {
             }
             "remove" => {
                 // rest = "K"/"T". Box the key/elem, then remove(coll, kbox).
-                let coll = self.operand(&args[0]);
+                let coll = self.collection_ptr(&args[0]);
                 let kbox = self.box_arg(&args[1], rest);
                 let f = self.runtime_fn(fam.remove);
                 let cs = self
@@ -204,7 +204,7 @@ impl<'ctx> CodeGen<'ctx> {
             }
             "contains" => {
                 // rest = "K"/"T". Box the key/elem; the runtime returns i32 → i1.
-                let coll = self.operand(&args[0]);
+                let coll = self.collection_ptr(&args[0]);
                 let kbox = self.box_arg(&args[1], rest);
                 let f = self.runtime_fn(fam.contains);
                 let raw = dest.as_deref().map(|d| format!("{d}.i32")).unwrap_or_default();
@@ -220,7 +220,7 @@ impl<'ctx> CodeGen<'ctx> {
                 }
             }
             "len" => {
-                let coll = self.operand(&args[0]);
+                let coll = self.collection_ptr(&args[0]);
                 let f = self.runtime_fn(fam.len);
                 let cs = self
                     .builder
@@ -255,7 +255,7 @@ impl<'ctx> CodeGen<'ctx> {
         val_ty: &Ty,
         getter: &str,
     ) {
-        let coll = self.operand(handle).into_pointer_value();
+        let coll = self.collection_ptr(handle);
         let kbox = self.box_arg(key, &key_ty.monomorphized_name());
 
         let get = self.runtime_fn(getter);

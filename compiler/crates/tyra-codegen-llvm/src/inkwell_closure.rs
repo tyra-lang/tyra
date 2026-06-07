@@ -69,7 +69,7 @@ impl<'ctx> CodeGen<'ctx> {
         runtime_fn: &str,
         pfx: &str,
     ) {
-        let h = self.operand(handle).into_pointer_value();
+        let h = self.collection_ptr(handle);
         let (fnp, envp) = self.load_closure_fields(fat_ptr, pfx);
         let f = self
             .module
