@@ -109,10 +109,12 @@ for f in "$SCRIPT_DIR"/*.tyra; do
 
   if [[ $obuild -ne 0 || $nbuild -ne 0 ]]; then
     if [[ $obuild -ne $nbuild ]]; then
-      if is_known_unbuildable "$base"; then
+      if [[ $obuild -ne 0 && $nbuild -eq 0 ]] && is_known_unbuildable "$base"; then
         # Allowlisted program where legacy (old) fails but inkwell (new) succeeds:
         # inkwell has fixed a legacy codegen defect. Report as KNOWN-IMPROVED so
         # the harness stays green while still surfacing the outstanding work item.
+        # Guard is obuild!=0 && nbuild==0 — the reverse (old=0, new!=0) is a real
+        # inkwell regression and must not be silently swallowed here.
         echo "KNOWN-IMPROVED $base (old=$obuild new=$nbuild - legacy regression fixed by inkwell)"
         UNBUILDABLE+=("$base (old=$obuild->new=$nbuild)")
       else
