@@ -2,18 +2,25 @@
 //!
 //! Internal structure:
 //!   - `entries`: GC-managed array of (key, val) pairs in insertion order.
+//!     An entry with `key == null` is a *tombstone* (logically deleted).
 //!   - `index`:   GC-managed open-addressing hash table mapping key → entries index.
+//!     A slot with `occupied == 2` is an index tombstone: the key was deleted
+//!     but the probe chain must continue through it.
+//!   - `live`:    count of non-tombstone entries (returned by `.len()`).
+//!   - `entries_cap`: actual length of the `entries` array (live + tombstones).
 //!
 //! All operations return a NEW TyraLinkedMap object (immutable-by-construction).
-//! Path-copy structural sharing is deferred to v0.9+ (Boehm GC makes COW complex).
 //!
-//! ABI mirrors `tyra_map_*` in stdlib_map.rs: keys and values are opaque
-//! `*const u8` pointers to GC-malloc'd boxes.  `eq_fn` and `hash_fn` are
-//! compiler-generated function pointers passed at construction time.
+//! Remove amortized cost (v0.9.0, ADR-0019 §remove-O-n):
+//!   - key absent:  O(1) — shared entries/index pointer, only the wrapper struct
+//!     is freshly allocated.
+//!   - key present: O(entries_cap + idx_cap) — entries and index are copied,
+//!     one entry is tombstoned (entries) and one slot is tombstoned (index).
+//!     `insert` always compacts tombstones, so entries_cap ≈ live after the next
+//!     write, keeping the amortized cost low.
 //!
-//! GC safety: The `TyraLinkedMap` struct is allocated with `GC_malloc` (pointer-
-//! scanning mode) so Boehm GC traverses the two internal pointer fields and keeps
-//! both the entries array and the index array alive for as long as the map is live.
+//! ABI mirrors `tyra_map_*` in stdlib_map.rs.
+//! GC safety: TyraLinkedMap is GC_malloc'd (pointer-scanning mode).
 
 #![allow(unsafe_op_in_unsafe_fn)]
 
@@ -34,6 +41,7 @@ type EqFn = unsafe extern "C" fn(*const u8, *const u8) -> i32;
 type HashFn = unsafe extern "C" fn(*const u8) -> i64;
 
 /// A (key, val) pair stored in insertion order.
+/// `key == null` marks a tombstone (logically deleted entry).
 #[repr(C)]
 struct Entry {
     key: *const u8,
@@ -41,6 +49,10 @@ struct Entry {
 }
 
 /// Open-addressing index slot.
+/// `occupied` values:
+///   0 = empty   — probe chain ends here (key absent)
+///   1 = live    — key is present, `entry_idx` points into `entries`
+///   2 = tombstone — key was deleted; probe chain must continue past this slot
 #[repr(C)]
 struct IndexSlot {
     key: *const u8,
@@ -54,9 +66,11 @@ struct IndexSlot {
 pub struct TyraLinkedMap {
     eq_fn: EqFn,
     hash_fn: HashFn,
-    /// Number of live entries.
-    count: i64,
-    /// GC-managed array of Entry, length = `count`.
+    /// Live (non-tombstone) entry count; returned by `tyra_linked_map_len`.
+    live: i64,
+    /// Length of the `entries` array, including tombstone slots.
+    entries_cap: i64,
+    /// GC-managed array of Entry, length = `entries_cap`.
     entries: *mut Entry,
     /// GC-managed open-addressing table, capacity = `idx_cap` (power of two).
     index: *mut IndexSlot,
@@ -90,18 +104,19 @@ fn next_pow2(n: usize) -> usize {
     p
 }
 
-/// Build a fresh index table for the given entries array.
+/// Build a fresh index table from a *compact* (tombstone-free) entries array.
+/// Callers guarantee that every entry in `0..entries_cap` has `key != null`.
 unsafe fn build_index(
     entries: *mut Entry,
-    count: usize,
+    entries_cap: usize,
     cap: usize,
     hash_fn: HashFn,
 ) -> *mut IndexSlot {
     let idx = gc_alloc_array::<IndexSlot>(cap);
-    // Zero-initialise: occupied = 0 for all slots.
     ptr::write_bytes(idx, 0, cap);
-    for i in 0..count {
+    for i in 0..entries_cap {
         let e = &*entries.add(i);
+        debug_assert!(!e.key.is_null(), "build_index: unexpected tombstone");
         let hash = (hash_fn)(e.key) as u64;
         let mut slot = (hash as usize) & (cap - 1);
         loop {
@@ -119,6 +134,7 @@ unsafe fn build_index(
 }
 
 /// Look up a key in the index. Returns `Some(entry_idx)` or `None`.
+/// Skips tombstone slots (occupied == 2) to honour probe chain continuity.
 unsafe fn index_lookup(
     index: *const IndexSlot,
     cap: usize,
@@ -133,35 +149,38 @@ unsafe fn index_lookup(
     let start = slot;
     loop {
         let s = &*index.add(slot);
-        if s.occupied == 0 {
-            return None;
-        }
-        if s.occupied == 1 && eq_fn(s.key, key) != 0 {
-            return Some(s.entry_idx);
-        }
-        slot = (slot + 1) & (cap - 1);
-        if slot == start {
-            return None; // full table (should never happen with load factor < 1)
+        match s.occupied {
+            0 => return None,
+            1 if eq_fn(s.key, key) != 0 => return Some(s.entry_idx),
+            _ => {
+                // occupied == 2 (tombstone) or occupied == 1 with a different key
+                slot = (slot + 1) & (cap - 1);
+                if slot == start {
+                    return None; // full table (should never happen with load < 1)
+                }
+            }
         }
     }
 }
 
 // ── Constructor helpers ──────────────────────────────────────────────────────
 
-/// Allocate a TyraLinkedMap from an existing entries array + rebuilt index.
+/// Build a TyraLinkedMap from a compact (tombstone-free) entries array and a
+/// freshly rebuilt index.  `entries_cap` == `live` here.
 unsafe fn make_map(
     eq_fn: EqFn,
     hash_fn: HashFn,
-    count: usize,
+    live: usize,
     entries: *mut Entry,
 ) -> *mut TyraLinkedMap {
-    let idx_cap = next_pow2(if count == 0 { MIN_IDX_CAP } else { count * 2 });
-    let index = build_index(entries, count, idx_cap, hash_fn);
+    let idx_cap = next_pow2(if live == 0 { MIN_IDX_CAP } else { live * 2 });
+    let index = build_index(entries, live, idx_cap, hash_fn);
     let map = gc_alloc::<TyraLinkedMap>();
     map.write(TyraLinkedMap {
         eq_fn,
         hash_fn,
-        count: count as i64,
+        live: live as i64,
+        entries_cap: live as i64,
         entries,
         index,
         idx_cap,
@@ -182,7 +201,8 @@ pub unsafe extern "C" fn tyra_linked_map_new(eq_fn: EqFn, hash_fn: HashFn) -> *m
     map.write(TyraLinkedMap {
         eq_fn,
         hash_fn,
-        count: 0,
+        live: 0,
+        entries_cap: 0,
         entries: ptr::null_mut(),
         index,
         idx_cap,
@@ -191,8 +211,12 @@ pub unsafe extern "C" fn tyra_linked_map_new(eq_fn: EqFn, hash_fn: HashFn) -> *m
 }
 
 /// Insert or update `key → val`. Returns a NEW TyraLinkedMap.
+///
+/// Always produces a compact (tombstone-free) entries array so that subsequent
+/// remove operations start from a clean baseline.
+///
 /// - New key: appended at the end (insertion order preserved).
-/// - Existing key: value updated in place within the new copy (order unchanged).
+/// - Existing key: value updated; position in insertion order is unchanged.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_linked_map_insert(
     map: *const TyraLinkedMap,
@@ -206,31 +230,55 @@ pub unsafe extern "C" fn tyra_linked_map_insert(
     let hash = (m.hash_fn)(key) as u64;
     let existing = index_lookup(m.index, m.idx_cap, hash, key, m.eq_fn);
 
-    let old_count = m.count as usize;
+    let old_live = m.live as usize;
+    let old_entries_cap = m.entries_cap as usize;
 
     match existing {
-        Some(i) => {
-            // Key exists: copy entries, update value at index i.
-            let new_entries = gc_alloc_array::<Entry>(old_count);
-            ptr::copy_nonoverlapping(m.entries, new_entries, old_count);
-            (*new_entries.add(i)).val = val;
-            make_map(m.eq_fn, m.hash_fn, old_count, new_entries)
+        Some(entry_idx) => {
+            // Key exists: compact entries (drop tombstones), update value.
+            let new_entries = gc_alloc_array::<Entry>(old_live);
+            let mut dst = 0usize;
+            let mut new_idx = 0usize;
+            for src in 0..old_entries_cap {
+                let e = &*m.entries.add(src);
+                if !e.key.is_null() {
+                    new_entries.add(dst).write(Entry { key: e.key, val: e.val });
+                    if src == entry_idx {
+                        new_idx = dst;
+                    }
+                    dst += 1;
+                }
+            }
+            (*new_entries.add(new_idx)).val = val;
+            make_map(m.eq_fn, m.hash_fn, old_live, new_entries)
         }
         None => {
-            // New key: append to entries.
-            let new_count = old_count + 1;
-            let new_entries = gc_alloc_array::<Entry>(new_count);
-            if old_count > 0 {
-                ptr::copy_nonoverlapping(m.entries, new_entries, old_count);
+            // New key: compact existing + append.
+            let new_live = old_live + 1;
+            let new_entries = gc_alloc_array::<Entry>(new_live);
+            let mut dst = 0usize;
+            for src in 0..old_entries_cap {
+                let e = &*m.entries.add(src);
+                if !e.key.is_null() {
+                    new_entries.add(dst).write(Entry { key: e.key, val: e.val });
+                    dst += 1;
+                }
             }
-            new_entries.add(old_count).write(Entry { key, val });
-            make_map(m.eq_fn, m.hash_fn, new_count, new_entries)
+            new_entries.add(dst).write(Entry { key, val });
+            make_map(m.eq_fn, m.hash_fn, new_live, new_entries)
         }
     }
 }
 
-/// Remove `key` from the map. Returns a NEW TyraLinkedMap (O(n)).
-/// If the key is absent, returns a new map equal to the original.
+/// Remove `key` from the map. Returns a NEW TyraLinkedMap.
+///
+/// Cost:
+///   - key absent:  O(1) — only the wrapper struct is freshly allocated;
+///     entries and index arrays are shared with the original map.
+///   - key present: O(entries_cap + idx_cap) — entries array is copied with
+///     the removed entry tombstoned (`key = null`); index is copied with the
+///     corresponding slot marked tombstone (`occupied = 2`).  The next
+///     `insert` call compacts tombstones back to O(live).
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_linked_map_remove(
     map: *const TyraLinkedMap,
@@ -245,30 +293,51 @@ pub unsafe extern "C" fn tyra_linked_map_remove(
 
     match existing {
         None => {
-            // Key not found: return a copy of the original.
-            let old_count = m.count as usize;
-            let new_entries = gc_alloc_array::<Entry>(old_count);
-            if old_count > 0 {
-                ptr::copy_nonoverlapping(m.entries, new_entries, old_count);
-            }
-            make_map(m.eq_fn, m.hash_fn, old_count, new_entries)
+            // Key absent: share entries and index — only allocate the wrapper.
+            let new_map = gc_alloc::<TyraLinkedMap>();
+            new_map.write(TyraLinkedMap {
+                eq_fn: m.eq_fn,
+                hash_fn: m.hash_fn,
+                live: m.live,
+                entries_cap: m.entries_cap,
+                entries: m.entries,
+                index: m.index,
+                idx_cap: m.idx_cap,
+            });
+            new_map
         }
-        Some(remove_idx) => {
-            // Compact entries, skipping the removed index.
-            let old_count = m.count as usize;
-            let new_count = old_count - 1;
-            let new_entries = gc_alloc_array::<Entry>(new_count);
-            let mut dst = 0usize;
-            for src in 0..old_count {
-                if src != remove_idx {
-                    new_entries.add(dst).write(Entry {
-                        key: (*m.entries.add(src)).key,
-                        val: (*m.entries.add(src)).val,
-                    });
-                    dst += 1;
+        Some(entry_idx) => {
+            let entries_cap = m.entries_cap as usize;
+
+            // Copy entries and tombstone the removed slot.
+            let new_entries = gc_alloc_array::<Entry>(entries_cap);
+            ptr::copy_nonoverlapping(m.entries, new_entries, entries_cap);
+            (*new_entries.add(entry_idx)).key = ptr::null();
+
+            // Copy index and tombstone the slot that referenced entry_idx.
+            let new_index = gc_alloc_array::<IndexSlot>(m.idx_cap);
+            ptr::copy_nonoverlapping(m.index, new_index, m.idx_cap);
+            let mut slot = (hash as usize) & (m.idx_cap - 1);
+            loop {
+                let s = &mut *new_index.add(slot);
+                if s.occupied == 1 && s.entry_idx == entry_idx {
+                    s.occupied = 2; // index tombstone
+                    break;
                 }
+                slot = (slot + 1) & (m.idx_cap - 1);
             }
-            make_map(m.eq_fn, m.hash_fn, new_count, new_entries)
+
+            let new_map = gc_alloc::<TyraLinkedMap>();
+            new_map.write(TyraLinkedMap {
+                eq_fn: m.eq_fn,
+                hash_fn: m.hash_fn,
+                live: m.live - 1,
+                entries_cap: entries_cap as i64,
+                entries: new_entries,
+                index: new_index,
+                idx_cap: m.idx_cap,
+            });
+            new_map
         }
     }
 }
@@ -299,17 +368,17 @@ pub unsafe extern "C" fn tyra_linked_map_contains_key(
     (!tyra_linked_map_get(map, key).is_null()) as c_int
 }
 
-/// Returns the number of entries in the map.
+/// Returns the number of live (non-tombstone) entries in the map.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_linked_map_len(map: *const TyraLinkedMap) -> i64 {
     if map.is_null() {
         return 0;
     }
-    (*map).count
+    (*map).live
 }
 
-/// Traverse every entry in insertion order, calling `callback(ctx, key, val)`
-/// once per entry.
+/// Traverse every live entry in insertion order, calling `callback(ctx, key, val)`
+/// once per entry.  Tombstone slots are skipped.
 ///
 /// `ctx` is an opaque pointer forwarded unchanged to every callback invocation
 /// (typically a pointer to a GC-managed closure environment struct).
@@ -323,9 +392,11 @@ pub unsafe extern "C" fn tyra_linked_map_for_each(
         return;
     }
     let m = &*map;
-    for i in 0..m.count as usize {
+    for i in 0..m.entries_cap as usize {
         let e = &*m.entries.add(i);
-        callback(ctx, e.key, e.val);
+        if !e.key.is_null() {
+            callback(ctx, e.key, e.val);
+        }
     }
 }
 
@@ -429,7 +500,6 @@ mod tests {
         }
 
         let m = unsafe { tyra_linked_map_new(eq_i64, hash_i64) };
-        // Insert keys 1, 2, 3 in order.
         let m = unsafe { tyra_linked_map_insert(m, box_i64(1), box_i64(10)) };
         let m = unsafe { tyra_linked_map_insert(m, box_i64(2), box_i64(20)) };
         let m = unsafe { tyra_linked_map_insert(m, box_i64(3), box_i64(30)) };
@@ -458,7 +528,6 @@ mod tests {
         let m = unsafe { tyra_linked_map_insert(m, box_i64(1), box_i64(10)) };
         let m = unsafe { tyra_linked_map_insert(m, box_i64(2), box_i64(20)) };
         let m = unsafe { tyra_linked_map_insert(m, box_i64(3), box_i64(30)) };
-        // Remove key 2.
         let m2 = unsafe { tyra_linked_map_remove(m, box_i64(2)) };
 
         COLLECTED2.with(|c| c.borrow_mut().clear());
@@ -490,7 +559,6 @@ mod tests {
         let m = unsafe { tyra_linked_map_insert(m, box_i64(1), box_i64(10)) };
         let m = unsafe { tyra_linked_map_insert(m, box_i64(2), box_i64(20)) };
         let m = unsafe { tyra_linked_map_insert(m, box_i64(3), box_i64(30)) };
-        // Update key 2 — must not change its position.
         let m = unsafe { tyra_linked_map_insert(m, box_i64(2), box_i64(99)) };
 
         COLLECTED3.with(|c| c.borrow_mut().clear());
@@ -542,6 +610,54 @@ mod tests {
         }
     }
 
+    /// remove(key) → insert(key2) round-trip: insert must compact tombstones so
+    /// subsequent lookups and for_each see only live entries.
+    #[test]
+    fn tombstone_compacted_by_subsequent_insert() {
+        thread_local! {
+            static KEYS: RefCell<Vec<i64>> = RefCell::new(Vec::new());
+        }
+        unsafe extern "C" fn collect(ctx: *mut c_void, key: *const u8, _v: *const u8) {
+            let _ = ctx;
+            KEYS.with(|c| c.borrow_mut().push(*(key as *const i64)));
+        }
+
+        let m = unsafe { tyra_linked_map_new(eq_i64, hash_i64) };
+        let m = unsafe { tyra_linked_map_insert(m, box_i64(1), box_i64(10)) };
+        let m = unsafe { tyra_linked_map_insert(m, box_i64(2), box_i64(20)) };
+        let m = unsafe { tyra_linked_map_insert(m, box_i64(3), box_i64(30)) };
+
+        // Remove key 2 → tombstone in entries/index.
+        let m = unsafe { tyra_linked_map_remove(m, box_i64(2)) };
+        assert_eq!(unsafe { tyra_linked_map_len(m) }, 2);
+        assert!(unsafe { tyra_linked_map_get(m, box_i64(2)) }.is_null());
+
+        // Insert key 4 → compaction occurs, tombstone disappears.
+        let m = unsafe { tyra_linked_map_insert(m, box_i64(4), box_i64(40)) };
+        assert_eq!(unsafe { tyra_linked_map_len(m) }, 3);
+
+        // Verify live entries and order: 1, 3, 4.
+        KEYS.with(|c| c.borrow_mut().clear());
+        unsafe { tyra_linked_map_for_each(m, ptr::null_mut(), collect) };
+        KEYS.with(|c| {
+            assert_eq!(c.borrow().clone(), vec![1i64, 3, 4]);
+        });
+    }
+
+    /// remove absent key: the returned map must be functionally equal and have
+    /// correct len (O(1) path).
+    #[test]
+    fn remove_absent_key_returns_equivalent_map() {
+        let m = unsafe { tyra_linked_map_new(eq_i64, hash_i64) };
+        let m = unsafe { tyra_linked_map_insert(m, box_i64(1), box_i64(10)) };
+        let m = unsafe { tyra_linked_map_insert(m, box_i64(2), box_i64(20)) };
+        let m2 = unsafe { tyra_linked_map_remove(m, box_i64(99)) };
+
+        assert_eq!(unsafe { tyra_linked_map_len(m2) }, 2);
+        assert_eq!(unbox_i64(unsafe { tyra_linked_map_get(m2, box_i64(1)) }), 10);
+        assert_eq!(unbox_i64(unsafe { tyra_linked_map_get(m2, box_i64(2)) }), 20);
+    }
+
     // ── GC smoke test ────────────────────────────────────────────────────────
     //
     // Run ignored tests single-threaded to avoid Boehm GC exclusion-range
@@ -551,13 +667,11 @@ mod tests {
     #[test]
     #[ignore]
     fn gc_smoke_linked_map() {
-        // Structural sanity with N=100 — no forced GC collection.
         let n = 100i64;
         let mut cur = unsafe { tyra_linked_map_new(eq_i64, hash_i64) };
         for i in 0..n {
             cur = unsafe { tyra_linked_map_insert(cur, box_i64(i), box_i64(i * 3)) };
         }
-        // Take 10 independent snapshots.
         let snapshots: Vec<*mut TyraLinkedMap> = (0..10i64)
             .map(|s| unsafe { tyra_linked_map_insert(cur, box_i64(n + s), box_i64(s * 7)) })
             .collect();

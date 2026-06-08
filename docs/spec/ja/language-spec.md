@@ -895,6 +895,12 @@ let n = lm.len()               # Int — 3
 
 **制約**: `K` は `Eq + Hash` ability constraint を満たす必要がある。`Float` キーは不可。
 
+**`remove` の計算量 (v0.9.0)**: tombstone 方式を採用。
+- キーが存在しない場合: O(1) — entries/index 配列を共有した新しいラッパーのみ確保。
+- キーが存在する場合: O(entries_cap + idx_cap) — entries と index をコピーして tombstone を記録。次の `insert` で tombstone を compaction する (entries_cap ≈ live に戻る)。
+
+**`LinkedMap.from` は v0.10 予定**。タプル型が追加された後、`LinkedMap.from([(k1, v1), ...])` 構文を実装する予定。
+
 ### 11.2 LinkedSet — 挿入順保持 Set (v0.8.0, ADR-0019)
 
 `LinkedSet<T>` は挿入順序を保持する永続 Set である。
