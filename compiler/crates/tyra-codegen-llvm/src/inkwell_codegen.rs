@@ -27,7 +27,19 @@ use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 use tyra_mir::{Program, SourceLoc};
 use tyra_types::Ty;
 
-use crate::helpers::target_triple;
+fn target_triple() -> &'static str {
+    if cfg!(target_os = "macos") {
+        if cfg!(target_arch = "aarch64") {
+            "arm64-apple-macosx14.0.0"
+        } else {
+            "x86_64-apple-macosx14.0.0"
+        }
+    } else if cfg!(target_os = "linux") {
+        "x86_64-unknown-linux-gnu"
+    } else {
+        "x86_64-unknown-unknown"
+    }
+}
 
 /// Inkwell codegen state for one module.
 ///

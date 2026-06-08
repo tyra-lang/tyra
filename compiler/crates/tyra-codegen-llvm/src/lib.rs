@@ -1,14 +1,7 @@
-// tyra-codegen-llvm: Generate LLVM IR text from MIR.
-//
-// Milestone 1a approach: generate LLVM IR as text (.ll file),
-// then compile with clang. No LLVM library dependency needed.
-// Can be upgraded to inkwell for direct LLVM API access later.
+// tyra-codegen-llvm: LLVM IR generation from MIR via inkwell (LLVM API).
 
-mod builtins;
 mod codegen;
 pub mod coverage;
-pub mod dwarf;
-mod helpers;
 mod inkwell_builtins;
 mod inkwell_closure;
 mod inkwell_concurrency;
@@ -22,8 +15,6 @@ mod inkwell_list_builtins;
 mod inkwell_list_higher;
 mod inkwell_map_builtins;
 mod inkwell_string_builtins;
-mod instr_emit;
-mod list_codegen;
 mod type_scan;
 
 pub use codegen::{emit_llvm_ir, emit_llvm_ir_coverage, emit_llvm_ir_debug};
