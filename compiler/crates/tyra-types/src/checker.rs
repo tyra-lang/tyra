@@ -22,7 +22,7 @@ use std::collections::{HashMap, HashSet};
 use tyra_ast::*;
 use tyra_diagnostics::{Diagnostic, Label, Report, Span};
 
-use crate::ty::{Ability, Ty, types_compatible};
+use crate::ty::{Ability, Substitution, Ty, unify};
 
 /// Map from source span → inferred type, used by the LSP hover handler.
 pub type TypeIndex = HashMap<Span, Ty>;
@@ -104,6 +104,11 @@ pub struct TypeEnv {
     /// call-site resolution can return the correct type rather than Ty::Error
     /// when the general dispatch path falls through (ADR-0017 §4).
     impl_method_ret: HashMap<(String, String), Ty>,
+    /// Active substitution for HM type inference (Theme B).
+    /// Reset at the start of each `check_fn` call so inference variables
+    /// are scoped to one function body. `lookup` and `current_return_type`
+    /// apply this before returning so callers always see resolved types.
+    pub(crate) subst: Substitution,
 }
 
 impl TypeEnv {
@@ -126,13 +131,14 @@ impl TypeEnv {
             imported_modules: HashMap::new(),
             binding_type_hint: None,
             impl_method_ret: HashMap::new(),
+            subst: Substitution::new(),
         }
     }
 
     /// Record the inferred type for a span (for LSP hover).
     /// Uses entry API to prefer the first (outermost) type recorded for a span.
     pub fn record_type(&mut self, span: Span, ty: Ty) {
-        self.type_index.entry(span).or_insert(ty);
+        self.type_index.entry(span).or_insert_with(|| self.subst.apply(&ty));
     }
 
     pub fn push_return_type(&mut self, ty: Ty) {
@@ -143,8 +149,8 @@ impl TypeEnv {
         self.return_type_stack.pop();
     }
 
-    pub fn current_return_type(&self) -> Option<&Ty> {
-        self.return_type_stack.last()
+    pub fn current_return_type(&self) -> Option<Ty> {
+        self.return_type_stack.last().map(|ty| self.subst.apply(ty))
     }
 
     pub fn enter_loop(&mut self) {
@@ -189,10 +195,10 @@ impl TypeEnv {
         false
     }
 
-    pub fn lookup(&self, name: &str) -> Option<&Ty> {
+    pub fn lookup(&self, name: &str) -> Option<Ty> {
         for scope in self.bindings.iter().rev() {
             if let Some(ty) = scope.get(name) {
-                return Some(ty);
+                return Some(self.subst.apply(ty));
             }
         }
         None
@@ -1115,6 +1121,15 @@ fn check_impl(i: &ImplDef, env: &mut TypeEnv, report: &mut Report) {
 }
 
 fn check_fn(f: &FnDef, env: &mut TypeEnv, self_ty: Option<&Ty>, report: &mut Report) {
+    // Reset the substitution at each function boundary (fn-level scoping is
+    // sufficient for Tyra since there is no let-polymorphism).
+    env.subst = Substitution::new();
+    // Snapshot span keys already in the index so the end-of-fn re-apply step
+    // only touches spans recorded during THIS function (Ty::Var ids are not
+    // per-function-fresh, so re-applying a later function's subst to an earlier
+    // function's Var entries would silently corrupt the LSP type index).
+    let pre_fn_spans: std::collections::HashSet<tyra_ast::Span> =
+        env.type_index.keys().copied().collect();
     env.push();
     for param in &f.params {
         let ty = Ty::from_type_expr(&param.type_annotation);
@@ -1163,19 +1178,41 @@ fn check_fn(f: &FnDef, env: &mut TypeEnv, self_ty: Option<&Ty>, report: &mut Rep
     if declared_ret != Ty::Unit
         && let (Some(actual_ty), Some(span)) = (last_expr_ty, last_expr_span)
         && !return_check_skip(&declared_ret, &actual_ty)
-        && actual_ty != declared_ret
     {
-        let mut diag = Diagnostic::error(format!(
-            "return type mismatch: expected {}, found {}",
-            declared_ret.display_name(),
-            actual_ty.display_name()
-        ))
-        .with_code("E0309")
-        .with_label(Label::new(span, "this expression has the wrong type"));
-        if let Some(ret_te) = &f.return_type {
-            diag = diag.with_label(Label::new(ret_te.span, "return type declared here"));
+        let mut tmp = env.subst.clone();
+        if unify(&declared_ret, &actual_ty, &mut tmp).is_ok() {
+            env.subst = tmp;
+        } else {
+            let exp_r = env.subst.apply(&declared_ret);
+            let act_r = env.subst.apply(&actual_ty);
+            let mut diag = Diagnostic::error(format!(
+                "return type mismatch: expected {}, found {}",
+                exp_r.display_name(),
+                act_r.display_name()
+            ))
+            .with_code("E0309")
+            .with_label(Label::new(span, "this expression has the wrong type"));
+            if let Some(ret_te) = &f.return_type {
+                diag = diag.with_label(Label::new(ret_te.span, "return type declared here"));
+            }
+            report.add(diag);
         }
-        report.add(diag);
+    }
+
+    // Re-apply the final substitution, but ONLY for spans recorded during this
+    // function body (i.e. those absent from the pre-fn snapshot).  Touching
+    // spans from prior functions would corrupt their types because Ty::Var ids
+    // are not reset between functions.
+    let fn_spans: Vec<tyra_ast::Span> = env
+        .type_index
+        .keys()
+        .filter(|s| !pre_fn_spans.contains(s))
+        .copied()
+        .collect();
+    for span in fn_spans {
+        if let Some(ty) = env.type_index.get_mut(&span) {
+            *ty = env.subst.apply(ty);
+        }
     }
 
     env.pop_return_type();
@@ -1251,7 +1288,7 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
                 None => (Ty::Unit, true),
             };
             // Compare against the enclosing fn's declared return type.
-            if let Some(declared_ret) = env.current_return_type().cloned() {
+            if let Some(declared_ret) = env.current_return_type() {
                 // Bare `return` should error when declared_ret != Unit, even though
                 // the general skip rules ignore Unit actuals (they exist to tolerate
                 // unresolved if/else). Skip rules still apply when declared is Named/Generic
@@ -1262,17 +1299,24 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
                 } else {
                     !return_check_skip(&declared_ret, &actual_ty)
                 };
-                if should_check && actual_ty != declared_ret {
-                    let span = s.value.as_ref().map(|v| v.span).unwrap_or(s.span);
-                    report.add(
-                        Diagnostic::error(format!(
-                            "return type mismatch: expected {}, found {}",
-                            declared_ret.display_name(),
-                            actual_ty.display_name()
-                        ))
-                        .with_code("E0309")
-                        .with_label(Label::new(span, "this return value has the wrong type")),
-                    );
+                if should_check {
+                    let mut tmp = env.subst.clone();
+                    if unify(&declared_ret, &actual_ty, &mut tmp).is_ok() {
+                        env.subst = tmp;
+                    } else {
+                        let exp_r = env.subst.apply(&declared_ret);
+                        let act_r = env.subst.apply(&actual_ty);
+                        let span = s.value.as_ref().map(|v| v.span).unwrap_or(s.span);
+                        report.add(
+                            Diagnostic::error(format!(
+                                "return type mismatch: expected {}, found {}",
+                                exp_r.display_name(),
+                                act_r.display_name()
+                            ))
+                            .with_code("E0309")
+                            .with_label(Label::new(span, "this return value has the wrong type")),
+                        );
+                    }
                 }
             }
         }
@@ -1413,7 +1457,7 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
 
         // Identifier lookup
         ExprKind::Ident(name) => {
-            let ty = env.lookup(name).cloned().unwrap_or(Ty::Error);
+            let ty = env.lookup(name).unwrap_or(Ty::Error);
             env.record_type(expr.span, ty.clone());
             ty
         }
@@ -1517,7 +1561,9 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     {
                         return set_ty.clone();
                     }
-                    if let Some(set_ty) = env.current_return_type().and_then(|t| peel_to_set(t)) {
+                    if let Some(ref rt) = env.current_return_type()
+                        && let Some(set_ty) = peel_to_set(rt)
+                    {
                         return set_ty.clone();
                     }
                     report.add(
@@ -1545,9 +1591,8 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     {
                         return lm_ty.clone();
                     }
-                    if let Some(lm_ty) = env
-                        .current_return_type()
-                        .and_then(|t| peel_to_linked_map(t))
+                    if let Some(ref rt) = env.current_return_type()
+                        && let Some(lm_ty) = peel_to_linked_map(rt)
                     {
                         return lm_ty.clone();
                     }
@@ -1576,9 +1621,8 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     {
                         return ls_ty.clone();
                     }
-                    if let Some(ls_ty) = env
-                        .current_return_type()
-                        .and_then(|t| peel_to_linked_set(t))
+                    if let Some(ref rt) = env.current_return_type()
+                        && let Some(ls_ty) = peel_to_linked_set(rt)
                     {
                         return ls_ty.clone();
                     }
@@ -2064,16 +2108,21 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                                 return ret;
                             }
                             // Both args must have the same type
-                            if !types_compatible(&actual_ty, &expected_ty) {
-                                report.add(
-                                    Diagnostic::error(format!(
-                                        "assert.{method}: actual type `{}` does not match expected type `{}`",
-                                        actual_ty.display_name(),
-                                        expected_ty.display_name()
-                                    ))
-                                    .with_code("E0308")
-                                    .with_label(Label::new(expr.span, "type mismatch")),
-                                );
+                            {
+                                let mut tmp = env.subst.clone();
+                                if unify(&actual_ty, &expected_ty, &mut tmp).is_ok() {
+                                    env.subst = tmp;
+                                } else {
+                                    report.add(
+                                        Diagnostic::error(format!(
+                                            "assert.{method}: actual type `{}` does not match expected type `{}`",
+                                            env.subst.apply(&actual_ty).display_name(),
+                                            env.subst.apply(&expected_ty).display_name()
+                                        ))
+                                        .with_code("E0308")
+                                        .with_label(Label::new(expr.span, "type mismatch")),
+                                    );
+                                }
                             }
                             return ret;
                         }
@@ -2277,7 +2326,7 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             // §12.2: the enclosing fn must return the same family (Option/Result).
             // Option<T>? requires fn -> Option<U>; Result<T,E>? requires fn -> Result<U,F>.
             if let (Some(kind), Some(ret)) = (inner_kind, env.current_return_type()) {
-                let ok = match ret {
+                let ok = match &ret {
                     Ty::Generic(name, args) => match kind {
                         "Option" => name == "Option" && args.len() == 1,
                         "Result" => name == "Result" && args.len() == 2,
@@ -2395,18 +2444,23 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                         (Ty::Error, _) => this_ty,
                         (_, Ty::Error) => prev,
                         _ => {
-                            if !types_compatible(&prev, &this_ty) {
+                            let mut tmp = env.subst.clone();
+                            if unify(&prev, &this_ty, &mut tmp).is_ok() {
+                                env.subst = tmp;
+                                // Use the more-resolved of the two arm types.
+                                env.subst.apply(&prev)
+                            } else {
                                 report.add(
                                     Diagnostic::error(format!(
                                         "match arms have incompatible types: `{}` vs `{}`",
-                                        prev.display_name(),
-                                        this_ty.display_name()
+                                        env.subst.apply(&prev).display_name(),
+                                        env.subst.apply(&this_ty).display_name()
                                     ))
                                     .with_code("E0305")
                                     .with_label(Label::new(m.span, "mismatched arm types")),
                                 );
+                                prev
                             }
-                            prev
                         }
                     },
                 });
@@ -2562,11 +2616,13 @@ fn check_if(if_expr: &IfExpr, env: &mut TypeEnv, report: &mut Report) -> Ty {
     // that type; otherwise fall back to Ty::Unit for a statement-shaped
     // if. Without this, `let b = if c then 1 else 2 end` was reported as
     // Unit and subsequent `b + 1` tripped E0305.
-    if types_compatible(&then_ty, &else_ty) {
+    let mut tmp = env.subst.clone();
+    if unify(&then_ty, &else_ty, &mut tmp).is_ok() {
+        env.subst = tmp;
         if then_ty.is_never() || then_ty.is_error() {
-            else_ty
+            env.subst.apply(&else_ty)
         } else {
-            then_ty
+            env.subst.apply(&then_ty)
         }
     } else {
         Ty::Unit
@@ -2976,24 +3032,33 @@ fn check_type_match(
     actual: &Ty,
     span: Span,
     origin_span: Option<Span>,
-    env: &TypeEnv,
+    env: &mut TypeEnv,
     report: &mut Report,
 ) {
-    if !types_compatible(expected, actual) {
+    // Try to unify expected and actual under the current substitution.
+    // On success the substitution is updated in place (propagating any new
+    // bindings to subsequent lookup/current_return_type calls).
+    // On failure we emit E0308 and leave the substitution unchanged.
+    let mut tmp = env.subst.clone();
+    if unify(expected, actual, &mut tmp).is_ok() {
+        env.subst = tmp;
+    } else {
+        let exp_resolved = env.subst.apply(expected);
+        let act_resolved = env.subst.apply(actual);
         let mut diag = Diagnostic::error(format!(
             "type mismatch: expected {}, found {}",
-            expected.display_name(),
-            actual.display_name()
+            exp_resolved.display_name(),
+            act_resolved.display_name()
         ))
         .with_code("E0308")
         .with_label(Label::new(
             span,
-            format!("expected {}", expected.display_name()),
+            format!("expected {}", exp_resolved.display_name()),
         ));
         if let Some(origin) = origin_span {
             diag = diag.with_label(Label::new(origin, "expected because of this annotation"));
         }
-        if let Some(help) = e0308_help_hint(expected, actual, env) {
+        if let Some(help) = e0308_help_hint(&exp_resolved, &act_resolved, env) {
             diag = diag.with_help(help);
         }
         report.add(diag);
