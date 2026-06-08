@@ -77,6 +77,8 @@ fn builtin_primitive_return(fname: &str) -> Option<Ty> {
         "__list_fold_str" => Some(Ty::String),
         name if name.starts_with("__map_contains__") => Some(Ty::Bool),
         name if name.starts_with("__set_contains__") => Some(Ty::Bool),
+        name if name.starts_with("__linked_map_contains__") => Some(Ty::Bool),
+        name if name.starts_with("__linked_set_contains__") => Some(Ty::Bool),
         _ => None,
     }
 }
@@ -446,6 +448,26 @@ fn scan_primitive_temps(
             Instruction::ClosureBuild { dest, .. } => {
                 string_temps.insert(dest.clone());
             }
+            // PtrLoad unboxes a value from a typed box pointer (used by Map/Set/
+            // LinkedMap/LinkedSet for-each callbacks). Track the dest by its declared
+            // element type, mirroring the same logic as function params above.
+            Instruction::PtrLoad { dest, ty, .. } => match ty {
+                Ty::String => {
+                    string_temps.insert(dest.clone());
+                }
+                Ty::Float => {
+                    float_temps.insert(dest.clone());
+                }
+                Ty::Bool => {
+                    bool_temps.insert(dest.clone());
+                }
+                Ty::Named(n) => {
+                    if struct_map.get(n.as_str()).map(|i| i.is_data).unwrap_or(false) {
+                        string_temps.insert(dest.clone());
+                    }
+                }
+                _ => {}
+            },
             // IndirectCall: track return type the same way as direct Call.
             Instruction::IndirectCall {
                 dest: Some(dest),

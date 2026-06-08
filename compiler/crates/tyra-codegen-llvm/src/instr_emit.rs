@@ -1043,6 +1043,20 @@ pub(crate) fn emit_instruction(
             } else {
                 "__mfe_c".to_string()
             };
+            // If the handle is a struct value (Map<K,V> = {ptr}), extract the
+            // raw runtime pointer before passing to the C runtime function.
+            let h_ptr = if let Operand::Var(name) = handle {
+                if let Some(stype) = ctx.struct_temps.get(name.as_str()) {
+                    let llvm_ty = &ctx.struct_map[stype.as_str()].llvm_name;
+                    let raw = format!("{pfx}.raw_h");
+                    writeln!(out, "  %{raw} = extractvalue {llvm_ty} {h}, 0").unwrap();
+                    format!("%{raw}")
+                } else {
+                    h.to_string()
+                }
+            } else {
+                h.to_string()
+            };
             writeln!(
                 out,
                 "  %{pfx}.fnp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 0"
@@ -1057,7 +1071,7 @@ pub(crate) fn emit_instruction(
             writeln!(out, "  %{pfx}.env_ptr = load ptr, ptr %{pfx}.envp_gep").unwrap();
             writeln!(
                 out,
-                "  call void @tyra_map_for_each(ptr {h}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)"
+                "  call void @tyra_map_for_each(ptr {h_ptr}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)"
             )
             .unwrap();
         }
@@ -1071,6 +1085,20 @@ pub(crate) fn emit_instruction(
             } else {
                 "__sfe_c".to_string()
             };
+            // If the handle is a struct value (Set<T> = {ptr}), extract the
+            // raw runtime pointer before passing to the C runtime function.
+            let h_ptr = if let Operand::Var(name) = handle {
+                if let Some(stype) = ctx.struct_temps.get(name.as_str()) {
+                    let llvm_ty = &ctx.struct_map[stype.as_str()].llvm_name;
+                    let raw = format!("{pfx}.raw_h");
+                    writeln!(out, "  %{raw} = extractvalue {llvm_ty} {h}, 0").unwrap();
+                    format!("%{raw}")
+                } else {
+                    h.to_string()
+                }
+            } else {
+                h.to_string()
+            };
             writeln!(
                 out,
                 "  %{pfx}.fnp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 0"
@@ -1085,7 +1113,7 @@ pub(crate) fn emit_instruction(
             writeln!(out, "  %{pfx}.env_ptr = load ptr, ptr %{pfx}.envp_gep").unwrap();
             writeln!(
                 out,
-                "  call void @tyra_set_for_each(ptr {h}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)"
+                "  call void @tyra_set_for_each(ptr {h_ptr}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)"
             )
             .unwrap();
         }
@@ -1099,33 +1127,17 @@ pub(crate) fn emit_instruction(
             } else {
                 "__lmfe_c".to_string()
             };
-            writeln!(
-                out,
-                "  %{pfx}.fnp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 0"
-            )
-            .unwrap();
-            writeln!(out, "  %{pfx}.fn_ptr = load ptr, ptr %{pfx}.fnp_gep").unwrap();
-            writeln!(
-                out,
-                "  %{pfx}.envp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 1"
-            )
-            .unwrap();
-            writeln!(out, "  %{pfx}.env_ptr = load ptr, ptr %{pfx}.envp_gep").unwrap();
-            writeln!(
-                out,
-                "  call void @tyra_linked_map_for_each(ptr {h}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)"
-            )
-            .unwrap();
-        }
-
-        // v0.8.0 / ADR-0019: LinkedSet iteration via tyra_linked_set_for_each callback.
-        Instruction::LinkedSetForEachCall { handle, fat_ptr } => {
-            let h = operand_ref(handle, func);
-            let fp = operand_ref(fat_ptr, func);
-            let pfx = if let Operand::Var(name) = fat_ptr {
-                format!("__lsfe_{name}")
+            let h_ptr = if let Operand::Var(name) = handle {
+                if let Some(stype) = ctx.struct_temps.get(name.as_str()) {
+                    let llvm_ty = &ctx.struct_map[stype.as_str()].llvm_name;
+                    let raw = format!("{pfx}.raw_h");
+                    writeln!(out, "  %{raw} = extractvalue {llvm_ty} {h}, 0").unwrap();
+                    format!("%{raw}")
+                } else {
+                    h.to_string()
+                }
             } else {
-                "__lsfe_c".to_string()
+                h.to_string()
             };
             writeln!(
                 out,
@@ -1141,7 +1153,47 @@ pub(crate) fn emit_instruction(
             writeln!(out, "  %{pfx}.env_ptr = load ptr, ptr %{pfx}.envp_gep").unwrap();
             writeln!(
                 out,
-                "  call void @tyra_linked_set_for_each(ptr {h}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)"
+                "  call void @tyra_linked_map_for_each(ptr {h_ptr}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)"
+            )
+            .unwrap();
+        }
+
+        // v0.8.0 / ADR-0019: LinkedSet iteration via tyra_linked_set_for_each callback.
+        Instruction::LinkedSetForEachCall { handle, fat_ptr } => {
+            let h = operand_ref(handle, func);
+            let fp = operand_ref(fat_ptr, func);
+            let pfx = if let Operand::Var(name) = fat_ptr {
+                format!("__lsfe_{name}")
+            } else {
+                "__lsfe_c".to_string()
+            };
+            let h_ptr = if let Operand::Var(name) = handle {
+                if let Some(stype) = ctx.struct_temps.get(name.as_str()) {
+                    let llvm_ty = &ctx.struct_map[stype.as_str()].llvm_name;
+                    let raw = format!("{pfx}.raw_h");
+                    writeln!(out, "  %{raw} = extractvalue {llvm_ty} {h}, 0").unwrap();
+                    format!("%{raw}")
+                } else {
+                    h.to_string()
+                }
+            } else {
+                h.to_string()
+            };
+            writeln!(
+                out,
+                "  %{pfx}.fnp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 0"
+            )
+            .unwrap();
+            writeln!(out, "  %{pfx}.fn_ptr = load ptr, ptr %{pfx}.fnp_gep").unwrap();
+            writeln!(
+                out,
+                "  %{pfx}.envp_gep = getelementptr %struct.__closure_fat, ptr {fp}, i32 0, i32 1"
+            )
+            .unwrap();
+            writeln!(out, "  %{pfx}.env_ptr = load ptr, ptr %{pfx}.envp_gep").unwrap();
+            writeln!(
+                out,
+                "  call void @tyra_linked_set_for_each(ptr {h_ptr}, ptr %{pfx}.env_ptr, ptr %{pfx}.fn_ptr)"
             )
             .unwrap();
         }
