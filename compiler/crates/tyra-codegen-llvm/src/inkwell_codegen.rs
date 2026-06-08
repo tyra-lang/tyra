@@ -203,11 +203,16 @@ impl<'ctx> CodeGen<'ctx> {
             "ptr" => self.ptr().into(),
             "double" => self.ctx.f64_type().into(),
             "i1" => self.ctx.bool_type().into(),
-            name => self
-                .struct_types
-                .get(name)
-                .map(|st| (*st).into())
-                .unwrap_or_else(|| self.ctx.i64_type().into()),
+            name => {
+                // alloca_llvm_types stores struct names as "%struct.Foo" (the LLVM
+                // text-IR format used by the legacy type-scan maps), but
+                // struct_types is keyed by "Foo" — strip the prefix if present.
+                let key = name.strip_prefix("%struct.").unwrap_or(name);
+                self.struct_types
+                    .get(key)
+                    .map(|st| (*st).into())
+                    .unwrap_or_else(|| self.ctx.i64_type().into())
+            }
         }
     }
 
