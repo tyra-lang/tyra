@@ -2,7 +2,7 @@
 
 A statically-typed, AI-friendly programming language for backend services, CLI tools, and business applications.
 
-> **v0.8.0** — Hindley-Milner type inference (rank-1), E0500 LLVM crash eliminated (E9001 ICE guard), `LinkedMap<K,V>` / `LinkedSet<T>` (insertion-order-preserving), E0308 heuristic iv (ADT variant suggestion), experimental Windows MSVC ABI support. **E0500 occurrences: 0** in AI-gen benchmark Run 18 (86/100 pass, seed=18 — seed differs from Run 17's seed=2, so pass-count comparison is not direct; see [`bench/ai-gen/results/SUMMARY.md`](bench/ai-gen/results/SUMMARY.md)). [See known limitations](#known-limitations) before using in production.
+> **v0.9.0 "Gentle Dream"** — inkwell-only LLVM backend (ADR-0018 Theme A complete), Hindley-Milner substitution threading (Theme B), `LinkedMap`/`LinkedSet` remove tombstone optimization (Theme D, key-absent O(1)), `Option<T>` string interpolation. G2 static-corpus harness fully green. Test counts: 100 codegen / 121 types / 116 runtime. [See known limitations](#known-limitations) before using in production.
 
 ---
 
@@ -205,7 +205,7 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | Linux x86_64 (glibc) | Dynamic | Supported |
 | Linux x86_64 (musl) | Static | Supported (v0.5.0+) |
 | macOS arm64 | Dynamic | Supported |
-| Windows x86_64 (MSVC) | Dynamic (`gc.dll` same-dir) | Experimental (v0.8.0+, MSVC ABI; see [Known limitations](#known-limitations)) |
+| Windows x86_64 (MSVC) | Dynamic (`gc.dll` same-dir) | Experimental (v0.8.0+; tracking-only CI — see [Known limitations](#known-limitations)) |
 
 **Using the musl static release artifact:**
 
@@ -240,9 +240,9 @@ tyra build --static myprogram.tyra
 
 ## Known limitations
 
-- **Windows is experimental in v0.8.0**: Source-level MSVC ABI support exists (x86_64-pc-windows-msvc), and `tyra build` auto-copies `gc.dll` next to the output binary. However, the official LLVM Windows installer does **not** bundle the dev files (lib/include) required by `llvm-sys`, so the full LLVM build is **not** run in `release-gate-windows` CI (which only `cargo check`s the LLVM-free crates). To build the full compiler on Windows you need an LLVM 21 SDK with dev files installed locally. MinGW GNU ABI, Windows ARM64, and native PDB debug symbols are deferred to v0.9.
-- **`LinkedMap.remove` / `LinkedSet.remove` is O(n)**: the entries array is rebuilt on each remove. For workloads with frequent removals, use `Map` / `Set` instead.
-- **HM unification is conservative**: `types_compatible()` uses a per-call throw-away substitution rather than propagating the substitution across the full checker. Full substitution threading is deferred to v0.9. Most programs are unaffected; edge cases may surface unexpected type errors.
+- **Windows is experimental**: Source-level MSVC ABI support exists (x86_64-pc-windows-msvc), and `tyra build` auto-copies `gc.dll` next to the output binary. The official LLVM Windows installer does **not** bundle the dev files required by `llvm-sys`, so `release-gate-windows` CI only `cargo check`s the LLVM-free crates (tracking-only, `continue-on-error: true`). To build the full compiler on Windows you need an LLVM 22 SDK with dev files installed locally. **Windows ARM64 and native PDB debug symbols are deferred** to a future release.
+- ~~**`LinkedMap.remove` / `LinkedSet.remove` is O(n)**~~: resolved in v0.9.0 — tombstone model; key-absent remove is now O(1).
+- ~~**HM unification is conservative**~~: resolved in v0.9.0 — substitution threading across the full checker pass.
 - **`tyra build --static`**: only reliable on musl. glibc static linking is unsupported (breaks `getaddrinfo`).
 - **`http.server`**: experimental. Single-threaded, no TLS, no middleware. Do not use in production.
 - **Breaking changes**: expect breaking changes before v1.0.

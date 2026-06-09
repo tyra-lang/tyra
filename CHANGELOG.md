@@ -18,7 +18,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - DWARF line table (I6a) and local variable debug info (I6b) via `DIBuilder` — `tyra test --coverage` and LLDB/lldb-dap integration preserved.
 - Coverage instrumentation (I5) ported: `atomicrmw add` per basic block label, flushed at exit via runtime `atexit` callback.
 - G2 codegen-equivalence harness (`bench/static-corpus/codegen-equivalence.sh`): `KNOWN_UNBUILDABLE` is now empty — every positive-corpus program builds and produces byte-identical runtime behavior.
-- Test counts: **100/100 codegen**, **121 types**, **114 runtime** (all green).
+- Test counts: **100/100 codegen**, **121 types**, **116 runtime** (all green; 8 GC-integration tests skipped via `#[ignore]`).
 
 **Theme B — Hindley-Milner substitution threading**
 - `TypeEnv` now propagates the HM substitution across the full checker pass rather than discarding it per call.
@@ -41,7 +41,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ### Known Limitations
 
-- **Windows ARM64 / native PDB debug symbols**: deferred. DWARF works on macOS and Linux; Windows MSVC ABI support remains experimental (see v0.8.0 release notes).
+- **Windows (x64-windows-msvc)**: experimental; `release-gate-windows` CI is tracking-only (`cargo check` only, `continue-on-error: true`). Building the full compiler requires a local LLVM 22 SDK with dev files. **Windows ARM64** and **native PDB debug symbols** are deferred. See ADR-0021 for status table.
 - **`LinkedMap.from([...])` / `LinkedMap` literal syntax**: deferred to v0.10 — requires tuple types (spec §21, not yet implemented).
 - **`Option<Bool>` / `Option<data-type>` string interpolation**: not supported in v0.9; no compile-time diagnostic is emitted. Behavior differs by context: in `println("#{expr}")` the containing function is lowered to an `unreachable` body (the codegen gate rejects struct-typed `print` arguments); in a string-format expression such as `"prefix #{expr}"` the struct value is passed to `snprintf` as `%ld`, printing a raw integer. A dedicated diagnostic is planned.
 - **Boehm GC parallel init in `cargo test`**: running `cargo test` for the runtime crate without `-- --test-threads=1` causes SIGABRT on some hosts due to concurrent `GC_init()` calls across test threads. Use `cargo test -- --test-threads=1` for the runtime crate.

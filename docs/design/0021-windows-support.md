@@ -223,3 +223,20 @@ vcpkg + `clang-cl` + `lld-link` + platform 抽象化。
 5. `tyra build` に `copy_runtime_dlls` を追加
 6. Windows 上でのランタイムテスト全件通過を確認
 7. リリーススクリプトに `tyra-<version>-windows-x86_64.zip` 生成を追加
+
+## 実装ノート (v0.9.0)
+
+v0.8.0 で実装した MSVC ABI サポートは **experimental のまま維持**。
+v0.9.0 での Windows 関連の変更はない。
+
+現時点のステータス:
+
+| 項目 | 状態 |
+|------|------|
+| x64-windows-msvc (x86_64) | Experimental — source-level のみ; `release-gate-windows` は `cargo check` のみ (`continue-on-error: true`) |
+| Windows ARM64 (`aarch64-pc-windows-msvc`) | Deferred |
+| Native PDB debug symbols | Deferred — DWARF は macOS/Linux で動作済み |
+| `link.exe` (native MSVC linker) | Deferred — `lld-link` を継続使用 |
+
+Linux (glibc/musl) と macOS arm64 を v0.9.0 の公式サポート対象とし、
+Windows は引き続き experimental と位置づける。

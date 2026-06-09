@@ -165,8 +165,11 @@ cargo build -p tyra-cli
 ### Running tests
 
 ```bash
-# Workspace unit tests
+# Compiler unit tests (codegen + types)
 cargo test --workspace
+
+# Runtime unit tests — must use --test-threads=1 to avoid concurrent GC_init SIGABRT
+cargo test -p tyra-runtime -- --test-threads=1
 
 # Static corpus (spec conformance)
 bash bench/static-corpus/check.sh ./target/debug/tyra
