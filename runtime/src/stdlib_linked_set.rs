@@ -75,8 +75,11 @@ pub unsafe extern "C" fn tyra_linked_set_insert(
     wrap(new_inner)
 }
 
-/// Remove element. Returns a NEW TyraLinkedSet (O(n)).
-/// If the element is absent, returns a new set equal to the original.
+/// Remove element. Returns a NEW TyraLinkedSet.
+/// Delegates to `tyra_linked_map_remove`; cost mirrors LinkedMap (tombstone model):
+///   - element absent:  O(1) — only the wrapper struct is freshly allocated.
+///   - element present: O(entries_cap + idx_cap) — entry tombstoned; compacted on
+///     the next `insert`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_linked_set_remove(
     set: *const TyraLinkedSet,
@@ -290,6 +293,52 @@ mod tests {
         assert_eq!(unsafe { tyra_linked_set_len(s2) }, 2);
         assert_eq!(unsafe { tyra_linked_set_contains(s2, box_i64(1)) }, 1);
         assert_eq!(unsafe { tyra_linked_set_contains(s2, box_i64(2)) }, 1);
+    }
+
+    // ── Tombstone / absent-remove tests ─────────────────────────────────────
+
+    #[test]
+    fn remove_absent_preserves_all_elements() {
+        // O(1) absent-remove must not drop any existing element.
+        let s = unsafe { tyra_linked_set_new(eq_i64, hash_i64) };
+        let s = unsafe { tyra_linked_set_insert(s, box_i64(42)) };
+        let s2 = unsafe { tyra_linked_set_remove(s, box_i64(99)) };
+        assert_eq!(unsafe { tyra_linked_set_len(s2) }, 1);
+        assert_eq!(unsafe { tyra_linked_set_contains(s2, box_i64(42)) }, 1);
+        assert_eq!(unsafe { tyra_linked_set_contains(s2, box_i64(99)) }, 0);
+    }
+
+    #[test]
+    fn insert_after_remove_compacts_tombstone() {
+        // After a present-remove a subsequent insert should compact the tombstone
+        // so that for_each emits exactly the live elements in insertion order.
+        thread_local! {
+            static ELEMS3: RefCell<Vec<i64>> = RefCell::new(Vec::new());
+        }
+        unsafe extern "C" fn collect3(ctx: *mut c_void, key: *const u8) {
+            let _ = ctx;
+            ELEMS3.with(|c| c.borrow_mut().push(*(key as *const i64)));
+        }
+
+        let s = unsafe { tyra_linked_set_new(eq_i64, hash_i64) };
+        let s = unsafe { tyra_linked_set_insert(s, box_i64(1)) };
+        let s = unsafe { tyra_linked_set_insert(s, box_i64(2)) };
+        let s = unsafe { tyra_linked_set_insert(s, box_i64(3)) };
+        let s = unsafe { tyra_linked_set_remove(s, box_i64(2)) }; // tombstone
+        let s = unsafe { tyra_linked_set_insert(s, box_i64(4)) }; // triggers compaction
+
+        assert_eq!(unsafe { tyra_linked_set_len(s) }, 3);
+        assert_eq!(unsafe { tyra_linked_set_contains(s, box_i64(2)) }, 0);
+
+        ELEMS3.with(|c| c.borrow_mut().clear());
+        unsafe { tyra_linked_set_for_each(s, ptr::null_mut(), collect3) };
+        ELEMS3.with(|c| {
+            assert_eq!(
+                c.borrow().clone(),
+                vec![1i64, 3, 4],
+                "post-compaction order must be insertion order of live elements"
+            );
+        });
     }
 
     #[test]

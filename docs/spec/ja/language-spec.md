@@ -924,6 +924,10 @@ let n = ls.len()           # Int — 3
 
 **制約**: `T` は `Eq + Hash` ability constraint を満たす必要がある。`Float` 要素は不可。
 
+**`remove` の計算量 (v0.9.0)**: `LinkedMap` に委譲するため §11.1 と同一。
+- 要素が存在しない場合: O(1) — ラッパー構造体のみ確保。
+- 要素が存在する場合: O(entries_cap + idx_cap) — tombstone を記録。次の `insert` で compaction。
+
 ---
 
 ## 12. エラー処理

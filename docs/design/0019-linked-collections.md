@@ -230,3 +230,20 @@ v0.8 の型システム範囲では実装が難しい。
 3. `runtime/src/stdlib_linked_set.rs` を実装 (LinkedMap<T,()> ラッパー)
 4. コンパイラ side: `LinkedMap` / `LinkedSet` の型チェック、lowering 追加
 5. E2E テスト: 挿入順 iteration、remove、GC 下での double root 安全性
+
+## 実装ノート (v0.9.0)
+
+`remove` の実装が **tombstone 方式**に変更された (`stdlib_linked_map.rs` 参照)。
+元の設計 (§2 の O(n) compact) から以下に変わった:
+
+| 条件 | 計算量 | 備考 |
+|------|--------|------|
+| key が存在しない | O(1) | entries/index を共有した新しいラッパーのみ確保 |
+| key が存在する | O(entries_cap + idx_cap) | entry tombstone + index tombstone を記録 |
+
+次の `insert` 呼び出し時に tombstone を compaction し、entries_cap ≈ live に戻す。
+§2 の計算量表 (`remove: O(n)`) は key 存在時の最悪ケースとして近似的に有効だが、
+key 不在の場合は O(1) になった点が変更の主要な改善である。
+
+`LinkedSet<T>` は `tyra_linked_map_remove` に委譲するため、同じ計算量特性を持つ。
+spec §11.1 および §11.2 にそれぞれ計算量の詳細が記載されている。
