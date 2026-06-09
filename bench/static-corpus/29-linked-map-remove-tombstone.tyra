@@ -1,0 +1,24 @@
+# 29-linked-map-remove-tombstone.tyra
+# Validates: LinkedMap.remove tombstone model (ADR-0019 / v0.9.0)
+#   - remove of present key: tombstoned; next insert compacts and preserves order
+#   - remove of absent key: O(1) wrapper-only allocation; all entries preserved
+# SPEC_REF: §11.1 (LinkedMap remove complexity, v0.9.0)
+import linked_map
+
+fn main() -> Unit
+  let lm: LinkedMap<String, Int> = LinkedMap.new()
+  let lm = lm.insert("a", 1)
+  let lm = lm.insert("b", 2)
+  let lm = lm.insert("c", 3)
+
+  # Remove present key; next insert compacts tombstone
+  let lm = lm.remove("b")
+  let lm = lm.insert("d", 4)
+  for k, v in lm
+    print("#{k}=#{v}")
+  end
+
+  # Remove absent key; all entries still present
+  let lm2 = lm.remove("z")
+  print("len=#{lm2.len()}")
+end

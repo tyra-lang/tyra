@@ -1,0 +1,25 @@
+# 30-linked-set-remove-tombstone.tyra
+# Validates: LinkedSet.remove tombstone model (ADR-0019 / v0.9.0)
+# LinkedSet.remove delegates to LinkedMap.remove; cost model is identical:
+#   - element absent:  O(1) — wrapper struct only
+#   - element present: tombstoned; next insert compacts
+# SPEC_REF: §11.2 (LinkedSet remove complexity, v0.9.0)
+import linked_set
+
+fn main() -> Unit
+  let s: LinkedSet<String> = LinkedSet.new()
+  let s = s.insert("x")
+  let s = s.insert("y")
+  let s = s.insert("z")
+
+  # Remove present element; next insert compacts tombstone
+  let s = s.remove("y")
+  let s = s.insert("w")
+  for v in s
+    print(v)
+  end
+
+  # Remove absent element; all entries still present
+  let s2 = s.remove("nope")
+  print("len=#{s2.len()}")
+end
