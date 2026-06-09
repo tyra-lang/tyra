@@ -3380,29 +3380,17 @@ mod tests {
             cg.module.verify().is_ok(),
             "debug module with locals failed to verify:\n{ir}"
         );
-        // LLVM 19+ prints the new debug-record form `#dbg_declare`; older
-        // versions print `call void @llvm.dbg.declare`. Match either.
-        assert!(
-            ir.contains("dbg_declare"),
-            "must emit dbg.declare for locals:\n{ir}"
-        );
-        assert!(
-            ir.contains("!DILocalVariable(name: \"x\""),
-            "must describe local x:\n{ir}"
-        );
-        assert!(
-            ir.contains("!DILocalVariable(name: \"s\""),
-            "must describe local s:\n{ir}"
-        );
-        // Int → signed basic type; String → a pointer derived type.
-        assert!(
-            ir.contains("!DIBasicType(name: \"Int\", size: 64, encoding: DW_ATE_signed)"),
-            "Int DIType:\n{ir}"
-        );
-        assert!(
-            ir.contains("DW_TAG_pointer_type, name: \"String\""),
-            "String DIType is a pointer:\n{ir}"
-        );
+        // I6b (local-variable debug records) is currently disabled because
+        // LLVMDIBuilderInsertDeclareRecordAtEnd emits `#dbg_declare` in text IR
+        // which the apt.llvm.org clang-22 text-IR parser rejects. Until a
+        // llvm.dbg.declare-intrinsic path is wired, emit_local_var_decls is
+        // a no-op. We only verify the module is valid here, not that
+        // DILocalVariable nodes are present.
+        // When I6b is re-enabled, restore:
+        //   assert!(ir.contains("dbg_declare"), ...);
+        //   assert!(ir.contains("!DILocalVariable(name: \"x\""), ...);
+        //   assert!(ir.contains("DW_TAG_pointer_type, name: \"String\""), ...);
+        let _ = ir; // suppress unused-variable lint
     }
 
     #[test]
@@ -3449,10 +3437,9 @@ mod tests {
             cg.module.verify().is_ok(),
             "generic local debug failed to verify:\n{ir}"
         );
-        assert!(
-            ir.contains("!DILocalVariable(name: \"o\""),
-            "must describe the Option local:\n{ir}"
-        );
+        // See i6b_local_var_emits_dbg_declare_and_ditype: I6b is disabled.
+        // When re-enabled, restore: assert!(ir.contains("!DILocalVariable"), ...);
+        let _ = ir;
     }
 
     // ---- I5: coverage instrumentation (ADR-0014) ----
