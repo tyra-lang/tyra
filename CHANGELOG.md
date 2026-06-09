@@ -41,17 +41,25 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ### Known Limitations
 
-- **Windows (x64-windows-msvc)**: experimental; `release-gate-windows` CI is tracking-only (`cargo check` only, `continue-on-error: true`). Building the full compiler requires a local LLVM 22 SDK with dev files. **Windows ARM64** and **native PDB debug symbols** are deferred. See ADR-0021 for status table.
-- **`LinkedMap.from([...])` / `LinkedMap` literal syntax**: deferred to v0.10 — requires tuple types (spec §21, not yet implemented).
-- **`Option<Bool>` / `Option<data-type>` string interpolation**: not supported in v0.9; no compile-time diagnostic is emitted. Behavior differs by context: in `println("#{expr}")` the containing function is lowered to an `unreachable` body (the codegen gate rejects struct-typed `print` arguments); in a string-format expression such as `"prefix #{expr}"` the struct value is passed to `snprintf` as `%ld`, printing a raw integer. A dedicated compile-time diagnostic (E0xxx) is tracked for v0.10 — see `compiler/crates/tyra-codegen-llvm/src/inkwell_instr.rs` `Instruction::StringFormat` arm (line ~954) and `compiler/crates/tyra-mir/src/lower/call.rs` `StringInterp` special case (line ~1762).
-- **Boehm GC parallel init in `cargo test`**: running `cargo test` for the runtime crate without `-- --test-threads=1` causes SIGABRT on some hosts due to concurrent `GC_init()` calls across test threads. Use `cargo test -- --test-threads=1` for the runtime crate.
+- **Windows (x64-windows-msvc)**: experimental — `release-gate-windows` CI is tracking-only (`cargo check` only, `continue-on-error: true`; not part of the release gate). Building the full compiler requires a local LLVM 22 SDK with dev files. **Windows ARM64** and **native PDB debug symbols** are deferred to a future release. See [ADR-0021](docs/design/0021-windows-support.md) for the full status table.
+- **`LinkedMap.from([...])` / `LinkedMap` literal syntax**: deferred to v0.10 — requires tuple types (spec §21, not yet implemented). Tracked in the v0.10 backlog below.
+- **`Option<Bool>` / `Option<data-type>` string interpolation**: not supported in v0.9; no compile-time diagnostic is emitted. Behavior differs by context: in `println("#{expr}")` the containing function is lowered to an `unreachable` body (the codegen gate rejects struct-typed `print` arguments); in `"prefix #{expr}"` the struct value is passed to `snprintf` as `%ld`, printing a raw integer. A compile-time E0xxx diagnostic is planned for v0.10 — tracked at `Instruction::StringFormat` arm in `inkwell_instr.rs` (~line 954) and the `StringInterp` special case in `lower/call.rs` (~line 1762).
+- **Boehm GC parallel init in `cargo test`**: running `cargo test -p tyra-runtime` without `-- --test-threads=1` causes SIGABRT on some hosts due to concurrent `GC_init()` calls. Workaround documented in CONTRIBUTING.md. Root cause is upstream in `bdw-gc`; no Tyra-side fix is planned.
+
+### v0.10 Backlog
+
+Items deferred from v0.9 with explicit tracking:
+
+1. **Tuple types** (spec §21) — required foundation for items 2 and 3.
+2. **`LinkedMap.from([...])` / map literal syntax** — unblocked after tuple types; ADR pending.
+3. **`Option<Bool>` / `Option<data-type>` string interpolation diagnostic** — compile-time E0xxx; two-line fix in `inkwell_instr.rs` + `lower/call.rs` once the error code is assigned.
+4. **Windows ARM64 / native PDB debug symbols** — see [ADR-0021](docs/design/0021-windows-support.md); blocked on upstream `llvm-sys` Windows ARM64 support.
+5. **`SortedMap<K,V>` / `SortedSet<T>`** — sort-order persistent collections; spec §11 extension.
 
 ### Not in This Release
 
-- `SortedMap<K,V>` / `SortedSet<T>` (sort-order persistent collections)
 - rank-N polymorphism / type classes / where clauses — spec §22 non-goals
-- Windows ARM64 / native PDB debug symbols
-- `LinkedMap.from([...])` and literal syntax — v0.10 (after tuples)
+- Operator overloading, macros, runtime reflection — spec §3 non-goals
 
 ---
 

@@ -133,7 +133,7 @@ RFCs may target the next minor spec version (e.g., propose for v0.2 while v0.1 i
 ### Requirements
 
 - Rust 1.88 or later (the project's MSRV)
-- LLVM 21 and Boehm GC (`bdw-gc` / `libgc-dev`)
+- LLVM 22 (macOS local default) or LLVM 21 (CI / Linux) and Boehm GC (`bdw-gc` / `libgc-dev`)
 - Git
 
 ### Platform-specific installation
@@ -141,9 +141,11 @@ RFCs may target the next minor spec version (e.g., propose for v0.2 while v0.1 i
 **macOS**:
 
 ```bash
-brew install llvm@21 bdw-gc
-echo 'export PATH="/opt/homebrew/opt/llvm@21/bin:$PATH"' >> ~/.zshrc
+brew install llvm@22 bdw-gc
+export LLVM_SYS_221_PREFIX=/opt/homebrew/opt/llvm@22
 ```
+
+Add the export to your shell profile (`~/.zshrc` or `~/.bash_profile`) so it persists across sessions.
 
 **Ubuntu/Debian**:
 
@@ -151,6 +153,8 @@ echo 'export PATH="/opt/homebrew/opt/llvm@21/bin:$PATH"' >> ~/.zshrc
 sudo apt install llvm-21 clang-21 libgc-dev
 sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-21 100
 ```
+
+Linux CI uses LLVM 21. Compiling locally with LLVM 21 is also supported — pass `--features llvm21-1` to `cargo build`.
 
 **Windows**: Build via WSL2 is recommended. Native Windows support is not currently tested.
 
