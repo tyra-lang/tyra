@@ -67,9 +67,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-release-gate-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-release-gate-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-release-gate-
+            ${{ runner.os }}-cargo-release-gate-v2-
 
       - name: Build release binary and runtime
         # inkwell requires an explicit LLVM version feature; LLVM 22 is installed above.
@@ -187,9 +187,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-release-gate-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-release-gate-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-release-gate-
+            ${{ runner.os }}-cargo-release-gate-v2-
 
       - name: Build release binary and runtime
         # inkwell requires an explicit LLVM version feature; LLVM 22 is installed above.
@@ -342,9 +342,9 @@ jobs:
             ${{ env.CARGO_HOME }}/registry
             ${{ env.CARGO_HOME }}/git
             target
-          key: alpine-musl-cargo-release-gate-${{ hashFiles('**/Cargo.lock') }}
+          key: alpine-musl-cargo-release-gate-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            alpine-musl-cargo-release-gate-
+            alpine-musl-cargo-release-gate-v2-
 
       - name: Build release binary and runtime
         # inkwell requires an explicit LLVM version feature; LLVM 19 is installed above.
@@ -516,9 +516,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-release-gate-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-release-gate-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-release-gate-
+            ${{ runner.os }}-cargo-release-gate-v2-
 
       - name: Check LLVM-free crates (tracking only)
         # tyra-cli, tyra-driver, tyra-lsp all depend on tyra-codegen-llvm (which
