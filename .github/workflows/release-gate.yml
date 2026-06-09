@@ -300,12 +300,21 @@ jobs:
         # failed during the `actions/cache` post-job save step on this job,
         # likely above a certain cache size. Adding GNU tar avoids the
         # "/bin/tar failed with exit code 1" save warning observed previously.
+        #
+        # llvm19-static + zlib-static + zstd-static + libxml2-static: required
+        # for llvm19-1 (fully static LLVM linkage). llvm19-1-prefer-dynamic
+        # caused SIGSEGV at LLVM initialisation time under Alpine musl; the
+        # static build (matching release.yml) avoids this.
         run: |
           apk add --no-cache \
             gc-dev \
             clang19 \
             llvm19 \
             llvm19-dev \
+            llvm19-static \
+            zlib-static \
+            zstd-static \
+            libxml2-static \
             musl-dev \
             pkgconf \
             file \
@@ -342,21 +351,23 @@ jobs:
             ${{ env.CARGO_HOME }}/registry
             ${{ env.CARGO_HOME }}/git
             target
-          key: alpine-musl-cargo-release-gate-v2-${{ hashFiles('**/Cargo.lock') }}
+          key: alpine-musl-cargo-release-gate-v3-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            alpine-musl-cargo-release-gate-v2-
+            alpine-musl-cargo-release-gate-v3-
 
       - name: Build release binary and runtime
         # inkwell requires an explicit LLVM version feature; LLVM 19 is installed above.
-        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm19-1-prefer-dynamic
+        # llvm19-1 (static) matches release.yml; llvm19-1-prefer-dynamic caused SIGSEGV
+        # at LLVM initialisation time under Alpine/musl.
+        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm19-1
 
       - name: Run workspace tests (excluding runtime and codegen)
-        # tyra-codegen-llvm is excluded on Alpine: LLVM 19 static libs + musl libc
+        # tyra-codegen-llvm is excluded on Alpine: LLVM 19 + musl libc
         # cause a SIGSEGV during test-binary initialisation (signal 11, before any
         # test runs). This is an environment issue, not a code regression — the same
         # tests pass on the Ubuntu and macOS release-gate jobs. Alpine's role here is
         # static-binary verification; full codegen unit tests run on Ubuntu/macOS.
-        run: cargo test --workspace --exclude tyra-runtime --exclude tyra-codegen-llvm --no-default-features --features tyra-codegen-llvm/llvm19-1-prefer-dynamic
+        run: cargo test --workspace --exclude tyra-runtime --exclude tyra-codegen-llvm --no-default-features --features tyra-codegen-llvm/llvm19-1
 
       - name: Run runtime tests (single-threaded, Boehm GC safety)
         # GC_INITIAL_HEAP_SIZE: prevent BDW GC from triggering collection #1 inside
