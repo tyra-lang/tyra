@@ -150,11 +150,11 @@ Add the export to your shell profile (`~/.zshrc` or `~/.bash_profile`) so it per
 **Ubuntu/Debian**:
 
 ```bash
-sudo apt install llvm-21 clang-21 libgc-dev
-sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-21 100
+sudo apt install llvm-22 clang-22 libgc-dev
+sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-22 100
 ```
 
-Linux CI uses LLVM 21. Compiling locally with LLVM 21 is also supported — pass `--features llvm21-1` to `cargo build`.
+Linux CI uses LLVM 22. Compiling locally with LLVM 22 is also supported via the default feature flag.
 
 **Windows**: Build via WSL2 is recommended. Native Windows support is not currently tested.
 

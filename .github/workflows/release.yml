@@ -36,24 +36,24 @@ jobs:
         run: |
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
           . /etc/os-release
-          echo "deb http://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-21 main" \
-            | sudo tee /etc/apt/sources.list.d/llvm-21.list
+          echo "deb http://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-22 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm-22.list
           sudo apt-get update
-          sudo apt-get install -y libgc-dev llvm-21 llvm-21-dev clang-21 libpolly-21-dev
-          sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-21 100
+          sudo apt-get install -y libgc-dev llvm-22 llvm-22-dev clang-22 libpolly-22-dev
+          sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-22 100
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install bdw-gc llvm@21
-          brew link --force --overwrite llvm@21
-          echo "/opt/homebrew/opt/llvm@21/bin" >> "$GITHUB_PATH"
+          brew install bdw-gc llvm@22
+          brew link --force --overwrite llvm@22
+          echo "/opt/homebrew/opt/llvm@22/bin" >> "$GITHUB_PATH"
 
-      - name: Verify LLVM 21
+      - name: Verify LLVM 22
         run: |
           version=$(llvm-config --version)
           echo "LLVM version: $version"
-          echo "$version" | grep -qE '^21\.' || { echo "ERROR: expected LLVM 21.x, got $version"; exit 1; }
+          echo "$version" | grep -qE '^22\.' || { echo "ERROR: expected LLVM 22.x, got $version"; exit 1; }
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -70,8 +70,8 @@ jobs:
             ${{ runner.os }}-cargo-release-
 
       - name: Build release binary and runtime
-        # inkwell requires an explicit LLVM version feature; LLVM 21 is installed above.
-        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm21-1
+        # inkwell requires an explicit LLVM version feature; LLVM 22 is installed above.
+        run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm22-1
 
       - name: Verify binary architecture
         run: |
