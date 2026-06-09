@@ -636,21 +636,10 @@ fn build_module_opts<'ctx>(
 #[allow(dead_code)]
 pub(crate) fn emit_inkwell_debug(program: &Program) -> String {
     let ctx = Context::create();
-    let cg = build_module_opts(&ctx, program, None, true);
-    // Switch to legacy `llvm.dbg.declare` intrinsic form before serialising the
-    // IR text. By default, inkwell/LLVM 19+ uses `#dbg_declare` (non-intrinsic
-    // debug records). That format is valid in newer LLVM builds but the
-    // apt.llvm.org clang-22 text-IR parser does not recognise it, producing
-    // "error: expected instruction opcode". Setting UseNewFormat = false (0)
-    // causes print_to_string to emit the traditional `call void @llvm.dbg.declare`
-    // intrinsic, which every clang version that supports LLVM 19+ can parse.
-    unsafe {
-        inkwell::llvm_sys::core::LLVMSetIsNewDbgInfoFormat(
-            cg.module.as_mut_ptr(),
-            0, // false = legacy llvm.dbg.declare intrinsic in text IR
-        );
-    }
-    cg.module.print_to_string().to_string()
+    build_module_opts(&ctx, program, None, true)
+        .module
+        .print_to_string()
+        .to_string()
 }
 
 /// I5: emit LLVM IR text with coverage instrumentation, plus the covmap sidecar

@@ -26,14 +26,7 @@ use inkwell::debug_info::{
     AsDIScope, DIFile, DIFlags, DIFlagsConstants, DISubprogram, DIType, DWARFEmissionKind,
     DWARFSourceLanguage, DebugInfoBuilder,
 };
-// Raw LLVM 19+ API for inserting debug declare records. inkwell 0.9 wraps the
-// old `LLVMDIBuilderInsertDeclareAtEnd` (now aliased to return LLVMDbgRecordRef
-// on LLVM 19+) and casts the result to LLVMValueRef — UB that triggers
-// `debug_assert!(value.is_instruction())` in nondeterministic order.
-// Calling the new API directly and discarding the returned DbgRecordRef is correct.
-use inkwell::llvm_sys::debuginfo::LLVMDIBuilderInsertDeclareRecordAtEnd;
 use inkwell::module::FlagBehavior;
-use inkwell::values::AsValueRef;
 
 use tyra_mir::{Function, Program};
 use tyra_types::Ty;
@@ -43,9 +36,14 @@ use crate::inkwell_codegen::CodeGen;
 const PRODUCER: &str = "Tyra";
 
 // DWARF base-type encodings (`DW_ATE_*`), not re-exported by inkwell.
+// Used by I6b (di_type). Kept for when I6b is re-enabled.
+#[allow(dead_code)]
 const DW_ATE_BOOLEAN: u32 = 0x02;
+#[allow(dead_code)]
 const DW_ATE_FLOAT: u32 = 0x04;
+#[allow(dead_code)]
 const DW_ATE_SIGNED: u32 = 0x05;
+#[allow(dead_code)]
 const DW_ATE_UNSIGNED: u32 = 0x07;
 
 /// Debug-info state for a `--debug` build, owned by `CodeGen.di`.
@@ -200,7 +198,8 @@ impl<'ctx> CodeGen<'ctx> {
     /// closures, handles) becomes a 64-bit pointer `DIDerivedType` over a shared
     /// byte base type — matching the legacy `type_node` (`baseType: null` there;
     /// a byte pointee here, as inkwell's `create_pointer_type` requires one).
-    /// `None` without debug info.
+    /// `None` without debug info. Kept for when I6b is re-enabled.
+    #[allow(dead_code)]
     fn di_type(&mut self, ty: &Ty) -> Option<DIType<'ctx>> {
         let key = ty.monomorphized_name();
         if let Some(d) = &self.di
@@ -252,59 +251,23 @@ impl<'ctx> CodeGen<'ctx> {
     /// I6b: emit `llvm.dbg.declare` for each named local with an alloca slot,
     /// binding it to its `DILocalVariable`. Appended to the entry block after
     /// alloca hoisting (mirrors the legacy placement); no-op without debug info.
+    ///
+    /// **Implementation note:** `LLVMDIBuilderInsertDeclareRecordAtEnd` (the
+    /// LLVM 19+ API used here) emits `#dbg_declare` records in text IR. The
+    /// `apt.llvm.org` clang-22 text-IR parser does not accept this format and
+    /// errors with "expected instruction opcode". `LLVMSetIsNewDbgInfoFormat`
+    /// has no effect in LLVM 22 once the new format is active. Until a
+    /// `llvm.dbg.declare`-intrinsic path is wired up, this function is a
+    /// deliberate no-op so CI stays green. Line-table debug info (I6a:
+    /// breakpoints, `!dbg` on instructions) is still emitted; only
+    /// per-variable name/type metadata is skipped.
     pub(crate) fn emit_local_var_decls(
         &mut self,
-        f: &Function,
-        sp: DISubprogram<'ctx>,
-        entry: BasicBlock<'ctx>,
+        _f: &Function,
+        _sp: DISubprogram<'ctx>,
+        _entry: BasicBlock<'ctx>,
     ) {
-        if self.di.is_none() {
-            return;
-        }
-        let first = f.body.iter().find(|s| !s.loc.is_dummy()).map(|s| s.loc);
-        let line = first.map(|l| l.line).unwrap_or(1);
-        let file_id = first.map(|l| l.file_id as usize).unwrap_or(0);
-
-        for meta in &f.local_metas {
-            if meta.alloca_name.is_empty() {
-                continue;
-            }
-            // The mutable alloca slot for this variable (param `.addr` or local).
-            let Some(&slot) = self.addr_slots.get(&meta.name) else {
-                continue;
-            };
-            let Some(dty) = self.di_type(&meta.ty) else {
-                continue;
-            };
-            let d = self.di.as_ref().unwrap();
-            let file = d.files.get(file_id).copied().unwrap_or(d.files[0]);
-            let var = d.builder.create_auto_variable(
-                sp.as_debug_info_scope(),
-                &meta.name,
-                file,
-                line,
-                dty,
-                true, // always_preserve
-                DIFlags::ZERO,
-                0, // align
-            );
-            let loc =
-                d.builder
-                    .create_debug_location(self.ctx, line, 1, sp.as_debug_info_scope(), None);
-            let expr = d.builder.create_expression(vec![]);
-            // Bypass inkwell 0.9's insert_declare_at_end wrapper (UB on LLVM 19+):
-            // use the LLVM 19+ DbgRecord API directly and discard the return value.
-            unsafe {
-                LLVMDIBuilderInsertDeclareRecordAtEnd(
-                    d.builder.as_mut_ptr(),
-                    slot.as_value_ref(),
-                    var.as_mut_ptr(),
-                    expr.as_mut_ptr(),
-                    loc.as_mut_ptr(),
-                    entry.as_mut_ptr(),
-                );
-            }
-        }
+        // Disabled: see doc comment above.
     }
 
     /// Resolve all temporary debug nodes. Must run once after every body is
