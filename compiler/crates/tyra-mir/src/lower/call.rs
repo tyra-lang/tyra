@@ -1791,9 +1791,7 @@ impl super::LowerCtx<'_> {
                     StringPart::Expr(e) => {
                         let expr_ty = self.infer_expr_type(e);
                         let val = self.lower_expr(e, body);
-                        let print_val = self
-                            .emit_adt_display(&val, &expr_ty, body)
-                            .unwrap_or(val);
+                        let print_val = self.emit_adt_display(&val, &expr_ty, body).unwrap_or(val);
                         self.emit(
                             body,
                             Instruction::Call {

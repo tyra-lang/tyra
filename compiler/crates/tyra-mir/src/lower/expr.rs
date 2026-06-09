@@ -1384,9 +1384,7 @@ impl super::LowerCtx<'_> {
                             let expr_ty = self.infer_expr_type(e);
                             let val = self.lower_expr(e, body);
 
-                            if let Some(display_tmp) =
-                                self.emit_adt_display(&val, &expr_ty, body)
-                            {
+                            if let Some(display_tmp) = self.emit_adt_display(&val, &expr_ty, body) {
                                 format_str.push_str("%s");
                                 format_args.push(Operand::Var(display_tmp));
                             } else if is_string {

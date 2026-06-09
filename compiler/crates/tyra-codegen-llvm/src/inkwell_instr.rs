@@ -8,7 +8,9 @@
 use std::collections::HashSet;
 
 use inkwell::types::BasicTypeEnum;
-use inkwell::values::{AggregateValueEnum, BasicMetadataValueEnum, BasicValueEnum, FunctionValue, PhiValue};
+use inkwell::values::{
+    AggregateValueEnum, BasicMetadataValueEnum, BasicValueEnum, FunctionValue, PhiValue,
+};
 use inkwell::{FloatPredicate, IntPredicate};
 
 use tyra_mir::{Constant, Function, Instruction, MirBinOp, Operand, Program};
@@ -57,7 +59,11 @@ impl<'ctx> CodeGen<'ctx> {
         // functions end with Return). An empty / non-terminated body (e.g. a
         // hand-built test stub) is not emittable and falls back to unreachable.
         match f.body.last().map(|s| &s.instr) {
-            Some(Instruction::Return { .. } | Instruction::Jump { .. } | Instruction::BranchIf { .. }) => {}
+            Some(
+                Instruction::Return { .. }
+                | Instruction::Jump { .. }
+                | Instruction::BranchIf { .. },
+            ) => {}
             _ => return false,
         }
         let mut seen: HashSet<&str> = HashSet::new();
@@ -132,10 +138,10 @@ impl<'ctx> CodeGen<'ctx> {
                 Instruction::Phi { branches, .. } => {
                     // First incoming must be resolvable at build time (for the
                     // phi type); later incomings may be defined anywhere.
-                    if let Some((first, _)) = branches.first() {
-                        if !self.operand_resolvable_now(first, &seen) {
-                            return false;
-                        }
+                    if let Some((first, _)) = branches.first()
+                        && !self.operand_resolvable_now(first, &seen)
+                    {
+                        return false;
                     }
                 }
                 _ => {
@@ -165,8 +171,8 @@ impl<'ctx> CodeGen<'ctx> {
                         // `let`-bound function reference, resolved to its global
                         // pointer); `Store`/`Load`/`PtrLoad` names are always
                         // slots/pointers, so they still require a `seen` entry.
-                        let is_copy_fn_ref =
-                            matches!(inst, Instruction::Copy { .. }) && self.fn_values.contains_key(n);
+                        let is_copy_fn_ref = matches!(inst, Instruction::Copy { .. })
+                            && self.fn_values.contains_key(n);
                         if !seen.contains(n) && !is_copy_fn_ref {
                             return false;
                         }
@@ -198,7 +204,11 @@ impl<'ctx> CodeGen<'ctx> {
     /// temp per the type scan, or a struct-typed parameter.
     fn operand_is_struct(&self, f: &Function, op: &Operand) -> bool {
         let Operand::Var(name) = op else { return false };
-        if self.scan.as_ref().is_some_and(|s| s.struct_temps.contains_key(name)) {
+        if self
+            .scan
+            .as_ref()
+            .is_some_and(|s| s.struct_temps.contains_key(name))
+        {
             return true;
         }
         f.params
@@ -233,7 +243,8 @@ impl<'ctx> CodeGen<'ctx> {
             Instruction::StringFormat { args, .. } => args.iter().collect(),
             Instruction::ListInit { elements, .. } => elements.iter().collect(),
             Instruction::ListLen { list, .. } => vec![list],
-            Instruction::ListGet { list, index, .. } | Instruction::ListGetSafe { list, index, .. } => {
+            Instruction::ListGet { list, index, .. }
+            | Instruction::ListGetSafe { list, index, .. } => {
                 vec![list, index]
             }
             Instruction::ListPush { list, elem, .. } => vec![list, elem],
@@ -286,7 +297,12 @@ impl<'ctx> CodeGen<'ctx> {
         // refines it per source statement.
         let sp = self.di_subprogram(&f.name);
         if let Some(sp) = sp {
-            let entry_line = f.body.iter().find(|s| !s.loc.is_dummy()).map(|s| s.loc.line).unwrap_or(1);
+            let entry_line = f
+                .body
+                .iter()
+                .find(|s| !s.loc.is_dummy())
+                .map(|s| s.loc.line)
+                .unwrap_or(1);
             self.set_debug_line(sp, entry_line);
         }
 
@@ -304,7 +320,10 @@ impl<'ctx> CodeGen<'ctx> {
                 p.set_name(name);
                 self.values.insert(name.clone(), p);
                 let bt = self.ty_to_basic_type(ty);
-                let slot = self.builder.build_alloca(bt, &format!("{name}.addr")).unwrap();
+                let slot = self
+                    .builder
+                    .build_alloca(bt, &format!("{name}.addr"))
+                    .unwrap();
                 self.builder.build_store(slot, p).unwrap();
                 self.addr_slots.insert(name.clone(), slot);
                 self.slot_types.insert(name.clone(), bt);
@@ -323,16 +342,16 @@ impl<'ctx> CodeGen<'ctx> {
             .unwrap_or_default();
         let i64t = self.ctx.i64_type();
         for stmt in &f.body {
-            if let Instruction::Alloca { dest } = &stmt.instr {
-                if !self.addr_slots.contains_key(dest) {
-                    let bt = alloca_type_strs
-                        .get(dest.as_str())
-                        .map(|s| self.basic_type_from_scan_str(s))
-                        .unwrap_or_else(|| i64t.into());
-                    let slot = self.builder.build_alloca(bt, dest).unwrap();
-                    self.addr_slots.insert(dest.clone(), slot);
-                    self.slot_types.insert(dest.clone(), bt);
-                }
+            if let Instruction::Alloca { dest } = &stmt.instr
+                && !self.addr_slots.contains_key(dest)
+            {
+                let bt = alloca_type_strs
+                    .get(dest.as_str())
+                    .map(|s| self.basic_type_from_scan_str(s))
+                    .unwrap_or_else(|| i64t.into());
+                let slot = self.builder.build_alloca(bt, dest).unwrap();
+                self.addr_slots.insert(dest.clone(), slot);
+                self.slot_types.insert(dest.clone(), bt);
             }
         }
 
@@ -345,9 +364,17 @@ impl<'ctx> CodeGen<'ctx> {
             let argv = fv.get_nth_param(1).unwrap();
             argc.set_name("argc");
             argv.set_name("argv");
-            let argc_g = self.module.get_global(".tyra.argc").unwrap().as_pointer_value();
+            let argc_g = self
+                .module
+                .get_global(".tyra.argc")
+                .unwrap()
+                .as_pointer_value();
             self.builder.build_store(argc_g, argc).unwrap();
-            let argv_g = self.module.get_global(".tyra.argv").unwrap().as_pointer_value();
+            let argv_g = self
+                .module
+                .get_global(".tyra.argv")
+                .unwrap()
+                .as_pointer_value();
             self.builder.build_store(argv_g, argv).unwrap();
             // I5: register the counter array with the runtime atexit flusher
             // before any user code runs (no-op without coverage).
@@ -414,10 +441,10 @@ impl<'ctx> CodeGen<'ctx> {
             // non-splitting instruction this is idempotent; for ListGet/
             // ListGetSafe (which branch mid-instruction) it advances to the
             // actual block the region's terminator will branch from.
-            if let Some(label) = &self.cur_label {
-                if let Some(bb) = self.builder.get_insert_block() {
-                    self.pred_blocks.insert(label.clone(), bb);
-                }
+            if let Some(label) = &self.cur_label
+                && let Some(bb) = self.builder.get_insert_block()
+            {
+                self.pred_blocks.insert(label.clone(), bb);
             }
         }
 
@@ -490,7 +517,11 @@ impl<'ctx> CodeGen<'ctx> {
                 let v = self.builder.build_load(bt, p, dest).unwrap();
                 self.values.insert(dest.clone(), v);
             }
-            Instruction::StructInit { dest, type_name, fields } => {
+            Instruction::StructInit {
+                dest,
+                type_name,
+                fields,
+            } => {
                 let st = self.struct_types[type_name];
                 if self.data_types.contains(type_name) {
                     // data type (§8.6): heap-allocate, then store each field.
@@ -521,16 +552,26 @@ impl<'ctx> CodeGen<'ctx> {
                     let mut agg: AggregateValueEnum = st.get_undef().into();
                     for (i, fop) in fields.iter().enumerate() {
                         let v = self.operand(fop);
-                        let name = if i + 1 == n { dest.as_str() } else { &format!("{dest}.s{i}") };
+                        let name = if i + 1 == n {
+                            dest.as_str()
+                        } else {
+                            &format!("{dest}.s{i}")
+                        };
                         agg = self
                             .builder
                             .build_insert_value(agg, v, i as u32, name)
                             .unwrap();
                     }
-                    self.values.insert(dest.clone(), agg.into_struct_value().into());
+                    self.values
+                        .insert(dest.clone(), agg.into_struct_value().into());
                 }
             }
-            Instruction::FieldGet { dest, obj, type_name, field_index } => {
+            Instruction::FieldGet {
+                dest,
+                obj,
+                type_name,
+                field_index,
+            } => {
                 let st = self.struct_types[type_name];
                 let o = self.operand(obj);
                 if self.data_types.contains(type_name) {
@@ -550,7 +591,12 @@ impl<'ctx> CodeGen<'ctx> {
                     self.values.insert(dest.clone(), v);
                 }
             }
-            Instruction::FieldSet { obj, type_name, field_index, value } => {
+            Instruction::FieldSet {
+                obj,
+                type_name,
+                field_index,
+                value,
+            } => {
                 // In-place data-type field mutation (§8.6): GEP + store.
                 let st = self.struct_types[type_name];
                 let ptr = self.operand(obj).into_pointer_value();
@@ -561,14 +607,26 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 self.builder.build_store(gep, v).unwrap();
             }
-            Instruction::AdtInit { dest, type_name, tag, fields } => {
+            Instruction::AdtInit {
+                dest,
+                type_name,
+                tag,
+                fields,
+            } => {
                 let st = self.struct_types[type_name];
-                let recursive = self.recursive_fields.get(type_name).cloned().unwrap_or_default();
+                let recursive = self
+                    .recursive_fields
+                    .get(type_name)
+                    .cloned()
+                    .unwrap_or_default();
                 let num_fields = st.count_fields() as usize;
                 // Field 0 is the i8 tag.
                 let mut agg: AggregateValueEnum = st.get_undef().into();
                 let tag_v = self.ctx.i8_type().const_int(*tag as u64, false);
-                agg = self.builder.build_insert_value(agg, tag_v, 0, "adt.tag").unwrap();
+                agg = self
+                    .builder
+                    .build_insert_value(agg, tag_v, 0, "adt.tag")
+                    .unwrap();
                 // Payload fields: AdtInit.fields excludes the tag, so field
                 // struct-index `fi` maps to fields[fi - 1].
                 for fi in 1..num_fields {
@@ -616,7 +674,8 @@ impl<'ctx> CodeGen<'ctx> {
                         .build_insert_value(agg, v, fi as u32, &format!("adt.f{fi}"))
                         .unwrap();
                 }
-                self.values.insert(dest.clone(), agg.into_struct_value().into());
+                self.values
+                    .insert(dest.clone(), agg.into_struct_value().into());
             }
             Instruction::AdtTag { dest, obj, .. } => {
                 let o = self.operand(obj).into_struct_value();
@@ -631,7 +690,12 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 self.values.insert(dest.clone(), v.into());
             }
-            Instruction::AdtPayload { dest, obj, type_name, field_index } => {
+            Instruction::AdtPayload {
+                dest,
+                obj,
+                type_name,
+                field_index,
+            } => {
                 let st = self.struct_types[type_name];
                 let o = self.operand(obj).into_struct_value();
                 let extracted = self
@@ -662,13 +726,26 @@ impl<'ctx> CodeGen<'ctx> {
                         .scan
                         .as_ref()
                         .and_then(|s| {
-                            let ln = if let Operand::Var(n) = lhs { s.struct_temps.get(n.as_str()) } else { None };
-                            let rn = if let Operand::Var(n) = rhs { s.struct_temps.get(n.as_str()) } else { None };
+                            let ln = if let Operand::Var(n) = lhs {
+                                s.struct_temps.get(n.as_str())
+                            } else {
+                                None
+                            };
+                            let rn = if let Operand::Var(n) = rhs {
+                                s.struct_temps.get(n.as_str())
+                            } else {
+                                None
+                            };
                             ln.or(rn)
                         })
                         .cloned();
                     if let Some(stype) = stype {
-                        let fv = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+                        let fv = self
+                            .builder
+                            .get_insert_block()
+                            .unwrap()
+                            .get_parent()
+                            .unwrap();
                         let v = self.emit_adt_compare(*op, lhs, rhs, dest, &stype, fv);
                         self.values.insert(dest.clone(), v);
                         return;
@@ -680,9 +757,15 @@ impl<'ctx> CodeGen<'ctx> {
             Instruction::Neg { dest, operand } => {
                 let o = self.operand(operand);
                 let v: BasicValueEnum = if o.is_float_value() {
-                    self.builder.build_float_neg(o.into_float_value(), dest).unwrap().into()
+                    self.builder
+                        .build_float_neg(o.into_float_value(), dest)
+                        .unwrap()
+                        .into()
                 } else {
-                    self.builder.build_int_neg(o.into_int_value(), dest).unwrap().into()
+                    self.builder
+                        .build_int_neg(o.into_int_value(), dest)
+                        .unwrap()
+                        .into()
                 };
                 self.values.insert(dest.clone(), v);
             }
@@ -712,9 +795,15 @@ impl<'ctx> CodeGen<'ctx> {
                 self.cur_label = Some(name.clone());
             }
             Instruction::Jump { label } => {
-                self.builder.build_unconditional_branch(self.blocks[label]).unwrap();
+                self.builder
+                    .build_unconditional_branch(self.blocks[label])
+                    .unwrap();
             }
-            Instruction::BranchIf { cond, true_label, false_label } => {
+            Instruction::BranchIf {
+                cond,
+                true_label,
+                false_label,
+            } => {
                 let c = self.operand(cond).into_int_value();
                 let t = self.blocks[true_label];
                 let e = self.blocks[false_label];
@@ -739,10 +828,10 @@ impl<'ctx> CodeGen<'ctx> {
                         .builder
                         .build_call(callee, &argvals, dest.as_deref().unwrap_or(""))
                         .unwrap();
-                    if let Some(d) = dest {
-                        if let Some(rv) = cs.try_as_basic_value().basic() {
-                            self.values.insert(d.clone(), rv);
-                        }
+                    if let Some(d) = dest
+                        && let Some(rv) = cs.try_as_basic_value().basic()
+                    {
+                        self.values.insert(d.clone(), rv);
                     }
                 } else {
                     // Builtin (the gate admitted only supported ones, I4a+).
@@ -750,31 +839,74 @@ impl<'ctx> CodeGen<'ctx> {
                     debug_assert!(handled, "gate admitted unsupported builtin `{func}`");
                 }
             }
-            Instruction::ListInit { dest, elem_type, elements } => {
+            Instruction::ListInit {
+                dest,
+                elem_type,
+                elements,
+            } => {
                 self.emit_list_init(dest, elem_type, elements);
             }
             Instruction::ListLen { dest, list } => {
                 self.emit_list_len(dest, list);
             }
-            Instruction::ListGet { dest, list, index, elem_type } => {
+            Instruction::ListGet {
+                dest,
+                list,
+                index,
+                elem_type,
+            } => {
                 self.emit_list_get(dest, list, index, elem_type);
             }
-            Instruction::ListGetSafe { dest, list, index, elem_type } => {
+            Instruction::ListGetSafe {
+                dest,
+                list,
+                index,
+                elem_type,
+            } => {
                 self.emit_list_get_safe(dest, list, index, elem_type);
             }
-            Instruction::ListPush { dest, list, elem, elem_type } => {
+            Instruction::ListPush {
+                dest,
+                list,
+                elem,
+                elem_type,
+            } => {
                 self.emit_list_push(dest, list, elem, elem_type);
             }
-            Instruction::MapGetOption { dest, handle, key, key_ty, val_ty } => {
+            Instruction::MapGetOption {
+                dest,
+                handle,
+                key,
+                key_ty,
+                val_ty,
+            } => {
                 self.emit_map_get_option(dest, handle, key, key_ty, val_ty, "tyra_map_get");
             }
-            Instruction::LinkedMapGetOption { dest, handle, key, key_ty, val_ty } => {
+            Instruction::LinkedMapGetOption {
+                dest,
+                handle,
+                key,
+                key_ty,
+                val_ty,
+            } => {
                 self.emit_map_get_option(dest, handle, key, key_ty, val_ty, "tyra_linked_map_get");
             }
-            Instruction::ClosureBuild { dest, fn_name, env_fields, env_struct_name, .. } => {
+            Instruction::ClosureBuild {
+                dest,
+                fn_name,
+                env_fields,
+                env_struct_name,
+                ..
+            } => {
                 self.emit_closure_build(dest, fn_name, env_fields, env_struct_name);
             }
-            Instruction::IndirectCall { dest, fat_ptr, args, param_types, return_type } => {
+            Instruction::IndirectCall {
+                dest,
+                fat_ptr,
+                args,
+                param_types,
+                return_type,
+            } => {
                 self.emit_indirect_call(dest, fat_ptr, args, param_types, return_type);
             }
             Instruction::MapForEachCall { handle, fat_ptr } => {
@@ -789,19 +921,41 @@ impl<'ctx> CodeGen<'ctx> {
             Instruction::LinkedSetForEachCall { handle, fat_ptr } => {
                 self.emit_for_each(handle, fat_ptr, "tyra_linked_set_for_each", "__lsfe");
             }
-            Instruction::Spawn { dest, func, args, arg_types, result_type } => {
+            Instruction::Spawn {
+                dest,
+                func,
+                args,
+                arg_types,
+                result_type,
+            } => {
                 self.emit_spawn(dest, func, args, arg_types, result_type);
             }
-            Instruction::Await { dest, task, result_type } => {
+            Instruction::Await {
+                dest,
+                task,
+                result_type,
+            } => {
                 self.emit_await(dest, task, result_type);
             }
-            Instruction::JoinAll { dest, list, elem_type } => {
+            Instruction::JoinAll {
+                dest,
+                list,
+                elem_type,
+            } => {
                 self.emit_join_all(dest, list, elem_type);
             }
-            Instruction::Select { dest, list, elem_type } => {
+            Instruction::Select {
+                dest,
+                list,
+                elem_type,
+            } => {
                 self.emit_select(dest, list, elem_type);
             }
-            Instruction::StringFormat { dest, format_ref, args } => {
+            Instruction::StringFormat {
+                dest,
+                format_ref,
+                args,
+            } => {
                 // GC-allocate a 1024-byte buffer and snprintf into it. No
                 // null-check branch: Boehm GC_malloc never returns null (its OOM
                 // handler aborts internally), and adding the branch would split
@@ -838,7 +992,9 @@ impl<'ctx> CodeGen<'ctx> {
                     }
                 }
                 let snprintf = self.module.get_function("snprintf").unwrap();
-                self.builder.build_call(snprintf, &call_args, "fmt").unwrap();
+                self.builder
+                    .build_call(snprintf, &call_args, "fmt")
+                    .unwrap();
                 self.values.insert(dest.clone(), buf.into());
             }
             // As of I4i every `Instruction` variant has a dispatch arm above, so
@@ -861,28 +1017,141 @@ impl<'ctx> CodeGen<'ctx> {
         let r = self.operand(rhs);
         let b = &self.builder;
         match op {
-            MirBinOp::AddInt => b.build_int_add(l.into_int_value(), r.into_int_value(), dest).unwrap().into(),
-            MirBinOp::SubInt => b.build_int_sub(l.into_int_value(), r.into_int_value(), dest).unwrap().into(),
-            MirBinOp::MulInt => b.build_int_mul(l.into_int_value(), r.into_int_value(), dest).unwrap().into(),
-            MirBinOp::DivInt => b.build_int_signed_div(l.into_int_value(), r.into_int_value(), dest).unwrap().into(),
-            MirBinOp::RemInt => b.build_int_signed_rem(l.into_int_value(), r.into_int_value(), dest).unwrap().into(),
-            MirBinOp::AddFloat => b.build_float_add(l.into_float_value(), r.into_float_value(), dest).unwrap().into(),
-            MirBinOp::SubFloat => b.build_float_sub(l.into_float_value(), r.into_float_value(), dest).unwrap().into(),
-            MirBinOp::MulFloat => b.build_float_mul(l.into_float_value(), r.into_float_value(), dest).unwrap().into(),
-            MirBinOp::DivFloat => b.build_float_div(l.into_float_value(), r.into_float_value(), dest).unwrap().into(),
+            MirBinOp::AddInt => b
+                .build_int_add(l.into_int_value(), r.into_int_value(), dest)
+                .unwrap()
+                .into(),
+            MirBinOp::SubInt => b
+                .build_int_sub(l.into_int_value(), r.into_int_value(), dest)
+                .unwrap()
+                .into(),
+            MirBinOp::MulInt => b
+                .build_int_mul(l.into_int_value(), r.into_int_value(), dest)
+                .unwrap()
+                .into(),
+            MirBinOp::DivInt => b
+                .build_int_signed_div(l.into_int_value(), r.into_int_value(), dest)
+                .unwrap()
+                .into(),
+            MirBinOp::RemInt => b
+                .build_int_signed_rem(l.into_int_value(), r.into_int_value(), dest)
+                .unwrap()
+                .into(),
+            MirBinOp::AddFloat => b
+                .build_float_add(l.into_float_value(), r.into_float_value(), dest)
+                .unwrap()
+                .into(),
+            MirBinOp::SubFloat => b
+                .build_float_sub(l.into_float_value(), r.into_float_value(), dest)
+                .unwrap()
+                .into(),
+            MirBinOp::MulFloat => b
+                .build_float_mul(l.into_float_value(), r.into_float_value(), dest)
+                .unwrap()
+                .into(),
+            MirBinOp::DivFloat => b
+                .build_float_div(l.into_float_value(), r.into_float_value(), dest)
+                .unwrap()
+                .into(),
             // Width (i1 vs i64) is taken from the operand handles automatically.
-            MirBinOp::EqInt => b.build_int_compare(IntPredicate::EQ, l.into_int_value(), r.into_int_value(), dest).unwrap().into(),
-            MirBinOp::NeqInt => b.build_int_compare(IntPredicate::NE, l.into_int_value(), r.into_int_value(), dest).unwrap().into(),
-            MirBinOp::LtInt => b.build_int_compare(IntPredicate::SLT, l.into_int_value(), r.into_int_value(), dest).unwrap().into(),
-            MirBinOp::LeInt => b.build_int_compare(IntPredicate::SLE, l.into_int_value(), r.into_int_value(), dest).unwrap().into(),
-            MirBinOp::GtInt => b.build_int_compare(IntPredicate::SGT, l.into_int_value(), r.into_int_value(), dest).unwrap().into(),
-            MirBinOp::GeInt => b.build_int_compare(IntPredicate::SGE, l.into_int_value(), r.into_int_value(), dest).unwrap().into(),
-            MirBinOp::LtFloat => b.build_float_compare(FloatPredicate::OLT, l.into_float_value(), r.into_float_value(), dest).unwrap().into(),
-            MirBinOp::LeFloat => b.build_float_compare(FloatPredicate::OLE, l.into_float_value(), r.into_float_value(), dest).unwrap().into(),
-            MirBinOp::GtFloat => b.build_float_compare(FloatPredicate::OGT, l.into_float_value(), r.into_float_value(), dest).unwrap().into(),
-            MirBinOp::GeFloat => b.build_float_compare(FloatPredicate::OGE, l.into_float_value(), r.into_float_value(), dest).unwrap().into(),
-            MirBinOp::And => b.build_and(l.into_int_value(), r.into_int_value(), dest).unwrap().into(),
-            MirBinOp::Or => b.build_or(l.into_int_value(), r.into_int_value(), dest).unwrap().into(),
+            MirBinOp::EqInt => b
+                .build_int_compare(
+                    IntPredicate::EQ,
+                    l.into_int_value(),
+                    r.into_int_value(),
+                    dest,
+                )
+                .unwrap()
+                .into(),
+            MirBinOp::NeqInt => b
+                .build_int_compare(
+                    IntPredicate::NE,
+                    l.into_int_value(),
+                    r.into_int_value(),
+                    dest,
+                )
+                .unwrap()
+                .into(),
+            MirBinOp::LtInt => b
+                .build_int_compare(
+                    IntPredicate::SLT,
+                    l.into_int_value(),
+                    r.into_int_value(),
+                    dest,
+                )
+                .unwrap()
+                .into(),
+            MirBinOp::LeInt => b
+                .build_int_compare(
+                    IntPredicate::SLE,
+                    l.into_int_value(),
+                    r.into_int_value(),
+                    dest,
+                )
+                .unwrap()
+                .into(),
+            MirBinOp::GtInt => b
+                .build_int_compare(
+                    IntPredicate::SGT,
+                    l.into_int_value(),
+                    r.into_int_value(),
+                    dest,
+                )
+                .unwrap()
+                .into(),
+            MirBinOp::GeInt => b
+                .build_int_compare(
+                    IntPredicate::SGE,
+                    l.into_int_value(),
+                    r.into_int_value(),
+                    dest,
+                )
+                .unwrap()
+                .into(),
+            MirBinOp::LtFloat => b
+                .build_float_compare(
+                    FloatPredicate::OLT,
+                    l.into_float_value(),
+                    r.into_float_value(),
+                    dest,
+                )
+                .unwrap()
+                .into(),
+            MirBinOp::LeFloat => b
+                .build_float_compare(
+                    FloatPredicate::OLE,
+                    l.into_float_value(),
+                    r.into_float_value(),
+                    dest,
+                )
+                .unwrap()
+                .into(),
+            MirBinOp::GtFloat => b
+                .build_float_compare(
+                    FloatPredicate::OGT,
+                    l.into_float_value(),
+                    r.into_float_value(),
+                    dest,
+                )
+                .unwrap()
+                .into(),
+            MirBinOp::GeFloat => b
+                .build_float_compare(
+                    FloatPredicate::OGE,
+                    l.into_float_value(),
+                    r.into_float_value(),
+                    dest,
+                )
+                .unwrap()
+                .into(),
+            MirBinOp::And => b
+                .build_and(l.into_int_value(), r.into_int_value(), dest)
+                .unwrap()
+                .into(),
+            MirBinOp::Or => b
+                .build_or(l.into_int_value(), r.into_int_value(), dest)
+                .unwrap()
+                .into(),
             MirBinOp::EqString | MirBinOp::NeqString => {
                 let strcmp = self.module.get_function("strcmp").unwrap();
                 let cs = b.build_call(strcmp, &[l.into(), r.into()], "scmp").unwrap();
@@ -917,7 +1186,11 @@ impl<'ctx> CodeGen<'ctx> {
         let i1t = self.ctx.bool_type();
 
         // Classify each field.
-        enum FieldKind { Scalar, StrPtr, Unsupported }
+        enum FieldKind {
+            Scalar,
+            StrPtr,
+            Unsupported,
+        }
         let field_kinds: Vec<FieldKind> = (0..num_fields)
             .map(|fi| {
                 if fi == 0 {
@@ -935,14 +1208,33 @@ impl<'ctx> CodeGen<'ctx> {
             })
             .collect();
 
-        let all_supported = field_kinds.iter().all(|k| !matches!(k, FieldKind::Unsupported));
+        let all_supported = field_kinds
+            .iter()
+            .all(|k| !matches!(k, FieldKind::Unsupported));
         if !all_supported {
             // Fallback: tag-only comparison (unsupported payload — leave as explicit TODO).
-            let lt = self.builder.build_extract_value(lv, 0, &format!("{dest}.lt")).unwrap();
-            let rt = self.builder.build_extract_value(rv, 0, &format!("{dest}.rt")).unwrap();
-            let eq = self.builder.build_int_compare(IntPredicate::EQ, lt.into_int_value(), rt.into_int_value(), dest).unwrap();
+            let lt = self
+                .builder
+                .build_extract_value(lv, 0, &format!("{dest}.lt"))
+                .unwrap();
+            let rt = self
+                .builder
+                .build_extract_value(rv, 0, &format!("{dest}.rt"))
+                .unwrap();
+            let eq = self
+                .builder
+                .build_int_compare(
+                    IntPredicate::EQ,
+                    lt.into_int_value(),
+                    rt.into_int_value(),
+                    dest,
+                )
+                .unwrap();
             return if matches!(op, MirBinOp::NeqInt) {
-                self.builder.build_xor(eq, i1t.const_all_ones(), &format!("{dest}.ne")).unwrap().into()
+                self.builder
+                    .build_xor(eq, i1t.const_all_ones(), &format!("{dest}.ne"))
+                    .unwrap()
+                    .into()
             } else {
                 eq.into()
             };
@@ -950,53 +1242,109 @@ impl<'ctx> CodeGen<'ctx> {
 
         let strcmp = self.module.get_function("strcmp").unwrap();
         let mut acc: Option<BasicValueEnum<'ctx>> = None;
-        for fi in 0..num_fields {
-            let lf = self.builder.build_extract_value(lv, fi as u32, &format!("{dest}.l{fi}")).unwrap();
-            let rf = self.builder.build_extract_value(rv, fi as u32, &format!("{dest}.r{fi}")).unwrap();
-            let cmp: BasicValueEnum<'ctx> = match &field_kinds[fi] {
+        for (fi, kind) in field_kinds.iter().enumerate() {
+            let lf = self
+                .builder
+                .build_extract_value(lv, fi as u32, &format!("{dest}.l{fi}"))
+                .unwrap();
+            let rf = self
+                .builder
+                .build_extract_value(rv, fi as u32, &format!("{dest}.r{fi}"))
+                .unwrap();
+            let cmp: BasicValueEnum<'ctx> = match kind {
                 FieldKind::StrPtr => {
                     // Null guard: AdtInit zero-fills inactive variant String fields.
                     let lp = lf.into_pointer_value();
                     let rp = rf.into_pointer_value();
                     let null = self.ptr().const_null();
-                    let ln = self.builder.build_int_compare(IntPredicate::EQ, lp, null, &format!("{dest}.ln{fi}")).unwrap();
-                    let rn = self.builder.build_int_compare(IntPredicate::EQ, rp, null, &format!("{dest}.rn{fi}")).unwrap();
-                    let any_null = self.builder.build_or(ln, rn, &format!("{dest}.anyn{fi}")).unwrap();
-                    let bb_snull = self.ctx.append_basic_block(fv, &format!("{dest}.snull{fi}"));
-                    let bb_scmp  = self.ctx.append_basic_block(fv, &format!("{dest}.scmp{fi}"));
-                    let bb_sdone = self.ctx.append_basic_block(fv, &format!("{dest}.sdone{fi}"));
-                    self.builder.build_conditional_branch(any_null, bb_snull, bb_scmp).unwrap();
+                    let ln = self
+                        .builder
+                        .build_int_compare(IntPredicate::EQ, lp, null, &format!("{dest}.ln{fi}"))
+                        .unwrap();
+                    let rn = self
+                        .builder
+                        .build_int_compare(IntPredicate::EQ, rp, null, &format!("{dest}.rn{fi}"))
+                        .unwrap();
+                    let any_null = self
+                        .builder
+                        .build_or(ln, rn, &format!("{dest}.anyn{fi}"))
+                        .unwrap();
+                    let bb_snull = self
+                        .ctx
+                        .append_basic_block(fv, &format!("{dest}.snull{fi}"));
+                    let bb_scmp = self.ctx.append_basic_block(fv, &format!("{dest}.scmp{fi}"));
+                    let bb_sdone = self
+                        .ctx
+                        .append_basic_block(fv, &format!("{dest}.sdone{fi}"));
+                    self.builder
+                        .build_conditional_branch(any_null, bb_snull, bb_scmp)
+                        .unwrap();
                     // snull: pointer equality (both null → equal, one null → not)
                     self.builder.position_at_end(bb_snull);
-                    let pe = self.builder.build_int_compare(IntPredicate::EQ, lp, rp, &format!("{dest}.pe{fi}")).unwrap();
+                    let pe = self
+                        .builder
+                        .build_int_compare(IntPredicate::EQ, lp, rp, &format!("{dest}.pe{fi}"))
+                        .unwrap();
                     self.builder.build_unconditional_branch(bb_sdone).unwrap();
                     // scmp: strcmp
                     self.builder.position_at_end(bb_scmp);
-                    let sc = self.builder.build_call(strcmp, &[lp.into(), rp.into()], &format!("{dest}.sc{fi}")).unwrap();
+                    let sc = self
+                        .builder
+                        .build_call(strcmp, &[lp.into(), rp.into()], &format!("{dest}.sc{fi}"))
+                        .unwrap();
                     let si = sc.try_as_basic_value().basic().unwrap().into_int_value();
-                    let se = self.builder.build_int_compare(IntPredicate::EQ, si, self.ctx.i32_type().const_zero(), &format!("{dest}.se{fi}")).unwrap();
+                    let se = self
+                        .builder
+                        .build_int_compare(
+                            IntPredicate::EQ,
+                            si,
+                            self.ctx.i32_type().const_zero(),
+                            &format!("{dest}.se{fi}"),
+                        )
+                        .unwrap();
                     self.builder.build_unconditional_branch(bb_sdone).unwrap();
                     // sdone: phi
                     self.builder.position_at_end(bb_sdone);
-                    let phi = self.builder.build_phi(i1t, &format!("{dest}.e{fi}")).unwrap();
+                    let phi = self
+                        .builder
+                        .build_phi(i1t, &format!("{dest}.e{fi}"))
+                        .unwrap();
                     phi.add_incoming(&[(&pe, bb_snull), (&se, bb_scmp)]);
                     phi.as_basic_value()
                 }
                 FieldKind::Scalar => {
                     let lfi = lf.into_int_value();
                     let rfi = rf.into_int_value();
-                    self.builder.build_int_compare(IntPredicate::EQ, lfi, rfi, &format!("{dest}.f{fi}")).unwrap().into()
+                    self.builder
+                        .build_int_compare(IntPredicate::EQ, lfi, rfi, &format!("{dest}.f{fi}"))
+                        .unwrap()
+                        .into()
                 }
                 FieldKind::Unsupported => unreachable!(),
             };
             acc = Some(match acc {
                 None => cmp,
-                Some(prev) => self.builder.build_and(prev.into_int_value(), cmp.into_int_value(), &format!("{dest}.a{fi}")).unwrap().into(),
+                Some(prev) => self
+                    .builder
+                    .build_and(
+                        prev.into_int_value(),
+                        cmp.into_int_value(),
+                        &format!("{dest}.a{fi}"),
+                    )
+                    .unwrap()
+                    .into(),
             });
         }
         let eq = acc.unwrap_or_else(|| i1t.const_int(1, false).into());
         if matches!(op, MirBinOp::NeqInt) {
-            self.builder.build_xor(eq.into_int_value(), i1t.const_all_ones(), &format!("{dest}.ne")).unwrap().into()
+            self.builder
+                .build_xor(
+                    eq.into_int_value(),
+                    i1t.const_all_ones(),
+                    &format!("{dest}.ne"),
+                )
+                .unwrap()
+                .into()
         } else {
             eq
         }

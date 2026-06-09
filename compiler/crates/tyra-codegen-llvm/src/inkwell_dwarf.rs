@@ -23,8 +23,8 @@ use std::collections::HashMap;
 
 use inkwell::basic_block::BasicBlock;
 use inkwell::debug_info::{
-    AsDIScope, DIFile, DIFlags, DIFlagsConstants, DISubprogram, DIType, DebugInfoBuilder,
-    DWARFEmissionKind, DWARFSourceLanguage,
+    AsDIScope, DIFile, DIFlags, DIFlagsConstants, DISubprogram, DIType, DWARFEmissionKind,
+    DWARFSourceLanguage, DebugInfoBuilder,
 };
 // Raw LLVM 19+ API for inserting debug declare records. inkwell 0.9 wraps the
 // old `LLVMDIBuilderInsertDeclareAtEnd` (now aliased to return LLVMDbgRecordRef
@@ -134,7 +134,11 @@ impl<'ctx> CodeGen<'ctx> {
             let file = first_loc
                 .and_then(|l| files.get(l.file_id as usize).copied())
                 .unwrap_or(primary);
-            let display = if func.is_main { "main" } else { func.name.as_str() };
+            let display = if func.is_main {
+                "main"
+            } else {
+                func.name.as_str()
+            };
             let sp = builder.create_function(
                 file.as_debug_info_scope(),
                 display,
@@ -154,12 +158,19 @@ impl<'ctx> CodeGen<'ctx> {
             subprograms.insert(func.name.clone(), sp);
         }
 
-        self.di = Some(DebugInfo { builder, files, subprograms, type_cache: HashMap::new() });
+        self.di = Some(DebugInfo {
+            builder,
+            files,
+            subprograms,
+            type_cache: HashMap::new(),
+        });
     }
 
     /// The `DISubprogram` for `name`, if debug info is enabled.
     pub(crate) fn di_subprogram(&self, name: &str) -> Option<DISubprogram<'ctx>> {
-        self.di.as_ref().and_then(|d| d.subprograms.get(name).copied())
+        self.di
+            .as_ref()
+            .and_then(|d| d.subprograms.get(name).copied())
     }
 
     /// Set the builder's current debug location to `(sp, line)` at column 1
@@ -167,7 +178,9 @@ impl<'ctx> CodeGen<'ctx> {
     /// `!dbg`. No-op without debug info.
     pub(crate) fn set_debug_line(&self, sp: DISubprogram<'ctx>, line: u32) {
         if let Some(d) = &self.di {
-            let loc = d.builder.create_debug_location(self.ctx, line, 1, sp.as_debug_info_scope(), None);
+            let loc =
+                d.builder
+                    .create_debug_location(self.ctx, line, 1, sp.as_debug_info_scope(), None);
             self.builder.set_current_debug_location(loc);
         }
     }
@@ -198,15 +211,36 @@ impl<'ctx> CodeGen<'ctx> {
         let d = self.di.as_ref()?;
         let b = &d.builder;
         let t: DIType<'ctx> = match ty {
-            Ty::Int => b.create_basic_type("Int", 64, DW_ATE_SIGNED, DIFlags::ZERO).unwrap().as_type(),
-            Ty::Bool => b.create_basic_type("Bool", 8, DW_ATE_BOOLEAN, DIFlags::ZERO).unwrap().as_type(),
-            Ty::Float => b.create_basic_type("Float", 64, DW_ATE_FLOAT, DIFlags::ZERO).unwrap().as_type(),
+            Ty::Int => b
+                .create_basic_type("Int", 64, DW_ATE_SIGNED, DIFlags::ZERO)
+                .unwrap()
+                .as_type(),
+            Ty::Bool => b
+                .create_basic_type("Bool", 8, DW_ATE_BOOLEAN, DIFlags::ZERO)
+                .unwrap()
+                .as_type(),
+            Ty::Float => b
+                .create_basic_type("Float", 64, DW_ATE_FLOAT, DIFlags::ZERO)
+                .unwrap()
+                .as_type(),
             _ => {
                 // Pointer types need a pointee; reuse one shared byte base type.
-                let byte = b.create_basic_type("u8", 8, DW_ATE_UNSIGNED, DIFlags::ZERO).unwrap();
-                let name = if matches!(ty, Ty::String) { "String".to_string() } else { key.clone() };
-                b.create_pointer_type(&name, byte.as_type(), 64, 0, inkwell::AddressSpace::default())
-                    .as_type()
+                let byte = b
+                    .create_basic_type("u8", 8, DW_ATE_UNSIGNED, DIFlags::ZERO)
+                    .unwrap();
+                let name = if matches!(ty, Ty::String) {
+                    "String".to_string()
+                } else {
+                    key.clone()
+                };
+                b.create_pointer_type(
+                    &name,
+                    byte.as_type(),
+                    64,
+                    0,
+                    inkwell::AddressSpace::default(),
+                )
+                .as_type()
             }
         };
         if let Some(d) = &mut self.di {
@@ -254,7 +288,9 @@ impl<'ctx> CodeGen<'ctx> {
                 DIFlags::ZERO,
                 0, // align
             );
-            let loc = d.builder.create_debug_location(self.ctx, line, 1, sp.as_debug_info_scope(), None);
+            let loc =
+                d.builder
+                    .create_debug_location(self.ctx, line, 1, sp.as_debug_info_scope(), None);
             let expr = d.builder.create_expression(vec![]);
             // Bypass inkwell 0.9's insert_declare_at_end wrapper (UB on LLVM 19+):
             // use the LLVM 19+ DbgRecord API directly and discard the return value.
@@ -284,7 +320,11 @@ impl<'ctx> CodeGen<'ctx> {
 /// missing directory becomes `"."` (matching the legacy `split_path`).
 fn split_path(path: &str) -> (String, String) {
     let p = std::path::Path::new(path);
-    let filename = p.file_name().and_then(|n| n.to_str()).unwrap_or(path).to_string();
+    let filename = p
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(path)
+        .to_string();
     let directory = p
         .parent()
         .and_then(|d| d.to_str())

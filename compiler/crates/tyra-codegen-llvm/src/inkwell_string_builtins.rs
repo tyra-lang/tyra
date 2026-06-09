@@ -25,7 +25,11 @@ use tyra_types::Ty;
 
 use crate::inkwell_codegen::CodeGen;
 
-const STRING_LIST: &[&str] = &["__string_split_whitespace", "__string_split", "__string_join"];
+const STRING_LIST: &[&str] = &[
+    "__string_split_whitespace",
+    "__string_split",
+    "__string_join",
+];
 
 impl<'ctx> CodeGen<'ctx> {
     /// Is `name` a string builtin that round-trips a `List<String>` by ref?
@@ -65,10 +69,19 @@ impl<'ctx> CodeGen<'ctx> {
     /// `__string_split[_whitespace]` — out-parameter form. The runtime writes the
     /// `List<String>` into a stack slot whose pointer is passed last; we load it
     /// back as the result.
-    fn emit_string_split(&mut self, dest: Option<&str>, args: &[Operand], callee: &str, has_sep: bool) {
+    fn emit_string_split(
+        &mut self,
+        dest: Option<&str>,
+        args: &[Operand],
+        callee: &str,
+        has_sep: bool,
+    ) {
         let d = dest.unwrap_or("_split");
         let list_ty = self.list_string_ty();
-        let slot = self.builder.build_alloca(list_ty, &format!("{d}.slot")).unwrap();
+        let slot = self
+            .builder
+            .build_alloca(list_ty, &format!("{d}.slot"))
+            .unwrap();
 
         let mut call_args: Vec<BasicMetadataValueEnum<'ctx>> = vec![self.operand(&args[0]).into()];
         if has_sep {
@@ -92,7 +105,10 @@ impl<'ctx> CodeGen<'ctx> {
         let d = dest.unwrap_or("_join");
         let list_ty = self.list_string_ty();
         let list_val = self.operand(&args[0]);
-        let slot = self.builder.build_alloca(list_ty, &format!("{d}.lslot")).unwrap();
+        let slot = self
+            .builder
+            .build_alloca(list_ty, &format!("{d}.lslot"))
+            .unwrap();
         self.builder.build_store(slot, list_val).unwrap();
         let sep = self.operand(&args[1]);
 
@@ -100,8 +116,14 @@ impl<'ctx> CodeGen<'ctx> {
             .module
             .get_function("tyra_string_join")
             .unwrap_or_else(|| panic!("runtime extern `tyra_string_join` must be declared (I1)"));
-        let cs = self.builder.build_call(f, &[slot.into(), sep.into()], d).unwrap();
-        let rv = cs.try_as_basic_value().basic().expect("tyra_string_join returns a ptr");
+        let cs = self
+            .builder
+            .build_call(f, &[slot.into(), sep.into()], d)
+            .unwrap();
+        let rv = cs
+            .try_as_basic_value()
+            .basic()
+            .expect("tyra_string_join returns a ptr");
         self.values.insert(d.to_string(), rv);
     }
 }

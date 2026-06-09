@@ -85,27 +85,29 @@ const LINKED_SET: CollFamily = CollFamily {
 impl<'ctx> CodeGen<'ctx> {
     /// Is `name` a boxed-collection builtin (any family/op)?
     pub(crate) fn is_collection_builtin(name: &str) -> bool {
-        matches!(name, "__map_len" | "__set_len" | "__linked_map_len" | "__linked_set_len")
-            || [
-                "__map_new__",
-                "__map_insert__",
-                "__map_remove__",
-                "__map_contains__",
-                "__set_new__",
-                "__set_insert__",
-                "__set_remove__",
-                "__set_contains__",
-                "__linked_map_new__",
-                "__linked_map_insert__",
-                "__linked_map_remove__",
-                "__linked_map_contains__",
-                "__linked_set_new__",
-                "__linked_set_insert__",
-                "__linked_set_remove__",
-                "__linked_set_contains__",
-            ]
-            .iter()
-            .any(|p| name.starts_with(p))
+        matches!(
+            name,
+            "__map_len" | "__set_len" | "__linked_map_len" | "__linked_set_len"
+        ) || [
+            "__map_new__",
+            "__map_insert__",
+            "__map_remove__",
+            "__map_contains__",
+            "__set_new__",
+            "__set_insert__",
+            "__set_remove__",
+            "__set_contains__",
+            "__linked_map_new__",
+            "__linked_map_insert__",
+            "__linked_map_remove__",
+            "__linked_map_contains__",
+            "__linked_set_new__",
+            "__linked_set_insert__",
+            "__linked_set_remove__",
+            "__linked_set_contains__",
+        ]
+        .iter()
+        .any(|p| name.starts_with(p))
     }
 
     /// Resolve the family of a collection builtin. `linked_*` is checked first
@@ -187,7 +189,11 @@ impl<'ctx> CodeGen<'ctx> {
                 let f = self.runtime_fn(fam.insert);
                 let cs = self
                     .builder
-                    .build_call(f, &[coll.into(), ebox.into()], dest.as_deref().unwrap_or(""))
+                    .build_call(
+                        f,
+                        &[coll.into(), ebox.into()],
+                        dest.as_deref().unwrap_or(""),
+                    )
                     .unwrap();
                 self.store_call_result(dest, cs);
             }
@@ -198,7 +204,11 @@ impl<'ctx> CodeGen<'ctx> {
                 let f = self.runtime_fn(fam.remove);
                 let cs = self
                     .builder
-                    .build_call(f, &[coll.into(), kbox.into()], dest.as_deref().unwrap_or(""))
+                    .build_call(
+                        f,
+                        &[coll.into(), kbox.into()],
+                        dest.as_deref().unwrap_or(""),
+                    )
                     .unwrap();
                 self.store_call_result(dest, cs);
             }
@@ -207,7 +217,10 @@ impl<'ctx> CodeGen<'ctx> {
                 let coll = self.collection_ptr(&args[0]);
                 let kbox = self.box_arg(&args[1], rest);
                 let f = self.runtime_fn(fam.contains);
-                let raw = dest.as_deref().map(|d| format!("{d}.i32")).unwrap_or_default();
+                let raw = dest
+                    .as_deref()
+                    .map(|d| format!("{d}.i32"))
+                    .unwrap_or_default();
                 let cs = self
                     .builder
                     .build_call(f, &[coll.into(), kbox.into()], &raw)
@@ -215,7 +228,10 @@ impl<'ctx> CodeGen<'ctx> {
                 if let Some(d) = dest {
                     let i = cs.try_as_basic_value().basic().unwrap().into_int_value();
                     let zero = self.ctx.i32_type().const_zero();
-                    let b = self.builder.build_int_compare(IntPredicate::NE, i, zero, d).unwrap();
+                    let b = self
+                        .builder
+                        .build_int_compare(IntPredicate::NE, i, zero, d)
+                        .unwrap();
                     self.values.insert(d.clone(), b.into());
                 }
             }
@@ -328,11 +344,9 @@ impl<'ctx> CodeGen<'ctx> {
             .builder
             .build_insert_value(agg, tag, 0, &format!("{dest}.s0"))
             .unwrap();
-        agg = self
-            .builder
-            .build_insert_value(agg, val, 1, dest)
-            .unwrap();
-        self.values.insert(dest.to_string(), agg.into_struct_value().into());
+        agg = self.builder.build_insert_value(agg, val, 1, dest).unwrap();
+        self.values
+            .insert(dest.to_string(), agg.into_struct_value().into());
     }
 
     /// Store a collection call's basic return value (a `ptr` for
@@ -450,9 +464,11 @@ impl<'ctx> CodeGen<'ctx> {
         );
         let eq_entry = self.ctx.append_basic_block(eq, "entry");
         let hash_name = format!("tyra_hash_{k}");
-        let hash =
-            self.module
-                .add_function(&hash_name, i64t.fn_type(&[ptr.into()], false), Some(Linkage::Private));
+        let hash = self.module.add_function(
+            &hash_name,
+            i64t.fn_type(&[ptr.into()], false),
+            Some(Linkage::Private),
+        );
         let hash_entry = self.ctx.append_basic_block(hash, "entry");
 
         // eq body: load both boxes, compare, zext to i32.
@@ -461,24 +477,54 @@ impl<'ctx> CodeGen<'ctx> {
         self.builder.position_at_end(eq_entry);
         match k {
             "Int" => {
-                let va = self.builder.build_load(i64t, a, "va").unwrap().into_int_value();
-                let vb = self.builder.build_load(i64t, b, "vb").unwrap().into_int_value();
-                let r1 = self.builder.build_int_compare(IntPredicate::EQ, va, vb, "r1").unwrap();
+                let va = self
+                    .builder
+                    .build_load(i64t, a, "va")
+                    .unwrap()
+                    .into_int_value();
+                let vb = self
+                    .builder
+                    .build_load(i64t, b, "vb")
+                    .unwrap()
+                    .into_int_value();
+                let r1 = self
+                    .builder
+                    .build_int_compare(IntPredicate::EQ, va, vb, "r1")
+                    .unwrap();
                 let r = self.builder.build_int_z_extend(r1, i32t, "r").unwrap();
                 self.builder.build_return(Some(&r)).unwrap();
             }
             "Bool" => {
                 let i8t = self.ctx.i8_type();
-                let va = self.builder.build_load(i8t, a, "va").unwrap().into_int_value();
-                let vb = self.builder.build_load(i8t, b, "vb").unwrap().into_int_value();
-                let r1 = self.builder.build_int_compare(IntPredicate::EQ, va, vb, "r1").unwrap();
+                let va = self
+                    .builder
+                    .build_load(i8t, a, "va")
+                    .unwrap()
+                    .into_int_value();
+                let vb = self
+                    .builder
+                    .build_load(i8t, b, "vb")
+                    .unwrap()
+                    .into_int_value();
+                let r1 = self
+                    .builder
+                    .build_int_compare(IntPredicate::EQ, va, vb, "r1")
+                    .unwrap();
                 let r = self.builder.build_int_z_extend(r1, i32t, "r").unwrap();
                 self.builder.build_return(Some(&r)).unwrap();
             }
             _ => {
                 // String: deref to the C string ptr, delegate to tyra_cstr_eq.
-                let sa = self.builder.build_load(ptr, a, "sa").unwrap().into_pointer_value();
-                let sb = self.builder.build_load(ptr, b, "sb").unwrap().into_pointer_value();
+                let sa = self
+                    .builder
+                    .build_load(ptr, a, "sa")
+                    .unwrap()
+                    .into_pointer_value();
+                let sb = self
+                    .builder
+                    .build_load(ptr, b, "sb")
+                    .unwrap()
+                    .into_pointer_value();
                 let cstr_eq = self.runtime_fn("tyra_cstr_eq");
                 let r = self
                     .builder
@@ -496,7 +542,11 @@ impl<'ctx> CodeGen<'ctx> {
         self.builder.position_at_end(hash_entry);
         match k {
             "Int" => {
-                let v = self.builder.build_load(i64t, ha, "v").unwrap().into_int_value();
+                let v = self
+                    .builder
+                    .build_load(i64t, ha, "v")
+                    .unwrap()
+                    .into_int_value();
                 // Knuth multiplicative hash (odd 64-bit constant).
                 let knuth = i64t.const_int((-3932073806218323177i64) as u64, false);
                 let h = self.builder.build_int_mul(v, knuth, "h").unwrap();
@@ -504,12 +554,20 @@ impl<'ctx> CodeGen<'ctx> {
             }
             "Bool" => {
                 let i8t = self.ctx.i8_type();
-                let v = self.builder.build_load(i8t, ha, "v").unwrap().into_int_value();
+                let v = self
+                    .builder
+                    .build_load(i8t, ha, "v")
+                    .unwrap()
+                    .into_int_value();
                 let h = self.builder.build_int_z_extend(v, i64t, "h").unwrap();
                 self.builder.build_return(Some(&h)).unwrap();
             }
             _ => {
-                let sp = self.builder.build_load(ptr, ha, "sp").unwrap().into_pointer_value();
+                let sp = self
+                    .builder
+                    .build_load(ptr, ha, "sp")
+                    .unwrap()
+                    .into_pointer_value();
                 let hash_cstr = self.runtime_fn("tyra_hash_cstr");
                 let h = self
                     .builder

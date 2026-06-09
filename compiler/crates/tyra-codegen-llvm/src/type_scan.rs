@@ -464,7 +464,11 @@ fn scan_primitive_temps(
                     bool_temps.insert(dest.clone());
                 }
                 Ty::Named(n) => {
-                    if struct_map.get(n.as_str()).map(|i| i.is_data).unwrap_or(false) {
+                    if struct_map
+                        .get(n.as_str())
+                        .map(|i| i.is_data)
+                        .unwrap_or(false)
+                    {
                         string_temps.insert(dest.clone());
                     }
                 }
@@ -800,10 +804,16 @@ fn pre_scan_struct_types(
             // / `await t`) takes the struct-aware Copy/Store/print path instead of
             // a scalar/ptr misclassification. Data generics stay ptrs (string_temps
             // in the primitive scan), so they are intentionally not registered here.
-            Instruction::Await { dest, result_type, .. } => {
+            Instruction::Await {
+                dest, result_type, ..
+            } => {
                 register_generic_value_struct(&mut struct_temps, struct_map, dest, result_type);
             }
-            Instruction::IndirectCall { dest: Some(dest), return_type, .. } => {
+            Instruction::IndirectCall {
+                dest: Some(dest),
+                return_type,
+                ..
+            } => {
                 register_generic_value_struct(&mut struct_temps, struct_map, dest, return_type);
             }
             Instruction::ListInit {

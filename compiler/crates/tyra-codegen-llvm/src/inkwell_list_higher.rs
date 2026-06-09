@@ -72,10 +72,9 @@ impl<'ctx> CodeGen<'ctx> {
     fn list_higher_types(&self, is_str: bool) -> (BasicTypeEnum<'ctx>, StructType<'ctx>) {
         let elem = if is_str { Ty::String } else { Ty::Int };
         let mono = Ty::Generic("List".into(), vec![elem.clone()]).monomorphized_name();
-        let list_ty = *self
-            .struct_types
-            .get(&mono)
-            .unwrap_or_else(|| panic!("`{mono}` struct must be registered for list higher-order builtin"));
+        let list_ty = *self.struct_types.get(&mono).unwrap_or_else(|| {
+            panic!("`{mono}` struct must be registered for list higher-order builtin")
+        });
         (self.ty_to_basic_type(&elem), list_ty)
     }
 
@@ -89,36 +88,66 @@ impl<'ctx> CodeGen<'ctx> {
 
         let newdata = self.alloc_slots(len, d);
         let (fnp, envp) = self.load_closure_fields(&args[1], d);
-        let ctr = self.builder.build_alloca(i64t, &format!("{d}.ctr")).unwrap();
+        let ctr = self
+            .builder
+            .build_alloca(i64t, &format!("{d}.ctr"))
+            .unwrap();
         self.builder.build_store(ctr, i64t.const_zero()).unwrap();
 
-        let fv = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+        let fv = self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
         let loop_bb = self.ctx.append_basic_block(fv, &format!("{d}.loop"));
         let body_bb = self.ctx.append_basic_block(fv, &format!("{d}.body"));
         let end_bb = self.ctx.append_basic_block(fv, &format!("{d}.end"));
         self.builder.build_unconditional_branch(loop_bb).unwrap();
 
         self.builder.position_at_end(loop_bb);
-        let i = self.builder.build_load(i64t, ctr, &format!("{d}.i")).unwrap().into_int_value();
+        let i = self
+            .builder
+            .build_load(i64t, ctr, &format!("{d}.i"))
+            .unwrap()
+            .into_int_value();
         let done = self
             .builder
             .build_int_compare(IntPredicate::SGE, i, len, &format!("{d}.done"))
             .unwrap();
-        self.builder.build_conditional_branch(done, end_bb, body_bb).unwrap();
+        self.builder
+            .build_conditional_branch(done, end_bb, body_bb)
+            .unwrap();
 
         self.builder.position_at_end(body_bb);
-        let srcp = unsafe { self.builder.build_gep(elem_bt, data, &[i], &format!("{d}.srcp")).unwrap() };
-        let elem = self.builder.build_load(elem_bt, srcp, &format!("{d}.elem")).unwrap();
+        let srcp = unsafe {
+            self.builder
+                .build_gep(elem_bt, data, &[i], &format!("{d}.srcp"))
+                .unwrap()
+        };
+        let elem = self
+            .builder
+            .build_load(elem_bt, srcp, &format!("{d}.elem"))
+            .unwrap();
         // Callback signature: T (ptr env, T elem).
         let fn_ty = elem_bt.fn_type(&[self.ptr().into(), elem_bt.into()], false);
         let mapped = self
             .builder
-            .build_indirect_call(fn_ty, fnp, &[envp.into(), elem.into()], &format!("{d}.mapped"))
+            .build_indirect_call(
+                fn_ty,
+                fnp,
+                &[envp.into(), elem.into()],
+                &format!("{d}.mapped"),
+            )
             .unwrap()
             .try_as_basic_value()
             .basic()
             .unwrap();
-        let dstp = unsafe { self.builder.build_gep(elem_bt, newdata, &[i], &format!("{d}.dstp")).unwrap() };
+        let dstp = unsafe {
+            self.builder
+                .build_gep(elem_bt, newdata, &[i], &format!("{d}.dstp"))
+                .unwrap()
+        };
         self.builder.build_store(dstp, mapped).unwrap();
         self.incr_counter(ctr, i, d);
         self.builder.build_unconditional_branch(loop_bb).unwrap();
@@ -140,12 +169,23 @@ impl<'ctx> CodeGen<'ctx> {
 
         let outdata = self.alloc_slots(len, d);
         let (fnp, envp) = self.load_closure_fields(&args[1], d);
-        let ctr = self.builder.build_alloca(i64t, &format!("{d}.ctr")).unwrap();
+        let ctr = self
+            .builder
+            .build_alloca(i64t, &format!("{d}.ctr"))
+            .unwrap();
         self.builder.build_store(ctr, i64t.const_zero()).unwrap();
-        let outctr = self.builder.build_alloca(i64t, &format!("{d}.outctr")).unwrap();
+        let outctr = self
+            .builder
+            .build_alloca(i64t, &format!("{d}.outctr"))
+            .unwrap();
         self.builder.build_store(outctr, i64t.const_zero()).unwrap();
 
-        let fv = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+        let fv = self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
         let loop_bb = self.ctx.append_basic_block(fv, &format!("{d}.loop"));
         let body_bb = self.ctx.append_basic_block(fv, &format!("{d}.body"));
         let keep_bb = self.ctx.append_basic_block(fv, &format!("{d}.keep"));
@@ -154,16 +194,29 @@ impl<'ctx> CodeGen<'ctx> {
         self.builder.build_unconditional_branch(loop_bb).unwrap();
 
         self.builder.position_at_end(loop_bb);
-        let i = self.builder.build_load(i64t, ctr, &format!("{d}.i")).unwrap().into_int_value();
+        let i = self
+            .builder
+            .build_load(i64t, ctr, &format!("{d}.i"))
+            .unwrap()
+            .into_int_value();
         let done = self
             .builder
             .build_int_compare(IntPredicate::SGE, i, len, &format!("{d}.done"))
             .unwrap();
-        self.builder.build_conditional_branch(done, end_bb, body_bb).unwrap();
+        self.builder
+            .build_conditional_branch(done, end_bb, body_bb)
+            .unwrap();
 
         self.builder.position_at_end(body_bb);
-        let srcp = unsafe { self.builder.build_gep(elem_bt, data, &[i], &format!("{d}.srcp")).unwrap() };
-        let elem = self.builder.build_load(elem_bt, srcp, &format!("{d}.elem")).unwrap();
+        let srcp = unsafe {
+            self.builder
+                .build_gep(elem_bt, data, &[i], &format!("{d}.srcp"))
+                .unwrap()
+        };
+        let elem = self
+            .builder
+            .build_load(elem_bt, srcp, &format!("{d}.elem"))
+            .unwrap();
         // Predicate signature: i1 (ptr env, T elem).
         let fn_ty = i1t.fn_type(&[self.ptr().into(), elem_bt.into()], false);
         let raw = self
@@ -174,11 +227,21 @@ impl<'ctx> CodeGen<'ctx> {
             .basic()
             .unwrap()
             .into_int_value();
-        self.builder.build_conditional_branch(raw, keep_bb, skip_bb).unwrap();
+        self.builder
+            .build_conditional_branch(raw, keep_bb, skip_bb)
+            .unwrap();
 
         self.builder.position_at_end(keep_bb);
-        let oi = self.builder.build_load(i64t, outctr, &format!("{d}.oi")).unwrap().into_int_value();
-        let dstp = unsafe { self.builder.build_gep(elem_bt, outdata, &[oi], &format!("{d}.dstp")).unwrap() };
+        let oi = self
+            .builder
+            .build_load(i64t, outctr, &format!("{d}.oi"))
+            .unwrap()
+            .into_int_value();
+        let dstp = unsafe {
+            self.builder
+                .build_gep(elem_bt, outdata, &[oi], &format!("{d}.dstp"))
+                .unwrap()
+        };
         self.builder.build_store(dstp, elem).unwrap();
         self.incr_counter(outctr, oi, &format!("{d}.o"));
         self.builder.build_unconditional_branch(skip_bb).unwrap();
@@ -188,7 +251,10 @@ impl<'ctx> CodeGen<'ctx> {
         self.builder.build_unconditional_branch(loop_bb).unwrap();
 
         self.builder.position_at_end(end_bb);
-        let outlen = self.builder.build_load(i64t, outctr, &format!("{d}.outlen")).unwrap();
+        let outlen = self
+            .builder
+            .build_load(i64t, outctr, &format!("{d}.outlen"))
+            .unwrap();
         let result = self.build_list_struct(list_ty, outdata.into(), outlen, d);
         self.values.insert(d.to_string(), result);
     }
@@ -202,35 +268,67 @@ impl<'ctx> CodeGen<'ctx> {
         let (data, len) = self.list_data_len(&args[0], d);
         let init = self.operand(&args[1]);
 
-        let acc = self.builder.build_alloca(elem_bt, &format!("{d}.acc")).unwrap();
+        let acc = self
+            .builder
+            .build_alloca(elem_bt, &format!("{d}.acc"))
+            .unwrap();
         self.builder.build_store(acc, init).unwrap();
         let (fnp, envp) = self.load_closure_fields(&args[2], d);
-        let ctr = self.builder.build_alloca(i64t, &format!("{d}.ctr")).unwrap();
+        let ctr = self
+            .builder
+            .build_alloca(i64t, &format!("{d}.ctr"))
+            .unwrap();
         self.builder.build_store(ctr, i64t.const_zero()).unwrap();
 
-        let fv = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+        let fv = self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
         let loop_bb = self.ctx.append_basic_block(fv, &format!("{d}.loop"));
         let body_bb = self.ctx.append_basic_block(fv, &format!("{d}.body"));
         let end_bb = self.ctx.append_basic_block(fv, &format!("{d}.end"));
         self.builder.build_unconditional_branch(loop_bb).unwrap();
 
         self.builder.position_at_end(loop_bb);
-        let i = self.builder.build_load(i64t, ctr, &format!("{d}.i")).unwrap().into_int_value();
+        let i = self
+            .builder
+            .build_load(i64t, ctr, &format!("{d}.i"))
+            .unwrap()
+            .into_int_value();
         let done = self
             .builder
             .build_int_compare(IntPredicate::SGE, i, len, &format!("{d}.done"))
             .unwrap();
-        self.builder.build_conditional_branch(done, end_bb, body_bb).unwrap();
+        self.builder
+            .build_conditional_branch(done, end_bb, body_bb)
+            .unwrap();
 
         self.builder.position_at_end(body_bb);
-        let srcp = unsafe { self.builder.build_gep(elem_bt, data, &[i], &format!("{d}.srcp")).unwrap() };
-        let elem = self.builder.build_load(elem_bt, srcp, &format!("{d}.elem")).unwrap();
-        let cur = self.builder.build_load(elem_bt, acc, &format!("{d}.cur")).unwrap();
+        let srcp = unsafe {
+            self.builder
+                .build_gep(elem_bt, data, &[i], &format!("{d}.srcp"))
+                .unwrap()
+        };
+        let elem = self
+            .builder
+            .build_load(elem_bt, srcp, &format!("{d}.elem"))
+            .unwrap();
+        let cur = self
+            .builder
+            .build_load(elem_bt, acc, &format!("{d}.cur"))
+            .unwrap();
         // Callback signature: T (ptr env, T acc, T elem).
         let fn_ty = elem_bt.fn_type(&[self.ptr().into(), elem_bt.into(), elem_bt.into()], false);
         let new = self
             .builder
-            .build_indirect_call(fn_ty, fnp, &[envp.into(), cur.into(), elem.into()], &format!("{d}.new"))
+            .build_indirect_call(
+                fn_ty,
+                fnp,
+                &[envp.into(), cur.into(), elem.into()],
+                &format!("{d}.new"),
+            )
             .unwrap()
             .try_as_basic_value()
             .basic()
@@ -249,7 +347,10 @@ impl<'ctx> CodeGen<'ctx> {
     /// Boehm OOM branch is intentionally omitted (see the module note).
     fn alloc_slots(&mut self, len: IntValue<'ctx>, d: &str) -> PointerValue<'ctx> {
         let i64t = self.ctx.i64_type();
-        let size = self.builder.build_int_mul(len, i64t.const_int(8, false), &format!("{d}.size")).unwrap();
+        let size = self
+            .builder
+            .build_int_mul(len, i64t.const_int(8, false), &format!("{d}.size"))
+            .unwrap();
         let gc = self.module.get_function("GC_malloc").unwrap();
         self.builder
             .build_call(gc, &[size.into()], &format!("{d}.buf"))

@@ -39,7 +39,10 @@ impl<'ctx> CodeGen<'ctx> {
             let elem_bt = self.ty_to_basic_type(elem_type);
             let elem_size = elem_bt.size_of().expect("list element type must be sized");
             let count = i64t.const_int(elements.len() as u64, false);
-            let total = self.builder.build_int_mul(count, elem_size, &format!("{dest}.tsz")).unwrap();
+            let total = self
+                .builder
+                .build_int_mul(count, elem_size, &format!("{dest}.tsz"))
+                .unwrap();
             let gc = self.module.get_function("GC_malloc").unwrap();
             let buf = self
                 .builder
@@ -77,7 +80,13 @@ impl<'ctx> CodeGen<'ctx> {
 
     /// `dest = list_get(list, index, elem_type)` — panicking index access (§11).
     /// Out-of-bounds calls `exit(102)` (distinct from panic `exit(101)`, ADR-0012).
-    pub(crate) fn emit_list_get(&mut self, dest: &str, list: &Operand, index: &Operand, elem_type: &Ty) {
+    pub(crate) fn emit_list_get(
+        &mut self,
+        dest: &str,
+        list: &Operand,
+        index: &Operand,
+        elem_type: &Ty,
+    ) {
         let lv = self.operand(list).into_struct_value();
         let data = self
             .builder
@@ -95,7 +104,12 @@ impl<'ctx> CodeGen<'ctx> {
             .build_int_compare(IntPredicate::ULT, idx, len, &format!("{dest}.inb"))
             .unwrap();
 
-        let fv = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+        let fv = self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
         let ok = self.ctx.append_basic_block(fv, &format!("{dest}.ok"));
         let oob = self.ctx.append_basic_block(fv, &format!("{dest}.oob"));
         self.builder.build_conditional_branch(inb, ok, oob).unwrap();
@@ -122,7 +136,13 @@ impl<'ctx> CodeGen<'ctx> {
     /// `dest = list_get_safe(list, index, elem_type)` — returns `Option<T>` (§11):
     /// `Some(elem)` if in bounds, else `None`. Merges the two arms with a phi
     /// (no alloca slot), so it stays correct inside loops.
-    pub(crate) fn emit_list_get_safe(&mut self, dest: &str, list: &Operand, index: &Operand, elem_type: &Ty) {
+    pub(crate) fn emit_list_get_safe(
+        &mut self,
+        dest: &str,
+        list: &Operand,
+        index: &Operand,
+        elem_type: &Ty,
+    ) {
         let lv = self.operand(list).into_struct_value();
         let data = self
             .builder
@@ -145,11 +165,18 @@ impl<'ctx> CodeGen<'ctx> {
         let elem_bt = self.ty_to_basic_type(elem_type);
         let i8t = self.ctx.i8_type();
 
-        let fv = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+        let fv = self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
         let some_bb = self.ctx.append_basic_block(fv, &format!("{dest}.some"));
         let none_bb = self.ctx.append_basic_block(fv, &format!("{dest}.none"));
         let end_bb = self.ctx.append_basic_block(fv, &format!("{dest}.end"));
-        self.builder.build_conditional_branch(inb, some_bb, none_bb).unwrap();
+        self.builder
+            .build_conditional_branch(inb, some_bb, none_bb)
+            .unwrap();
 
         // Some(elem): tag 0, payload = loaded element.
         self.builder.position_at_end(some_bb);
@@ -158,7 +185,10 @@ impl<'ctx> CodeGen<'ctx> {
                 .build_gep(elem_bt, data, &[idx], &format!("{dest}.gep"))
                 .unwrap()
         };
-        let elem = self.builder.build_load(elem_bt, gep, &format!("{dest}.elem")).unwrap();
+        let elem = self
+            .builder
+            .build_load(elem_bt, gep, &format!("{dest}.elem"))
+            .unwrap();
         let mut some_agg: AggregateValueEnum = opt_ty.get_undef().into();
         some_agg = self
             .builder
@@ -178,7 +208,12 @@ impl<'ctx> CodeGen<'ctx> {
         let mut none_agg: AggregateValueEnum = opt_ty.get_undef().into();
         none_agg = self
             .builder
-            .build_insert_value(none_agg, i8t.const_int(1, false), 0, &format!("{dest}.none.s0"))
+            .build_insert_value(
+                none_agg,
+                i8t.const_int(1, false),
+                0,
+                &format!("{dest}.none.s0"),
+            )
             .unwrap();
         none_agg = self
             .builder
@@ -198,7 +233,13 @@ impl<'ctx> CodeGen<'ctx> {
     /// `dest = list_push(list, elem, elem_type)` — immutable append (§17.3.5).
     /// Allocates `(len+1) * sizeof(elem)`, `memcpy`s the prefix, and stores
     /// `elem` at the tail. The input list is never mutated.
-    pub(crate) fn emit_list_push(&mut self, dest: &str, list: &Operand, elem: &Operand, elem_type: &Ty) {
+    pub(crate) fn emit_list_push(
+        &mut self,
+        dest: &str,
+        list: &Operand,
+        elem: &Operand,
+        elem_type: &Ty,
+    ) {
         let lv = self.operand(list).into_struct_value();
         let list_ty = lv.get_type();
         let olddata = self
@@ -219,7 +260,10 @@ impl<'ctx> CodeGen<'ctx> {
             .builder
             .build_int_add(oldlen, i64t.const_int(1, false), &format!("{dest}.newlen"))
             .unwrap();
-        let newsize = self.builder.build_int_mul(newlen, elem_size, &format!("{dest}.size")).unwrap();
+        let newsize = self
+            .builder
+            .build_int_mul(newlen, elem_size, &format!("{dest}.size"))
+            .unwrap();
         let gc = self.module.get_function("GC_malloc").unwrap();
         let newdata = self
             .builder
@@ -233,7 +277,10 @@ impl<'ctx> CodeGen<'ctx> {
         // Copy the existing prefix. `llvm.memcpy` with len 0 is a well-defined
         // no-op (LangRef), so an empty source (null `olddata`) is safe. Align 1
         // is always valid; element stride may be 1 byte (Bool).
-        let copysize = self.builder.build_int_mul(oldlen, elem_size, &format!("{dest}.copysz")).unwrap();
+        let copysize = self
+            .builder
+            .build_int_mul(oldlen, elem_size, &format!("{dest}.copysz"))
+            .unwrap();
         self.builder
             .build_memcpy(newdata, 1, olddata, 1, copysize)
             .unwrap();
@@ -260,8 +307,14 @@ impl<'ctx> CodeGen<'ctx> {
         dest: &str,
     ) -> BasicValueEnum<'ctx> {
         let mut agg: AggregateValueEnum = list_ty.get_undef().into();
-        agg = self.builder.build_insert_value(agg, data, 0, &format!("{dest}.s0")).unwrap();
-        agg = self.builder.build_insert_value(agg, len, 1, &format!("{dest}.s1")).unwrap();
+        agg = self
+            .builder
+            .build_insert_value(agg, data, 0, &format!("{dest}.s0"))
+            .unwrap();
+        agg = self
+            .builder
+            .build_insert_value(agg, len, 1, &format!("{dest}.s1"))
+            .unwrap();
         agg.into_struct_value().into()
     }
 }

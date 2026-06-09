@@ -227,6 +227,7 @@ impl<'ctx> CodeGen<'ctx> {
     ///   the varargs `%ld` — never dereferenced (matches legacy intent; legacy
     ///   itself would have emitted invalid `i64 %ptr` IR, but this backend's
     ///   varargs accept the ptr and print the address).
+    ///
     /// printf/puts return i32; a dest (byte count, Int) is sign-extended to i64.
     fn emit_print(&mut self, dest: &Option<String>, fname: &str, args: &[Operand]) {
         let is_println = fname == "println" || fname == "eprintln";
@@ -254,23 +255,42 @@ impl<'ctx> CodeGen<'ctx> {
             kind => {
                 let (fmt_name, val): (&str, BasicMetadataValueEnum<'ctx>) = match kind {
                     PrintKind::Str => (".fmt.str", v.into()),
-                    PrintKind::Float => {
-                        (if is_println { ".fmt.float_ln" } else { ".fmt.float" }, v.into())
-                    }
+                    PrintKind::Float => (
+                        if is_println {
+                            ".fmt.float_ln"
+                        } else {
+                            ".fmt.float"
+                        },
+                        v.into(),
+                    ),
                     PrintKind::Bool => {
                         let wide = self
                             .builder
                             .build_int_z_extend(v.into_int_value(), self.ctx.i64_type(), "p.wide")
                             .unwrap();
-                        (if is_println { ".fmt.int_ln" } else { ".fmt.int" }, wide.into())
+                        (
+                            if is_println {
+                                ".fmt.int_ln"
+                            } else {
+                                ".fmt.int"
+                            },
+                            wide.into(),
+                        )
                     }
-                    PrintKind::Int => {
-                        (if is_println { ".fmt.int_ln" } else { ".fmt.int" }, v.into())
-                    }
+                    PrintKind::Int => (
+                        if is_println {
+                            ".fmt.int_ln"
+                        } else {
+                            ".fmt.int"
+                        },
+                        v.into(),
+                    ),
                 };
                 let printf = self.module.get_function("printf").unwrap();
                 let fmt = self.global_ptr(fmt_name);
-                self.builder.build_call(printf, &[fmt.into(), val], "").unwrap()
+                self.builder
+                    .build_call(printf, &[fmt.into(), val], "")
+                    .unwrap()
             }
         };
         self.store_print_result(dest, cs);
@@ -286,7 +306,10 @@ impl<'ctx> CodeGen<'ctx> {
             Operand::Const(Constant::Bool(_)) => PrintKind::Bool,
             Operand::Const(_) => PrintKind::Int,
             Operand::Var(name) => {
-                let scan = self.scan.as_ref().expect("type scan set per function (I4c)");
+                let scan = self
+                    .scan
+                    .as_ref()
+                    .expect("type scan set per function (I4c)");
                 if scan.string_temps.contains(name) {
                     PrintKind::Str
                 } else if scan.float_temps.contains(name) {
@@ -312,7 +335,9 @@ impl<'ctx> CodeGen<'ctx> {
     /// call carries a dest.
     fn store_print_result(&mut self, dest: &Option<String>, cs: CallSiteValue<'ctx>) {
         let Some(d) = dest else { return };
-        let Some(rv) = cs.try_as_basic_value().basic() else { return };
+        let Some(rv) = cs.try_as_basic_value().basic() else {
+            return;
+        };
         let v = self
             .builder
             .build_int_s_extend(rv.into_int_value(), self.ctx.i64_type(), d)
@@ -385,7 +410,10 @@ impl<'ctx> CodeGen<'ctx> {
     fn emit_sys_exit(&mut self, dest: &Option<String>, args: &[Operand]) {
         let i32t = self.ctx.i32_type();
         let code = if let Some(arg) = args.first() {
-            let name = dest.as_deref().map(|d| format!("{d}.i32")).unwrap_or_default();
+            let name = dest
+                .as_deref()
+                .map(|d| format!("{d}.i32"))
+                .unwrap_or_default();
             self.builder
                 .build_int_truncate(self.operand(arg).into_int_value(), i32t, &name)
                 .unwrap()
@@ -418,7 +446,11 @@ impl<'ctx> CodeGen<'ctx> {
             .unwrap_or_else(|| panic!("`List__String` struct must be registered for sys.args"));
 
         // argc (i32 → i64) and argv (ptr) from the globals stored in main.
-        let argc_g = self.module.get_global(".tyra.argc").unwrap().as_pointer_value();
+        let argc_g = self
+            .module
+            .get_global(".tyra.argc")
+            .unwrap()
+            .as_pointer_value();
         let argc = self
             .builder
             .build_load(i32t, argc_g, &format!("{d}.argc"))
@@ -428,7 +460,11 @@ impl<'ctx> CodeGen<'ctx> {
             .builder
             .build_int_s_extend(argc, i64t, &format!("{d}.argc64"))
             .unwrap();
-        let argv_g = self.module.get_global(".tyra.argv").unwrap().as_pointer_value();
+        let argv_g = self
+            .module
+            .get_global(".tyra.argv")
+            .unwrap()
+            .as_pointer_value();
         let argv = self
             .builder
             .build_load(ptr, argv_g, &format!("{d}.argv"))
@@ -452,8 +488,16 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Counter loop: for i in 0..argc { data[i] = argv[i] }. An alloca
         // counter avoids phi predecessor bookkeeping in this self-contained loop.
-        let fv = self.builder.get_insert_block().unwrap().get_parent().unwrap();
-        let ctr = self.builder.build_alloca(i64t, &format!("{d}.ctr")).unwrap();
+        let fv = self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
+        let ctr = self
+            .builder
+            .build_alloca(i64t, &format!("{d}.ctr"))
+            .unwrap();
         self.builder.build_store(ctr, i64t.const_zero()).unwrap();
         let loop_bb = self.ctx.append_basic_block(fv, &format!("{d}.loop"));
         let body_bb = self.ctx.append_basic_block(fv, &format!("{d}.body"));
@@ -470,7 +514,9 @@ impl<'ctx> CodeGen<'ctx> {
             .builder
             .build_int_compare(IntPredicate::SGE, i, argc64, &format!("{d}.done"))
             .unwrap();
-        self.builder.build_conditional_branch(done, end_bb, body_bb).unwrap();
+        self.builder
+            .build_conditional_branch(done, end_bb, body_bb)
+            .unwrap();
 
         self.builder.position_at_end(body_bb);
         let argp = unsafe {
@@ -478,7 +524,10 @@ impl<'ctx> CodeGen<'ctx> {
                 .build_gep(ptr, argv, &[i], &format!("{d}.argp"))
                 .unwrap()
         };
-        let arg = self.builder.build_load(ptr, argp, &format!("{d}.arg")).unwrap();
+        let arg = self
+            .builder
+            .build_load(ptr, argp, &format!("{d}.arg"))
+            .unwrap();
         let dstp = unsafe {
             self.builder
                 .build_gep(ptr, data, &[i], &format!("{d}.dstp"))
@@ -500,7 +549,8 @@ impl<'ctx> CodeGen<'ctx> {
             .build_insert_value(agg, data, 0, &format!("{d}.s0"))
             .unwrap();
         agg = self.builder.build_insert_value(agg, argc64, 1, &d).unwrap();
-        self.values.insert(d.clone(), agg.into_struct_value().into());
+        self.values
+            .insert(d.clone(), agg.into_struct_value().into());
     }
 
     /// Emit a table-driven builtin call. Returns `false` if `fname` is not in
@@ -571,7 +621,10 @@ impl<'ctx> CodeGen<'ctx> {
         let opt_ty = self.struct_types["Option__Int"];
 
         let s = self.operand(&args[0]).into_pointer_value();
-        let endp = self.builder.build_alloca(ptr, &format!("{d}.endp")).unwrap();
+        let endp = self
+            .builder
+            .build_alloca(ptr, &format!("{d}.endp"))
+            .unwrap();
         let strtoll = self.module.get_function("strtoll").unwrap();
         let v = self
             .builder
@@ -585,20 +638,44 @@ impl<'ctx> CodeGen<'ctx> {
             .basic()
             .unwrap()
             .into_int_value();
-        let ep = self.builder.build_load(ptr, endp, &format!("{d}.ep")).unwrap().into_pointer_value();
+        let ep = self
+            .builder
+            .build_load(ptr, endp, &format!("{d}.ep"))
+            .unwrap()
+            .into_pointer_value();
         // No conversion: endptr unmoved from the start of the string.
-        let nconv = self.builder.build_int_compare(IntPredicate::EQ, ep, s, &format!("{d}.nconv")).unwrap();
+        let nconv = self
+            .builder
+            .build_int_compare(IntPredicate::EQ, ep, s, &format!("{d}.nconv"))
+            .unwrap();
         // Trailing garbage: the char at endptr is not the NUL terminator.
-        let epch = self.builder.build_load(i8t, ep, &format!("{d}.epch")).unwrap().into_int_value();
+        let epch = self
+            .builder
+            .build_load(i8t, ep, &format!("{d}.epch"))
+            .unwrap()
+            .into_int_value();
         let partial = self
             .builder
-            .build_int_compare(IntPredicate::NE, epch, i8t.const_zero(), &format!("{d}.partial"))
+            .build_int_compare(
+                IntPredicate::NE,
+                epch,
+                i8t.const_zero(),
+                &format!("{d}.partial"),
+            )
             .unwrap();
-        let fail = self.builder.build_or(nconv, partial, &format!("{d}.fail")).unwrap();
+        let fail = self
+            .builder
+            .build_or(nconv, partial, &format!("{d}.fail"))
+            .unwrap();
         // tag = fail ? 1 (None) : 0 (Some); value = fail ? 0 : parsed.
         let tag = self
             .builder
-            .build_select(fail, i8t.const_int(1, false), i8t.const_zero(), &format!("{d}.tag"))
+            .build_select(
+                fail,
+                i8t.const_int(1, false),
+                i8t.const_zero(),
+                &format!("{d}.tag"),
+            )
             .unwrap()
             .into_int_value();
         let value = self
@@ -607,8 +684,15 @@ impl<'ctx> CodeGen<'ctx> {
             .unwrap()
             .into_int_value();
         let mut agg: AggregateValueEnum = opt_ty.get_undef().into();
-        agg = self.builder.build_insert_value(agg, tag, 0, &format!("{d}.s0")).unwrap();
-        agg = self.builder.build_insert_value(agg, value, 1, &format!("{d}.s1")).unwrap();
-        self.values.insert(d.to_string(), agg.into_struct_value().into());
+        agg = self
+            .builder
+            .build_insert_value(agg, tag, 0, &format!("{d}.s0"))
+            .unwrap();
+        agg = self
+            .builder
+            .build_insert_value(agg, value, 1, &format!("{d}.s1"))
+            .unwrap();
+        self.values
+            .insert(d.to_string(), agg.into_struct_value().into());
     }
 }

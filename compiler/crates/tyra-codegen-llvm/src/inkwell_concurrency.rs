@@ -50,7 +50,13 @@ impl<'ctx> CodeGen<'ctx> {
         for f in &program.functions {
             self.spawn_bases.push(self.spawn_thunks.len());
             for stmt in &f.body {
-                if let Instruction::Spawn { func, arg_types, result_type, .. } = &stmt.instr {
+                if let Instruction::Spawn {
+                    func,
+                    arg_types,
+                    result_type,
+                    ..
+                } = &stmt.instr
+                {
                     let id = self.spawn_thunks.len();
                     // Per-site argument struct (named, so it appears in IR text).
                     let field_tys: Vec<BasicTypeEnum<'ctx>> =
@@ -58,11 +64,14 @@ impl<'ctx> CodeGen<'ctx> {
                     let st_name = format!("struct.__tyra_spawn_args_{id}");
                     let args_st = self.ctx.opaque_struct_type(&st_name);
                     args_st.set_body(&field_tys, false);
-                    self.struct_types.insert(format!("__tyra_spawn_args_{id}"), args_st);
+                    self.struct_types
+                        .insert(format!("__tyra_spawn_args_{id}"), args_st);
                     // Thunk function signature `ptr(ptr args)`.
                     let fn_ty = ptr.fn_type(&[ptr.into()], false);
                     let name = format!("__tyra_spawn_thunk_{id}");
-                    let fv = self.module.add_function(&name, fn_ty, Some(Linkage::Internal));
+                    let fv = self
+                        .module
+                        .add_function(&name, fn_ty, Some(Linkage::Internal));
                     self.fn_values.insert(name, fv);
                     self.spawn_thunks.push(SpawnThunkDesc {
                         id,
@@ -138,7 +147,10 @@ impl<'ctx> CodeGen<'ctx> {
         let ptr = self.ptr();
         let i64t = self.ctx.i64_type();
         let t = self.operand(task).into_int_value();
-        let tptr = self.builder.build_int_to_ptr(t, ptr, &format!("{dest}.tptr")).unwrap();
+        let tptr = self
+            .builder
+            .build_int_to_ptr(t, ptr, &format!("{dest}.tptr"))
+            .unwrap();
         let await_fn = self.module.get_function("tyra_task_await").unwrap();
         let abox = self
             .builder
@@ -150,7 +162,8 @@ impl<'ctx> CodeGen<'ctx> {
             .into_pointer_value();
 
         if matches!(result_type, Ty::Unit | Ty::Never) {
-            self.values.insert(dest.to_string(), i64t.const_zero().into());
+            self.values
+                .insert(dest.to_string(), i64t.const_zero().into());
             return;
         }
         let rty = self.ty_to_basic_type(result_type);
@@ -166,7 +179,10 @@ impl<'ctx> CodeGen<'ctx> {
         let (in_data, n) = self.list_data_len(list, dest);
         let elem_bt = self.ty_to_basic_type(elem_type);
         let esz = elem_bt.size_of().expect("join_all element type is sized");
-        let tsz = self.builder.build_int_mul(n, esz, &format!("{dest}.tsz")).unwrap();
+        let tsz = self
+            .builder
+            .build_int_mul(n, esz, &format!("{dest}.tsz"))
+            .unwrap();
         let gc = self.module.get_function("GC_malloc").unwrap();
         let out_data = self
             .builder
@@ -177,27 +193,52 @@ impl<'ctx> CodeGen<'ctx> {
             .unwrap()
             .into_pointer_value();
 
-        let ctr = self.builder.build_alloca(i64t, &format!("{dest}.ctr")).unwrap();
+        let ctr = self
+            .builder
+            .build_alloca(i64t, &format!("{dest}.ctr"))
+            .unwrap();
         self.builder.build_store(ctr, i64t.const_zero()).unwrap();
 
-        let fv = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+        let fv = self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
         let loop_bb = self.ctx.append_basic_block(fv, &format!("{dest}.loop"));
         let body_bb = self.ctx.append_basic_block(fv, &format!("{dest}.body"));
         let end_bb = self.ctx.append_basic_block(fv, &format!("{dest}.end"));
         self.builder.build_unconditional_branch(loop_bb).unwrap();
 
         self.builder.position_at_end(loop_bb);
-        let i = self.builder.build_load(i64t, ctr, &format!("{dest}.i")).unwrap().into_int_value();
+        let i = self
+            .builder
+            .build_load(i64t, ctr, &format!("{dest}.i"))
+            .unwrap()
+            .into_int_value();
         let done = self
             .builder
             .build_int_compare(IntPredicate::SGE, i, n, &format!("{dest}.done"))
             .unwrap();
-        self.builder.build_conditional_branch(done, end_bb, body_bb).unwrap();
+        self.builder
+            .build_conditional_branch(done, end_bb, body_bb)
+            .unwrap();
 
         self.builder.position_at_end(body_bb);
-        let hgep = unsafe { self.builder.build_gep(i64t, in_data, &[i], &format!("{dest}.hgep")).unwrap() };
-        let handle = self.builder.build_load(i64t, hgep, &format!("{dest}.handle")).unwrap().into_int_value();
-        let tptr = self.builder.build_int_to_ptr(handle, ptr, &format!("{dest}.tptr")).unwrap();
+        let hgep = unsafe {
+            self.builder
+                .build_gep(i64t, in_data, &[i], &format!("{dest}.hgep"))
+                .unwrap()
+        };
+        let handle = self
+            .builder
+            .build_load(i64t, hgep, &format!("{dest}.handle"))
+            .unwrap()
+            .into_int_value();
+        let tptr = self
+            .builder
+            .build_int_to_ptr(handle, ptr, &format!("{dest}.tptr"))
+            .unwrap();
         let await_fn = self.module.get_function("tyra_task_await").unwrap();
         let abox = self
             .builder
@@ -207,8 +248,15 @@ impl<'ctx> CodeGen<'ctx> {
             .basic()
             .unwrap()
             .into_pointer_value();
-        let val = self.builder.build_load(elem_bt, abox, &format!("{dest}.val")).unwrap();
-        let ogep = unsafe { self.builder.build_gep(elem_bt, out_data, &[i], &format!("{dest}.ogep")).unwrap() };
+        let val = self
+            .builder
+            .build_load(elem_bt, abox, &format!("{dest}.val"))
+            .unwrap();
+        let ogep = unsafe {
+            self.builder
+                .build_gep(elem_bt, out_data, &[i], &format!("{dest}.ogep"))
+                .unwrap()
+        };
         self.builder.build_store(ogep, val).unwrap();
         self.incr_counter(ctr, i, dest);
         self.builder.build_unconditional_branch(loop_bb).unwrap();
@@ -230,7 +278,11 @@ impl<'ctx> CodeGen<'ctx> {
         let select_fn = self.module.get_function("tyra_task_select").unwrap();
         let tptr = self
             .builder
-            .build_call(select_fn, &[in_data.into(), n.into()], &format!("{dest}.tptr"))
+            .build_call(
+                select_fn,
+                &[in_data.into(), n.into()],
+                &format!("{dest}.tptr"),
+            )
             .unwrap()
             .try_as_basic_value()
             .basic()
@@ -257,7 +309,8 @@ impl<'ctx> CodeGen<'ctx> {
             let args_param = fv.get_nth_param(0).unwrap().into_pointer_value();
             args_param.set_name("args");
 
-            let mut call_args: Vec<BasicMetadataValueEnum<'ctx>> = Vec::with_capacity(desc.arg_types.len());
+            let mut call_args: Vec<BasicMetadataValueEnum<'ctx>> =
+                Vec::with_capacity(desc.arg_types.len());
             if !desc.arg_types.is_empty() {
                 let args_st = self.struct_types[&format!("__tyra_spawn_args_{id}")];
                 for (i, ty) in desc.arg_types.iter().enumerate() {

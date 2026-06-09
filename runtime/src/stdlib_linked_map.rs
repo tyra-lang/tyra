@@ -242,7 +242,10 @@ pub unsafe extern "C" fn tyra_linked_map_insert(
             for src in 0..old_entries_cap {
                 let e = &*m.entries.add(src);
                 if !e.key.is_null() {
-                    new_entries.add(dst).write(Entry { key: e.key, val: e.val });
+                    new_entries.add(dst).write(Entry {
+                        key: e.key,
+                        val: e.val,
+                    });
                     if src == entry_idx {
                         new_idx = dst;
                     }
@@ -260,7 +263,10 @@ pub unsafe extern "C" fn tyra_linked_map_insert(
             for src in 0..old_entries_cap {
                 let e = &*m.entries.add(src);
                 if !e.key.is_null() {
-                    new_entries.add(dst).write(Entry { key: e.key, val: e.val });
+                    new_entries.add(dst).write(Entry {
+                        key: e.key,
+                        val: e.val,
+                    });
                     dst += 1;
                 }
             }
@@ -654,8 +660,14 @@ mod tests {
         let m2 = unsafe { tyra_linked_map_remove(m, box_i64(99)) };
 
         assert_eq!(unsafe { tyra_linked_map_len(m2) }, 2);
-        assert_eq!(unbox_i64(unsafe { tyra_linked_map_get(m2, box_i64(1)) }), 10);
-        assert_eq!(unbox_i64(unsafe { tyra_linked_map_get(m2, box_i64(2)) }), 20);
+        assert_eq!(
+            unbox_i64(unsafe { tyra_linked_map_get(m2, box_i64(1)) }),
+            10
+        );
+        assert_eq!(
+            unbox_i64(unsafe { tyra_linked_map_get(m2, box_i64(2)) }),
+            20
+        );
     }
 
     // ── GC smoke test ────────────────────────────────────────────────────────

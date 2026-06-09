@@ -26,8 +26,11 @@ use tyra_mir::Operand;
 
 use crate::inkwell_codegen::CodeGen;
 
-const HTTP_SERVER: &[&str] =
-    &["__http_server_new", "__http_server_route", "__http_server_listen"];
+const HTTP_SERVER: &[&str] = &[
+    "__http_server_new",
+    "__http_server_route",
+    "__http_server_listen",
+];
 
 impl<'ctx> CodeGen<'ctx> {
     /// Is `name` an http *server* builtin (handle ptr↔int round-trip)?
@@ -66,7 +69,10 @@ impl<'ctx> CodeGen<'ctx> {
             .basic()
             .expect("tyra_http_server_new returns a ptr")
             .into_pointer_value();
-        let handle = self.builder.build_ptr_to_int(ptr, self.ctx.i64_type(), d).unwrap();
+        let handle = self
+            .builder
+            .build_ptr_to_int(ptr, self.ctx.i64_type(), d)
+            .unwrap();
         self.values.insert(d.to_string(), handle.into());
     }
 
@@ -75,7 +81,10 @@ impl<'ctx> CodeGen<'ctx> {
     fn emit_http_server_listen(&mut self, dest: Option<&str>, args: &[Operand]) {
         let d = dest.unwrap_or("_srv_listen");
         let srv = self.operand(&args[0]).into_int_value();
-        let sptr = self.builder.build_int_to_ptr(srv, self.ptr(), &format!("{d}.sptr")).unwrap();
+        let sptr = self
+            .builder
+            .build_int_to_ptr(srv, self.ptr(), &format!("{d}.sptr"))
+            .unwrap();
         let port = self.operand(&args[1]);
         let f = self.module.get_function("tyra_http_server_listen").unwrap();
         let rv = self
@@ -86,7 +95,10 @@ impl<'ctx> CodeGen<'ctx> {
             .basic()
             .expect("tyra_http_server_listen returns i32")
             .into_int_value();
-        let v = self.builder.build_int_s_extend(rv, self.ctx.i64_type(), d).unwrap();
+        let v = self
+            .builder
+            .build_int_s_extend(rv, self.ctx.i64_type(), d)
+            .unwrap();
         self.values.insert(d.to_string(), v.into());
     }
 
@@ -94,7 +106,10 @@ impl<'ctx> CodeGen<'ctx> {
     /// and pass the four pointers. Void result.
     fn emit_http_server_route(&mut self, args: &[Operand]) {
         let srv = self.operand(&args[0]).into_int_value();
-        let sptr = self.builder.build_int_to_ptr(srv, self.ptr(), "srv.sptr").unwrap();
+        let sptr = self
+            .builder
+            .build_int_to_ptr(srv, self.ptr(), "srv.sptr")
+            .unwrap();
         let call_args: Vec<BasicMetadataValueEnum<'ctx>> = vec![
             sptr.into(),
             self.operand(&args[1]).into(),

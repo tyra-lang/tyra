@@ -4,10 +4,10 @@ mod codegen;
 pub mod coverage;
 mod inkwell_builtins;
 mod inkwell_closure;
+mod inkwell_codegen;
 mod inkwell_concurrency;
 mod inkwell_coverage;
 mod inkwell_dwarf;
-mod inkwell_codegen;
 mod inkwell_http_builtins;
 mod inkwell_instr;
 mod inkwell_list;
@@ -528,7 +528,10 @@ mod tests {
         let ir = emit_llvm_ir(&program);
         assert!(ir.contains("icmp ult i64"), "expected bounds check");
         // ADR-0012: OOB must use exit(102), distinct from panic exit(101) and abort().
-        assert!(ir.contains("call void @exit(i32 102)"), "expected exit(102) on OOB");
+        assert!(
+            ir.contains("call void @exit(i32 102)"),
+            "expected exit(102) on OOB"
+        );
         assert!(ir.contains("load i64"), "expected load from list data");
     }
 

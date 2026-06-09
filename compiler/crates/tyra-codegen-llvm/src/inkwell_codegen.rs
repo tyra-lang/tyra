@@ -558,7 +558,6 @@ impl<'ctx> CodeGen<'ctx> {
             self.fn_values.insert(f.name.clone(), fv);
         }
     }
-
 }
 
 /// Compact extern signature kinds for the data-driven `declare_externs` table.
@@ -583,7 +582,10 @@ enum ExternKind {
 #[allow(dead_code)]
 pub(crate) fn emit_inkwell(program: &Program) -> String {
     let ctx = Context::create();
-    build_module(&ctx, program).module.print_to_string().to_string()
+    build_module(&ctx, program)
+        .module
+        .print_to_string()
+        .to_string()
 }
 
 /// Run the I1 declaration pipeline and return the populated `CodeGen` (module
@@ -673,7 +675,10 @@ mod tests {
     #[test]
     fn emit_inkwell_produces_module_with_target_triple() {
         let ir = emit_inkwell(&empty_program());
-        assert!(ir.contains("target triple"), "IR missing target triple:\n{ir}");
+        assert!(
+            ir.contains("target triple"),
+            "IR missing target triple:\n{ir}"
+        );
     }
 
     #[test]
@@ -716,9 +721,15 @@ mod tests {
         };
         cg.register_struct_types(&program);
         // data type → ptr
-        assert!(cg.ty_to_basic_type(&Ty::Named("Heap".into())).is_pointer_type());
+        assert!(
+            cg.ty_to_basic_type(&Ty::Named("Heap".into()))
+                .is_pointer_type()
+        );
         // value struct → struct type
-        assert!(cg.ty_to_basic_type(&Ty::Named("Pair".into())).is_struct_type());
+        assert!(
+            cg.ty_to_basic_type(&Ty::Named("Pair".into()))
+                .is_struct_type()
+        );
     }
 
     #[test]
@@ -831,7 +842,10 @@ mod tests {
             cg.module.print_to_string().to_string()
         );
         let ir = cg.module.print_to_string().to_string();
-        assert!(ir.contains("add i64"), "missing real add instruction:\n{ir}");
+        assert!(
+            ir.contains("add i64"),
+            "missing real add instruction:\n{ir}"
+        );
         assert!(ir.contains("ret i64"), "missing typed return:\n{ir}");
     }
 
@@ -856,13 +870,17 @@ mod tests {
                         dest: "t".into(),
                         value: Constant::Int(1),
                     }),
-                    MirStmt::synthetic(Instruction::Jump { label: "merge".into() }),
+                    MirStmt::synthetic(Instruction::Jump {
+                        label: "merge".into(),
+                    }),
                     MirStmt::synthetic(Instruction::Label("els".into())),
                     MirStmt::synthetic(Instruction::Const {
                         dest: "e".into(),
                         value: Constant::Int(2),
                     }),
-                    MirStmt::synthetic(Instruction::Jump { label: "merge".into() }),
+                    MirStmt::synthetic(Instruction::Jump {
+                        label: "merge".into(),
+                    }),
                     MirStmt::synthetic(Instruction::Label("merge".into())),
                     MirStmt::synthetic(Instruction::Phi {
                         dest: "r".into(),
@@ -1185,7 +1203,12 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         assert!(cg.module.verify().is_ok());
-        assert!(cg.module.print_to_string().to_string().contains("unreachable"));
+        assert!(
+            cg.module
+                .print_to_string()
+                .to_string()
+                .contains("unreachable")
+        );
     }
 
     #[test]
@@ -1477,9 +1500,13 @@ mod tests {
                         index: Operand::Const(Constant::Int(0)),
                         elem_type: Ty::Int,
                     }),
-                    MirStmt::synthetic(Instruction::Jump { label: "merge".into() }),
+                    MirStmt::synthetic(Instruction::Jump {
+                        label: "merge".into(),
+                    }),
                     MirStmt::synthetic(Instruction::Label("els".into())),
-                    MirStmt::synthetic(Instruction::Jump { label: "merge".into() }),
+                    MirStmt::synthetic(Instruction::Jump {
+                        label: "merge".into(),
+                    }),
                     MirStmt::synthetic(Instruction::Label("merge".into())),
                     MirStmt::synthetic(Instruction::Phi {
                         dest: "r".into(),
@@ -1534,7 +1561,9 @@ mod tests {
                 ],
                 return_type: Ty::Int,
                 body: vec![
-                    MirStmt::synthetic(Instruction::Jump { label: "loop".into() }),
+                    MirStmt::synthetic(Instruction::Jump {
+                        label: "loop".into(),
+                    }),
                     MirStmt::synthetic(Instruction::Label("loop".into())),
                     MirStmt::synthetic(Instruction::ListGet {
                         dest: "e".into(),
@@ -1568,7 +1597,10 @@ mod tests {
         // structural: the back-edge (the conditional branch in the bounds-check
         // `.ok` block) must target the loop *entry* `%loop`, which re-runs the
         // bounds check each iteration — the buggy sync would emit `label %e.ok`.
-        assert!(cg.module.verify().is_ok(), "back-edge module failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "back-edge module failed to verify:\n{ir}"
+        );
         assert!(
             ir.contains("br i1 %c, label %loop, label %done"),
             "back-edge must target loop entry %loop (not the split %e.ok block):\n{ir}"
@@ -1626,7 +1658,10 @@ mod tests {
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
         assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
-        assert!(ir.contains("call i64 @tyra_string_len"), "missing runtime call:\n{ir}");
+        assert!(
+            ir.contains("call i64 @tyra_string_len"),
+            "missing runtime call:\n{ir}"
+        );
     }
 
     #[test]
@@ -1643,8 +1678,14 @@ mod tests {
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
         assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
-        assert!(ir.contains("call i32 @tyra_string_contains"), "missing runtime call:\n{ir}");
-        assert!(ir.contains("icmp ne i32"), "missing i32→i1 bool conversion:\n{ir}");
+        assert!(
+            ir.contains("call i32 @tyra_string_contains"),
+            "missing runtime call:\n{ir}"
+        );
+        assert!(
+            ir.contains("icmp ne i32"),
+            "missing i32→i1 bool conversion:\n{ir}"
+        );
     }
 
     #[test]
@@ -1654,7 +1695,10 @@ mod tests {
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
         assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
-        assert!(ir.contains("call i32 @tyra_fs_errno"), "missing runtime call:\n{ir}");
+        assert!(
+            ir.contains("call i32 @tyra_fs_errno"),
+            "missing runtime call:\n{ir}"
+        );
         assert!(ir.contains("sext i32"), "missing i32→i64 sext:\n{ir}");
     }
 
@@ -1672,7 +1716,10 @@ mod tests {
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
         assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
-        assert!(ir.contains("call double @tyra_float_abs"), "missing runtime call:\n{ir}");
+        assert!(
+            ir.contains("call double @tyra_float_abs"),
+            "missing runtime call:\n{ir}"
+        );
     }
 
     #[test]
@@ -1704,7 +1751,10 @@ mod tests {
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
         assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
-        assert!(ir.contains("call void @tyra_log_info"), "missing void runtime call:\n{ir}");
+        assert!(
+            ir.contains("call void @tyra_log_info"),
+            "missing void runtime call:\n{ir}"
+        );
     }
 
     #[test]
@@ -1742,7 +1792,10 @@ mod tests {
         let cg = build_module(&ctx, &program);
         assert!(cg.module.verify().is_ok());
         let ir = cg.module.print_to_string().to_string();
-        assert!(ir.contains("unreachable"), "deferred builtin should fall back:\n{ir}");
+        assert!(
+            ir.contains("unreachable"),
+            "deferred builtin should fall back:\n{ir}"
+        );
         // A real body (loops etc.) would have >1 block; the fallback is exactly
         // one block holding only `unreachable`.
         let f = cg.module.get_function("f").unwrap();
@@ -1769,7 +1822,11 @@ mod tests {
                 return_type: Ty::Unit,
                 body: vec![
                     MirStmt::new(
-                        SourceLoc { file_id: 0, line: 7, col: 3 },
+                        SourceLoc {
+                            file_id: 0,
+                            line: 7,
+                            col: 3,
+                        },
                         Instruction::Call {
                             dest: None,
                             func: "panic".into(),
@@ -1788,16 +1845,37 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "panic body failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "panic body failed to verify:\n{ir}"
+        );
         // `ptr @.fmt.panic_loc` / `ptr @.src.0` appear only when used as a call
         // argument (the global *definitions* are `@... = private ...`), so these
         // assert the loc line is actually emitted, not merely declared.
-        assert!(ir.contains("ptr @.fmt.panic_loc"), "panic-loc format must be used:\n{ir}");
-        assert!(ir.contains("ptr @.src.0"), "source-file global must be passed:\n{ir}");
-        assert!(ir.contains("@.fmt.str_ln"), "missing message+newline format:\n{ir}");
-        assert!(ir.contains("@.str.panic_sentinel"), "missing panic sentinel:\n{ir}");
-        assert!(ir.contains("call void @exit(i32 101)"), "panic must exit(101):\n{ir}");
-        assert!(ir.contains("unreachable"), "panic must end in unreachable:\n{ir}");
+        assert!(
+            ir.contains("ptr @.fmt.panic_loc"),
+            "panic-loc format must be used:\n{ir}"
+        );
+        assert!(
+            ir.contains("ptr @.src.0"),
+            "source-file global must be passed:\n{ir}"
+        );
+        assert!(
+            ir.contains("@.fmt.str_ln"),
+            "missing message+newline format:\n{ir}"
+        );
+        assert!(
+            ir.contains("@.str.panic_sentinel"),
+            "missing panic sentinel:\n{ir}"
+        );
+        assert!(
+            ir.contains("call void @exit(i32 101)"),
+            "panic must exit(101):\n{ir}"
+        );
+        assert!(
+            ir.contains("unreachable"),
+            "panic must end in unreachable:\n{ir}"
+        );
         assert!(
             !ir.contains("ret "),
             "the dead trailing Return after panic must be skipped:\n{ir}"
@@ -1833,13 +1911,22 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "panic body failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "panic body failed to verify:\n{ir}"
+        );
         assert!(
             !ir.contains("ptr @.fmt.panic_loc"),
             "dummy loc must skip the FILE:LINE line:\n{ir}"
         );
-        assert!(ir.contains("@.str.panic_sentinel"), "missing panic sentinel:\n{ir}");
-        assert!(ir.contains("call void @exit(i32 101)"), "panic must exit(101):\n{ir}");
+        assert!(
+            ir.contains("@.str.panic_sentinel"),
+            "missing panic sentinel:\n{ir}"
+        );
+        assert!(
+            ir.contains("call void @exit(i32 101)"),
+            "panic must exit(101):\n{ir}"
+        );
     }
 
     #[test]
@@ -1870,9 +1957,18 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "sys.exit body failed to verify:\n{ir}");
-        assert!(ir.contains("call void @exit"), "sys.exit must call exit:\n{ir}");
-        assert!(ir.contains("unreachable"), "sys.exit must end in unreachable:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "sys.exit body failed to verify:\n{ir}"
+        );
+        assert!(
+            ir.contains("call void @exit"),
+            "sys.exit must call exit:\n{ir}"
+        );
+        assert!(
+            ir.contains("unreachable"),
+            "sys.exit must end in unreachable:\n{ir}"
+        );
     }
 
     #[test]
@@ -1905,10 +2001,16 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "sys.args body failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "sys.args body failed to verify:\n{ir}"
+        );
         assert!(ir.contains("@.tyra.argc"), "sys.args must load argc:\n{ir}");
         assert!(ir.contains("@.tyra.argv"), "sys.args must load argv:\n{ir}");
-        assert!(ir.contains("@GC_malloc"), "sys.args must allocate the data array:\n{ir}");
+        assert!(
+            ir.contains("@GC_malloc"),
+            "sys.args must allocate the data array:\n{ir}"
+        );
     }
 
     // ---- I4e: boxed collections (Map/Set/LinkedMap/LinkedSet) ----
@@ -1964,7 +2066,11 @@ mod tests {
                     (
                         Some("m1"),
                         "__map_insert__Int__Int",
-                        vec![Operand::Var("m0".into()), Operand::Var("k".into()), Operand::Var("v".into())],
+                        vec![
+                            Operand::Var("m0".into()),
+                            Operand::Var("k".into()),
+                            Operand::Var("v".into()),
+                        ],
                     ),
                     (
                         Some("has"),
@@ -1977,20 +2083,41 @@ mod tests {
             ),
         );
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "map ops failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "map ops failed to verify:\n{ir}"
+        );
         // `new` threads the compiler-generated eq/hash fn pointers.
         assert!(
             ir.contains("@tyra_map_new(ptr @tyra_eq_Int, ptr @tyra_hash_Int)"),
             "map.new must pass eq/hash fn pointers:\n{ir}"
         );
-        assert!(ir.contains("call ptr @tyra_map_insert"), "missing map.insert:\n{ir}");
-        assert!(ir.contains("call i32 @tyra_map_contains"), "missing map.contains:\n{ir}");
-        assert!(ir.contains("call i64 @tyra_map_len"), "missing map.len:\n{ir}");
+        assert!(
+            ir.contains("call ptr @tyra_map_insert"),
+            "missing map.insert:\n{ir}"
+        );
+        assert!(
+            ir.contains("call i32 @tyra_map_contains"),
+            "missing map.contains:\n{ir}"
+        );
+        assert!(
+            ir.contains("call i64 @tyra_map_len"),
+            "missing map.len:\n{ir}"
+        );
         // eq/hash function bodies are emitted; Int hash uses the Knuth constant.
-        assert!(ir.contains("@tyra_eq_Int("), "eq_Int must be defined:\n{ir}");
-        assert!(ir.contains("-3932073806218323177"), "Int hash must use the Knuth multiply:\n{ir}");
+        assert!(
+            ir.contains("@tyra_eq_Int("),
+            "eq_Int must be defined:\n{ir}"
+        );
+        assert!(
+            ir.contains("-3932073806218323177"),
+            "Int hash must use the Knuth multiply:\n{ir}"
+        );
         // Boxing allocates 8-byte cells.
-        assert!(ir.contains("@GC_malloc"), "insert must box via GC_malloc:\n{ir}");
+        assert!(
+            ir.contains("@GC_malloc"),
+            "insert must box via GC_malloc:\n{ir}"
+        );
     }
 
     #[test]
@@ -2019,12 +2146,18 @@ mod tests {
             ),
         );
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "set ops failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "set ops failed to verify:\n{ir}"
+        );
         assert!(
             ir.contains("@tyra_set_new(ptr @tyra_eq_Bool, ptr @tyra_hash_Bool)"),
             "set.new must pass Bool eq/hash:\n{ir}"
         );
-        assert!(ir.contains("call ptr @tyra_set_insert"), "missing set.insert:\n{ir}");
+        assert!(
+            ir.contains("call ptr @tyra_set_insert"),
+            "missing set.insert:\n{ir}"
+        );
         // Bool boxing zero-extends the i1 to i8 before storing.
         assert!(ir.contains("zext i1"), "Bool box must zext i1->i8:\n{ir}");
     }
@@ -2043,7 +2176,11 @@ mod tests {
                     (
                         Some("m1"),
                         "__linked_map_insert__String__Int",
-                        vec![Operand::Var("m0".into()), Operand::Var("k".into()), Operand::Var("v".into())],
+                        vec![
+                            Operand::Var("m0".into()),
+                            Operand::Var("k".into()),
+                            Operand::Var("v".into()),
+                        ],
                     ),
                     (
                         Some("has"),
@@ -2055,16 +2192,28 @@ mod tests {
             ),
         );
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "linked_map ops failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "linked_map ops failed to verify:\n{ir}"
+        );
         // contains routes to the `_contains_key` callee (the one naming divergence).
         assert!(
             ir.contains("call i32 @tyra_linked_map_contains_key"),
             "linked_map.contains must call tyra_linked_map_contains_key:\n{ir}"
         );
         // String eq/hash delegate to the cstr runtime helpers.
-        assert!(ir.contains("@tyra_eq_String("), "eq_String must be defined:\n{ir}");
-        assert!(ir.contains("@tyra_cstr_eq"), "String eq must delegate to tyra_cstr_eq:\n{ir}");
-        assert!(ir.contains("@tyra_hash_cstr"), "String hash must delegate to tyra_hash_cstr:\n{ir}");
+        assert!(
+            ir.contains("@tyra_eq_String("),
+            "eq_String must be defined:\n{ir}"
+        );
+        assert!(
+            ir.contains("@tyra_cstr_eq"),
+            "String eq must delegate to tyra_cstr_eq:\n{ir}"
+        );
+        assert!(
+            ir.contains("@tyra_hash_cstr"),
+            "String hash must delegate to tyra_hash_cstr:\n{ir}"
+        );
     }
 
     #[test]
@@ -2088,17 +2237,36 @@ mod tests {
                         "__linked_set_remove__Int",
                         vec![Operand::Var("s1".into()), Operand::Var("x".into())],
                     ),
-                    (Some("n"), "__linked_set_len", vec![Operand::Var("s2".into())]),
+                    (
+                        Some("n"),
+                        "__linked_set_len",
+                        vec![Operand::Var("s2".into())],
+                    ),
                 ],
                 Some("n"),
             ),
         );
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "linked_set ops failed to verify:\n{ir}");
-        assert!(ir.contains("call ptr @tyra_linked_set_new"), "missing linked_set.new:\n{ir}");
-        assert!(ir.contains("call ptr @tyra_linked_set_insert"), "missing linked_set.insert:\n{ir}");
-        assert!(ir.contains("call ptr @tyra_linked_set_remove"), "missing linked_set.remove:\n{ir}");
-        assert!(ir.contains("call i64 @tyra_linked_set_len"), "missing linked_set.len:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "linked_set ops failed to verify:\n{ir}"
+        );
+        assert!(
+            ir.contains("call ptr @tyra_linked_set_new"),
+            "missing linked_set.new:\n{ir}"
+        );
+        assert!(
+            ir.contains("call ptr @tyra_linked_set_insert"),
+            "missing linked_set.insert:\n{ir}"
+        );
+        assert!(
+            ir.contains("call ptr @tyra_linked_set_remove"),
+            "missing linked_set.remove:\n{ir}"
+        );
+        assert!(
+            ir.contains("call i64 @tyra_linked_set_len"),
+            "missing linked_set.len:\n{ir}"
+        );
     }
 
     /// I4f: `Map<K,V>.get(k) -> Option<V>` (the `MapGetOption` MIR instruction).
@@ -2149,13 +2317,25 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "map.get failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "map.get failed to verify:\n{ir}"
+        );
         // The retrieval round-trips through the boxed runtime getter,
-        assert!(ir.contains("call ptr @tyra_map_get"), "map.get must call tyra_map_get:\n{ir}");
+        assert!(
+            ir.contains("call ptr @tyra_map_get"),
+            "map.get must call tyra_map_get:\n{ir}"
+        );
         // null-checks the returned box (absent => None),
-        assert!(ir.contains("icmp ne ptr"), "map.get must null-check the value box:\n{ir}");
+        assert!(
+            ir.contains("icmp ne ptr"),
+            "map.get must null-check the value box:\n{ir}"
+        );
         // and selects the zero slot as a null-safe load source when absent.
-        assert!(ir.contains("@.tyra_zero_slot"), "map.get must guard the load via zero slot:\n{ir}");
+        assert!(
+            ir.contains("@.tyra_zero_slot"),
+            "map.get must guard the load via zero slot:\n{ir}"
+        );
     }
 
     /// I4f: `LinkedMap<K,V>.get(k)` mirrors `MapGetOption` but calls the
@@ -2205,7 +2385,10 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "linked_map.get failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "linked_map.get failed to verify:\n{ir}"
+        );
         assert!(
             ir.contains("call ptr @tyra_linked_map_get"),
             "linked_map.get must call tyra_linked_map_get:\n{ir}"
@@ -2263,11 +2446,20 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "Bool map.get failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "Bool map.get failed to verify:\n{ir}"
+        );
         // i8 load (the boxed Bool) ...
-        assert!(ir.contains("load i8"), "Bool value must be loaded as i8:\n{ir}");
+        assert!(
+            ir.contains("load i8"),
+            "Bool value must be loaded as i8:\n{ir}"
+        );
         // ... truncated back to the i1 Option payload.
-        assert!(ir.contains("trunc i8"), "Bool value must be truncated i8->i1:\n{ir}");
+        assert!(
+            ir.contains("trunc i8"),
+            "Bool value must be truncated i8->i1:\n{ir}"
+        );
     }
 
     /// I4f parity: a function that only RETRIEVES from a map (no `*_new` /
@@ -2308,10 +2500,19 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "get-only failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "get-only failed to verify:\n{ir}"
+        );
         // No `*_new` exists, yet the key's eq/hash must still be emitted.
-        assert!(ir.contains("@tyra_eq_Int("), "get-only must still emit eq_Int:\n{ir}");
-        assert!(ir.contains("@tyra_hash_Int("), "get-only must still emit hash_Int:\n{ir}");
+        assert!(
+            ir.contains("@tyra_eq_Int("),
+            "get-only must still emit eq_Int:\n{ir}"
+        );
+        assert!(
+            ir.contains("@tyra_hash_Int("),
+            "get-only must still emit hash_Int:\n{ir}"
+        );
     }
 
     /// `Option<Bool>` ADT: field 0 named "tag" (→ i8), payload `value: Bool`.
@@ -2389,11 +2590,20 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "closure build/call failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "closure build/call failed to verify:\n{ir}"
+        );
         // fat pointer allocated and the target fn pointer stored,
-        assert!(ir.contains("store ptr @cb"), "closure must store the target fn pointer:\n{ir}");
+        assert!(
+            ir.contains("store ptr @cb"),
+            "closure must store the target fn pointer:\n{ir}"
+        );
         // non-capturing => env field is null,
-        assert!(ir.contains("store ptr null"), "non-capturing closure must null its env:\n{ir}");
+        assert!(
+            ir.contains("store ptr null"),
+            "non-capturing closure must null its env:\n{ir}"
+        );
         // and the indirect call dereferences the fat struct.
         assert!(
             ir.contains("getelementptr") && ir.contains("call i64 %"),
@@ -2450,11 +2660,20 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "capturing closure failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "capturing closure failed to verify:\n{ir}"
+        );
         // The captured value is stored into the heap env struct,
-        assert!(ir.contains("@GC_malloc"), "capturing closure must allocate an env:\n{ir}");
+        assert!(
+            ir.contains("@GC_malloc"),
+            "capturing closure must allocate an env:\n{ir}"
+        );
         // and the env pointer (not null) is threaded into the fat pointer.
-        assert!(ir.contains("store ptr @cb2"), "closure must store the target fn pointer:\n{ir}");
+        assert!(
+            ir.contains("store ptr @cb2"),
+            "closure must store the target fn pointer:\n{ir}"
+        );
     }
 
     // ---- I4h: list higher-order builtins (map/filter/fold) + collection forEach ----
@@ -2463,7 +2682,12 @@ mod tests {
     /// `params` excludes the implicit env pointer (typed as a ptr via `String`).
     /// `ret_var` returns that param; `None` returns a `Bool(true)` constant (used
     /// by filter predicates, whose Int param can't be returned from an i1 fn).
-    fn cb_target(name: &str, params: Vec<(&str, Ty)>, ret: Ty, ret_var: Option<&str>) -> tyra_mir::Function {
+    fn cb_target(
+        name: &str,
+        params: Vec<(&str, Ty)>,
+        ret: Ty,
+        ret_var: Option<&str>,
+    ) -> tyra_mir::Function {
         use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand};
         let mut full_params = vec![("env".to_string(), Ty::String)];
         full_params.extend(params.into_iter().map(|(n, t)| (n.to_string(), t)));
@@ -2475,7 +2699,9 @@ mod tests {
             name: name.into(),
             params: full_params,
             return_type: ret,
-            body: vec![MirStmt::synthetic(Instruction::Return { value: Some(value) })],
+            body: vec![MirStmt::synthetic(Instruction::Return {
+                value: Some(value),
+            })],
             is_main: false,
             local_metas: vec![],
         }
@@ -2505,7 +2731,11 @@ mod tests {
             params: vec![],
             return_type: ret,
             body: vec![
-                MirStmt::synthetic(Instruction::ListInit { dest: "l".into(), elem_type: elem_ty, elements: elems }),
+                MirStmt::synthetic(Instruction::ListInit {
+                    dest: "l".into(),
+                    elem_type: elem_ty,
+                    elements: elems,
+                }),
                 MirStmt::synthetic(Instruction::ClosureBuild {
                     dest: "cl".into(),
                     fn_name: target_name.into(),
@@ -2514,8 +2744,14 @@ mod tests {
                     param_types: cb_param_types,
                     return_type: cb_return,
                 }),
-                MirStmt::synthetic(Instruction::Call { dest: Some("r".into()), func: builtin.into(), args: call_args }),
-                MirStmt::synthetic(Instruction::Return { value: Some(Operand::Var("r".into())) }),
+                MirStmt::synthetic(Instruction::Call {
+                    dest: Some("r".into()),
+                    func: builtin.into(),
+                    args: call_args,
+                }),
+                MirStmt::synthetic(Instruction::Return {
+                    value: Some(Operand::Var("r".into())),
+                }),
             ],
             is_main: false,
             local_metas: vec![],
@@ -2558,12 +2794,24 @@ mod tests {
             ),
         );
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "list_map_int failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "list_map_int failed to verify:\n{ir}"
+        );
         // A fresh data buffer is allocated and the closure is dispatched per element.
-        assert!(ir.contains("@GC_malloc"), "map must allocate a new buffer:\n{ir}");
-        assert!(ir.contains("call i64 %"), "map must apply the closure via an indirect call:\n{ir}");
+        assert!(
+            ir.contains("@GC_malloc"),
+            "map must allocate a new buffer:\n{ir}"
+        );
+        assert!(
+            ir.contains("call i64 %"),
+            "map must apply the closure via an indirect call:\n{ir}"
+        );
         // The result is reassembled into a List struct.
-        assert!(ir.contains("insertvalue"), "map must build the result list:\n{ir}");
+        assert!(
+            ir.contains("insertvalue"),
+            "map must build the result list:\n{ir}"
+        );
     }
 
     #[test]
@@ -2585,11 +2833,20 @@ mod tests {
             ),
         );
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "list_filter_int failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "list_filter_int failed to verify:\n{ir}"
+        );
         // The predicate returns i1, branching keep/skip.
-        assert!(ir.contains("call i1 %"), "filter must call an i1-returning predicate:\n{ir}");
+        assert!(
+            ir.contains("call i1 %"),
+            "filter must call an i1-returning predicate:\n{ir}"
+        );
         // A separate output counter compacts the kept elements.
-        assert!(ir.contains(".outctr"), "filter must track an output counter:\n{ir}");
+        assert!(
+            ir.contains(".outctr"),
+            "filter must track an output counter:\n{ir}"
+        );
     }
 
     #[test]
@@ -2600,7 +2857,12 @@ mod tests {
             &ctx,
             &list_higher_program(
                 "__list_fold_int",
-                vec![cb_target("add", vec![("acc", Ty::Int), ("x", Ty::Int)], Ty::Int, Some("acc"))],
+                vec![cb_target(
+                    "add",
+                    vec![("acc", Ty::Int), ("x", Ty::Int)],
+                    Ty::Int,
+                    Some("acc"),
+                )],
                 "add",
                 vec![Ty::Int, Ty::Int],
                 Ty::Int,
@@ -2612,10 +2874,19 @@ mod tests {
             ),
         );
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "list_fold_int failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "list_fold_int failed to verify:\n{ir}"
+        );
         // The accumulator threads through a `T (ptr, T, T)` callback.
-        assert!(ir.contains("call i64 %"), "fold must apply the closure via an indirect call:\n{ir}");
-        assert!(ir.contains(".acc"), "fold must keep an accumulator slot:\n{ir}");
+        assert!(
+            ir.contains("call i64 %"),
+            "fold must apply the closure via an indirect call:\n{ir}"
+        );
+        assert!(
+            ir.contains(".acc"),
+            "fold must keep an accumulator slot:\n{ir}"
+        );
     }
 
     #[test]
@@ -2626,21 +2897,35 @@ mod tests {
             &ctx,
             &list_higher_program(
                 "__list_map_str",
-                vec![cb_target("ids", vec![("s", Ty::String)], Ty::String, Some("s"))],
+                vec![cb_target(
+                    "ids",
+                    vec![("s", Ty::String)],
+                    Ty::String,
+                    Some("s"),
+                )],
                 "ids",
                 vec![Ty::String],
                 Ty::String,
                 Ty::String,
-                vec![Operand::Const(Constant::StringRef(0)), Operand::Const(Constant::StringRef(0))],
+                vec![
+                    Operand::Const(Constant::StringRef(0)),
+                    Operand::Const(Constant::StringRef(0)),
+                ],
                 vec![],
                 Ty::Generic("List".into(), vec![Ty::String]),
                 vec![list_string_def()],
             ),
         );
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "list_map_str failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "list_map_str failed to verify:\n{ir}"
+        );
         // String elements are pointers; the closure returns a ptr.
-        assert!(ir.contains("call ptr %"), "map_str must dispatch a ptr-returning closure:\n{ir}");
+        assert!(
+            ir.contains("call ptr %"),
+            "map_str must dispatch a ptr-returning closure:\n{ir}"
+        );
     }
 
     #[test]
@@ -2652,7 +2937,11 @@ mod tests {
                 // Iteration callback `fn cbk(env, kbox, vbox) -> Unit { return }`.
                 Function {
                     name: "cbk".into(),
-                    params: vec![("env".into(), Ty::String), ("k".into(), Ty::String), ("v".into(), Ty::String)],
+                    params: vec![
+                        ("env".into(), Ty::String),
+                        ("k".into(), Ty::String),
+                        ("v".into(), Ty::String),
+                    ],
                     return_type: Ty::Unit,
                     body: vec![MirStmt::synthetic(Instruction::Return { value: None })],
                     is_main: false,
@@ -2671,7 +2960,11 @@ mod tests {
                         MirStmt::synthetic(Instruction::Call {
                             dest: Some("m1".into()),
                             func: "__map_insert__Int__Int".into(),
-                            args: vec![Operand::Var("m0".into()), Operand::Var("k".into()), Operand::Var("v".into())],
+                            args: vec![
+                                Operand::Var("m0".into()),
+                                Operand::Var("k".into()),
+                                Operand::Var("v".into()),
+                            ],
                         }),
                         MirStmt::synthetic(Instruction::ClosureBuild {
                             dest: "cl".into(),
@@ -2698,14 +2991,20 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "map for_each failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "map for_each failed to verify:\n{ir}"
+        );
         // The fat pointer's fn_ptr/env_ptr are loaded and handed to the runtime
         // iterator as `tyra_map_for_each(handle, env_ptr, fn_ptr)`.
         assert!(
             ir.contains("call void @tyra_map_for_each(ptr"),
             "for_each must call the runtime iterator:\n{ir}"
         );
-        assert!(ir.contains("getelementptr"), "for_each must load the closure fields:\n{ir}");
+        assert!(
+            ir.contains("getelementptr"),
+            "for_each must load the closure fields:\n{ir}"
+        );
     }
 
     /// `__list_fold_str` returns a String, so `builtin_primitive_return` must put
@@ -2718,7 +3017,12 @@ mod tests {
         let ctx = Context::create();
         let program = Program {
             functions: vec![
-                cb_target("cat", vec![("acc", Ty::String), ("x", Ty::String)], Ty::String, Some("acc")),
+                cb_target(
+                    "cat",
+                    vec![("acc", Ty::String), ("x", Ty::String)],
+                    Ty::String,
+                    Some("acc"),
+                ),
                 Function {
                     name: "f".into(),
                     params: vec![],
@@ -2764,9 +3068,15 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "fold_str + print failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "fold_str + print failed to verify:\n{ir}"
+        );
         // String result → puts, not the %ld integer path.
-        assert!(ir.contains("call i32 @puts"), "fold_str result must print as a String:\n{ir}");
+        assert!(
+            ir.contains("call i32 @puts"),
+            "fold_str result must print as a String:\n{ir}"
+        );
     }
 
     /// `__list_map_int` returns a `List<Int>`, so `pre_scan_struct_types` must
@@ -2789,7 +3099,10 @@ mod tests {
                         MirStmt::synthetic(Instruction::ListInit {
                             dest: "l".into(),
                             elem_type: Ty::Int,
-                            elements: vec![Operand::Const(Constant::Int(10)), Operand::Const(Constant::Int(20))],
+                            elements: vec![
+                                Operand::Const(Constant::Int(10)),
+                                Operand::Const(Constant::Int(20)),
+                            ],
                         }),
                         MirStmt::synthetic(Instruction::ClosureBuild {
                             dest: "cl".into(),
@@ -2822,10 +3135,19 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "map + print(list) failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "map + print(list) failed to verify:\n{ir}"
+        );
         // print(List<Int>) has no printf form → gate rejects → fallback body.
-        assert!(ir.contains("unreachable"), "print of a map result list must fall back:\n{ir}");
-        assert!(!ir.contains("call i32 @puts"), "a struct list must not be printed as a value:\n{ir}");
+        assert!(
+            ir.contains("unreachable"),
+            "print of a map result list must fall back:\n{ir}"
+        );
+        assert!(
+            !ir.contains("call i32 @puts"),
+            "a struct list must not be printed as a value:\n{ir}"
+        );
     }
 
     /// `parse__Int(s) -> Option<Int>` — strtoll + endptr, branchless via select.
@@ -2844,7 +3166,9 @@ mod tests {
                         func: "parse__Int".into(),
                         args: vec![Operand::Var("s".into())],
                     }),
-                    MirStmt::synthetic(Instruction::Return { value: Some(Operand::Var("r".into())) }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("r".into())),
+                    }),
                 ],
                 is_main: false,
                 local_metas: vec![],
@@ -2856,11 +3180,23 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "parse__Int failed to verify:\n{ir}");
-        assert!(ir.contains("call i64 @strtoll"), "parse must call strtoll:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "parse__Int failed to verify:\n{ir}"
+        );
+        assert!(
+            ir.contains("call i64 @strtoll"),
+            "parse must call strtoll:\n{ir}"
+        );
         // Branchless: tag/value chosen by select, then assembled into Option<Int>.
-        assert!(ir.contains("select i1"), "parse must pick the result branchlessly:\n{ir}");
-        assert!(ir.contains("insertvalue"), "parse must build the Option struct:\n{ir}");
+        assert!(
+            ir.contains("select i1"),
+            "parse must pick the result branchlessly:\n{ir}"
+        );
+        assert!(
+            ir.contains("insertvalue"),
+            "parse must build the Option struct:\n{ir}"
+        );
     }
 
     // ---- I6: DWARF debug info (ADR-0014 §4a) ----
@@ -2868,7 +3204,11 @@ mod tests {
     #[test]
     fn i6_debug_emits_compile_unit_subprogram_and_locations() {
         use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand, SourceLoc};
-        let loc = |line| SourceLoc { file_id: 0, line, col: 1 };
+        let loc = |line| SourceLoc {
+            file_id: 0,
+            line,
+            col: 1,
+        };
         let program = Program {
             functions: vec![
                 Function {
@@ -2876,7 +3216,13 @@ mod tests {
                     params: vec![],
                     return_type: Ty::Unit,
                     body: vec![
-                        MirStmt::new(loc(1), Instruction::Const { dest: "c".into(), value: Constant::Int(0) }),
+                        MirStmt::new(
+                            loc(1),
+                            Instruction::Const {
+                                dest: "c".into(),
+                                value: Constant::Int(0),
+                            },
+                        ),
                         MirStmt::new(loc(2), Instruction::Return { value: None }),
                     ],
                     is_main: true,
@@ -2886,7 +3232,12 @@ mod tests {
                     name: "g".into(),
                     params: vec![("x".into(), Ty::Int)],
                     return_type: Ty::Int,
-                    body: vec![MirStmt::new(loc(5), Instruction::Return { value: Some(Operand::Var("x".into())) })],
+                    body: vec![MirStmt::new(
+                        loc(5),
+                        Instruction::Return {
+                            value: Some(Operand::Var("x".into())),
+                        },
+                    )],
                     is_main: false,
                     local_metas: vec![],
                 },
@@ -2899,19 +3250,44 @@ mod tests {
         // The instrumented module must verify (catches out-of-scope !dbg etc.).
         let ctx = Context::create();
         let cg = build_module_opts(&ctx, &program, None, true);
-        assert!(cg.module.verify().is_ok(), "debug module failed to verify:\n{}", cg.module.print_to_string().to_string());
+        assert!(
+            cg.module.verify().is_ok(),
+            "debug module failed to verify:\n{}",
+            cg.module.print_to_string().to_string()
+        );
 
         let ir = emit_inkwell_debug(&program);
         // Compile unit + file + subprograms.
-        assert!(ir.contains("!DICompileUnit"), "must emit a compile unit:\n{ir}");
-        assert!(ir.contains("!DIFile(filename: \"app.tyra\", directory: \"src\")"), "must emit the source file:\n{ir}");
-        assert!(ir.contains("!DISubprogram(name: \"main\""), "main must have a subprogram:\n{ir}");
-        assert!(ir.contains("!DISubprogram(name: \"g\""), "g must have a subprogram:\n{ir}");
+        assert!(
+            ir.contains("!DICompileUnit"),
+            "must emit a compile unit:\n{ir}"
+        );
+        assert!(
+            ir.contains("!DIFile(filename: \"app.tyra\", directory: \"src\")"),
+            "must emit the source file:\n{ir}"
+        );
+        assert!(
+            ir.contains("!DISubprogram(name: \"main\""),
+            "main must have a subprogram:\n{ir}"
+        );
+        assert!(
+            ir.contains("!DISubprogram(name: \"g\""),
+            "g must have a subprogram:\n{ir}"
+        );
         // Functions carry !dbg and statements get DILocations.
-        assert!(ir.contains("!dbg"), "definitions/instructions must carry !dbg:\n{ir}");
-        assert!(ir.contains("!DILocation(line: 5"), "g's return is on line 5:\n{ir}");
+        assert!(
+            ir.contains("!dbg"),
+            "definitions/instructions must carry !dbg:\n{ir}"
+        );
+        assert!(
+            ir.contains("!DILocation(line: 5"),
+            "g's return is on line 5:\n{ir}"
+        );
         // Module flags for debug info.
-        assert!(ir.contains("\"Debug Info Version\""), "must set the Debug Info Version module flag:\n{ir}");
+        assert!(
+            ir.contains("\"Debug Info Version\""),
+            "must set the Debug Info Version module flag:\n{ir}"
+        );
     }
 
     /// Without --debug the backend emits no debug metadata.
@@ -2925,7 +3301,17 @@ mod tests {
                 params: vec![],
                 return_type: Ty::Unit,
                 body: vec![
-                    MirStmt::new(SourceLoc { file_id: 0, line: 1, col: 1 }, Instruction::Const { dest: "c".into(), value: Constant::Int(0) }),
+                    MirStmt::new(
+                        SourceLoc {
+                            file_id: 0,
+                            line: 1,
+                            col: 1,
+                        },
+                        Instruction::Const {
+                            dest: "c".into(),
+                            value: Constant::Int(0),
+                        },
+                    ),
                     MirStmt::synthetic(Instruction::Return { value: None }),
                 ],
                 is_main: true,
@@ -2939,24 +3325,47 @@ mod tests {
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
         assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
-        assert!(!ir.contains("!DICompileUnit"), "no debug metadata without --debug:\n{ir}");
-        assert!(!ir.contains("!DILocation"), "no locations without --debug:\n{ir}");
+        assert!(
+            !ir.contains("!DICompileUnit"),
+            "no debug metadata without --debug:\n{ir}"
+        );
+        assert!(
+            !ir.contains("!DILocation"),
+            "no locations without --debug:\n{ir}"
+        );
     }
 
     #[test]
     fn i6b_local_var_emits_dbg_declare_and_ditype() {
         use tyra_mir::{Function, Instruction, LocalMeta, MirStmt, Operand, SourceLoc};
-        let loc = |line| SourceLoc { file_id: 0, line, col: 1 };
+        let loc = |line| SourceLoc {
+            file_id: 0,
+            line,
+            col: 1,
+        };
         let program = Program {
             functions: vec![Function {
                 name: "g".into(),
                 params: vec![("x".into(), Ty::Int), ("s".into(), Ty::String)],
                 return_type: Ty::Int,
-                body: vec![MirStmt::new(loc(3), Instruction::Return { value: Some(Operand::Var("x".into())) })],
+                body: vec![MirStmt::new(
+                    loc(3),
+                    Instruction::Return {
+                        value: Some(Operand::Var("x".into())),
+                    },
+                )],
                 is_main: false,
                 local_metas: vec![
-                    LocalMeta { name: "x".into(), ty: Ty::Int, alloca_name: "x.addr".into() },
-                    LocalMeta { name: "s".into(), ty: Ty::String, alloca_name: "s.addr".into() },
+                    LocalMeta {
+                        name: "x".into(),
+                        ty: Ty::Int,
+                        alloca_name: "x.addr".into(),
+                    },
+                    LocalMeta {
+                        name: "s".into(),
+                        ty: Ty::String,
+                        alloca_name: "s.addr".into(),
+                    },
                 ],
             }],
             string_constants: vec![],
@@ -2967,15 +3376,33 @@ mod tests {
         let ctx = Context::create();
         let cg = build_module_opts(&ctx, &program, None, true);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "debug module with locals failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "debug module with locals failed to verify:\n{ir}"
+        );
         // LLVM 19+ prints the new debug-record form `#dbg_declare`; older
         // versions print `call void @llvm.dbg.declare`. Match either.
-        assert!(ir.contains("dbg_declare"), "must emit dbg.declare for locals:\n{ir}");
-        assert!(ir.contains("!DILocalVariable(name: \"x\""), "must describe local x:\n{ir}");
-        assert!(ir.contains("!DILocalVariable(name: \"s\""), "must describe local s:\n{ir}");
+        assert!(
+            ir.contains("dbg_declare"),
+            "must emit dbg.declare for locals:\n{ir}"
+        );
+        assert!(
+            ir.contains("!DILocalVariable(name: \"x\""),
+            "must describe local x:\n{ir}"
+        );
+        assert!(
+            ir.contains("!DILocalVariable(name: \"s\""),
+            "must describe local s:\n{ir}"
+        );
         // Int → signed basic type; String → a pointer derived type.
-        assert!(ir.contains("!DIBasicType(name: \"Int\", size: 64, encoding: DW_ATE_signed)"), "Int DIType:\n{ir}");
-        assert!(ir.contains("DW_TAG_pointer_type, name: \"String\""), "String DIType is a pointer:\n{ir}");
+        assert!(
+            ir.contains("!DIBasicType(name: \"Int\", size: 64, encoding: DW_ATE_signed)"),
+            "Int DIType:\n{ir}"
+        );
+        assert!(
+            ir.contains("DW_TAG_pointer_type, name: \"String\""),
+            "String DIType is a pointer:\n{ir}"
+        );
     }
 
     #[test]
@@ -2984,7 +3411,11 @@ mod tests {
         // i6b only covered Int/String. A generic value-type local must emit a
         // DIType + dbg.declare without panicking and verify.
         use tyra_mir::{Constant, Function, Instruction, LocalMeta, MirStmt, Operand, SourceLoc};
-        let loc = |line| SourceLoc { file_id: 0, line, col: 1 };
+        let loc = |line| SourceLoc {
+            file_id: 0,
+            line,
+            col: 1,
+        };
         let program = Program {
             functions: vec![Function {
                 name: "g".into(),
@@ -2992,7 +3423,12 @@ mod tests {
                 return_type: Ty::Int,
                 body: vec![
                     MirStmt::new(loc(2), Instruction::Alloca { dest: "o".into() }),
-                    MirStmt::new(loc(3), Instruction::Return { value: Some(Operand::Const(Constant::Int(0))) }),
+                    MirStmt::new(
+                        loc(3),
+                        Instruction::Return {
+                            value: Some(Operand::Const(Constant::Int(0))),
+                        },
+                    ),
                 ],
                 is_main: false,
                 local_metas: vec![LocalMeta {
@@ -3009,8 +3445,14 @@ mod tests {
         let ctx = Context::create();
         let cg = build_module_opts(&ctx, &program, None, true);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "generic local debug failed to verify:\n{ir}");
-        assert!(ir.contains("!DILocalVariable(name: \"o\""), "must describe the Option local:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "generic local debug failed to verify:\n{ir}"
+        );
+        assert!(
+            ir.contains("!DILocalVariable(name: \"o\""),
+            "must describe the Option local:\n{ir}"
+        );
     }
 
     // ---- I5: coverage instrumentation (ADR-0014) ----
@@ -3018,7 +3460,11 @@ mod tests {
     #[test]
     fn i5_coverage_emits_global_atomicrmw_and_init() {
         use tyra_mir::{Constant, Function, Instruction, MirStmt, Operand, SourceLoc};
-        let loc = |line| SourceLoc { file_id: 0, line, col: 1 };
+        let loc = |line| SourceLoc {
+            file_id: 0,
+            line,
+            col: 1,
+        };
         let program = Program {
             functions: vec![
                 // main: entry counter + tyra_cov_init call.
@@ -3027,7 +3473,13 @@ mod tests {
                     params: vec![],
                     return_type: Ty::Unit,
                     body: vec![
-                        MirStmt::new(loc(1), Instruction::Const { dest: "c".into(), value: Constant::Int(0) }),
+                        MirStmt::new(
+                            loc(1),
+                            Instruction::Const {
+                                dest: "c".into(),
+                                value: Constant::Int(0),
+                            },
+                        ),
                         MirStmt::synthetic(Instruction::Return { value: None }),
                     ],
                     is_main: true,
@@ -3041,8 +3493,16 @@ mod tests {
                     body: vec![
                         MirStmt::new(loc(5), Instruction::Jump { label: "L".into() }),
                         MirStmt::new(loc(6), Instruction::Label("L".into())),
-                        MirStmt::new(loc(6), Instruction::Const { dest: "r".into(), value: Constant::Int(1) }),
-                        MirStmt::synthetic(Instruction::Return { value: Some(Operand::Var("r".into())) }),
+                        MirStmt::new(
+                            loc(6),
+                            Instruction::Const {
+                                dest: "r".into(),
+                                value: Constant::Int(1),
+                            },
+                        ),
+                        MirStmt::synthetic(Instruction::Return {
+                            value: Some(Operand::Var("r".into())),
+                        }),
                     ],
                     is_main: false,
                     local_metas: vec![],
@@ -3057,21 +3517,49 @@ mod tests {
         let ctx = Context::create();
         let cov_map = crate::coverage::build_cov_map(&program);
         let cg = build_module_opts(&ctx, &program, Some(cov_map), false);
-        assert!(cg.module.verify().is_ok(), "instrumented module failed to verify:\n{}", cg.module.print_to_string().to_string());
+        assert!(
+            cg.module.verify().is_ok(),
+            "instrumented module failed to verify:\n{}",
+            cg.module.print_to_string().to_string()
+        );
 
         let (ir, covmap) = emit_inkwell_coverage(&program);
         // The counter array global (3 counters: main entry, g entry, g's label).
-        assert!(ir.contains("@.tyra_counters ="), "must emit the counter global:\n{ir}");
-        assert!(ir.contains("x i64] zeroinitializer"), "counter global must be a zeroinit i64 array:\n{ir}");
+        assert!(
+            ir.contains("@.tyra_counters ="),
+            "must emit the counter global:\n{ir}"
+        );
+        assert!(
+            ir.contains("x i64] zeroinitializer"),
+            "counter global must be a zeroinit i64 array:\n{ir}"
+        );
         // Per-BB increments use atomicrmw add … monotonic.
-        assert!(ir.contains("atomicrmw add ptr"), "must increment counters atomically:\n{ir}");
-        assert!(ir.contains("monotonic"), "increment must be monotonic-ordered:\n{ir}");
+        assert!(
+            ir.contains("atomicrmw add ptr"),
+            "must increment counters atomically:\n{ir}"
+        );
+        assert!(
+            ir.contains("monotonic"),
+            "increment must be monotonic-ordered:\n{ir}"
+        );
         // main registers the array with the runtime.
-        assert!(ir.contains("declare void @tyra_cov_init"), "must declare the cov-init extern:\n{ir}");
-        assert!(ir.contains("call void @tyra_cov_init(ptr @.tyra_counters"), "main must call cov-init:\n{ir}");
+        assert!(
+            ir.contains("declare void @tyra_cov_init"),
+            "must declare the cov-init extern:\n{ir}"
+        );
+        assert!(
+            ir.contains("call void @tyra_cov_init(ptr @.tyra_counters"),
+            "main must call cov-init:\n{ir}"
+        );
         // The covmap sidecar is produced alongside the IR.
-        assert!(covmap.starts_with("TYRA_COVMAP_V1"), "covmap sidecar must be emitted:\n{covmap}");
-        assert!(covmap.contains("FILE:0=test.tyra"), "covmap must list the source file:\n{covmap}");
+        assert!(
+            covmap.starts_with("TYRA_COVMAP_V1"),
+            "covmap sidecar must be emitted:\n{covmap}"
+        );
+        assert!(
+            covmap.contains("FILE:0=test.tyra"),
+            "covmap must list the source file:\n{covmap}"
+        );
     }
 
     /// Without a cov_map the backend emits no coverage artifacts (ordinary build).
@@ -3085,7 +3573,17 @@ mod tests {
                 params: vec![],
                 return_type: Ty::Unit,
                 body: vec![
-                    MirStmt::new(SourceLoc { file_id: 0, line: 1, col: 1 }, Instruction::Const { dest: "c".into(), value: Constant::Int(0) }),
+                    MirStmt::new(
+                        SourceLoc {
+                            file_id: 0,
+                            line: 1,
+                            col: 1,
+                        },
+                        Instruction::Const {
+                            dest: "c".into(),
+                            value: Constant::Int(0),
+                        },
+                    ),
                     MirStmt::synthetic(Instruction::Return { value: None }),
                 ],
                 is_main: true,
@@ -3099,9 +3597,18 @@ mod tests {
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
         assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
-        assert!(!ir.contains("@.tyra_counters"), "no counter global without coverage:\n{ir}");
-        assert!(!ir.contains("atomicrmw"), "no increments without coverage:\n{ir}");
-        assert!(!ir.contains("tyra_cov_init"), "no cov-init without coverage:\n{ir}");
+        assert!(
+            !ir.contains("@.tyra_counters"),
+            "no counter global without coverage:\n{ir}"
+        );
+        assert!(
+            !ir.contains("atomicrmw"),
+            "no increments without coverage:\n{ir}"
+        );
+        assert!(
+            !ir.contains("tyra_cov_init"),
+            "no cov-init without coverage:\n{ir}"
+        );
     }
 
     // ---- I4i: async concurrency (spawn / await / join_all / select) ----
@@ -3113,7 +3620,9 @@ mod tests {
             name: "work".into(),
             params: vec![("x".into(), Ty::Int)],
             return_type: Ty::Int,
-            body: vec![MirStmt::synthetic(Instruction::Return { value: Some(Operand::Var("x".into())) })],
+            body: vec![MirStmt::synthetic(Instruction::Return {
+                value: Some(Operand::Var("x".into())),
+            })],
             is_main: false,
             local_metas: vec![],
         }
@@ -3143,7 +3652,9 @@ mod tests {
                             task: Operand::Var("t".into()),
                             result_type: Ty::Int,
                         }),
-                        MirStmt::synthetic(Instruction::Return { value: Some(Operand::Var("r".into())) }),
+                        MirStmt::synthetic(Instruction::Return {
+                            value: Some(Operand::Var("r".into())),
+                        }),
                     ],
                     is_main: false,
                     local_metas: vec![],
@@ -3156,16 +3667,37 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "spawn/await failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "spawn/await failed to verify:\n{ir}"
+        );
         // Spawn: boxes args, submits the per-site thunk, handle travels as i64.
-        assert!(ir.contains("call ptr @tyra_task_spawn(ptr @__tyra_spawn_thunk_0"), "spawn must submit the thunk:\n{ir}");
-        assert!(ir.contains("ptrtoint"), "spawn handle must be cast to i64:\n{ir}");
+        assert!(
+            ir.contains("call ptr @tyra_task_spawn(ptr @__tyra_spawn_thunk_0"),
+            "spawn must submit the thunk:\n{ir}"
+        );
+        assert!(
+            ir.contains("ptrtoint"),
+            "spawn handle must be cast to i64:\n{ir}"
+        );
         // Await: inttoptr the handle, await, load the boxed result.
-        assert!(ir.contains("call ptr @tyra_task_await"), "await must call the runtime:\n{ir}");
-        assert!(ir.contains("inttoptr"), "await must cast the i64 handle back to ptr:\n{ir}");
+        assert!(
+            ir.contains("call ptr @tyra_task_await"),
+            "await must call the runtime:\n{ir}"
+        );
+        assert!(
+            ir.contains("inttoptr"),
+            "await must cast the i64 handle back to ptr:\n{ir}"
+        );
         // The thunk body is emitted and calls the target.
-        assert!(ir.contains("define internal ptr @__tyra_spawn_thunk_0(ptr"), "thunk body must be defined:\n{ir}");
-        assert!(ir.contains("call i64 @work"), "thunk must call the target function:\n{ir}");
+        assert!(
+            ir.contains("define internal ptr @__tyra_spawn_thunk_0(ptr"),
+            "thunk body must be defined:\n{ir}"
+        );
+        assert!(
+            ir.contains("call i64 @work"),
+            "thunk must call the target function:\n{ir}"
+        );
     }
 
     #[test]
@@ -3213,10 +3745,19 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "spawn(unit)/await failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "spawn(unit)/await failed to verify:\n{ir}"
+        );
         // Unit thunk discards the result and returns a null box.
-        assert!(ir.contains("call void @act"), "unit thunk must call the void target:\n{ir}");
-        assert!(ir.contains("ret ptr null"), "unit thunk must return a null box:\n{ir}");
+        assert!(
+            ir.contains("call void @act"),
+            "unit thunk must call the void target:\n{ir}"
+        );
+        assert!(
+            ir.contains("ret ptr null"),
+            "unit thunk must return a null box:\n{ir}"
+        );
     }
 
     #[test]
@@ -3233,14 +3774,19 @@ mod tests {
                     MirStmt::synthetic(Instruction::ListInit {
                         dest: "hs".into(),
                         elem_type: Ty::Int,
-                        elements: vec![Operand::Const(Constant::Int(1)), Operand::Const(Constant::Int(2))],
+                        elements: vec![
+                            Operand::Const(Constant::Int(1)),
+                            Operand::Const(Constant::Int(2)),
+                        ],
                     }),
                     MirStmt::synthetic(Instruction::JoinAll {
                         dest: "r".into(),
                         list: Operand::Var("hs".into()),
                         elem_type: Ty::Int,
                     }),
-                    MirStmt::synthetic(Instruction::Return { value: Some(Operand::Var("r".into())) }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("r".into())),
+                    }),
                 ],
                 is_main: false,
                 local_metas: vec![],
@@ -3252,10 +3798,19 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "join_all failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "join_all failed to verify:\n{ir}"
+        );
         // Loops awaiting each handle and reassembles a List<Int>.
-        assert!(ir.contains("call ptr @tyra_task_await"), "join_all must await each handle:\n{ir}");
-        assert!(ir.contains("insertvalue"), "join_all must build the result list:\n{ir}");
+        assert!(
+            ir.contains("call ptr @tyra_task_await"),
+            "join_all must await each handle:\n{ir}"
+        );
+        assert!(
+            ir.contains("insertvalue"),
+            "join_all must build the result list:\n{ir}"
+        );
     }
 
     #[test]
@@ -3271,14 +3826,19 @@ mod tests {
                     MirStmt::synthetic(Instruction::ListInit {
                         dest: "hs".into(),
                         elem_type: Ty::Int,
-                        elements: vec![Operand::Const(Constant::Int(1)), Operand::Const(Constant::Int(2))],
+                        elements: vec![
+                            Operand::Const(Constant::Int(1)),
+                            Operand::Const(Constant::Int(2)),
+                        ],
                     }),
                     MirStmt::synthetic(Instruction::Select {
                         dest: "s".into(),
                         list: Operand::Var("hs".into()),
                         elem_type: Ty::Int,
                     }),
-                    MirStmt::synthetic(Instruction::Return { value: Some(Operand::Var("s".into())) }),
+                    MirStmt::synthetic(Instruction::Return {
+                        value: Some(Operand::Var("s".into())),
+                    }),
                 ],
                 is_main: false,
                 local_metas: vec![],
@@ -3291,8 +3851,14 @@ mod tests {
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
         assert!(cg.module.verify().is_ok(), "select failed to verify:\n{ir}");
-        assert!(ir.contains("call ptr @tyra_task_select"), "select must dispatch to the runtime:\n{ir}");
-        assert!(ir.contains("ptrtoint"), "select handle must be cast to i64:\n{ir}");
+        assert!(
+            ir.contains("call ptr @tyra_task_select"),
+            "select must dispatch to the runtime:\n{ir}"
+        );
+        assert!(
+            ir.contains("ptrtoint"),
+            "select handle must be cast to i64:\n{ir}"
+        );
     }
 
     /// Awaiting a `Task<Option<Int>>` yields an `Option<Int>` *struct value*
@@ -3332,9 +3898,18 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "await(Option<Int>) + print failed to verify:\n{ir}");
-        assert!(ir.contains("unreachable"), "print of an await'd struct must fall back:\n{ir}");
-        assert!(!ir.contains("call i32 @puts"), "a struct must not be printed as a value:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "await(Option<Int>) + print failed to verify:\n{ir}"
+        );
+        assert!(
+            ir.contains("unreachable"),
+            "print of an await'd struct must fall back:\n{ir}"
+        );
+        assert!(
+            !ir.contains("call i32 @puts"),
+            "a struct must not be printed as a value:\n{ir}"
+        );
     }
 
     /// An `IndirectCall` returning a value-type generic (`Option<Int>`) yields a
@@ -3395,9 +3970,18 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "indirect call(Option<Int>) + print failed to verify:\n{ir}");
-        assert!(ir.contains("unreachable"), "print of an indirect-call struct result must fall back:\n{ir}");
-        assert!(!ir.contains("call i32 @puts"), "a struct must not be printed as a value:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "indirect call(Option<Int>) + print failed to verify:\n{ir}"
+        );
+        assert!(
+            ir.contains("unreachable"),
+            "print of an indirect-call struct result must fall back:\n{ir}"
+        );
+        assert!(
+            !ir.contains("call i32 @puts"),
+            "a struct must not be printed as a value:\n{ir}"
+        );
     }
 
     // ---- I4c: print family (type-scan-routed) ----
@@ -3434,7 +4018,10 @@ mod tests {
         let cg = build_module(&ctx, &print_program("println", Ty::String, vec![]));
         let ir = cg.module.print_to_string().to_string();
         assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
-        assert!(ir.contains("call i32 @puts"), "println(String) should use puts:\n{ir}");
+        assert!(
+            ir.contains("call i32 @puts"),
+            "println(String) should use puts:\n{ir}"
+        );
     }
 
     #[test]
@@ -3443,8 +4030,14 @@ mod tests {
         let cg = build_module(&ctx, &print_program("print", Ty::String, vec![]));
         let ir = cg.module.print_to_string().to_string();
         assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
-        assert!(ir.contains("@printf"), "print(String) should use printf:\n{ir}");
-        assert!(ir.contains("@.fmt.str"), "print(String) should use the %s format:\n{ir}");
+        assert!(
+            ir.contains("@printf"),
+            "print(String) should use printf:\n{ir}"
+        );
+        assert!(
+            ir.contains("@.fmt.str"),
+            "print(String) should use the %s format:\n{ir}"
+        );
     }
 
     #[test]
@@ -3453,7 +4046,10 @@ mod tests {
         let cg = build_module(&ctx, &print_program("print", Ty::Int, vec![]));
         let ir = cg.module.print_to_string().to_string();
         assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
-        assert!(ir.contains("@.fmt.int"), "print(Int) should use the %ld format:\n{ir}");
+        assert!(
+            ir.contains("@.fmt.int"),
+            "print(Int) should use the %ld format:\n{ir}"
+        );
     }
 
     #[test]
@@ -3462,7 +4058,10 @@ mod tests {
         let cg = build_module(&ctx, &print_program("println", Ty::Float, vec![]));
         let ir = cg.module.print_to_string().to_string();
         assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
-        assert!(ir.contains("@.fmt.float_ln"), "println(Float) should use %g\\n:\n{ir}");
+        assert!(
+            ir.contains("@.fmt.float_ln"),
+            "println(Float) should use %g\\n:\n{ir}"
+        );
     }
 
     #[test]
@@ -3471,8 +4070,14 @@ mod tests {
         let cg = build_module(&ctx, &print_program("println", Ty::Bool, vec![]));
         let ir = cg.module.print_to_string().to_string();
         assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
-        assert!(ir.contains("zext i1"), "println(Bool) should widen i1→i64:\n{ir}");
-        assert!(ir.contains("@.fmt.int_ln"), "println(Bool) should print via %ld\\n:\n{ir}");
+        assert!(
+            ir.contains("zext i1"),
+            "println(Bool) should widen i1→i64:\n{ir}"
+        );
+        assert!(
+            ir.contains("@.fmt.int_ln"),
+            "println(Bool) should print via %ld\\n:\n{ir}"
+        );
     }
 
     #[test]
@@ -3510,12 +4115,22 @@ mod tests {
         let ctx = Context::create();
         let cg = build_module(
             &ctx,
-            &print_program("println", Ty::Generic("List".into(), vec![Ty::Int]), vec![list_int_def()]),
+            &print_program(
+                "println",
+                Ty::Generic("List".into(), vec![Ty::Int]),
+                vec![list_int_def()],
+            ),
         );
         let ir = cg.module.print_to_string().to_string();
         assert!(cg.module.verify().is_ok(), "module failed to verify:\n{ir}");
-        assert!(ir.contains("unreachable"), "print(struct) should fall back:\n{ir}");
-        assert!(!ir.contains("call i32 @puts"), "must not emit a print for a struct arg:\n{ir}");
+        assert!(
+            ir.contains("unreachable"),
+            "print(struct) should fall back:\n{ir}"
+        );
+        assert!(
+            !ir.contains("call i32 @puts"),
+            "must not emit a print for a struct arg:\n{ir}"
+        );
     }
 
     // ---- I4b slice A: scalar __list_int_* builtins ----
@@ -3569,11 +4184,20 @@ mod tests {
     #[test]
     fn i4b_list_int_sum_verifies_and_loops() {
         let ctx = Context::create();
-        let cg = build_module(&ctx, &list_int_builtin_program("__list_int_sum", vec![], Ty::Int, vec![list_int_def()]));
+        let cg = build_module(
+            &ctx,
+            &list_int_builtin_program("__list_int_sum", vec![], Ty::Int, vec![list_int_def()]),
+        );
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "list_int_sum failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "list_int_sum failed to verify:\n{ir}"
+        );
         // Accumulator loop: a back-edge and an i64 add must be present.
-        assert!(ir.contains("add i64"), "sum must accumulate with i64 add:\n{ir}");
+        assert!(
+            ir.contains("add i64"),
+            "sum must accumulate with i64 add:\n{ir}"
+        );
     }
 
     #[test]
@@ -3590,8 +4214,14 @@ mod tests {
             ),
         );
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "list_int_contains failed to verify:\n{ir}");
-        assert!(ir.contains("icmp eq i64"), "contains must compare elements:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "list_int_contains failed to verify:\n{ir}"
+        );
+        assert!(
+            ir.contains("icmp eq i64"),
+            "contains must compare elements:\n{ir}"
+        );
     }
 
     #[test]
@@ -3608,8 +4238,14 @@ mod tests {
             ),
         );
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "list_int_index_of failed to verify:\n{ir}");
-        assert!(ir.contains("insertvalue"), "index_of must build an Option struct:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "list_int_index_of failed to verify:\n{ir}"
+        );
+        assert!(
+            ir.contains("insertvalue"),
+            "index_of must build an Option struct:\n{ir}"
+        );
     }
 
     #[test]
@@ -3625,8 +4261,14 @@ mod tests {
             ),
         );
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "list_int_max failed to verify:\n{ir}");
-        assert!(ir.contains("icmp sgt i64"), "max must use a signed-greater compare:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "list_int_max failed to verify:\n{ir}"
+        );
+        assert!(
+            ir.contains("icmp sgt i64"),
+            "max must use a signed-greater compare:\n{ir}"
+        );
     }
 
     #[test]
@@ -3642,8 +4284,14 @@ mod tests {
             ),
         );
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "list_int_min failed to verify:\n{ir}");
-        assert!(ir.contains("icmp slt i64"), "min must use a signed-less compare:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "list_int_min failed to verify:\n{ir}"
+        );
+        assert!(
+            ir.contains("icmp slt i64"),
+            "min must use a signed-less compare:\n{ir}"
+        );
     }
 
     #[test]
@@ -3660,9 +4308,15 @@ mod tests {
             ),
         );
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "list_int_push failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "list_int_push failed to verify:\n{ir}"
+        );
         // Delegates to the ListPush emitter: GC_malloc + memcpy prefix.
-        assert!(ir.contains("@GC_malloc"), "push must allocate a new buffer:\n{ir}");
+        assert!(
+            ir.contains("@GC_malloc"),
+            "push must allocate a new buffer:\n{ir}"
+        );
         assert!(ir.contains("memcpy"), "push must copy the prefix:\n{ir}");
     }
 
@@ -3693,7 +4347,10 @@ mod tests {
         program.struct_defs = vec![list_string_def()];
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "split_whitespace failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "split_whitespace failed to verify:\n{ir}"
+        );
         assert!(
             ir.contains("call void @tyra_string_split_whitespace"),
             "must call the void out-param runtime fn:\n{ir}"
@@ -3715,7 +4372,10 @@ mod tests {
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
         assert!(cg.module.verify().is_ok(), "split failed to verify:\n{ir}");
-        assert!(ir.contains("call void @tyra_string_split"), "must call split runtime fn:\n{ir}");
+        assert!(
+            ir.contains("call void @tyra_string_split"),
+            "must call split runtime fn:\n{ir}"
+        );
     }
 
     #[test]
@@ -3756,9 +4416,15 @@ mod tests {
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
         assert!(cg.module.verify().is_ok(), "join failed to verify:\n{ir}");
-        assert!(ir.contains("call ptr @tyra_string_join"), "must call join runtime fn:\n{ir}");
+        assert!(
+            ir.contains("call ptr @tyra_string_join"),
+            "must call join runtime fn:\n{ir}"
+        );
         // The list value is stored into a slot before the by-ref call.
-        assert!(ir.contains("store"), "join must store the list into a slot:\n{ir}");
+        assert!(
+            ir.contains("store"),
+            "join must store the list into a slot:\n{ir}"
+        );
     }
 
     #[test]
@@ -3769,15 +4435,29 @@ mod tests {
         let ctx = Context::create();
         let program = builtin_call_program(
             "f",
-            vec![("s".into(), Ty::String), ("from".into(), Ty::String), ("to".into(), Ty::String)],
+            vec![
+                ("s".into(), Ty::String),
+                ("from".into(), Ty::String),
+                ("to".into(), Ty::String),
+            ],
             Ty::String,
             "__string_replace",
-            vec![Operand::Var("s".into()), Operand::Var("from".into()), Operand::Var("to".into())],
+            vec![
+                Operand::Var("s".into()),
+                Operand::Var("from".into()),
+                Operand::Var("to".into()),
+            ],
         );
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "replace failed to verify:\n{ir}");
-        assert!(ir.contains("call ptr @tyra_string_replace"), "must call replace runtime fn:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "replace failed to verify:\n{ir}"
+        );
+        assert!(
+            ir.contains("call ptr @tyra_string_replace"),
+            "must call replace runtime fn:\n{ir}"
+        );
     }
 
     // ---- I4b slice D: http server builtins (handle ptr↔int round-trip) ----
@@ -3788,9 +4468,18 @@ mod tests {
         let program = builtin_call_program("f", vec![], Ty::Int, "__http_server_new", vec![]);
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "server_new failed to verify:\n{ir}");
-        assert!(ir.contains("call ptr @tyra_http_server_new"), "must call the runtime fn:\n{ir}");
-        assert!(ir.contains("ptrtoint"), "handle must be stored as Int via ptrtoint:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "server_new failed to verify:\n{ir}"
+        );
+        assert!(
+            ir.contains("call ptr @tyra_http_server_new"),
+            "must call the runtime fn:\n{ir}"
+        );
+        assert!(
+            ir.contains("ptrtoint"),
+            "handle must be stored as Int via ptrtoint:\n{ir}"
+        );
     }
 
     #[test]
@@ -3806,10 +4495,22 @@ mod tests {
         );
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "server_listen failed to verify:\n{ir}");
-        assert!(ir.contains("inttoptr"), "handle must be cast back to ptr:\n{ir}");
-        assert!(ir.contains("call i32 @tyra_http_server_listen"), "must call the runtime fn:\n{ir}");
-        assert!(ir.contains("sext i32"), "i32 result must sext to the Tyra Int:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "server_listen failed to verify:\n{ir}"
+        );
+        assert!(
+            ir.contains("inttoptr"),
+            "handle must be cast back to ptr:\n{ir}"
+        );
+        assert!(
+            ir.contains("call i32 @tyra_http_server_listen"),
+            "must call the runtime fn:\n{ir}"
+        );
+        assert!(
+            ir.contains("sext i32"),
+            "i32 result must sext to the Tyra Int:\n{ir}"
+        );
     }
 
     #[test]
@@ -3855,8 +4556,14 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "server_route failed to verify:\n{ir}");
-        assert!(ir.contains("inttoptr"), "handle must be cast back to ptr:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "server_route failed to verify:\n{ir}"
+        );
+        assert!(
+            ir.contains("inttoptr"),
+            "handle must be cast back to ptr:\n{ir}"
+        );
         assert!(
             ir.contains("call void @tyra_http_server_route"),
             "must call the void runtime fn with four ptrs:\n{ir}"
@@ -3921,7 +4628,10 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "bare-handler route failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "bare-handler route failed to verify:\n{ir}"
+        );
         // `f` must be emitted (not a fallback): the route call is present...
         assert!(
             ir.contains("call void @tyra_http_server_route"),
@@ -3991,7 +4701,10 @@ mod tests {
         };
         let cg = build_module(&ctx, &program);
         let ir = cg.module.print_to_string().to_string();
-        assert!(cg.module.verify().is_ok(), "let-bound handler route failed to verify:\n{ir}");
+        assert!(
+            cg.module.verify().is_ok(),
+            "let-bound handler route failed to verify:\n{ir}"
+        );
         assert!(
             ir.contains("call void @tyra_http_server_route"),
             "let-bound handler path must emit the route call, not fall back:\n{ir}"

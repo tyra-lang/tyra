@@ -138,7 +138,9 @@ impl TypeEnv {
     /// Record the inferred type for a span (for LSP hover).
     /// Uses entry API to prefer the first (outermost) type recorded for a span.
     pub fn record_type(&mut self, span: Span, ty: Ty) {
-        self.type_index.entry(span).or_insert_with(|| self.subst.apply(&ty));
+        self.type_index
+            .entry(span)
+            .or_insert_with(|| self.subst.apply(&ty));
     }
 
     pub fn push_return_type(&mut self, ty: Ty) {
@@ -3016,12 +3018,11 @@ fn e0308_help_hint(expected: &Ty, actual: &Ty, env: &TypeEnv) -> Option<String> 
     // Conservative guard: only fire when `found_name` resolves to *exactly one* parent ADT
     // in scope and that parent matches `expected_name`. If `found_name` is a variant of
     // multiple ADTs (ambiguous), no suggestion is emitted.
-    if let (Ty::Named(expected_name), Ty::Named(found_name)) = (expected, actual) {
-        if let Some(adt_name) = find_unique_adt_for_variant(found_name, env) {
-            if &adt_name == expected_name {
-                return Some(format!("did you mean `{}.{}`?", expected_name, found_name));
-            }
-        }
+    if let (Ty::Named(expected_name), Ty::Named(found_name)) = (expected, actual)
+        && let Some(adt_name) = find_unique_adt_for_variant(found_name, env)
+        && &adt_name == expected_name
+    {
+        return Some(format!("did you mean `{}.{}`?", expected_name, found_name));
     }
 
     None

@@ -28,7 +28,9 @@ pub unsafe extern "C" fn __display_option__Float(tag: i64, val: f64) -> *const c
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __display_option__Str(tag: i64, val: *const c_char) -> *const c_char {
     if tag == 0 {
-        let s = unsafe { CStr::from_ptr(val) }.to_str().unwrap_or("<invalid>");
+        let s = unsafe { CStr::from_ptr(val) }
+            .to_str()
+            .unwrap_or("<invalid>");
         alloc_gc_cstring(&format!("Some({})", s))
     } else {
         alloc_gc_cstring("None")

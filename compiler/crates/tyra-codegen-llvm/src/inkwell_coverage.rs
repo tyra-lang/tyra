@@ -29,7 +29,9 @@ impl<'ctx> CodeGen<'ctx> {
     /// Effective counter-array length (`n`, but at least 1 so the `[N x i64]`
     /// type is well-formed when a program has no instrumentable locations).
     fn cov_len(&self) -> Option<u32> {
-        self.cov_map.as_ref().map(|cm| if cm.n == 0 { 1 } else { cm.n })
+        self.cov_map
+            .as_ref()
+            .map(|cm| if cm.n == 0 { 1 } else { cm.n })
     }
 
     /// Declare the `.tyra_counters` global (`[N x i64] zeroinitializer`) and the
@@ -74,7 +76,12 @@ impl<'ctx> CodeGen<'ctx> {
                 .unwrap()
         };
         self.builder
-            .build_atomicrmw(AtomicRMWBinOp::Add, gep, i64t.const_int(1, false), AtomicOrdering::Monotonic)
+            .build_atomicrmw(
+                AtomicRMWBinOp::Add,
+                gep,
+                i64t.const_int(1, false),
+                AtomicOrdering::Monotonic,
+            )
             .unwrap();
     }
 
@@ -98,7 +105,11 @@ impl<'ctx> CodeGen<'ctx> {
             self.module.get_global(COUNTERS).unwrap().as_pointer_value();
         let init = self.module.get_function("tyra_cov_init").unwrap();
         self.builder
-            .build_call(init, &[counters.into(), i64t.const_int(n as u64, false).into()], "")
+            .build_call(
+                init,
+                &[counters.into(), i64t.const_int(n as u64, false).into()],
+                "",
+            )
             .unwrap();
     }
 }
