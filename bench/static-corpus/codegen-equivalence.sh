@@ -65,7 +65,7 @@ KNOWN_UNBUILDABLE=(
 
 is_known_unbuildable() {
   local b="$1"
-  for k in "${KNOWN_UNBUILDABLE[@]}"; do
+  for k in "${KNOWN_UNBUILDABLE[@]:-}"; do
     [[ "$b" == "$k" ]] && return 0
   done
   return 1
