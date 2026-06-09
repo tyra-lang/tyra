@@ -351,7 +351,9 @@ jobs:
         run: cargo build --release -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm19-1-prefer-dynamic
 
       - name: Run workspace tests (excluding runtime)
-        run: cargo test --workspace --exclude tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm19-1-prefer-dynamic
+        # --test-threads=1: LLVM's global state is not thread-safe under Alpine/musl;
+        # parallel test execution causes SIGSEGV in tyra-codegen-llvm tests.
+        run: cargo test --workspace --exclude tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm19-1-prefer-dynamic -- --test-threads=1
 
       - name: Run runtime tests (single-threaded, Boehm GC safety)
         # GC_INITIAL_HEAP_SIZE: prevent BDW GC from triggering collection #1 inside
