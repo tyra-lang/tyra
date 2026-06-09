@@ -41,6 +41,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgc-dev llvm-22 llvm-22-dev clang-22 libpolly-22-dev
           sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-22 100
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-22 100
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'

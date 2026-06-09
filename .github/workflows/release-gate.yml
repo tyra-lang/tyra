@@ -33,6 +33,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgc-dev llvm-22 clang-22
           sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-22 100
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-22 100
 
       - name: Check workspace at MSRV
         # prefer-dynamic avoids requiring libPolly.a (not in the apt llvm-22 package).
@@ -57,6 +58,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgc-dev llvm-22 clang-22
           sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-22 100
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-22 100
 
       - name: Cache cargo registry and target
         uses: actions/cache@v5
