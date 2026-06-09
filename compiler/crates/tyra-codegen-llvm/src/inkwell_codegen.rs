@@ -1,17 +1,8 @@
-//! Inkwell-based LLVM IR generation (v0.9.0, ADR-0018 Theme A).
+//! Inkwell-based LLVM IR generation (ADR-0018 Theme A).
 //!
-//! **I0 scaffold.** Establishes the `CodeGen<'ctx>` value-handle model that
-//! replaces the string-based IR builder in `codegen.rs`. SSA values become
-//! typed `BasicValueEnum` handles keyed by MIR temp name, so a value's LLVM
-//! type travels with it to every use site — structurally eliminating the
-//! "default an unknown operand to i64" mistyping class the text backend was
-//! prone to (see `helpers::infer_operand_type`).
-//!
-//! The legacy text path in `codegen.rs` remains the production backend until
-//! the migration completes (I7). This module is compiled and exercised in
-//! parallel so each phase (I1 declarations, I2 instructions, …) lands
-//! incrementally behind its own verification gate. I0 itself changes no
-//! observable output.
+//! Emits LLVM IR via the inkwell value-handle model: every SSA value is a
+//! typed `BasicValueEnum` keyed by its MIR temp name, so a value's LLVM type
+//! travels with it to every use site.
 
 use std::collections::{HashMap, HashSet};
 
@@ -43,12 +34,8 @@ fn target_triple() -> &'static str {
 
 /// Inkwell codegen state for one module.
 ///
-/// Replaces the string-based value/type tracking of the legacy text backend:
-/// every SSA value is a typed `BasicValueEnum` handle keyed by its MIR temp
-/// name, and named types resolve through `struct_types`/`data_types` rather
-/// than string lookups.
-// Several fields/methods are unread in the I0 scaffold; they are populated and
-// consumed from I1 (declarations) and I2 (instructions, blocks, allocas) on.
+/// Each SSA value is a typed `BasicValueEnum` handle keyed by its MIR temp
+/// name; named types resolve through `struct_types`/`data_types`.
 #[allow(dead_code)]
 pub(crate) struct CodeGen<'ctx> {
     pub(crate) ctx: &'ctx Context,
@@ -88,8 +75,7 @@ pub(crate) struct CodeGen<'ctx> {
     /// backend's `StructInfo`/`FnSig` maps + per-function `type_scan` results
     /// give the inkwell backend an operand's *Tyra* type, which the opaque-`ptr`
     /// value handle cannot recover (String vs data/fn/handle ptr). Needed by
-    /// `print` routing (String→%s vs other). Transitional coupling to the legacy
-    /// structures; removed when the legacy backend is deleted (I7).
+    /// `print` routing (String→%s vs other).
     pub(crate) struct_map: HashMap<String, crate::codegen::StructInfo>,
     pub(crate) fn_sigs: HashMap<String, crate::codegen::FnSig>,
     /// Type scan for the function currently being emitted (set per function in
@@ -165,8 +151,8 @@ impl<'ctx> CodeGen<'ctx> {
     /// Bridge a Tyra `Ty` to an inkwell **value** type. Mirrors
     /// `helpers::llvm_type_str` but yields a typed handle.
     ///
-    /// `Unit`/`Never` map to `i64` here because the legacy backend stores Unit
-    /// as `i64` in value position (e.g. ADT struct fields, codegen.rs). The
+    /// `Unit`/`Never` map to `i64` here because Unit occupies `i64` storage in
+    /// value position (e.g. ADT struct fields). The
     /// `void` *return* type is not a `BasicTypeEnum` and is handled separately
     /// at function-signature emission (I1).
     #[allow(dead_code)] // used from I1 on (declarations, value emission)
@@ -3494,9 +3480,8 @@ mod tests {
         // A `data` type lowers to a ptr and the type scan puts it in
         // string_temps (type_scan.rs:154), so println(dataObject) routes to
         // `puts` — the runtime reads its bytes as a C string. This is a latent
-        // legacy behavior; the inkwell backend reproduces it faithfully (parity,
-        // not "fix print"). Documented here so the routing is intentional, not
-        // accidental, and so the data-ptr path is covered.
+        // A data-ptr is treated as a C string by the runtime — routing it through
+        // `puts` is intentional, not accidental, and the data-ptr path is covered.
         let data_foo = tyra_mir::StructDef {
             name: "Foo".into(),
             fields: vec![("x".into(), Ty::Int)],

@@ -1,17 +1,9 @@
-//! Inkwell I2a: core scalar and control-flow instruction emission.
+//! MIR instruction emission: scalars, control flow, memory, ADT, and builtins.
 //!
-//! Ports the scalar / control-flow subset of the legacy `emit_instruction`
-//! (instr_emit.rs) to the inkwell builder. The value-handle model removes the
-//! text backend's per-temp type tables (`string_temps`/`float_temps`/…): a
-//! `BasicValueEnum` carries its own LLVM type, so e.g. `icmp` width selection
-//! is automatic from the operand handles.
-//!
-//! Scope (I2a): Const, BinOp (scalar arithmetic/compare, string eq, and/or),
-//! Neg, Not, Copy, Return, Label, Jump, BranchIf, Phi (deferred resolution),
-//! and Call to *user* functions. A function whose body contains any other
-//! instruction (Alloca/Store/Load → I2b; StructInit/ADT/StringFormat/list →
-//! I2c; builtin Call → I4) falls back to a single `unreachable` block so the
-//! module still verifies, and coverage expands phase by phase.
+//! Each `BasicValueEnum` carries its own LLVM type, so width selection for
+//! `icmp`/`fcmp` and similar type-driven operations is automatic from the
+//! operand handles. Functions whose bodies contain unsupported instructions
+//! fall back to a single `unreachable` block so the module always verifies.
 
 use std::collections::HashSet;
 
@@ -299,8 +291,8 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         // Parameters: bind the SSA arg for direct (immutable) operand refs and
-        // also create a `.addr` slot (matching the legacy backend) so mutation
-        // (Store) and `Copy`-from-param read the mutable view.
+        // also create a `.addr` alloca so mutation (Store) and `Copy`-from-param
+        // read the mutable view.
         // IMPORTANT: use the parameter's actual LLVM type for the alloca, not
         // a fixed `alloca i64`.  Struct-typed params (Option, Result, List,
         // collection wrappers, ADT values) are wider than 8 bytes; allocating
@@ -810,13 +802,10 @@ impl<'ctx> CodeGen<'ctx> {
                 self.emit_select(dest, list, elem_type);
             }
             Instruction::StringFormat { dest, format_ref, args } => {
-                // GC-allocate a 1024-byte buffer and snprintf into it. The
-                // legacy backend adds a defensive GC_malloc null check + abort
-                // branch; it is omitted here because Boehm GC_malloc never
-                // returns null (its OOM handler aborts internally), and adding
-                // the branch would split the current basic block — which would
-                // break phi-predecessor bookkeeping. Observable behavior is
-                // identical (abort on OOM either way).
+                // GC-allocate a 1024-byte buffer and snprintf into it. No
+                // null-check branch: Boehm GC_malloc never returns null (its OOM
+                // handler aborts internally), and adding the branch would split
+                // the basic block and break phi-predecessor bookkeeping.
                 let i64t = self.ctx.i64_type();
                 let size = i64t.const_int(1024, false);
                 let gc = self.module.get_function("GC_malloc").unwrap();
@@ -910,8 +899,8 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     /// Field-by-field structural comparison for Option/Result ADT values
-    /// (EqInt/NeqInt with struct operands). Mirrors the legacy `instr_emit.rs`
-    /// BinOp struct path. Creates null-safe strcmp blocks for String fields.
+    /// (EqInt/NeqInt with struct operands). Creates null-safe strcmp blocks for
+    /// String fields.
     fn emit_adt_compare(
         &mut self,
         op: MirBinOp,

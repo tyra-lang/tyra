@@ -1,16 +1,11 @@
-//! Inkwell I4g: closures and indirect calls (ADR-0011 fat-pointer model).
+//! Closure and indirect call emission (ADR-0011 fat-pointer model).
 //!
 //! A closure value is a heap `__closure_fat { fn_ptr: ptr, env_ptr: ptr }`
-//! (declared in I1 by `declare_closure_type`). `ClosureBuild` allocates the fat
+//! (declared by `declare_closure_type`). `ClosureBuild` allocates the fat
 //! pointer, stores the target function's global pointer at field 0, and either
 //! allocates+populates an environment struct (capturing lambda) or stores null
 //! (non-capturing) at field 1. `IndirectCall` loads both fields and dispatches
 //! through `fn_ptr`, prepending `env_ptr` as the implicit first argument.
-//!
-//! Mirrors legacy `emit_closure_build` / `emit_indirect_call` (instr_emit.rs).
-//! The value-handle model removes the text backend's `getelementptr null` +
-//! `ptrtoint` size trick (it uses `StructType::size_of`) and its explicit
-//! per-field store types (the operand handle carries its own type).
 
 use inkwell::types::{BasicMetadataTypeEnum, BasicType};
 use inkwell::values::{BasicMetadataValueEnum, PointerValue};
@@ -59,9 +54,8 @@ impl<'ctx> CodeGen<'ctx> {
     /// `{map,set,linked_map,linked_set}.forEach(closure)` — extract the
     /// `fn_ptr`/`env_ptr` from the fat-pointer closure and call the runtime
     /// iterator `runtime_fn(handle, env_ptr, fn_ptr)` (signature
-    /// `void(ptr, ptr, ptr)`, declared in I1). Mirrors the legacy emit for the
-    /// four `*ForEachCall` MIR instructions (instr_emit.rs); the runtime invokes
-    /// the callback per entry (kbox/vbox or elembox), so no loop is emitted here.
+    /// `void(ptr, ptr, ptr)`). The runtime invokes the callback per entry
+    /// (kbox/vbox or elembox), so no loop is emitted here.
     pub(crate) fn emit_for_each(
         &mut self,
         handle: &Operand,

@@ -16,8 +16,8 @@
 //!   uses `tyra_linked_map_contains_key` for `contains` (the only callee that
 //!   diverges from the regular `_contains` naming).
 //!
-//! Boxing (mirrors legacy `emit_box_value`): `Int` → store i64; `Bool` → zext
-//! i1→i8, store i8; everything else (`String`, data ptrs) → store ptr.
+//! Boxing: `Int` → store i64; `Bool` → zext i1→i8, store i8; everything else
+//! (`String`, data ptrs) → store ptr.
 //!
 //! `Map`/`LinkedMap` value *retrieval* is NOT here — it lowers to the dedicated
 //! `MapGetOption`/`LinkedMapGetOption` MIR instructions, ported separately.
@@ -238,8 +238,7 @@ impl<'ctx> CodeGen<'ctx> {
     /// the runtime callee (`tyra_map_get` / `tyra_linked_map_get`), both
     /// `fn(ptr coll, ptr keybox) -> ptr valuebox` returning null when absent.
     ///
-    /// Shape (mirrors legacy `emit_instruction`'s `MapGetOption` arm, single
-    /// basic block via `select` rather than branches):
+    /// Shape (single basic block via `select` rather than branches):
     ///   1. box the key (same boxing as insert/contains);
     ///   2. `vbox = getter(coll, kbox)`; `present = vbox != null`;
     ///   3. `safe = present ? vbox : @.tyra_zero_slot` (null-safe load source);
@@ -344,9 +343,9 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    /// Box an argument value: `GC_malloc(8)` + a typed store, mirroring legacy
-    /// `emit_box_value`. `Int` stores i64, `Bool` zero-extends i1→i8, everything
-    /// else (`String`, data ptrs) stores the ptr.
+    /// Box an argument value: `GC_malloc(8)` + a typed store. `Int` stores i64,
+    /// `Bool` zero-extends i1→i8, everything else (`String`, data ptrs) stores
+    /// the ptr.
     fn box_arg(&mut self, op: &Operand, ty_name: &str) -> PointerValue<'ctx> {
         let val = self.operand(op);
         let i64t = self.ctx.i64_type();
@@ -384,8 +383,7 @@ impl<'ctx> CodeGen<'ctx> {
 
     /// Emit the compiler-generated `@tyra_eq_<K>` / `@tyra_hash_<K>` functions
     /// for every key/element type used by a collection `*_new`/`*_contains`
-    /// builtin in the program. Mirrors legacy `collect_elem_types` +
-    /// `emit_map_eq_hash`. Every collection is created by a `*_new` call (whose
+    /// builtin in the program. Every collection is created by a `*_new` call (whose
     /// K is collected), so this covers every type that any reachable
     /// `get`/`insert` could need. Idempotent per type.
     pub(crate) fn emit_collection_eq_hash(&mut self, program: &Program) {
@@ -397,8 +395,7 @@ impl<'ctx> CodeGen<'ctx> {
                 // builtin Call, and a `Map`/`LinkedMap` `.get(k)` instruction
                 // (MapGetOption/LinkedMapGetOption boxes its key). A function that
                 // only receives a map by param and calls `.get` has no `*_new` of
-                // its own, so the latter is required for legacy parity — mirrors
-                // codegen.rs collect_elem_types_stmt.
+                // its own, so MapGetOption coverage is required for completeness.
                 let k: Option<String> = match &stmt.instr {
                     Instruction::Call { func, .. } => key_type_of_call(func).map(str::to_string),
                     Instruction::MapGetOption { key_ty, .. }
@@ -430,10 +427,9 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     /// Emit `@tyra_eq_<k>` (`fn(ptr, ptr) -> i32`) and `@tyra_hash_<k>`
-    /// (`fn(ptr) -> i64`) as private functions, mirroring legacy
-    /// `emit_map_eq_hash` byte-for-byte in behavior. No-op if already emitted or
-    /// if `k` is not a primitive (the type checker rejects non-primitive keys
-    /// before codegen, so the latter never occurs for valid programs).
+    /// (`fn(ptr) -> i64`) as private functions. No-op if already emitted or if
+    /// `k` is not a primitive (the type checker rejects non-primitive keys before
+    /// codegen, so the latter never occurs for valid programs).
     fn emit_eq_hash_fns(&mut self, k: &str) {
         let eq_name = format!("tyra_eq_{k}");
         if self.module.get_function(&eq_name).is_some() {
@@ -501,8 +497,7 @@ impl<'ctx> CodeGen<'ctx> {
         match k {
             "Int" => {
                 let v = self.builder.build_load(i64t, ha, "v").unwrap().into_int_value();
-                // Knuth multiplicative hash (odd 64-bit constant), bit-for-bit
-                // identical to the legacy backend.
+                // Knuth multiplicative hash (odd 64-bit constant).
                 let knuth = i64t.const_int((-3932073806218323177i64) as u64, false);
                 let h = self.builder.build_int_mul(v, knuth, "h").unwrap();
                 self.builder.build_return(Some(&h)).unwrap();
@@ -530,8 +525,7 @@ impl<'ctx> CodeGen<'ctx> {
 }
 
 /// The key/element type name needing eq/hash for a collection `*_new` or
-/// `*_contains` builtin call, or `None` for any other call. Mirrors legacy
-/// `collect_elem_types_stmt` (the `_new`/`_contains` cases): `new` carries the
+/// `*_contains` builtin call, or `None` for any other call. `new` carries the
 /// key as the first suffix segment; `contains` carries it whole.
 fn key_type_of_call(func: &str) -> Option<&str> {
     for fam in ["map", "set", "linked_map", "linked_set"] {
