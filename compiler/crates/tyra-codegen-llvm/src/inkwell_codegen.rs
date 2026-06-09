@@ -511,6 +511,12 @@ impl<'ctx> CodeGen<'ctx> {
             ("strcmp", I32, &[P, P], false),
             ("__bench_clock_ns", I64, &[], false),
             ("strtoll", I64, &[P, P, I32], false),
+            // ADT display helpers for string interpolation (Int/Float/String only;
+            // Bool is excluded — AdtPayload yields i1, not i64; other inner types
+            // carry struct payloads and are not scalar-safe to pass as extern args)
+            ("__display_option__Int", P, &[I64, I64], false),
+            ("__display_option__Float", P, &[I64, F64], false),
+            ("__display_option__Str", P, &[I64, P], false),
         ];
         for (name, ret, params, varargs) in externs {
             if self.module.get_function(name).is_some() {

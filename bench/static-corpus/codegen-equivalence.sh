@@ -60,12 +60,7 @@ UNBUILDABLE=()  # tracked (allowlisted) programs both compilers fail to build
 # build+run, so a shared codegen regression must never slip through silently).
 # Prune entries as the underlying defects are fixed — the harness flags any
 # listed program that starts building again.
-#   11-break-loop — Option<Int> in string interpolation (#{evens}) hits the
-#                   legacy printf type-error path; inkwell emits unreachable
-#                   instead. Tracked as KNOWN-IMPROVED (new builds, old fails).
-#                   Root fix requires struct-to-string conversion (Theme B+).
 KNOWN_UNBUILDABLE=(
-  "11-break-loop"
 )
 
 is_known_unbuildable() {

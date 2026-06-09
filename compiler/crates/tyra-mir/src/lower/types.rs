@@ -756,6 +756,72 @@ impl super::LowerCtx<'_> {
             _ => None,
         }
     }
+
+    /// Lower an ADT value to a display string for string interpolation.
+    ///
+    /// When `#{expr}` is interpolated and `expr` has type `Option<T>`,
+    /// extract the tag and payload, call `__display_option__T`, and return
+    /// the result temp name.
+    ///
+    /// Only `Option<Int>`, `Option<Float>`, and `Option<String>` are handled;
+    /// all other inner types return `None` so the call site falls back to the
+    /// existing interpolation path. This keeps the ABI safe: Bool payloads
+    /// arrive as i1 from AdtPayload (not i64), and composite payloads are
+    /// structs — neither can be passed safely to a fixed scalar extern.
+    pub(super) fn emit_adt_display(
+        &mut self,
+        val: &str,
+        expr_ty: &Option<Ty>,
+        body: &mut Vec<MirStmt>,
+    ) -> Option<String> {
+        let ty = expr_ty.as_ref()?;
+        match ty {
+            Ty::Generic(name, args) if name == "Option" => {
+                let inner = args.first()?;
+                // Bool payload is i1 from AdtPayload — ABI mismatch with i64 extern.
+                // Composite/Named inner types carry struct payloads — not scalar-safe.
+                let suffix = match inner {
+                    Ty::Int => "Int",
+                    Ty::Float => "Float",
+                    Ty::String => "Str",
+                    _ => return None,
+                };
+                let type_name = ty.monomorphized_name();
+                let tag_tmp = self.fresh_temp();
+                self.emit(
+                    body,
+                    Instruction::AdtTag {
+                        dest: tag_tmp.clone(),
+                        obj: Operand::Var(val.to_string()),
+                        type_name: type_name.clone(),
+                    },
+                );
+                let payload_tmp = self.fresh_temp();
+                self.emit(
+                    body,
+                    Instruction::AdtPayload {
+                        dest: payload_tmp.clone(),
+                        obj: Operand::Var(val.to_string()),
+                        type_name,
+                        field_index: 1,
+                    },
+                );
+                let display_fn = format!("__display_option__{}", suffix);
+                let display_tmp = self.fresh_temp();
+                self.emit(
+                    body,
+                    Instruction::Call {
+                        dest: Some(display_tmp.clone()),
+                        func: display_fn,
+                        args: vec![Operand::Var(tag_tmp), Operand::Var(payload_tmp)],
+                    },
+                );
+                self.string_vars.insert(display_tmp.clone());
+                Some(display_tmp)
+            }
+            _ => None,
+        }
+    }
 }
 
 /// Walk through Option/Result/List wrappers to extract an inner `Set<T>` type.

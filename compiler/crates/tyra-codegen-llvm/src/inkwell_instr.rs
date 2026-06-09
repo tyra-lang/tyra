@@ -121,6 +121,7 @@ impl<'ctx> CodeGen<'ctx> {
                 Instruction::ClosureBuild { fn_name, .. } => self.fn_values.contains_key(fn_name),
                 Instruction::Call { func, args, .. } => {
                     self.fn_values.contains_key(func)
+                        || self.module.get_function(func).is_some()
                         || (Self::is_supported_builtin(func)
                             && self.builtin_args_emittable(f, func, args))
                 }
@@ -734,7 +735,12 @@ impl<'ctx> CodeGen<'ctx> {
                 pending.push((phi, branches.clone()));
             }
             Instruction::Call { dest, func, args } => {
-                if let Some(&callee) = self.fn_values.get(func) {
+                let callee_opt = self
+                    .fn_values
+                    .get(func)
+                    .copied()
+                    .or_else(|| self.module.get_function(func));
+                if let Some(callee) = callee_opt {
                     let argvals: Vec<BasicMetadataValueEnum<'ctx>> =
                         args.iter().map(|a| self.operand(a).into()).collect();
                     let cs = self

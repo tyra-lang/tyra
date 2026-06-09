@@ -31,6 +31,8 @@ use std::thread;
 
 mod gc_string;
 
+mod stdlib_display;
+
 mod stdlib_fs;
 pub use stdlib_fs::{tyra_fs_errmsg, tyra_fs_errno, tyra_fs_exists, tyra_fs_read, tyra_fs_write};
 

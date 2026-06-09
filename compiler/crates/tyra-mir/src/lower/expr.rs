@@ -1381,16 +1381,24 @@ impl super::LowerCtx<'_> {
                         StringPart::Expr(e) => {
                             let is_float = self.is_float_expr(e);
                             let is_string = self.is_string_expr(e);
+                            let expr_ty = self.infer_expr_type(e);
                             let val = self.lower_expr(e, body);
 
-                            if is_string {
+                            if let Some(display_tmp) =
+                                self.emit_adt_display(&val, &expr_ty, body)
+                            {
                                 format_str.push_str("%s");
+                                format_args.push(Operand::Var(display_tmp));
+                            } else if is_string {
+                                format_str.push_str("%s");
+                                format_args.push(Operand::Var(val));
                             } else if is_float {
                                 format_str.push_str("%g");
+                                format_args.push(Operand::Var(val));
                             } else {
                                 format_str.push_str("%ld");
+                                format_args.push(Operand::Var(val));
                             }
-                            format_args.push(Operand::Var(val));
                         }
                     }
                 }

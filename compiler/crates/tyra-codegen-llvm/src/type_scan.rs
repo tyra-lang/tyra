@@ -79,6 +79,8 @@ fn builtin_primitive_return(fname: &str) -> Option<Ty> {
         name if name.starts_with("__set_contains__") => Some(Ty::Bool),
         name if name.starts_with("__linked_map_contains__") => Some(Ty::Bool),
         name if name.starts_with("__linked_set_contains__") => Some(Ty::Bool),
+        // ADT display helpers return *const c_char (ptr = String in Tyra type model)
+        name if name.starts_with("__display_option__") => Some(Ty::String),
         _ => None,
     }
 }
