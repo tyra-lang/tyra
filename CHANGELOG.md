@@ -7,6 +7,54 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ---
 
+## [0.9.0] — Gentle Dream (2026-06-09)
+
+### Stable
+
+**inkwell LLVM backend — ADR-0018 Theme A complete (I0–I7)**
+- The text-IR string-builder path (`codegen.rs` / `instr_emit.rs`) has been removed. inkwell is now the sole LLVM backend.
+- `CodeGen<'ctx>` value-handle model: every SSA value is a typed `BasicValueEnum` keyed by MIR temp name; width selection and pointer semantics are structurally enforced at the call site.
+- Full instruction coverage: scalars, control flow, memory (alloca/load/store), structs, ADTs, lists, strings, all builtins, closures, concurrency (spawn/await/join_all/select), collection intrinsics (Map/Set/LinkedMap/LinkedSet forEach + get), and `parse_Int`.
+- DWARF line table (I6a) and local variable debug info (I6b) via `DIBuilder` — `tyra test --coverage` and LLDB/lldb-dap integration preserved.
+- Coverage instrumentation (I5) ported: `atomicrmw add` per basic block label, flushed at exit via runtime `atexit` callback.
+- G2 codegen-equivalence harness (`bench/static-corpus/codegen-equivalence.sh`): `KNOWN_UNBUILDABLE` is now empty — every positive-corpus program builds and produces byte-identical runtime behavior.
+- Test counts: **100/100 codegen**, **121 types**, **114 runtime** (all green).
+
+**Theme B — Hindley-Milner substitution threading**
+- `TypeEnv` now propagates the HM substitution across the full checker pass rather than discarding it per call.
+- Resolves the v0.8.0 known limitation: "HM unification is conservative: per-call throw-away substitution."
+- No regressions in static corpus or AI-gen benchmark.
+
+**Theme D — `LinkedMap` / `LinkedSet` remove tombstone optimization**
+- `tyra_linked_map_remove` now uses a tombstone model instead of eager compact:
+  - key absent: O(1) — only the wrapper struct is freshly allocated; `entries`/`index` arrays are shared.
+  - key present: O(entries_cap + idx_cap) — one entry tombstoned + one index slot tombstoned; the next `insert` compacts back to O(live).
+- Resolves the v0.8.0 known limitation: "`LinkedMap.remove` / `LinkedSet.remove` is O(n)`".
+- `LinkedSet.remove` inherits the same cost via delegation to `tyra_linked_map_remove`.
+- spec §11.1 and §11.2 updated with the split cost table; ADR-0019 amended with an implementation note.
+
+**`Option<T>` string interpolation**
+- `#{expr}` in string literals now correctly renders `Option<Int>`, `Option<Float>`, and `Option<String>` as `"Some(x)"` / `"None"` instead of crashing (SIGTRAP / exit 133).
+- New runtime helpers: `__display_option__Int(i64, i64)`, `__display_option__Float(i64, f64)`, `__display_option__Str(i64, ptr)` in `runtime/src/stdlib_display.rs`.
+- `Option<Bool>` and `Option<data-type>` interpolation are intentionally unsupported (ABI safety: `AdtPayload` yields `i1` for Bool; struct payloads are not scalar-safe).
+- MIR lowering: `emit_adt_display` in `lower/types.rs`; wired into both the `StringInterp` path (`lower/expr.rs`) and the `println + StringInterp` special-case path (`lower/call.rs`).
+
+### Known Limitations
+
+- **Windows ARM64 / native PDB debug symbols**: deferred. DWARF works on macOS and Linux; Windows MSVC ABI support remains experimental (see v0.8.0 release notes).
+- **`LinkedMap.from([...])` / `LinkedMap` literal syntax**: deferred to v0.10 — requires tuple types (spec §21, not yet implemented).
+- **`Option<Bool>` / `Option<data-type>` string interpolation**: not supported in v0.9; no compile-time diagnostic is emitted. Behavior differs by context: in `println("#{expr}")` the containing function is lowered to an `unreachable` body (the codegen gate rejects struct-typed `print` arguments); in a string-format expression such as `"prefix #{expr}"` the struct value is passed to `snprintf` as `%ld`, printing a raw integer. A dedicated diagnostic is planned.
+- **Boehm GC parallel init in `cargo test`**: running `cargo test` for the runtime crate without `-- --test-threads=1` causes SIGABRT on some hosts due to concurrent `GC_init()` calls across test threads. Use `cargo test -- --test-threads=1` for the runtime crate.
+
+### Not in This Release
+
+- `SortedMap<K,V>` / `SortedSet<T>` (sort-order persistent collections)
+- rank-N polymorphism / type classes / where clauses — spec §22 non-goals
+- Windows ARM64 / native PDB debug symbols
+- `LinkedMap.from([...])` and literal syntax — v0.10 (after tuples)
+
+---
+
 ## [0.8.0] — Lexical Bengio (2026-05-30)
 
 ### Stable
@@ -48,8 +96,8 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ### Known Limitations
 
-- **HM unification is conservative**: `types_compatible()` uses a per-call throw-away substitution rather than propagating it across the full checker pass. Full substitution threading is deferred to v0.9. No regressions observed in static corpus or AI-gen benchmark, but edge cases in user code remain possible.
-- **`LinkedMap.remove` / `LinkedSet.remove` is O(n)**: the entries array is fully rebuilt on each remove. Use `Map` / `Set` for workloads where removal is frequent.
+- ~~**HM unification is conservative**~~: resolved in v0.9.0 (Theme B — substitution threading).
+- ~~**`LinkedMap.remove` / `LinkedSet.remove` is O(n)**~~: resolved in v0.9.0 (Theme D — tombstone model; key-absent remove is now O(1)).
 - **Windows is experimental (see § Experimental above)**: source-level MSVC ABI only; CI is `cargo check` for LLVM-free crates. Building the full compiler on Windows requires a local LLVM 21 SDK with dev files (the official LLVM Windows installer omits them). MinGW GNU ABI, Windows ARM64, and native PDB debug symbols are deferred to v0.9 (DWARF works on macOS/Linux).
 - **AI-gen benchmark Run 18**: 86/100 pass (seed=18). Seed differs from Run 17 (seed=2); pass-count is not directly comparable. The primary v0.8.0 signal is **E0500 count = 0**.
 
