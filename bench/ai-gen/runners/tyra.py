@@ -8,7 +8,7 @@ from .base import Runner, StageResult
 
 class TyraRunner(Runner):
     name = "tyra"
-    source_ext = ".tyra"
+    source_ext = ".ty"
 
     def compiler_available(self) -> bool:
         return (self.repo_root / "target" / "debug" / "tyra").exists()
@@ -17,7 +17,7 @@ class TyraRunner(Runner):
         return self.repo_root / "target" / "debug" / "tyra"
 
     def compile(self, workdir: Path) -> StageResult:
-        src = workdir / "main.tyra"
+        src = workdir / "main.ty"
         # tyra build <src> currently emits `a.out` next to the source.
         # Use `tyra build` so type checking + codegen both run.
         # The workdir sits under /tmp so the compiler's default stdlib
@@ -32,7 +32,7 @@ class TyraRunner(Runner):
         return res
 
     def execute(self, workdir: Path, stdin: str, timeout_s: int) -> StageResult:
-        # `tyra build main.tyra` emits `main` (source stem, no extension).
+        # `tyra build main.ty` emits `main` (source stem, no extension).
         bin_path = workdir / "main"
         if not bin_path.exists():
             # Historical fallback in case CLI behavior changes.

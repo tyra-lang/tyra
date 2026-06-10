@@ -873,11 +873,11 @@ mod tests {
 
     fn run(src: &str) -> SemanticTokens {
         let mut sources = SourceMap::new();
-        let id = sources.add("t.tyra".into(), src.into());
+        let id = sources.add("t.ty".into(), src.into());
         let mut report = tyra_diagnostics::Report::new();
         let ast = tyra_parser::parse(id, &sources, &mut report);
         let tyra_driver::CheckResult { def_index, .. } =
-            tyra_driver::check_in_memory("t.tyra".into(), src.into(), None);
+            tyra_driver::check_in_memory("t.ty".into(), src.into(), None);
         build_full(src, &ast, &def_index, id, &sources)
     }
 

@@ -95,7 +95,7 @@ implementing language spec 0.1
 
 ## Test with Hello, World
 
-Create a file named `hello.tyra`:
+Create a file named `hello.ty`:
 
 ```tyra
 print("Hello, World!\n")
@@ -104,7 +104,7 @@ print("Hello, World!\n")
 Run it:
 
 ```bash
-tyra run hello.tyra
+tyra run hello.ty
 ```
 
 Expected output:

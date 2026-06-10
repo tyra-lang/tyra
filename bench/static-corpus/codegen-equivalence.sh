@@ -11,14 +11,14 @@
 #   bash bench/static-corpus/codegen-equivalence.sh <old-tyra> <new-tyra> [--include-network]
 #
 # File classes (mirrors check.sh so the same corpus is covered consistently):
-#   *.tyra (non-test, non-bad)  -> `tyra build -o <tmp>` then run the binary;
+#   *.ty (non-test, non-bad)  -> `tyra build -o <tmp>` then run the binary;
 #                                  compare combined stdout+stderr and exit code.
-#   *_test.tyra                 -> `tyra test`; compare output (per-file `# time:`
+#   *_test.ty                 -> `tyra test`; compare output (per-file `# time:`
 #                                  TAP timing lines are stripped — nondeterministic).
-#   bad/*.tyra                  -> EXCLUDED: these fail type-checking and never
+#   bad/*.ty                  -> EXCLUDED: these fail type-checking and never
 #                                  reach codegen, so they are irrelevant to codegen
 #                                  equivalence (covered by check.sh / G1 verify).
-#   win/*.tyra                  -> EXCLUDED: Windows-only, not buildable on the host.
+#   win/*.ty                  -> EXCLUDED: Windows-only, not buildable on the host.
 #
 # Exits 0 only if every compared program matches.
 
@@ -79,8 +79,8 @@ strip_nondeterministic() {
 shopt -s nullglob
 
 # ---- Class 1: buildable programs (build + run, compare behavior) ----
-for f in "$SCRIPT_DIR"/*.tyra; do
-  base="$(basename "$f" .tyra)"
+for f in "$SCRIPT_DIR"/*.ty; do
+  base="$(basename "$f" .ty)"
   [[ "$base" == *_test ]] && continue
 
   skip=0
@@ -159,8 +159,8 @@ for f in "$SCRIPT_DIR"/*.tyra; do
 done
 
 # ---- Class 2: test files (tyra test, compare normalized output) ----
-for f in "$SCRIPT_DIR"/*_test.tyra; do
-  base="$(basename "$f" .tyra)"
+for f in "$SCRIPT_DIR"/*_test.ty; do
+  base="$(basename "$f" .ty)"
 
   set +e
   oraw="$("$OLD" test "$f" 2>&1)"

@@ -36,7 +36,7 @@ average: 87
 
 ## The Complete Program
 
-Save this as `grades.tyra` and run with `tyra run grades.tyra < input.txt`:
+Save this as `grades.ty` and run with `tyra run grades.ty < input.txt`:
 
 ```tyra
 import io
@@ -224,13 +224,13 @@ let avg = total / count
 **From a file:**
 
 ```bash
-tyra run grades.tyra < input.txt
+tyra run grades.ty < input.txt
 ```
 
 **Interactive (type records, press Ctrl-D to end input):**
 
 ```bash
-tyra run grades.tyra
+tyra run grades.ty
 alice,90
 bob,82
 ^D
@@ -239,7 +239,7 @@ bob,82
 **Build a standalone binary:**
 
 ```bash
-tyra build -o grades grades.tyra
+tyra build -o grades grades.ty
 ./grades < input.txt
 ```
 

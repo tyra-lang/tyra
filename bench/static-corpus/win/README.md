@@ -12,7 +12,7 @@ provide a reference for test authors who need to verify Windows compatibility.
 
 Tyra source code does **not** need to handle path separator differences between
 Windows (`\`) and Unix (`/`) at the language level.  Path manipulation in the
-Tyra standard library (`stdlib/fs.tyra`) is delegated to `std::path::PathBuf`
+Tyra standard library (`stdlib/fs.ty`) is delegated to `std::path::PathBuf`
 in the Rust runtime, which transparently normalizes separators on each platform.
 
 Consequence: a Tyra program that constructs or consumes file paths is portable
@@ -25,7 +25,7 @@ Windows once the toolchain is set up (see `README.md` § Platform support).
 
 If a future change introduces genuinely Windows-specific behavior at the
 *language* level (e.g., a Windows-only stdlib module, a platform conditional
-syntax), add a `.tyra` corpus file here with the standard header:
+syntax), add a `.ty` corpus file here with the standard header:
 
 ```tyra
 # SPEC_REF: §<section> — <description>

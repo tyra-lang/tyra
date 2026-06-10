@@ -41,7 +41,7 @@ mod tests {
     use super::*;
 
     fn run(src: &str) -> Vec<CodeLens> {
-        let result = tyra_driver::check_in_memory("test.tyra".to_string(), src.to_string(), None);
+        let result = tyra_driver::check_in_memory("test.ty".to_string(), src.to_string(), None);
         let state = crate::DocState {
             text: src.to_string(),
             sources: result.sources,

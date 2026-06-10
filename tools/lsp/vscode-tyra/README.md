@@ -4,7 +4,7 @@ VS Code extension for the [Tyra](https://github.com/tyra-lang/tyra) programming 
 
 ## Features
 
-- Syntax highlighting for `.tyra` files
+- Syntax highlighting for `.ty` files
 - Diagnostics (compiler errors shown as red squigglies on save)
 - Hover: shows the inferred type of identifiers
 

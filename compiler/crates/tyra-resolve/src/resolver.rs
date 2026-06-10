@@ -819,7 +819,7 @@ mod tests {
 
     fn resolve_str(source: &str) -> Report {
         let mut sources = SourceMap::new();
-        let id = sources.add("test.tyra".into(), source.into());
+        let id = sources.add("test.ty".into(), source.into());
         let mut report = Report::new();
         let ast = tyra_parser::parse(id, &sources, &mut report);
         if report.has_errors() {
@@ -831,7 +831,7 @@ mod tests {
 
     fn resolve_with_symbols(source: &str) -> (Report, crate::SymbolList) {
         let mut sources = tyra_diagnostics::SourceMap::new();
-        let id = sources.add("test.tyra".into(), source.into());
+        let id = sources.add("test.ty".into(), source.into());
         let mut report = Report::new();
         let ast = tyra_parser::parse(id, &sources, &mut report);
         if report.has_errors() {

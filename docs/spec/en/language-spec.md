@@ -1442,10 +1442,10 @@ finalized in later milestones.
 
 Callers `import fs` and use the module-qualified form
 `fs.read_to_string(...)`. The declarations below are excerpted from
-`stdlib/fs.tyra`.
+`stdlib/fs.ty`.
 
 ```tyra
-# stdlib/fs.tyra
+# stdlib/fs.ty
 export fn read_to_string(_ path: String) -> Result<String, FsError>
 export fn write_string(_ path: String, _ contents: String) -> Result<Unit, FsError>
 export fn exists(_ path: String) -> Bool
@@ -1467,10 +1467,10 @@ export type FsError =
 
 Callers `import json` and use the module-qualified form
 `json.parse(...)` / `json.Value`. The declarations below are excerpted
-from `stdlib/json.tyra`.
+from `stdlib/json.ty`.
 
 ```tyra
-# stdlib/json.tyra
+# stdlib/json.ty
 export data Value
   _handle: Int
 end
@@ -1507,11 +1507,11 @@ end
 
 Callers `import http.client` / `import http.server` and use the
 module-qualified forms `http.client.get(...)` or `http.server.new()`.
-The declarations below are excerpted from `stdlib/http/client.tyra`
-and `stdlib/http/server.tyra`.
+The declarations below are excerpted from `stdlib/http/client.ty`
+and `stdlib/http/server.ty`.
 
 ```tyra
-# stdlib/http/client.tyra
+# stdlib/http/client.ty
 export data Response
   status: Int
   body: String
@@ -1525,7 +1525,7 @@ export fn get(_ url: String) -> Result<Response, FetchError>
 ```
 
 ```tyra
-# stdlib/http/server.tyra
+# stdlib/http/server.ty
 export data Request
   method: String
   path: String
@@ -1599,10 +1599,10 @@ end
 
 Callers `import string` and use the module-qualified form
 `string.trim(...)` / `string.len(...)`. The declarations below are
-excerpted from `stdlib/string.tyra`.
+excerpted from `stdlib/string.ty`.
 
 ```tyra
-# stdlib/string.tyra
+# stdlib/string.ty
 export fn len(_ s: String) -> Int
 export fn is_empty(_ s: String) -> Bool
 export fn trim(_ s: String) -> String
@@ -1668,7 +1668,7 @@ Callers `import list` and use module-qualified calls like `list.push(...)`
 functions.
 
 ```tyra
-# stdlib/list.tyra
+# stdlib/list.ty
 export fn push(_ list: List<Int>, _ x: Int) -> List<Int>
 export fn sum(_ list: List<Int>) -> Int
 export fn max(_ list: List<Int>) -> Option<Int>
@@ -1826,11 +1826,11 @@ Type-checks a source file without compiling.
 
 ```bash
 tyra check                    # project mode: auto-discovers entry point via Tyra.toml
-tyra check src/myapp.tyra    # specify file directly
+tyra check src/myapp.ty    # specify file directly
 ```
 
 - No errors → exit 0; errors → exit 1
-- Project mode: walks up from the current directory to find `Tyra.toml`, then checks `src/<name>.tyra`
+- Project mode: walks up from the current directory to find `Tyra.toml`, then checks `src/<name>.ty`
 
 ### 18.2 tyra run
 
@@ -1838,8 +1838,8 @@ Compiles and runs in one step. No binary is written to disk.
 
 ```bash
 tyra run                           # project mode
-tyra run src/myapp.tyra            # specify file directly
-tyra run --release src/myapp.tyra  # run with optimized build (-O2)
+tyra run src/myapp.ty            # specify file directly
+tyra run --release src/myapp.ty  # run with optimized build (-O2)
 ```
 
 ### 18.3 tyra build
@@ -1850,7 +1850,7 @@ Compiles to a native binary.
 tyra build                         # project mode: output to <project_root>/<name>
 tyra build --release               # optimized build (-O2)
 tyra build -o dist/myapp           # explicit output path
-tyra build src/myapp.tyra -o out   # specify file and output path directly
+tyra build src/myapp.ty -o out   # specify file and output path directly
 ```
 
 - Debug build (default): `-O0`; `--release`: `-O2`
@@ -1861,7 +1861,7 @@ tyra build src/myapp.tyra -o out   # specify file and output path directly
 Formats Tyra source to the canonical style.
 
 ```bash
-tyra fmt src/myapp.tyra           # format a file in-place
+tyra fmt src/myapp.ty           # format a file in-place
 tyra fmt src/                     # recursively format a directory
 tyra fmt --check src/             # list files that would change and exit 1 (CI-friendly)
 tyra fmt --stdin                  # read from stdin, write formatted source to stdout
@@ -1876,24 +1876,24 @@ tyra fmt --stdin                  # read from stdin, write formatted source to s
 Discovers and runs tests automatically.
 
 ```bash
-tyra test                          # run all *_test.tyra files under the current directory
+tyra test                          # run all *_test.ty files under the current directory
 tyra test src/                     # specify a directory
-tyra test math_test.tyra           # specify a single file
+tyra test math_test.ty           # specify a single file
 tyra test --filter <pattern>       # substring match on test function names
 tyra test --list                   # list matched functions without running
 tyra test --format tap             # TAP version 14 (default)
 tyra test --format junit           # JUnit-compatible XML (for CI test summaries)
 ```
 
-- Target files: `*_test.tyra`
+- Target files: `*_test.ty`
 - Test functions: `fn test_*() -> Result<Unit, String>` (no parameters)
 - TAP output includes `# time: <s>s` at the end of each file's run
 - JUnit: if a file fails to compile, a synthetic single-test suite is emitted to prevent silent green in CI
 - Each `<testsuite>` carries a `time=` attribute
-- **E0216**: `*_test.tyra` files must not contain `fn main` or top-level executable statements
+- **E0216**: `*_test.ty` files must not contain `fn main` or top-level executable statements
 
 ```tyra
-# example_test.tyra
+# example_test.ty
 import assert
 
 fn test_add() -> Result<Unit, String>
@@ -1907,12 +1907,12 @@ end
 Scaffolds a new project.
 
 ```bash
-tyra new myapp              # bin project (src/myapp.tyra, Tyra.toml, .gitignore, README.md)
-tyra new mylib --lib        # lib project (src/mylib.tyra with export fn)
+tyra new myapp              # bin project (src/myapp.ty, Tyra.toml, .gitignore, README.md)
+tyra new mylib --lib        # lib project (src/mylib.ty with export fn)
 tyra new myapp --vcs none   # suppress .gitignore (for sub-projects inside an existing repo)
 ```
 
-- `src/<name>.tyra` filename must match the package name (§13.1 invariant)
+- `src/<name>.ty` filename must match the package name (§13.1 invariant)
 - Bin packages (containing `fn main` or top-level statements) cannot be imported (E0218)
 - Lib packages consist of declarations only; symbols are published with `export fn`
 
@@ -1938,7 +1938,7 @@ tyra mod clean                                  # remove ~/.tyra/cache/
 **Dependency invariants (ADR 0009)**:
 - The dep key must equal the `package.name` declared in the target `Tyra.toml` (no aliasing)
 - Bin packages cannot be imported as dependencies (E0218)
-- A dependency with no `src/<name>.tyra` is rejected at `tyra mod sync` time
+- A dependency with no `src/<name>.ty` is rejected at `tyra mod sync` time
 
 ### 18.8 tyra bench
 

@@ -94,7 +94,7 @@ jobs:
 
       - name: Smoke test (hello world)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra run examples/01-hello.tyra)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra run examples/01-hello.ty)
           expected="hello, tyra"
           if [ "$output" != "$expected" ]; then
             echo "FAIL: expected '$expected', got '$output'"
@@ -104,10 +104,10 @@ jobs:
       - name: Smoke test (tyra test / per-test isolation)
         run: |
           # Verify per-test isolation: a crashing test must not suppress sibling results.
-          # isolation_smoke_test.tyra has one test that stack-overflows (non-tail recursion,
+          # isolation_smoke_test.ty has one test that stack-overflows (non-tail recursion,
           # TCO-proof) and one that passes. Without isolation the crash kills the shared binary
           # and suppresses the sibling's TAP line.
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/isolation_smoke_test.tyra 2>&1 || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/isolation_smoke_test.ty 2>&1 || true)
           echo "$output"
           echo "$output" | grep -qE '^ok [0-9]+ - test_will_pass' || {
             echo "FAIL: passing sibling test was not reported — isolation broken"
@@ -120,7 +120,7 @@ jobs:
 
       - name: Smoke test (tyra test --timeout)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/smoke/timeout_smoke_test.tyra 2>&1 || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/smoke/timeout_smoke_test.ty 2>&1 || true)
           echo "$output"
           echo "$output" | grep -qE '^not ok [0-9]+ - test_will_timeout' || {
             echo "FAIL: timed-out test was not reported as failed"
@@ -136,7 +136,7 @@ jobs:
           # Verify JUnit failure case: isolation_smoke_test has one crashing test,
           # so the XML must contain a <failure> element (not just <testcase>).
           # Capture with || true so pipefail does not fire on tyra test's non-0 exit.
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/smoke/isolation_smoke_test.tyra 2>/dev/null || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/smoke/isolation_smoke_test.ty 2>/dev/null || true)
           echo "$output" | grep -q '<failure' || {
             echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1
@@ -144,21 +144,21 @@ jobs:
 
       - name: Smoke test (test "name" syntax)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_syntax_smoke_test.tyra 2>&1)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_syntax_smoke_test.ty 2>&1)
           echo "$output"
           echo "$output" | grep -qE '^ok ' || { echo "FAIL: named test syntax smoke tests not passing"; exit 1; }
           echo "$output" | grep -qE '^not ok ' && { echo "FAIL: named test syntax smoke tests have failures"; exit 1; } || true
 
       - name: Smoke test (test "name" non-ASCII)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_non_ascii_smoke_test.tyra 2>&1)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_non_ascii_smoke_test.ty 2>&1)
           echo "$output"
           echo "$output" | grep -qE '^ok ' || { echo "FAIL: non-ASCII named test smoke tests not passing"; exit 1; }
           echo "$output" | grep -qE '^not ok ' && { echo "FAIL: non-ASCII named test smoke tests have failures"; exit 1; } || true
 
       - name: Smoke test (test "name" panics modifier)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_panics_block_smoke_test.tyra 2>&1)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_panics_block_smoke_test.ty 2>&1)
           echo "$output"
           ok_count=$(echo "$output" | grep -cE '^ok ' || true)
           [ "$ok_count" -ge 2 ] || { echo "FAIL: expected at least 2 passing named tests, got $ok_count"; exit 1; }
@@ -214,7 +214,7 @@ jobs:
 
       - name: Smoke test (hello world)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra run examples/01-hello.tyra)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra run examples/01-hello.ty)
           expected="hello, tyra"
           if [ "$output" != "$expected" ]; then
             echo "FAIL: expected '$expected', got '$output'"
@@ -224,10 +224,10 @@ jobs:
       - name: Smoke test (tyra test / per-test isolation)
         run: |
           # Verify per-test isolation: a crashing test must not suppress sibling results.
-          # isolation_smoke_test.tyra has one test that stack-overflows (non-tail recursion,
+          # isolation_smoke_test.ty has one test that stack-overflows (non-tail recursion,
           # TCO-proof) and one that passes. Without isolation the crash kills the shared binary
           # and suppresses the sibling's TAP line.
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/isolation_smoke_test.tyra 2>&1 || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/isolation_smoke_test.ty 2>&1 || true)
           echo "$output"
           echo "$output" | grep -qE '^ok [0-9]+ - test_will_pass' || {
             echo "FAIL: passing sibling test was not reported — isolation broken"
@@ -240,7 +240,7 @@ jobs:
 
       - name: Smoke test (tyra test --timeout)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/smoke/timeout_smoke_test.tyra 2>&1 || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/smoke/timeout_smoke_test.ty 2>&1 || true)
           echo "$output"
           echo "$output" | grep -qE '^not ok [0-9]+ - test_will_timeout' || {
             echo "FAIL: timed-out test was not reported as failed"
@@ -256,7 +256,7 @@ jobs:
           # Verify JUnit failure case: isolation_smoke_test has one crashing test,
           # so the XML must contain a <failure> element (not just <testcase>).
           # Capture with || true so pipefail does not fire on tyra test's non-0 exit.
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/smoke/isolation_smoke_test.tyra 2>/dev/null || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/smoke/isolation_smoke_test.ty 2>/dev/null || true)
           echo "$output" | grep -q '<failure' || {
             echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1
@@ -264,21 +264,21 @@ jobs:
 
       - name: Smoke test (test "name" syntax)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_syntax_smoke_test.tyra 2>&1)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_syntax_smoke_test.ty 2>&1)
           echo "$output"
           echo "$output" | grep -qE '^ok ' || { echo "FAIL: named test syntax smoke tests not passing"; exit 1; }
           echo "$output" | grep -qE '^not ok ' && { echo "FAIL: named test syntax smoke tests have failures"; exit 1; } || true
 
       - name: Smoke test (test "name" non-ASCII)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_non_ascii_smoke_test.tyra 2>&1)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_non_ascii_smoke_test.ty 2>&1)
           echo "$output"
           echo "$output" | grep -qE '^ok ' || { echo "FAIL: non-ASCII named test smoke tests not passing"; exit 1; }
           echo "$output" | grep -qE '^not ok ' && { echo "FAIL: non-ASCII named test smoke tests have failures"; exit 1; } || true
 
       - name: Smoke test (test "name" panics modifier)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_panics_block_smoke_test.tyra 2>&1)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_panics_block_smoke_test.ty 2>&1)
           echo "$output"
           ok_count=$(echo "$output" | grep -cE '^ok ' || true)
           [ "$ok_count" -ge 2 ] || { echo "FAIL: expected at least 2 passing named tests, got $ok_count"; exit 1; }
@@ -380,7 +380,7 @@ jobs:
 
       - name: Run static corpus check
         # --check-only: LLVM 19 static libs + musl libc SIGSEGV during
-        # test-binary initialisation, so "tyra test" on *_test.tyra files
+        # test-binary initialisation, so "tyra test" on *_test.ty files
         # is skipped. Type-checking (imports, types, signatures) still runs.
         # Full tyra test execution is covered by the Ubuntu and macOS jobs.
         env:
@@ -389,7 +389,7 @@ jobs:
 
       - name: Smoke test (hello world)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra run examples/01-hello.tyra)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra run examples/01-hello.ty)
           expected="hello, tyra"
           if [ "$output" != "$expected" ]; then
             echo "FAIL: expected '$expected', got '$output'"
@@ -398,7 +398,7 @@ jobs:
 
       - name: Smoke test (static binary)
         run: |
-          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra build --static examples/01-hello.tyra -o /tmp/tyra_static_test
+          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra build --static examples/01-hello.ty -o /tmp/tyra_static_test
           file /tmp/tyra_static_test | grep -q "statically linked" || {
             echo "FAIL: binary is not statically linked"
             file /tmp/tyra_static_test
@@ -414,10 +414,10 @@ jobs:
       - name: Smoke test (tyra test / per-test isolation)
         run: |
           # Verify per-test isolation: a crashing test must not suppress sibling results.
-          # isolation_smoke_test.tyra has one test that stack-overflows (non-tail recursion,
+          # isolation_smoke_test.ty has one test that stack-overflows (non-tail recursion,
           # TCO-proof) and one that passes. Without isolation the crash kills the shared binary
           # and suppresses the sibling's TAP line.
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/isolation_smoke_test.tyra 2>&1 || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/isolation_smoke_test.ty 2>&1 || true)
           echo "$output"
           echo "$output" | grep -qE '^ok [0-9]+ - test_will_pass' || {
             echo "FAIL: passing sibling test was not reported — isolation broken"
@@ -430,7 +430,7 @@ jobs:
 
       - name: Smoke test (tyra test --timeout)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/smoke/timeout_smoke_test.tyra 2>&1 || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --timeout 2 bench/smoke/timeout_smoke_test.ty 2>&1 || true)
           echo "$output"
           echo "$output" | grep -qE '^not ok [0-9]+ - test_will_timeout' || {
             echo "FAIL: timed-out test was not reported as failed"
@@ -446,7 +446,7 @@ jobs:
           # Verify JUnit failure case: isolation_smoke_test has one crashing test,
           # so the XML must contain a <failure> element (not just <testcase>).
           # Capture with || true so pipefail does not fire on tyra test's non-0 exit.
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/smoke/isolation_smoke_test.tyra 2>/dev/null || true)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test --format junit bench/smoke/isolation_smoke_test.ty 2>/dev/null || true)
           echo "$output" | grep -q '<failure' || {
             echo "FAIL: JUnit output contains no <failure> element for the crashing test"
             exit 1
@@ -454,21 +454,21 @@ jobs:
 
       - name: Smoke test (test "name" syntax)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_syntax_smoke_test.tyra 2>&1)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_syntax_smoke_test.ty 2>&1)
           echo "$output"
           echo "$output" | grep -qE '^ok ' || { echo "FAIL: named test syntax smoke tests not passing"; exit 1; }
           echo "$output" | grep -qE '^not ok ' && { echo "FAIL: named test syntax smoke tests have failures"; exit 1; } || true
 
       - name: Smoke test (test "name" non-ASCII)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_non_ascii_smoke_test.tyra 2>&1)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_non_ascii_smoke_test.ty 2>&1)
           echo "$output"
           echo "$output" | grep -qE '^ok ' || { echo "FAIL: non-ASCII named test smoke tests not passing"; exit 1; }
           echo "$output" | grep -qE '^not ok ' && { echo "FAIL: non-ASCII named test smoke tests have failures"; exit 1; } || true
 
       - name: Smoke test (test "name" panics modifier)
         run: |
-          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_panics_block_smoke_test.tyra 2>&1)
+          output=$(TYRA_STDLIB=$PWD/stdlib ./target/release/tyra test bench/smoke/test_name_panics_block_smoke_test.ty 2>&1)
           echo "$output"
           ok_count=$(echo "$output" | grep -cE '^ok ' || true)
           [ "$ok_count" -ge 2 ] || { echo "FAIL: expected at least 2 passing named tests, got $ok_count"; exit 1; }

@@ -2,9 +2,9 @@
 //!
 //! Exposes `tyra_fs_read` / `tyra_fs_errno` / `tyra_fs_errmsg` /
 //! `tyra_fs_write` / `tyra_fs_exists` to Tyra. The Tyra-side wrapper in
-//! `stdlib/fs.tyra` turns these into `Result<_, FsError>` / `Bool`.
+//! `stdlib/fs.ty` turns these into `Result<_, FsError>` / `Bool`.
 //!
-//! Errno codes (matched by stdlib/fs.tyra):
+//! Errno codes (matched by stdlib/fs.ty):
 //!   0 = Ok
 //!   1 = NotFound
 //!   2 = PermissionDenied
@@ -13,7 +13,7 @@
 //! Returned strings use `gc_string::alloc_gc_cstring` (`GC_malloc_atomic`)
 //! so the Boehm GC manages their lifetime (M2 fix).
 //! - The `__fs_*` intrinsics are registered in the Tyra prelude so that
-//!   `stdlib/fs.tyra` can call them without an `import` (which would
+//!   `stdlib/fs.ty` can call them without an `import` (which would
 //!   create a module cycle). Direct user calls are technically possible
 //!   but unsupported — the thread-local errno/errmsg contract assumes
 //!   the stdlib wrapper pattern and user code interleaving multiple fs
@@ -21,7 +21,7 @@
 //!
 //! Thread-safety contract: `tyra_fs_read` followed by `tyra_fs_errno` /
 //! `tyra_fs_errmsg` must occur on the same OS thread with no `.await`
-//! point (= no scheduler handoff in M9) in between. `stdlib/fs.tyra`
+//! point (= no scheduler handoff in M9) in between. `stdlib/fs.ty`
 //! satisfies this by calling the intrinsics back-to-back.
 
 use crate::gc_string::alloc_gc_cstring;
@@ -158,7 +158,7 @@ pub unsafe extern "C" fn tyra_fs_write(path: *const c_char, contents: *const c_c
 /// returns an empty string for other codes.
 ///
 /// The returned pointer is managed by the Boehm GC and must not be freed
-/// by the caller. `stdlib/fs.tyra` calls this only under the `IoError` arm.
+/// by the caller. `stdlib/fs.ty` calls this only under the `IoError` arm.
 #[unsafe(no_mangle)]
 pub extern "C" fn tyra_fs_errmsg() -> *const c_char {
     let s = FS_ERRMSG.with(|m| m.borrow().clone());

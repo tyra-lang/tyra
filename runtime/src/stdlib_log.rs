@@ -1,6 +1,6 @@
 //! Log stdlib backing (§17.3.x). v0.1 structured logging (stderr).
 //!
-//! Exposes `tyra_log_*` intrinsics consumed by `stdlib/log.tyra`.
+//! Exposes `tyra_log_*` intrinsics consumed by `stdlib/log.ty`.
 //!
 //! Scope (v0.1):
 //!   info(msg: String)  -> Unit

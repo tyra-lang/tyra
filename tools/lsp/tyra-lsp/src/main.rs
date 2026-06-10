@@ -83,7 +83,7 @@ impl TyraLsp {
             .to_file_path()
             .ok()
             .and_then(|p| p.file_name().map(|f| f.to_string_lossy().into_owned()))
-            .unwrap_or_else(|| "untitled.tyra".to_string());
+            .unwrap_or_else(|| "untitled.ty".to_string());
 
         let text_clone = text.clone();
 
@@ -306,7 +306,7 @@ impl LanguageServer for TyraLsp {
                             filters: vec![FileOperationFilter {
                                 scheme: Some("file".to_string()),
                                 pattern: FileOperationPattern {
-                                    glob: "**/*.tyra".to_string(),
+                                    glob: "**/*.ty".to_string(),
                                     matches: Some(FileOperationPatternKind::File),
                                     options: None,
                                 },
@@ -316,7 +316,7 @@ impl LanguageServer for TyraLsp {
                             filters: vec![FileOperationFilter {
                                 scheme: Some("file".to_string()),
                                 pattern: FileOperationPattern {
-                                    glob: "**/*.tyra".to_string(),
+                                    glob: "**/*.ty".to_string(),
                                     matches: Some(FileOperationPatternKind::File),
                                     options: None,
                                 },
@@ -367,7 +367,7 @@ impl LanguageServer for TyraLsp {
         {
             let opts = DidChangeWatchedFilesRegistrationOptions {
                 watchers: vec![FileSystemWatcher {
-                    glob_pattern: GlobPattern::String("**/*.tyra".into()),
+                    glob_pattern: GlobPattern::String("**/*.ty".into()),
                     kind: None,
                 }],
             };
@@ -1115,7 +1115,7 @@ impl LanguageServer for TyraLsp {
     }
 
     async fn did_change_watched_files(&self, _params: DidChangeWatchedFilesParams) {
-        // Any .tyra file created/changed/deleted outside the editor may affect
+        // Any .ty file created/changed/deleted outside the editor may affect
         // import resolution for all open docs. Re-analyze everything with the
         // document's parent directory so resolve_imports re-reads modules from
         // disk and picks up the external change.

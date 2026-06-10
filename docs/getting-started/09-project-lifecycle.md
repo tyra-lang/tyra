@@ -19,7 +19,7 @@ This creates:
 greeter/
   Tyra.toml        # project manifest
   src/
-    greeter.tyra   # entry point
+    greeter.ty   # entry point
   .gitignore
   README.md
 ```
@@ -33,7 +33,7 @@ version = "0.1.0"
 edition = "2026"
 ```
 
-The generated entry point (`src/greeter.tyra`):
+The generated entry point (`src/greeter.ty`):
 
 ```tyra
 fn main() -> Unit
@@ -69,13 +69,13 @@ tyra run
 ```
 
 Tyra looks for `Tyra.toml` in the current directory (walking up if needed),
-reads the package name, and runs `src/greeter.tyra` automatically.
+reads the package name, and runs `src/greeter.ty` automatically.
 
 You can also pass the source file explicitly — this works outside a project
 directory too:
 
 ```bash
-tyra run src/greeter.tyra
+tyra run src/greeter.ty
 ```
 
 ---
@@ -213,7 +213,7 @@ This removes the entry from `[dependencies]` in `Tyra.toml`.
 tyra build
 ```
 
-Compiles `src/greeter.tyra` and writes the binary to `greeter` in the project
+Compiles `src/greeter.ty` and writes the binary to `greeter` in the project
 root. The output name matches the package name.
 
 For a release build with optimizations:
@@ -255,7 +255,7 @@ a full build.
 
 ## Converting an existing directory
 
-If you have existing `.tyra` files and want to add a manifest:
+If you have existing `.ty` files and want to add a manifest:
 
 ```bash
 tyra mod init

@@ -1445,10 +1445,10 @@ M10 で `fs` と `json`、M11 で `http.client` / `http.server`、さらに
 #### 17.3.1 fs
 
 呼出側は `import fs` の上で `fs.read_to_string(...)` のようにモジュール
-修飾して呼ぶ。以下は `stdlib/fs.tyra` の宣言抜粋。
+修飾して呼ぶ。以下は `stdlib/fs.ty` の宣言抜粋。
 
 ```tyra
-# stdlib/fs.tyra
+# stdlib/fs.ty
 export fn read_to_string(_ path: String) -> Result<String, FsError>
 export fn write_string(_ path: String, _ contents: String) -> Result<Unit, FsError>
 export fn exists(_ path: String) -> Bool
@@ -1468,10 +1468,10 @@ export type FsError =
 #### 17.3.2 json
 
 呼出側は `import json` の上で `json.parse(...)` / `json.Value` のように
-モジュール修飾する。以下は `stdlib/json.tyra` の宣言抜粋。
+モジュール修飾する。以下は `stdlib/json.ty` の宣言抜粋。
 
 ```tyra
-# stdlib/json.tyra
+# stdlib/json.ty
 export data Value
   _handle: Int
 end
@@ -1507,11 +1507,11 @@ end
 
 呼出側は `import http.client` / `import http.server` の上で
 `http.client.get(...)` や `http.server.new()` のようにモジュール修飾
-する。以下は `stdlib/http/client.tyra` および `stdlib/http/server.tyra`
+する。以下は `stdlib/http/client.ty` および `stdlib/http/server.ty`
 の宣言抜粋。
 
 ```tyra
-# stdlib/http/client.tyra
+# stdlib/http/client.ty
 export data Response
   status: Int
   body: String
@@ -1525,7 +1525,7 @@ export fn get(_ url: String) -> Result<Response, FetchError>
 ```
 
 ```tyra
-# stdlib/http/server.tyra
+# stdlib/http/server.ty
 export data Request
   method: String
   path: String
@@ -1595,10 +1595,10 @@ end
 #### 17.3.4 string
 
 呼出側は `import string` の上で `string.trim(...)` / `string.len(...)`
-のようにモジュール修飾して呼ぶ。以下は `stdlib/string.tyra` の宣言抜粋。
+のようにモジュール修飾して呼ぶ。以下は `stdlib/string.ty` の宣言抜粋。
 
 ```tyra
-# stdlib/string.tyra
+# stdlib/string.ty
 export fn len(_ s: String) -> Int
 export fn is_empty(_ s: String) -> Bool
 export fn trim(_ s: String) -> String
@@ -1659,7 +1659,7 @@ export fn join(_ parts: List<String>, _ sep: String) -> String
 モジュール修飾して呼ぶ。v0.1 では **`List<Int>` 専用** の 6 関数を凍結する。
 
 ```tyra
-# stdlib/list.tyra
+# stdlib/list.ty
 export fn push(_ list: List<Int>, _ x: Int) -> List<Int>
 export fn sum(_ list: List<Int>) -> Int
 export fn max(_ list: List<Int>) -> Option<Int>
@@ -1822,11 +1822,11 @@ tyra test    tyra new    tyra mod    tyra bench
 
 ```bash
 tyra check                    # Tyra.toml があればエントリポイントを自動検出（プロジェクトモード）
-tyra check src/myapp.tyra    # ファイルを直接指定
+tyra check src/myapp.ty    # ファイルを直接指定
 ```
 
 - 型エラーなし → exit 0、エラーあり → exit 1
-- プロジェクトモード: カレントディレクトリから上位を walk-up して `Tyra.toml` を発見し、`src/<name>.tyra` を対象とする
+- プロジェクトモード: カレントディレクトリから上位を walk-up して `Tyra.toml` を発見し、`src/<name>.ty` を対象とする
 
 ### 18.2 tyra run
 
@@ -1834,8 +1834,8 @@ tyra check src/myapp.tyra    # ファイルを直接指定
 
 ```bash
 tyra run                           # プロジェクトモード
-tyra run src/myapp.tyra            # ファイルを直接指定
-tyra run --release src/myapp.tyra  # 最適化ビルドで実行（-O2）
+tyra run src/myapp.ty            # ファイルを直接指定
+tyra run --release src/myapp.ty  # 最適化ビルドで実行（-O2）
 ```
 
 ### 18.3 tyra build
@@ -1846,7 +1846,7 @@ tyra run --release src/myapp.tyra  # 最適化ビルドで実行（-O2）
 tyra build                         # プロジェクトモード：<project_root>/<name> に出力
 tyra build --release               # 最適化ビルド（-O2）
 tyra build -o dist/myapp           # 出力先を明示指定
-tyra build src/myapp.tyra -o out   # ファイルと出力先を直接指定
+tyra build src/myapp.ty -o out   # ファイルと出力先を直接指定
 ```
 
 - デバッグビルド（デフォルト）は `-O0`、`--release` は `-O2`
@@ -1857,7 +1857,7 @@ tyra build src/myapp.tyra -o out   # ファイルと出力先を直接指定
 Tyra ソースを標準形式にフォーマットする。
 
 ```bash
-tyra fmt src/myapp.tyra           # ファイルをインプレースでフォーマット
+tyra fmt src/myapp.ty           # ファイルをインプレースでフォーマット
 tyra fmt src/                     # ディレクトリを再帰的にフォーマット
 tyra fmt --check src/             # 変更が必要なファイルを表示して exit 1（CI 向け）
 tyra fmt --stdin                  # stdin から読んで stdout に整形済みソースを出力
@@ -1872,24 +1872,24 @@ tyra fmt --stdin                  # stdin から読んで stdout に整形済み
 テストを自動発見・実行する。
 
 ```bash
-tyra test                          # カレントディレクトリ以下の *_test.tyra を全件実行
+tyra test                          # カレントディレクトリ以下の *_test.ty を全件実行
 tyra test src/                     # ディレクトリを指定
-tyra test math_test.tyra           # 単一ファイルを指定
+tyra test math_test.ty           # 単一ファイルを指定
 tyra test --filter <pattern>       # 関数名に部分文字列マッチで絞り込み
 tyra test --list                   # 実行せず関数名を列挙
 tyra test --format tap             # TAP version 14（デフォルト）
 tyra test --format junit           # JUnit 互換 XML（CI の test summary 向け）
 ```
 
-- 対象ファイル名は `*_test.tyra`
+- 対象ファイル名は `*_test.ty`
 - テスト関数: `fn test_*() -> Result<Unit, String>`（引数なし）
 - TAP 出力は各ファイルの末尾に `# time: <s>s` を含む
 - JUnit 出力でコンパイル失敗が発生した場合、synthetic な単一テストスイートを生成する（サイレントグリーンを防ぐ）
 - 各 `<testsuite>` は `time=` 属性を持つ
-- **E0216**: `*_test.tyra` に `fn main` またはトップレベル実行文を置くことはできない
+- **E0216**: `*_test.ty` に `fn main` またはトップレベル実行文を置くことはできない
 
 ```tyra
-# example_test.tyra
+# example_test.ty
 import assert
 
 fn test_add() -> Result<Unit, String>
@@ -1903,12 +1903,12 @@ end
 新規プロジェクトをスキャフォールドする。
 
 ```bash
-tyra new myapp              # bin プロジェクト（src/myapp.tyra, Tyra.toml, .gitignore, README.md）
-tyra new mylib --lib        # lib プロジェクト（src/mylib.tyra に export fn）
+tyra new myapp              # bin プロジェクト（src/myapp.ty, Tyra.toml, .gitignore, README.md）
+tyra new mylib --lib        # lib プロジェクト（src/mylib.ty に export fn）
 tyra new myapp --vcs none   # .gitignore を生成しない（既存 repo 内サブプロジェクト向け）
 ```
 
-- `src/<name>.tyra` のファイル名はパッケージ名と一致する（§13.1 の不変条件）
+- `src/<name>.ty` のファイル名はパッケージ名と一致する（§13.1 の不変条件）
 - bin パッケージ（`fn main` またはトップレベル実行文を含む）は外部から import 不可（E0218）
 - lib パッケージは宣言のみ、`export fn` で公開する
 
@@ -1934,7 +1934,7 @@ tyra mod clean                                  # ~/.tyra/cache/ を削除
 **依存の不変条件（ADR 0009）**:
 - dep キーは対象 `Tyra.toml` の `package.name` と一致しなければならない（エイリアス禁止）
 - bin パッケージは依存として import 不可（E0218）
-- `src/<name>.tyra` がない依存は `tyra mod sync` 時にエラー
+- `src/<name>.ty` がない依存は `tyra mod sync` 時にエラー
 
 ### 18.8 tyra bench
 

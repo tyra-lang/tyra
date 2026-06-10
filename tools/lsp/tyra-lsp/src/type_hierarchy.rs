@@ -271,10 +271,10 @@ mod tests {
     use super::*;
     use tower_lsp::lsp_types::Url;
 
-    const URI: &str = "file:///tmp/test.tyra";
+    const URI: &str = "file:///tmp/test.ty";
 
     fn run_prepare(src: &str, line: u32, col: u32) -> Vec<TypeHierarchyItem> {
-        let result = tyra_driver::check_in_memory("test.tyra".to_string(), src.to_string(), None);
+        let result = tyra_driver::check_in_memory("test.ty".to_string(), src.to_string(), None);
         let offset = result
             .sources
             .offset_at_utf16(result.source_id, line, col)
@@ -284,13 +284,13 @@ mod tests {
     }
 
     fn run_supertypes(src: &str, item: TypeHierarchyItem) -> Vec<TypeHierarchyItem> {
-        let result = tyra_driver::check_in_memory("test.tyra".to_string(), src.to_string(), None);
+        let result = tyra_driver::check_in_memory("test.ty".to_string(), src.to_string(), None);
         let uri = Url::parse(URI).unwrap();
         supertypes(&result.ast, src, &result.sources, &uri, &item)
     }
 
     fn run_subtypes(src: &str, item: TypeHierarchyItem) -> Vec<TypeHierarchyItem> {
-        let result = tyra_driver::check_in_memory("test.tyra".to_string(), src.to_string(), None);
+        let result = tyra_driver::check_in_memory("test.ty".to_string(), src.to_string(), None);
         let uri = Url::parse(URI).unwrap();
         subtypes(&result.ast, src, &result.sources, &uri, &item)
     }

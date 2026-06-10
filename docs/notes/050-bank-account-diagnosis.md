@@ -13,7 +13,7 @@ end
 
 `a` gets garbage instead of `fallback`. Second `match r` on same value works correctly.
 
-Minimal repro: `/tmp/050_min8.tyra`
+Minimal repro: `/tmp/050_min8.ty`
 
 ## Root cause — chain of events
 

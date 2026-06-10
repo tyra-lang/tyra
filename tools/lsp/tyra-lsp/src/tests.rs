@@ -16,7 +16,7 @@ use crate::{DIAG_SOURCE, DocState, TyraLsp, to_lsp_diagnostic};
 fn make_source() -> (SourceMap, tyra_diagnostics::SourceId) {
     let mut sources = SourceMap::new();
     // "hello\nworld\n" → line 1 = "hello", line 2 = "world"
-    let id = sources.add("test.tyra".into(), "hello\nworld\n".into());
+    let id = sources.add("test.ty".into(), "hello\nworld\n".into());
     (sources, id)
 }
 
@@ -90,7 +90,7 @@ fn hover_type_index_lookup() {
         type_index,
         source_id,
         ..
-    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    } = tyra_driver::check_in_memory("test.ty".into(), src.into(), None);
     assert!(
         !report.has_errors(),
         "unexpected errors: {:?}",
@@ -121,7 +121,7 @@ fn goto_definition_def_index_lookup() {
         def_index,
         source_id,
         ..
-    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    } = tyra_driver::check_in_memory("test.ty".into(), src.into(), None);
     assert!(
         !report.has_errors(),
         "unexpected errors: {:?}",
@@ -169,7 +169,7 @@ async fn goto_definition_returns_location() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/def_test.tyra",
+                "uri": "file:///tmp/def_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -180,7 +180,7 @@ async fn goto_definition_returns_location() {
 
     let def_req = Request::build("textDocument/definition")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/def_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/def_test.ty" },
             "position": { "line": 1, "character": 8 }
         }))
         .id(2)
@@ -195,9 +195,9 @@ async fn goto_definition_returns_location() {
     assert!(
         body["result"]["uri"]
             .as_str()
-            .map(|s| s.contains("def_test.tyra"))
+            .map(|s| s.contains("def_test.ty"))
             .unwrap_or(false),
-        "expected def_test.tyra in uri, got: {body}"
+        "expected def_test.ty in uri, got: {body}"
     );
 }
 
@@ -213,7 +213,7 @@ fn completion_returns_prelude_and_locals() {
         source_id,
         ast,
         ..
-    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    } = tyra_driver::check_in_memory("test.ty".into(), src.into(), None);
     assert!(
         !report.has_errors(),
         "unexpected errors: {:?}",
@@ -253,7 +253,7 @@ fn completion_excludes_intrinsics() {
         source_id,
         ast,
         ..
-    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    } = tyra_driver::check_in_memory("test.ty".into(), src.into(), None);
     let state = DocState {
         text: src.to_string(),
         sources,
@@ -295,7 +295,7 @@ async fn completion_returns_array_with_println() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/completion_test.tyra",
+                "uri": "file:///tmp/completion_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -306,7 +306,7 @@ async fn completion_returns_array_with_println() {
 
     let comp_req = Request::build("textDocument/completion")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/completion_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/completion_test.ty" },
             "position": { "line": 0, "character": 0 }
         }))
         .id(2)
@@ -373,7 +373,7 @@ fn completion_after_module_dot_returns_module_members() {
         source_id,
         ast,
         ..
-    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    } = tyra_driver::check_in_memory("test.ty".into(), src.into(), None);
     let symbols: SymbolList = vec![
         ("mymod__foo".into(), CompletionKind::Function),
         ("mymod__bar".into(), CompletionKind::Function),
@@ -422,7 +422,7 @@ fn completion_after_dot_no_match_returns_empty() {
         source_id,
         ast,
         ..
-    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    } = tyra_driver::check_in_memory("test.ty".into(), src.into(), None);
     let state = DocState {
         text: src.to_string(),
         sources,
@@ -471,7 +471,7 @@ fn references_finds_uses_from_def_site() {
         source_id,
         ast,
         ..
-    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    } = tyra_driver::check_in_memory("test.ty".into(), src.into(), None);
     assert!(
         !report.has_errors(),
         "unexpected errors: {:?}",
@@ -509,7 +509,7 @@ fn references_finds_uses_from_use_site() {
         source_id,
         ast,
         ..
-    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    } = tyra_driver::check_in_memory("test.ty".into(), src.into(), None);
     assert!(
         !report.has_errors(),
         "unexpected errors: {:?}",
@@ -547,7 +547,7 @@ fn references_includes_declaration_when_requested() {
         source_id,
         ast,
         ..
-    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    } = tyra_driver::check_in_memory("test.ty".into(), src.into(), None);
     assert!(
         !report.has_errors(),
         "unexpected errors: {:?}",
@@ -602,7 +602,7 @@ async fn references_returns_location_array() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/refs_test.tyra",
+                "uri": "file:///tmp/refs_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -613,7 +613,7 @@ async fn references_returns_location_array() {
 
     let refs_req = Request::build("textDocument/references")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/refs_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/refs_test.ty" },
             "position": { "line": 1, "character": 8 },
             "context": { "includeDeclaration": false }
         }))
@@ -657,7 +657,7 @@ async fn references_include_declaration_returns_def_and_use() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/refs_incl_test.tyra",
+                "uri": "file:///tmp/refs_incl_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -669,7 +669,7 @@ async fn references_include_declaration_returns_def_and_use() {
     // Cursor on use-site; includeDeclaration: true → 1 use + 1 decl = 2 locations.
     let refs_req = Request::build("textDocument/references")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/refs_incl_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/refs_incl_test.ty" },
             "position": { "line": 1, "character": 8 },
             "context": { "includeDeclaration": true }
         }))
@@ -687,9 +687,9 @@ async fn references_include_declaration_returns_def_and_use() {
     assert!(
         locations.iter().all(|loc| loc["uri"]
             .as_str()
-            .map(|s| s.contains("refs_incl_test.tyra"))
+            .map(|s| s.contains("refs_incl_test.ty"))
             .unwrap_or(false)),
-        "all locations should reference refs_incl_test.tyra, got: {body}"
+        "all locations should reference refs_incl_test.ty, got: {body}"
     );
 }
 
@@ -709,7 +709,7 @@ fn rename_renames_all_uses_and_declaration() {
         source_id,
         ast,
         ..
-    } = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+    } = tyra_driver::check_in_memory("test.ty".into(), src.into(), None);
     assert!(
         !report.has_errors(),
         "unexpected errors: {:?}",
@@ -771,7 +771,7 @@ async fn rename_returns_workspace_edit() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/rename_test.tyra",
+                "uri": "file:///tmp/rename_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -783,7 +783,7 @@ async fn rename_returns_workspace_edit() {
     // Rename `x` at line 1 col 8 (use-site) to `renamed`.
     let rename_req = Request::build("textDocument/rename")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/rename_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/rename_test.ty" },
             "position": { "line": 1, "character": 8 },
             "newName": "renamed"
         }))
@@ -800,7 +800,7 @@ async fn rename_returns_workspace_edit() {
 
     let changes = &body["result"]["changes"];
     assert!(changes.is_object(), "expected changes object, got: {body}");
-    let file_edits = changes["file:///tmp/rename_test.tyra"]
+    let file_edits = changes["file:///tmp/rename_test.ty"]
         .as_array()
         .expect("expected edits array for the file");
     assert!(
@@ -839,7 +839,7 @@ async fn rename_from_def_site_returns_workspace_edit() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/rename_def_test.tyra",
+                "uri": "file:///tmp/rename_def_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -851,7 +851,7 @@ async fn rename_from_def_site_returns_workspace_edit() {
     // Cursor at line 0 col 4 = 'x' in "let x: Int = 1" (def-site).
     let rename_req = Request::build("textDocument/rename")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/rename_def_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/rename_def_test.ty" },
             "position": { "line": 0, "character": 4 },
             "newName": "renamed"
         }))
@@ -866,7 +866,7 @@ async fn rename_from_def_site_returns_workspace_edit() {
         .unwrap();
     let body = serde_json::to_value(&resp).unwrap();
 
-    let edits = body["result"]["changes"]["file:///tmp/rename_def_test.tyra"]
+    let edits = body["result"]["changes"]["file:///tmp/rename_def_test.ty"]
         .as_array()
         .expect("expected edits array");
     // 1 declaration edit + 1 use edit = 2 total.
@@ -910,7 +910,7 @@ async fn rename_invalid_identifier_returns_error() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/rename_err_test.tyra",
+                "uri": "file:///tmp/rename_err_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -921,7 +921,7 @@ async fn rename_invalid_identifier_returns_error() {
 
     let rename_req = Request::build("textDocument/rename")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/rename_err_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/rename_err_test.ty" },
             "position": { "line": 0, "character": 4 },
             "newName": "let"
         }))
@@ -967,7 +967,7 @@ async fn document_symbol_returns_top_level_items() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/syms_test.tyra",
+                "uri": "file:///tmp/syms_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -977,7 +977,7 @@ async fn document_symbol_returns_top_level_items() {
     let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
 
     let sym_req = Request::build("textDocument/documentSymbol")
-        .params(json!({ "textDocument": { "uri": "file:///tmp/syms_test.tyra" } }))
+        .params(json!({ "textDocument": { "uri": "file:///tmp/syms_test.ty" } }))
         .id(2)
         .finish();
     let resp = service.ready().await.unwrap().call(sym_req).await.unwrap();
@@ -1019,7 +1019,7 @@ async fn document_symbol_returns_none_for_unopened_uri() {
     let _ = service.ready().await.unwrap().call(init).await.unwrap();
 
     let sym_req = Request::build("textDocument/documentSymbol")
-        .params(json!({ "textDocument": { "uri": "file:///tmp/not_opened.tyra" } }))
+        .params(json!({ "textDocument": { "uri": "file:///tmp/not_opened.ty" } }))
         .id(2)
         .finish();
     let resp = service.ready().await.unwrap().call(sym_req).await.unwrap();
@@ -1056,7 +1056,7 @@ async fn semantic_tokens_full_returns_tokens() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/tokens_test.tyra",
+                "uri": "file:///tmp/tokens_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -1066,7 +1066,7 @@ async fn semantic_tokens_full_returns_tokens() {
     let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
 
     let tok_req = Request::build("textDocument/semanticTokens/full")
-        .params(json!({ "textDocument": { "uri": "file:///tmp/tokens_test.tyra" } }))
+        .params(json!({ "textDocument": { "uri": "file:///tmp/tokens_test.ty" } }))
         .id(2)
         .finish();
     let resp = service.ready().await.unwrap().call(tok_req).await.unwrap();
@@ -1107,7 +1107,7 @@ async fn semantic_tokens_full_returns_none_for_unopened_uri() {
     let _ = service.ready().await.unwrap().call(init).await.unwrap();
 
     let tok_req = Request::build("textDocument/semanticTokens/full")
-        .params(json!({ "textDocument": { "uri": "file:///tmp/not_opened_tokens.tyra" } }))
+        .params(json!({ "textDocument": { "uri": "file:///tmp/not_opened_tokens.ty" } }))
         .id(2)
         .finish();
     let resp = service.ready().await.unwrap().call(tok_req).await.unwrap();
@@ -1146,7 +1146,7 @@ async fn signature_help_returns_user_fn_signature() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/sig_test.tyra",
+                "uri": "file:///tmp/sig_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -1158,7 +1158,7 @@ async fn signature_help_returns_user_fn_signature() {
     // Line 4: "  add(1, )" — character 9 is right before `)`, after ", "
     let sig_req = Request::build("textDocument/signatureHelp")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/sig_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/sig_test.ty" },
             "position": { "line": 4, "character": 9 }
         }))
         .id(2)
@@ -1207,7 +1207,7 @@ async fn signature_help_returns_none_outside_call() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/sig_none_test.tyra",
+                "uri": "file:///tmp/sig_none_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -1219,7 +1219,7 @@ async fn signature_help_returns_none_outside_call() {
     // Cursor at line 0, character 0 — not inside any call
     let sig_req = Request::build("textDocument/signatureHelp")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/sig_none_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/sig_none_test.ty" },
             "position": { "line": 0, "character": 0 }
         }))
         .id(2)
@@ -1259,7 +1259,7 @@ async fn did_open_publishes_e0110_diagnostic() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/smoke.tyra",
+                "uri": "file:///tmp/smoke.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -1307,7 +1307,7 @@ async fn code_action_returns_typo_quickfix() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/code_action_test.tyra",
+                "uri": "file:///tmp/code_action_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -1330,7 +1330,7 @@ async fn code_action_returns_typo_quickfix() {
 
     let ca_req = Request::build("textDocument/codeAction")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/code_action_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/code_action_test.ty" },
             "range": {
                 "start": { "line": 1, "character": 2 },
                 "end":   { "line": 1, "character": 7 }
@@ -1381,7 +1381,7 @@ async fn code_action_returns_none_for_unopened_uri() {
 
     let ca_req = Request::build("textDocument/codeAction")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/not_opened.tyra" },
+            "textDocument": { "uri": "file:///tmp/not_opened.ty" },
             "range": { "start": { "line": 0, "character": 0 }, "end": { "line": 0, "character": 0 } },
             "context": { "diagnostics": [], "only": null, "triggerKind": 1 }
         }))
@@ -1421,7 +1421,7 @@ async fn inlay_hint_returns_type_for_let() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/inlay_test.tyra",
+                "uri": "file:///tmp/inlay_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -1432,7 +1432,7 @@ async fn inlay_hint_returns_type_for_let() {
 
     let hint_req = Request::build("textDocument/inlayHint")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/inlay_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/inlay_test.ty" },
             "range": {
                 "start": { "line": 0, "character": 0 },
                 "end":   { "line": 99, "character": 0 }
@@ -1478,7 +1478,7 @@ async fn inlay_hint_returns_none_for_unopened_uri() {
 
     let hint_req = Request::build("textDocument/inlayHint")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/not_opened_inlay.tyra" },
+            "textDocument": { "uri": "file:///tmp/not_opened_inlay.ty" },
             "range": {
                 "start": { "line": 0, "character": 0 },
                 "end":   { "line": 99, "character": 0 }
@@ -1518,7 +1518,7 @@ async fn folding_range_returns_ranges_for_fn() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/fold_test.tyra",
+                "uri": "file:///tmp/fold_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -1529,7 +1529,7 @@ async fn folding_range_returns_ranges_for_fn() {
 
     let fold_req = Request::build("textDocument/foldingRange")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/fold_test.tyra" }
+            "textDocument": { "uri": "file:///tmp/fold_test.ty" }
         }))
         .id(2)
         .finish();
@@ -1570,7 +1570,7 @@ async fn folding_range_returns_none_for_unopened_uri() {
 
     let fold_req = Request::build("textDocument/foldingRange")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/not_opened_fold.tyra" }
+            "textDocument": { "uri": "file:///tmp/not_opened_fold.ty" }
         }))
         .id(2)
         .finish();
@@ -1607,7 +1607,7 @@ async fn document_highlight_returns_uses_at_def_site() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/highlight_test.tyra",
+                "uri": "file:///tmp/highlight_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -1619,7 +1619,7 @@ async fn document_highlight_returns_uses_at_def_site() {
     // Cursor on 'foo' definition (line 0, col 3).
     let hl_req = Request::build("textDocument/documentHighlight")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/highlight_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/highlight_test.ty" },
             "position": { "line": 0, "character": 3 }
         }))
         .id(2)
@@ -1662,7 +1662,7 @@ async fn document_highlight_returns_uses_at_use_site() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/highlight_use_test.tyra",
+                "uri": "file:///tmp/highlight_use_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -1674,7 +1674,7 @@ async fn document_highlight_returns_uses_at_use_site() {
     // Cursor on first call site 'foo' (line 3, col 0).
     let hl_req = Request::build("textDocument/documentHighlight")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/highlight_use_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/highlight_use_test.ty" },
             "position": { "line": 3, "character": 0 }
         }))
         .id(2)
@@ -1711,7 +1711,7 @@ async fn document_highlight_returns_none_for_unopened_uri() {
 
     let hl_req = Request::build("textDocument/documentHighlight")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/not_opened_highlight.tyra" },
+            "textDocument": { "uri": "file:///tmp/not_opened_highlight.ty" },
             "position": { "line": 0, "character": 0 }
         }))
         .id(2)
@@ -1749,7 +1749,7 @@ async fn selection_range_handler_returns_chain_for_known_position() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/selrange_test.tyra",
+                "uri": "file:///tmp/selrange_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -1760,7 +1760,7 @@ async fn selection_range_handler_returns_chain_for_known_position() {
 
     let req = Request::build("textDocument/selectionRange")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/selrange_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/selrange_test.ty" },
             "positions": [{ "line": 1, "character": 13 }]
         }))
         .id(2)
@@ -1802,7 +1802,7 @@ async fn selection_range_handler_returns_none_for_unopened_uri() {
 
     let req = Request::build("textDocument/selectionRange")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/not_opened_selrange.tyra" },
+            "textDocument": { "uri": "file:///tmp/not_opened_selrange.ty" },
             "positions": [{ "line": 0, "character": 0 }]
         }))
         .id(2)
@@ -1840,7 +1840,7 @@ async fn prepare_call_hierarchy_handler_returns_item() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/callhier_test.tyra",
+                "uri": "file:///tmp/callhier_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -1852,7 +1852,7 @@ async fn prepare_call_hierarchy_handler_returns_item() {
     // Cursor on 'foo' definition (line 0, col 3).
     let req = Request::build("textDocument/prepareCallHierarchy")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/callhier_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/callhier_test.ty" },
             "position": { "line": 0, "character": 3 }
         }))
         .id(2)
@@ -1896,7 +1896,7 @@ async fn incoming_calls_handler_returns_caller() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/callhier_incoming.tyra",
+                "uri": "file:///tmp/callhier_incoming.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -1908,7 +1908,7 @@ async fn incoming_calls_handler_returns_caller() {
     // First prepare to get the CallHierarchyItem for 'foo'.
     let prepare_req = Request::build("textDocument/prepareCallHierarchy")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/callhier_incoming.tyra" },
+            "textDocument": { "uri": "file:///tmp/callhier_incoming.ty" },
             "position": { "line": 0, "character": 3 }
         }))
         .id(2)
@@ -1968,7 +1968,7 @@ async fn linked_editing_range_returns_def_and_uses() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/linked_edit.tyra",
+                "uri": "file:///tmp/linked_edit.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -1980,7 +1980,7 @@ async fn linked_editing_range_returns_def_and_uses() {
     // Cursor on 'x' at line 2, col 10 (first use).
     let req = Request::build("textDocument/linkedEditingRange")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/linked_edit.tyra" },
+            "textDocument": { "uri": "file:///tmp/linked_edit.ty" },
             "position": { "line": 2, "character": 10 }
         }))
         .id(2)
@@ -2029,7 +2029,7 @@ async fn linked_editing_range_returns_none_outside_identifier() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/linked_edit_none.tyra",
+                "uri": "file:///tmp/linked_edit_none.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -2041,7 +2041,7 @@ async fn linked_editing_range_returns_none_outside_identifier() {
     // Cursor on whitespace (col 0 of line 1, before 'let').
     let req = Request::build("textDocument/linkedEditingRange")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/linked_edit_none.tyra" },
+            "textDocument": { "uri": "file:///tmp/linked_edit_none.ty" },
             "position": { "line": 1, "character": 0 }
         }))
         .id(2)
@@ -2078,7 +2078,7 @@ async fn goto_type_definition_handler_returns_location() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/typedef.tyra",
+                "uri": "file:///tmp/typedef.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -2089,7 +2089,7 @@ async fn goto_type_definition_handler_returns_location() {
 
     let req = Request::build("textDocument/typeDefinition")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/typedef.tyra" },
+            "textDocument": { "uri": "file:///tmp/typedef.ty" },
             "position": { "line": 2, "character": 5 }
         }))
         .id(2)
@@ -2131,7 +2131,7 @@ async fn goto_implementation_handler_returns_locations() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/impl_test.tyra",
+                "uri": "file:///tmp/impl_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -2142,7 +2142,7 @@ async fn goto_implementation_handler_returns_locations() {
 
     let req = Request::build("textDocument/implementation")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/impl_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/impl_test.ty" },
             "position": { "line": 0, "character": 6 }
         }))
         .id(2)
@@ -2186,7 +2186,7 @@ async fn goto_declaration_handler_returns_location() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/decl_test.tyra",
+                "uri": "file:///tmp/decl_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -2197,7 +2197,7 @@ async fn goto_declaration_handler_returns_location() {
 
     let req = Request::build("textDocument/declaration")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/decl_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/decl_test.ty" },
             "position": { "line": 4, "character": 5 }
         }))
         .id(2)
@@ -2239,7 +2239,7 @@ async fn workspace_symbol_handler_returns_matches() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/ws_sym.tyra",
+                "uri": "file:///tmp/ws_sym.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -2291,7 +2291,7 @@ async fn code_lens_handler_returns_lenses() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/lens_test.tyra",
+                "uri": "file:///tmp/lens_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -2301,7 +2301,7 @@ async fn code_lens_handler_returns_lenses() {
     let _ = service.ready().await.unwrap().call(did_open).await.unwrap();
 
     let req = Request::build("textDocument/codeLens")
-        .params(json!({ "textDocument": { "uri": "file:///tmp/lens_test.tyra" } }))
+        .params(json!({ "textDocument": { "uri": "file:///tmp/lens_test.ty" } }))
         .id(2)
         .finish();
     let resp = service.ready().await.unwrap().call(req).await.unwrap();
@@ -2340,7 +2340,7 @@ async fn diagnostic_handler_returns_full_report_with_items() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/pull_diag_test.tyra",
+                "uri": "file:///tmp/pull_diag_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -2351,7 +2351,7 @@ async fn diagnostic_handler_returns_full_report_with_items() {
 
     let req = Request::build("textDocument/diagnostic")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/pull_diag_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/pull_diag_test.ty" },
             "identifier": null,
             "previousResultId": null
         }))
@@ -2395,7 +2395,7 @@ async fn diagnostic_handler_returns_empty_report_for_unopened_uri() {
 
     let req = Request::build("textDocument/diagnostic")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/never_opened.tyra" },
+            "textDocument": { "uri": "file:///tmp/never_opened.ty" },
             "identifier": null,
             "previousResultId": null
         }))
@@ -2442,7 +2442,7 @@ async fn prepare_rename_returns_range_for_let_binding() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/prepare_rename_test.tyra",
+                "uri": "file:///tmp/prepare_rename_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -2454,7 +2454,7 @@ async fn prepare_rename_returns_range_for_let_binding() {
     // Cursor on 'x' in 'let x' (line 0, col 4)
     let req = Request::build("textDocument/prepareRename")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/prepare_rename_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/prepare_rename_test.ty" },
             "position": { "line": 0, "character": 4 }
         }))
         .id(2)
@@ -2500,7 +2500,7 @@ async fn prepare_rename_returns_none_outside_identifier() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/prepare_rename_test2.tyra",
+                "uri": "file:///tmp/prepare_rename_test2.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -2512,7 +2512,7 @@ async fn prepare_rename_returns_none_outside_identifier() {
     // Cursor on '=' (col 11 in 'let x: Int = 1') — not an identifier character
     let req = Request::build("textDocument/prepareRename")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/prepare_rename_test2.tyra" },
+            "textDocument": { "uri": "file:///tmp/prepare_rename_test2.ty" },
             "position": { "line": 0, "character": 11 }
         }))
         .id(2)
@@ -2548,7 +2548,7 @@ async fn prepare_rename_rejects_keyword() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/prepare_rename_test3.tyra",
+                "uri": "file:///tmp/prepare_rename_test3.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -2560,7 +2560,7 @@ async fn prepare_rename_rejects_keyword() {
     // Cursor on 'l' in 'let' (col 0) — keyword, not renameable
     let req = Request::build("textDocument/prepareRename")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/prepare_rename_test3.tyra" },
+            "textDocument": { "uri": "file:///tmp/prepare_rename_test3.ty" },
             "position": { "line": 0, "character": 0 }
         }))
         .id(2)
@@ -2583,9 +2583,9 @@ async fn document_link_handler_returns_link_for_local_import() {
     let dir = std::env::temp_dir().join("tyra_lsp_dl_smoke");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("math.tyra"), "").unwrap();
+    std::fs::write(dir.join("math.ty"), "").unwrap();
 
-    let main_tyra = dir.join("main.tyra");
+    let main_tyra = dir.join("main.ty");
     let file_uri = tower_lsp::lsp_types::Url::from_file_path(&main_tyra).unwrap();
     let uri_str = file_uri.to_string();
 
@@ -2630,8 +2630,8 @@ async fn document_link_handler_returns_link_for_local_import() {
     );
     let target = arr[0]["target"].as_str().expect("expected target string");
     assert!(
-        target.ends_with("math.tyra"),
-        "target should point to math.tyra: {target}"
+        target.ends_with("math.ty"),
+        "target should point to math.ty: {target}"
     );
 
     let _ = std::fs::remove_dir_all(&dir);
@@ -2660,7 +2660,7 @@ async fn prepare_type_hierarchy_handler_returns_item() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/type_hier_test.tyra",
+                "uri": "file:///tmp/type_hier_test.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": src
@@ -2672,7 +2672,7 @@ async fn prepare_type_hierarchy_handler_returns_item() {
     // Cursor on 'Foo' in 'trait Foo' (line 0, col 6)
     let req = Request::build("textDocument/prepareTypeHierarchy")
         .params(json!({
-            "textDocument": { "uri": "file:///tmp/type_hier_test.tyra" },
+            "textDocument": { "uri": "file:///tmp/type_hier_test.ty" },
             "position": { "line": 0, "character": 6 }
         }))
         .id(2)
@@ -2714,7 +2714,7 @@ async fn workspace_diagnostic_returns_reports_for_all_open_docs() {
     let did_open = Request::build("textDocument/didOpen")
         .params(json!({
             "textDocument": {
-                "uri": "file:///tmp/ws_diag_err.tyra",
+                "uri": "file:///tmp/ws_diag_err.ty",
                 "languageId": "tyra",
                 "version": 1,
                 "text": "fn bad() -> Int\n  \"not an int\"\nend\n"
@@ -2816,7 +2816,7 @@ async fn did_change_watched_files_handler_does_not_crash() {
     let notif = Request::build("workspace/didChangeWatchedFiles")
         .params(json!({
             "changes": [
-                { "uri": "file:///tmp/other.tyra", "type": 1 }
+                { "uri": "file:///tmp/other.ty", "type": 1 }
             ]
         }))
         .finish();

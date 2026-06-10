@@ -1,7 +1,7 @@
 //! JSON stdlib backing (§22, Tier 2). M10 phase 2.
 //!
 //! Exposes a hand-rolled JSON parser + node accessors as C ABI intrinsics
-//! for `stdlib/json.tyra`. The parsed document root is wrapped in `Box` and
+//! for `stdlib/json.ty`. The parsed document root is wrapped in `Box` and
 //! leaked via `Box::leak`; its raw pointer is handed to Tyra as an `i64`
 //! handle. Child nodes live inside the root's allocation as owned `Box`es,
 //! so a single root leak keeps the entire tree alive. Handle `0` is

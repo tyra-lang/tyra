@@ -183,7 +183,7 @@ bash bench/static-corpus/check.sh ./target/debug/tyra
 
 ```bash
 export TYRA_STDLIB=$PWD/stdlib
-./target/debug/tyra run examples/01-hello.tyra
+./target/debug/tyra run examples/01-hello.ty
 ```
 
 ---

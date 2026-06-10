@@ -157,7 +157,7 @@ mod tests {
     #[test]
     fn render_single_error() {
         let mut sources = SourceMap::new();
-        let id = sources.add("test.tyra".into(), "let x = 10\nlet y =\n".into());
+        let id = sources.add("test.ty".into(), "let x = 10\nlet y =\n".into());
 
         let mut report = Report::new();
         report.add(
@@ -171,7 +171,7 @@ mod tests {
 
         let output = report.render(&sources);
         assert!(output.contains("error[E0001]: expected expression"));
-        assert!(output.contains("test.tyra:2:"));
+        assert!(output.contains("test.ty:2:"));
         assert!(output.contains("1 error emitted"));
     }
 

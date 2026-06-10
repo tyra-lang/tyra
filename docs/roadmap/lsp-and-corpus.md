@@ -61,7 +61,7 @@ never silently break these programs.
 
 1. ✅ **CI hook** — `.github/workflows/static-corpus.yml` added (2026-05-05).
    Triggers on push and PR to main; builds `tyra-cli`, then runs `check.sh`.
-2. ✅ **Extend with break/continue** — `11-break-loop.tyra` added (2026-05-05).
+2. ✅ **Extend with break/continue** — `11-break-loop.ty` added (2026-05-05).
    Exercises `break` inside `while` and `for`; `tyra check` subcommand also added.
 3. ✅ **Negative corpus** — `bad/` subdirectory added (2026-05-05), expanded to
    9 programs (E0104 / E0200 / E0206 / E0214 / E0301 / E0302 / E0305 / E0309 /
@@ -115,7 +115,7 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
    `textDocument/didOpen` + `textDocument/didChange` handlers; publish
    `textDocument/publishDiagnostics` with compiler errors.
 2. **VS Code extension scaffold** — create `tools/lsp/vscode-tyra/` with a
-   minimal `package.json` that spawns `tyra-lsp` and registers `.tyra` file
+   minimal `package.json` that spawns `tyra-lsp` and registers `.ty` file
    associations.
 3. **Document store** — a `HashMap<Url, String>` that caches the latest source
    text so the server can re-parse on change without hitting disk.
@@ -209,9 +209,9 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
 - **Document link scope**: `import a.b.c` の path token のみ。文字列リテラルや
   コメント内 URL は対象外。`resolve_provider = false` で eager に `target` を
   埋める。`main_dir` はドキュメント URI の `parent()` から取得し、解決順は
-  `<main_dir>/a/b/c.tyra` → `<TYRA_STDLIB or 上位の stdlib/>/a/b/c.tyra`。
+  `<main_dir>/a/b/c.ty` → `<TYRA_STDLIB or 上位の stdlib/>/a/b/c.ty`。
   built-in module (`core.sys` / `core.tasks`) と解決失敗 import はリンク化しない。
-- **Workspace file delete scope**: 削除対象 `.tyra` ファイルを import して
+- **Workspace file delete scope**: 削除対象 `.ty` ファイルを import して
   いる open ドキュメントの `import` 文を行単位で削除する。`willRenameFiles`
   同様、モジュールパスはインポータの parent dir 相対で解決し、合成 import は
   span text 不一致で除外。フォルダ単位の削除および未オープンファイルのスキャンは
@@ -219,7 +219,7 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
 - **Workspace file rename scope**: 開いているドキュメントの `import` 文のみ
   書き換える (ディスク上の未オープンファイルはスキャンしない)。Workspace
   root は `initialize` 時の `workspace_folders[0]` または `root_uri` から取得し、
-  単一ルートを前提とする。フォルダ単位のリネームは対象外 (`*.tyra` ファイル
+  単一ルートを前提とする。フォルダ単位のリネームは対象外 (`*.ty` ファイル
   単体のみ反応)。Auto-import で合成された `import` は span text 不一致で除外。
 - **Type hierarchy scope**: 単一ファイルのみ。trait → impl 検索は `state.ast`
   のトップレベル `Item::ImplDef` を走査するため、別ファイルの impl はヒット
@@ -236,12 +236,12 @@ and re-runs the pipeline on every `textDocument/didChange` notification.
   差分最適化と `Unchanged` レポートは未対応で、常に `Full` を返す。
   `related_documents` (cross-file diagnostics) も未対応。既存の push-based
   `publishDiagnostics` と併存し、`analyze` 時にキャッシュした結果を返す。
-- **Watched files scope**: クライアントが監視する `.tyra` ファイルの
+- **Watched files scope**: クライアントが監視する `.ty` ファイルの
   Create / Change / Delete を受信 (`workspace/didChangeWatchedFiles`)。
   受信時は `params.changes` の内訳を参照せず、open 中の全ドキュメントを
   再解析する (cross-file な影響を簡潔に網羅するため)。動的登録
   (`client/registerCapability`) で表明するため、静的 capability のみの
-  クライアントでは無効。glob は `**/*.tyra` 単一。フォルダ単位 watcher、
+  クライアントでは無効。glob は `**/*.ty` 単一。フォルダ単位 watcher、
   `RelativePattern`、`WatchKind` 個別指定は未対応。
 - **Type definition scope**: ユーザ定義 `value` / `data` / `type` のみ対応。
   プリミティブ (`Int`, `String` 等) と prelude generics

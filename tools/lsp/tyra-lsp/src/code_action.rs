@@ -188,7 +188,7 @@ mod tests {
             vec![("myvar".to_string(), tyra_driver::CompletionKind::Function)];
         let diag = make_e0200("undefined name `pirnt`");
         let actions = build_actions(
-            &Url::parse("file:///test.tyra").unwrap(),
+            &Url::parse("file:///test.ty").unwrap(),
             &[diag],
             &symbols,
             None,
@@ -213,7 +213,7 @@ mod tests {
             vec![("xyzzy".to_string(), tyra_driver::CompletionKind::Function)];
         let diag = make_e0200("undefined name `zzzzqqqq`");
         let actions = build_actions(
-            &Url::parse("file:///test.tyra").unwrap(),
+            &Url::parse("file:///test.ty").unwrap(),
             &[diag],
             &symbols,
             None,
@@ -226,7 +226,7 @@ mod tests {
         let symbols: SymbolList = vec![];
         let diag = make_diag_with_code("E0309");
         let actions = build_actions(
-            &Url::parse("file:///test.tyra").unwrap(),
+            &Url::parse("file:///test.ty").unwrap(),
             &[diag],
             &symbols,
             None,
@@ -240,7 +240,7 @@ mod tests {
         let symbols: SymbolList = vec![];
         let diag = make_e0200("cannot import `math`: module not found");
         let actions = build_actions(
-            &Url::parse("file:///test.tyra").unwrap(),
+            &Url::parse("file:///test.ty").unwrap(),
             &[diag],
             &symbols,
             None,
@@ -258,7 +258,7 @@ mod tests {
         // Client only wants source actions — quick fixes should be excluded.
         let only = vec![CodeActionKind::SOURCE];
         let actions = build_actions(
-            &Url::parse("file:///test.tyra").unwrap(),
+            &Url::parse("file:///test.ty").unwrap(),
             &[diag],
             &symbols,
             Some(&only),

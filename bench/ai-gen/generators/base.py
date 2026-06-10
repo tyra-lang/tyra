@@ -38,14 +38,14 @@ def _load_tyra_context() -> str:
     spec = (_REPO_ROOT / "docs" / "spec" / "en" / "language-spec.md").read_text()
     examples_dir = _REPO_ROOT / "examples"
     example_blocks: list[str] = []
-    for path in sorted(examples_dir.glob("*.tyra")):
+    for path in sorted(examples_dir.glob("*.ty")):
         example_blocks.append(
             f"### {path.name}\n\n```tyra\n{path.read_text()}\n```"
         )
     stdlib_dir = _REPO_ROOT / "stdlib"
     stdlib_blocks: list[str] = []
-    # Recurse so http/client.tyra and http/server.tyra are picked up too.
-    for path in sorted(stdlib_dir.rglob("*.tyra")):
+    # Recurse so http/client.ty and http/server.ty are picked up too.
+    for path in sorted(stdlib_dir.rglob("*.ty")):
         rel = path.relative_to(stdlib_dir)
         stdlib_blocks.append(
             f"### stdlib/{rel}\n\n```tyra\n{path.read_text()}\n```"

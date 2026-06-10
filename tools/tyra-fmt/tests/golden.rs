@@ -1,6 +1,6 @@
 // Golden idempotency tests for tyra-fmt.
 //
-// For each .tyra file in bench/static-corpus (excluding bad/ error cases),
+// For each .ty file in bench/static-corpus (excluding bad/ error cases),
 // verify that:
 //   1. fmt_source succeeds (no parse errors)
 //   2. Formatting is idempotent: fmt(fmt(src)) == fmt(src)
@@ -36,11 +36,11 @@ fn golden_static_corpus() {
     for entry in std::fs::read_dir(dir).expect("cannot read corpus dir") {
         let entry = entry.unwrap();
         let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("tyra") {
+        if path.extension().and_then(|e| e.to_str()) != Some("ty") {
             continue;
         }
         assert_idempotent(&path);
         count += 1;
     }
-    assert!(count > 0, "no .tyra files found in static-corpus");
+    assert!(count > 0, "no .ty files found in static-corpus");
 }

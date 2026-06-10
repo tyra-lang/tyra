@@ -106,7 +106,7 @@ Set `"program"` to the path of the compiled binary (see the next section).
 Build without `--release` to include DWARF debug information:
 
 ```bash
-tyra build src/main.tyra -o my_program
+tyra build src/main.ty -o my_program
 ```
 
 Or, inside a project directory:
@@ -125,7 +125,7 @@ tyra build --release   # DWARF stripped — not suitable for debugging
 
 ## Setting breakpoints and stepping
 
-1. Open your `.tyra` source file in VS Code.
+1. Open your `.ty` source file in VS Code.
 2. Click in the gutter to set a breakpoint (a red dot appears).
 3. Press **F5** (or run **Debug > Start Debugging**) to launch the session.
 

@@ -418,7 +418,7 @@ mod tests {
     /// must match Tyra's codegen-emitted struct order for `data Request`
     /// / `data Response`. This test validates only the Rust offsets; a
     /// companion test in `tyra-mir` (`http_server_tyra_struct_field_order`)
-    /// lower-parses `stdlib/http/server.tyra` and asserts the Tyra
+    /// lower-parses `stdlib/http/server.ty` and asserts the Tyra
     /// declaration order, so drift on either side trips a failing test.
     #[test]
     fn ffi_layout_matches_tyra_data_order() {

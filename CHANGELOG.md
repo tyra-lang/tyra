@@ -44,6 +44,12 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - No new runtime functions — tuples desugar to synthetic `struct` defs in MIR (`StructInit`/`FieldGet`).
 - spec §11.5 (ja + en); corpus `bench/static-corpus/31-tuples.tyra`.
 
+**Source file extension renamed `.tyra` → `.ty` (ADR-0025)**
+- All Tyra source files now use the `.ty` extension (v0.10.0 breaking change; pre-1.0 policy).
+- `import` statements are unaffected — the resolver suffix is internal.
+- Language ID `"tyra"`, TextMate scopes, and LLVM symbols are unchanged.
+- All 104 corpus/stdlib/example/smoke files renamed; compiler, LSP, formatter, CI, and scripts updated atomically.
+
 **`SortedMap<K,V>` / `SortedSet<T>` — key-sorted persistent collections (ADR-0024)**
 - Two new persistent collection types that iterate in ascending key/element order.
 - Key type must satisfy `Ord`; Float keys are rejected at compile time with **E0315** (NaN is not comparable, ADR-0002).

@@ -289,7 +289,7 @@ mod tests {
         let src = "fn add(x: Int, y: Int) -> Int\n  x + y\nend\n";
         let mut sources = SourceMap::new();
         let mut report = tyra_diagnostics::Report::new();
-        let id = sources.add("t.tyra".into(), src.into());
+        let id = sources.add("t.ty".into(), src.into());
         let ast = tyra_parser::parse(id, &sources, &mut report);
         let f = ast
             .items

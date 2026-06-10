@@ -140,7 +140,7 @@ pub const PRELUDE_FUNCTIONS: &[&str] = &[
     "panic",
     "parse",
     // M10 phase 1: intrinsic stdlib backing. Not intended for user code,
-    // but exposed at the prelude so `stdlib/fs.tyra` can call them without
+    // but exposed at the prelude so `stdlib/fs.ty` can call them without
     // needing an `import` (which would create a circular dependency).
     "__fs_read_raw",
     "__fs_errno",
@@ -293,7 +293,7 @@ mod tests {
 
     fn test_span() -> Span {
         let mut sources = SourceMap::new();
-        let id = sources.add("test.tyra".into(), "".into());
+        let id = sources.add("test.ty".into(), "".into());
         Span::new(id, 0, 0)
     }
 

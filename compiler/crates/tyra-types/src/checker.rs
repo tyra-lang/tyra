@@ -434,7 +434,7 @@ fn register_prelude(env: &mut TypeEnv) {
         "__bench_clock_ns".to_string(),
         Ty::Fn(vec![], Box::new(Ty::Int)),
     );
-    // M10 phase 1: fs stdlib intrinsics. See stdlib/fs.tyra.
+    // M10 phase 1: fs stdlib intrinsics. See stdlib/fs.ty.
     env.define(
         "__fs_read_raw".to_string(),
         Ty::Fn(vec![Ty::String], Box::new(Ty::String)),
@@ -452,7 +452,7 @@ fn register_prelude(env: &mut TypeEnv) {
         "__fs_exists".to_string(),
         Ty::Fn(vec![Ty::String], Box::new(Ty::Bool)),
     );
-    // M11 phase 1: http client intrinsics. See stdlib/http/client.tyra.
+    // M11 phase 1: http client intrinsics. See stdlib/http/client.ty.
     env.define(
         "__http_get".to_string(),
         Ty::Fn(vec![Ty::String], Box::new(Ty::Int)),
@@ -493,7 +493,7 @@ fn register_prelude(env: &mut TypeEnv) {
         "__http_server_listen".to_string(),
         Ty::Fn(vec![Ty::Int, Ty::Int], Box::new(Ty::Int)),
     );
-    // M10 phase 2: json stdlib intrinsics. See stdlib/json.tyra.
+    // M10 phase 2: json stdlib intrinsics. See stdlib/json.ty.
     // Handles are opaque Int values (0 = error / absent).
     env.define(
         "__json_parse".to_string(),
@@ -547,7 +547,7 @@ fn register_prelude(env: &mut TypeEnv) {
         "__json_at".to_string(),
         Ty::Fn(vec![Ty::Int, Ty::Int], Box::new(Ty::Int)),
     );
-    // stdin intrinsics. See stdlib/io.tyra.
+    // stdin intrinsics. See stdlib/io.ty.
     env.define(
         "__io_read_line".to_string(),
         Ty::Fn(vec![], Box::new(Ty::String)),
@@ -557,7 +557,7 @@ fn register_prelude(env: &mut TypeEnv) {
         Ty::Fn(vec![], Box::new(Ty::String)),
     );
     env.define("__io_eof".to_string(), Ty::Fn(vec![], Box::new(Ty::Bool)));
-    // §17.3.4: string stdlib intrinsics. See stdlib/string.tyra.
+    // §17.3.4: string stdlib intrinsics. See stdlib/string.ty.
     env.define(
         "__string_len".to_string(),
         Ty::Fn(vec![Ty::String], Box::new(Ty::Int)),
@@ -634,7 +634,7 @@ fn register_prelude(env: &mut TypeEnv) {
         "__string_join".to_string(),
         Ty::Fn(vec![list_string.clone(), Ty::String], Box::new(Ty::String)),
     );
-    // §17.3.x: time stdlib intrinsics. See stdlib/time.tyra.
+    // §17.3.x: time stdlib intrinsics. See stdlib/time.ty.
     env.define(
         "__time_now_unix".to_string(),
         Ty::Fn(vec![], Box::new(Ty::Int)),
@@ -643,7 +643,7 @@ fn register_prelude(env: &mut TypeEnv) {
         "__time_monotonic_millis".to_string(),
         Ty::Fn(vec![], Box::new(Ty::Int)),
     );
-    // §17.3.x: log stdlib intrinsics. See stdlib/log.tyra.
+    // §17.3.x: log stdlib intrinsics. See stdlib/log.ty.
     env.define(
         "__log_info".to_string(),
         Ty::Fn(vec![Ty::String], Box::new(Ty::Unit)),
@@ -656,7 +656,7 @@ fn register_prelude(env: &mut TypeEnv) {
         "__log_error".to_string(),
         Ty::Fn(vec![Ty::String], Box::new(Ty::Unit)),
     );
-    // §17.3.x: float stdlib intrinsics. See stdlib/float.tyra.
+    // §17.3.x: float stdlib intrinsics. See stdlib/float.ty.
     env.define(
         "__float_eq".to_string(),
         Ty::Fn(vec![Ty::Float, Ty::Float], Box::new(Ty::Bool)),
@@ -721,7 +721,7 @@ fn register_prelude(env: &mut TypeEnv) {
     // are never visible in the type-checker environment (ADR-0015).  The old
     // hardcoded __map_*_string_int entries are removed.
 
-    // §17.3.5: list stdlib intrinsics (List<Int> only). See stdlib/list.tyra.
+    // §17.3.5: list stdlib intrinsics (List<Int> only). See stdlib/list.ty.
     let list_int = Ty::Generic("List".into(), vec![Ty::Int]);
     let opt_int = Ty::Generic("Option".into(), vec![Ty::Int]);
     env.define(

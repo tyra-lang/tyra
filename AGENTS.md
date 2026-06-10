@@ -191,7 +191,7 @@ cargo test
 cargo test --test conformance
 
 # Run a single Tyra program (after build)
-./target/debug/tyra run examples/01-hello.tyra
+./target/debug/tyra run examples/01-hello.ty
 
 # Format check (when formatter exists)
 ./target/debug/tyra fmt --check stdlib/
@@ -305,7 +305,7 @@ The compiler is written in Rust. Rust language features (macros, panics, etc.) a
 
 ### Tyra Code Conventions (in stdlib, tests, examples)
 
-Tyra code (`.tyra` files) follows the language specification strictly:
+Tyra code (`.ty` files) follows the language specification strictly:
 
 - Tyra has no macros (spec §3). Use `panic("msg")` as a regular function call, not `panic!("msg")`.
 - Use `?` for both Result and Option propagation
@@ -417,7 +417,7 @@ When implementing parser or codegen, refer to canonical examples:
 
 - `docs/spec/ja/language-spec.md` §21 (worked examples in the spec)
 - `examples/` (spec by example programs)
-- `examples/hello/main.tyra` (minimal program)
+- `examples/hello/main.ty` (minimal program)
 
 These are the ground truth for what Tyra code looks like.
 

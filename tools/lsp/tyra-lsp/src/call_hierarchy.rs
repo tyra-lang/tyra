@@ -427,10 +427,10 @@ mod tests {
     use super::*;
     use tower_lsp::lsp_types::Url;
 
-    const URI: &str = "file:///tmp/test.tyra";
+    const URI: &str = "file:///tmp/test.ty";
 
     fn make_state(src: &str) -> DocState {
-        let result = tyra_driver::check_in_memory("test.tyra".to_string(), src.to_string(), None);
+        let result = tyra_driver::check_in_memory("test.ty".to_string(), src.to_string(), None);
         DocState {
             text: src.to_string(),
             sources: result.sources,

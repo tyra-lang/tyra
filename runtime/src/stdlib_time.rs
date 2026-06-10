@@ -1,6 +1,6 @@
 //! Time stdlib backing (§17.3.x). v0.1 scalar time operations.
 //!
-//! Exposes `tyra_time_*` intrinsics consumed by `stdlib/time.tyra`.
+//! Exposes `tyra_time_*` intrinsics consumed by `stdlib/time.ty`.
 //!
 //! Scope (v0.1):
 //!   now_unix()          -> Int   (seconds since Unix epoch, UTC)

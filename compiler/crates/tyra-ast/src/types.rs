@@ -570,7 +570,7 @@ mod tests {
 
     fn test_span() -> Span {
         let mut sources = SourceMap::new();
-        let id = sources.add("test.tyra".into(), "".into());
+        let id = sources.add("test.ty".into(), "".into());
         Span::new(id, 0, 0)
     }
 

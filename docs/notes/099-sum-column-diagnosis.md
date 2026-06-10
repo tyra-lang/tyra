@@ -98,8 +98,8 @@ in the *caller's* loop body.
 
 ## Scope assessment
 
-This is a **codegen bug** (alloca in non-entry block), not a `stdlib/io.tyra`
-limitation. The existing `io.tyra:18-21` warning ("avoid hot polling loops in
+This is a **codegen bug** (alloca in non-entry block), not a `stdlib/io.ty`
+limitation. The existing `io.ty:18-21` warning ("avoid hot polling loops in
 v0.1") is inaccurate about the cause — the issue is not GC or allocation
 lifetime but stack exhaustion from loop-body allocas. Any unbounded loop
 that generates match-expression allocas will eventually overflow, regardless
@@ -132,7 +132,7 @@ loop iterations.
   moved from SIGSEGV (exit 139) to timeout — the compiler-caused crash is
   gone; the remaining failure is the model's own `while true` loop with no
   `break`, which is out of scope for the compiler.
-- The `stdlib/io.tyra` and `runtime/src/stdlib_io.rs` allocation comments
+- The `stdlib/io.ty` and `runtime/src/stdlib_io.rs` allocation comments
   have been corrected: the per-read heap leak is real (system-allocator
   buffer, not GC-managed), but the SIGSEGV was a separate codegen defect —
   now fixed — and not a GC / allocation-lifetime issue.

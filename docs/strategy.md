@@ -652,7 +652,7 @@ When updating:
 - `docs/design/0004-unify-propagation-operator.md` — `?` works on Option and Result
 - `docs/design/0005-multi-constraint-generics.md` — Up to 2 generic constraints
 - `AGENTS.md` — AI coding assistant guidance
-- `examples/` — Phase 0a example programs (01-hello.tyra through 10-data-modeling.tyra)
+- `examples/` — Phase 0a example programs (01-hello.ty through 10-data-modeling.ty)
 
 ### External references
 

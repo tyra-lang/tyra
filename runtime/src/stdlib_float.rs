@@ -1,6 +1,6 @@
 //! Float stdlib backing (§17.3.x). v0.1 scalar float operations.
 //!
-//! Exposes `tyra_float_*` intrinsics consumed by `stdlib/float.tyra`.
+//! Exposes `tyra_float_*` intrinsics consumed by `stdlib/float.ty`.
 //!
 //! Scope (v0.1): equality, approximate equality, abs, floor, ceil, round,
 //! to_string, parse (with errno), from_int, to_int (truncate), min, max.

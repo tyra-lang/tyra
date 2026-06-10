@@ -330,9 +330,9 @@ fn compile_to_ir_impl(
 }
 
 /// Confirm that `dir` is a real Tyra stdlib tree, not a user directory named "stdlib".
-/// Uses `assert.tyra` as a stable sentinel — it is part of the Tyra stdlib by spec.
+/// Uses `assert.ty` as a stable sentinel — it is part of the Tyra stdlib by spec.
 fn is_tyra_stdlib(dir: &Path) -> bool {
-    dir.is_dir() && dir.join("assert.tyra").is_file()
+    dir.is_dir() && dir.join("assert.ty").is_file()
 }
 
 /// Find the stdlib directory. Resolution order:
@@ -628,7 +628,7 @@ fn is_builtin_module(module_path: &str) -> bool {
     matches!(module_path, "core.sys" | "core.tasks")
 }
 
-/// Resolve `import a.b.c` to the `.tyra` file path using the ADR 0010 rule.
+/// Resolve `import a.b.c` to the `.ty` file path using the ADR 0010 rule.
 ///
 /// Returns `None` for built-in modules, ambiguous imports (E0217), or
 /// paths that do not exist on disk. Returns `Some` only when exactly one
@@ -683,13 +683,13 @@ fn collect_import_candidates(
 ) -> Vec<std::path::PathBuf> {
     let mut candidates = Vec::new();
 
-    // Layer (a): local_base / a / b / c.tyra
+    // Layer (a): local_base / a / b / c.ty
     {
         let mut p = local_base.to_path_buf();
         for seg in path_segs {
             p.push(seg);
         }
-        p.set_extension("tyra");
+        p.set_extension("ty");
         if p.is_file() {
             candidates.push(p);
         }
@@ -728,7 +728,7 @@ fn collect_import_candidates(
             for seg in path_segs {
                 dp.push(seg);
             }
-            dp.set_extension("tyra");
+            dp.set_extension("ty");
             if dp.is_file() {
                 candidates.push(dp);
             }
@@ -741,7 +741,7 @@ fn collect_import_candidates(
         for seg in path_segs {
             sp.push(seg);
         }
-        sp.set_extension("tyra");
+        sp.set_extension("ty");
         if sp.is_file() {
             candidates.push(sp);
         }
@@ -758,7 +758,7 @@ fn is_bin_dep(dep_root: &Path) -> bool {
     };
     let root_src = dep_root
         .join("src")
-        .join(format!("{}.tyra", manifest.package.name));
+        .join(format!("{}.ty", manifest.package.name));
     let Ok(src) = std::fs::read_to_string(&root_src) else {
         return false;
     };
@@ -782,7 +782,7 @@ fn check_git_dep_root(dep_name: &str, dep_root: &std::path::Path) -> Result<(), 
     }
     let root_src = dep_root
         .join("src")
-        .join(format!("{}.tyra", manifest.package.name));
+        .join(format!("{}.ty", manifest.package.name));
     let Ok(src) = std::fs::read_to_string(&root_src) else {
         return Ok(());
     };
@@ -2602,7 +2602,7 @@ mod tests {
     #[test]
     fn check_in_memory_clean_program() {
         let CheckResult { report, .. } = check_in_memory(
-            "ok.tyra".into(),
+            "ok.ty".into(),
             "fn main() -> Unit\n  print(\"hello\")\nend\n".into(),
             None,
         );
@@ -2616,7 +2616,7 @@ mod tests {
     #[test]
     fn check_in_memory_reports_e0110_for_import_in_fn() {
         let CheckResult { report, .. } = check_in_memory(
-            "bad.tyra".into(),
+            "bad.ty".into(),
             "fn f() -> Int\n  import foo\n  0\nend\n".into(),
             None,
         );
@@ -2632,7 +2632,7 @@ mod tests {
     #[test]
     fn check_in_memory_reports_parse_error() {
         let CheckResult { report, .. } =
-            check_in_memory("bad.tyra".into(), "let x = \n".into(), None);
+            check_in_memory("bad.ty".into(), "let x = \n".into(), None);
         assert!(report.has_errors(), "expected parse error");
     }
 
@@ -2642,7 +2642,7 @@ mod tests {
         let dir = std::env::temp_dir().join("tyra_driver_rif_test");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        let foo_path = dir.join("foo.tyra");
+        let foo_path = dir.join("foo.ty");
         fs::write(&foo_path, "").unwrap();
 
         // local module resolves
@@ -2650,12 +2650,12 @@ mod tests {
         assert_eq!(
             got.as_deref(),
             Some(foo_path.as_path()),
-            "should find foo.tyra"
+            "should find foo.ty"
         );
 
         // non-existent module
         let got = resolve_import_file(&dir, &["bar".to_string()]);
-        assert!(got.is_none(), "should not find bar.tyra: {got:?}");
+        assert!(got.is_none(), "should not find bar.ty: {got:?}");
 
         // built-in module skipped
         let got = resolve_import_file(&dir, &["core".to_string(), "sys".to_string()]);
@@ -2666,8 +2666,8 @@ mod tests {
 
     #[test]
     fn resolve_import_file_ambiguous_local_and_stdlib_returns_none() {
-        // local/mymod.tyra  (layer a)
-        // stdlib/mymod.tyra  (layer c, pinned via TYRA_STDLIB)
+        // local/mymod.ty  (layer a)
+        // stdlib/mymod.ty  (layer c, pinned via TYRA_STDLIB)
         // → 2 candidates → None
         use std::fs;
 
@@ -2693,13 +2693,13 @@ mod tests {
 
         let dir = tempfile::tempdir().unwrap();
         let main_dir = dir.path();
-        fs::write(main_dir.join("mymod.tyra"), "export fn f() -> Unit\nend\n").unwrap();
-        // The fake stdlib must pass is_tyra_stdlib (needs assert.tyra sentinel).
+        fs::write(main_dir.join("mymod.ty"), "export fn f() -> Unit\nend\n").unwrap();
+        // The fake stdlib must pass is_tyra_stdlib (needs assert.ty sentinel).
         let stdlib_dir = dir.path().join("stdlib");
         fs::create_dir(&stdlib_dir).unwrap();
-        fs::write(stdlib_dir.join("assert.tyra"), "").unwrap();
+        fs::write(stdlib_dir.join("assert.ty"), "").unwrap();
         fs::write(
-            stdlib_dir.join("mymod.tyra"),
+            stdlib_dir.join("mymod.ty"),
             "export fn f() -> Unit\nend\n",
         )
         .unwrap();
@@ -2722,10 +2722,10 @@ mod tests {
     #[test]
     fn resolve_import_file_path_dep_returns_some() {
         // project/Tyra.toml  (dep mylib = { path = <lib_dir> })
-        // project/src/main.tyra
+        // project/src/main.ty
         // <lib_dir>/Tyra.toml
-        // <lib_dir>/src/mylib.tyra  (lib source)
-        // resolve_import_file(project/src/, ["mylib"]) → Some(<lib_dir>/src/mylib.tyra)
+        // <lib_dir>/src/mylib.ty  (lib source)
+        // resolve_import_file(project/src/, ["mylib"]) → Some(<lib_dir>/src/mylib.ty)
         use std::fs;
         let project = tempfile::tempdir().unwrap();
         let lib = tempfile::tempdir().unwrap();
@@ -2736,7 +2736,7 @@ mod tests {
         )
         .unwrap();
         fs::create_dir(lib.path().join("src")).unwrap();
-        let lib_src = lib.path().join("src/mylib.tyra");
+        let lib_src = lib.path().join("src/mylib.ty");
         fs::write(&lib_src, "export fn greet(n: String) -> String\n  n\nend\n").unwrap();
 
         fs::write(
@@ -2750,7 +2750,7 @@ mod tests {
         .unwrap();
         let src_dir = project.path().join("src");
         fs::create_dir(&src_dir).unwrap();
-        fs::write(src_dir.join("myapp.tyra"), "import mylib\n").unwrap();
+        fs::write(src_dir.join("myapp.ty"), "import mylib\n").unwrap();
 
         let result = resolve_import_file(&src_dir, &["mylib".to_string()]);
         assert!(result.is_some(), "path dep resolution must return Some");
@@ -2774,7 +2774,7 @@ mod tests {
         .unwrap();
         fs::create_dir(bin_dep.path().join("src")).unwrap();
         fs::write(
-            bin_dep.path().join("src/mybin.tyra"),
+            bin_dep.path().join("src/mybin.ty"),
             "fn main() -> Unit\n  print(\"hi\")\nend\n",
         )
         .unwrap();
@@ -2790,7 +2790,7 @@ mod tests {
         .unwrap();
         let src_dir = project.path().join("src");
         fs::create_dir(&src_dir).unwrap();
-        fs::write(src_dir.join("app.tyra"), "import mybin\n").unwrap();
+        fs::write(src_dir.join("app.ty"), "import mybin\n").unwrap();
 
         let result = resolve_import_file(&src_dir, &["mybin".to_string()]);
         assert!(
@@ -2805,7 +2805,7 @@ mod tests {
         // Before the fix, walk_expr did not recurse into Propagate,
         // so `import string` was never injected → E0200.
         let CheckResult { report, .. } = check_in_memory(
-            "p.tyra".into(),
+            "p.ty".into(),
             "import io\n\nfn main() -> Result<Unit, String>\n  \
              let line = match io.read_line() when Some(s) s when None \"\" end\n  \
              let n = string.parse_int(string.trim(line)).ok_or(\"bad\")?\n  \
@@ -2834,7 +2834,7 @@ mod tests {
             "  end\n",
             "end\n",
         );
-        let CheckResult { report, .. } = check_in_memory("c.tyra".into(), src.into(), None);
+        let CheckResult { report, .. } = check_in_memory("c.ty".into(), src.into(), None);
         assert!(
             !report.has_errors(),
             "unexpected errors: {:?}",
@@ -2855,7 +2855,7 @@ mod tests {
             "  end\n",
             "end\n",
         );
-        let CheckResult { report, .. } = check_in_memory("c.tyra".into(), src.into(), None);
+        let CheckResult { report, .. } = check_in_memory("c.ty".into(), src.into(), None);
         assert!(
             !report.has_errors(),
             "unexpected errors: {:?}",
@@ -2866,7 +2866,7 @@ mod tests {
     #[test]
     fn continue_outside_loop_emits_e0215() {
         let CheckResult { report, .. } = check_in_memory(
-            "bad.tyra".into(),
+            "bad.ty".into(),
             "fn main() -> Unit\n  continue\nend\n".into(),
             None,
         );
@@ -2892,7 +2892,7 @@ mod tests {
             "  end\n",
             "end\n",
         );
-        let CheckResult { report, .. } = check_in_memory("bad.tyra".into(), src.into(), None);
+        let CheckResult { report, .. } = check_in_memory("bad.ty".into(), src.into(), None);
         assert!(report.has_errors(), "expected E0215 inside lambda");
         let codes: Vec<&str> = report
             .diagnostics()
@@ -2915,7 +2915,7 @@ mod tests {
             "  end\n",
             "end\n",
         );
-        let CheckResult { report, .. } = check_in_memory("bad.tyra".into(), src.into(), None);
+        let CheckResult { report, .. } = check_in_memory("bad.ty".into(), src.into(), None);
         assert!(report.has_errors(), "expected E0214 inside lambda");
         let codes: Vec<&str> = report
             .diagnostics()
@@ -2941,7 +2941,7 @@ mod tests {
             "  \"ok\"\n",
             "end\n",
         );
-        let CheckResult { report, .. } = check_in_memory("bad.tyra".into(), src.into(), None);
+        let CheckResult { report, .. } = check_in_memory("bad.ty".into(), src.into(), None);
         assert!(report.has_errors(), "expected E0309 in lambda");
         let codes: Vec<&str> = report
             .diagnostics()

@@ -242,7 +242,7 @@ Three stacked improvements on top of Run 5:
    search never resolved the repo's `stdlib/`. Pinned via env.
 3. **Stdlib source included in the spec-injection context**
    (`26dd58c`) — Run 5's context was spec + examples only.
-   Including every `stdlib/**/*.tyra` file with an explicit "these
+   Including every `stdlib/**/*.ty` file with an explicit "these
    are the ONLY modules" note cut hallucinated imports
    (`string`, `core.io`, `collections`) sharply.
 

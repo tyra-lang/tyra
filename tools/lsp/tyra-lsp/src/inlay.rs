@@ -276,7 +276,7 @@ mod tests {
     use super::*;
 
     fn compile_hints(src: &str) -> Vec<InlayHint> {
-        let result = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+        let result = tyra_driver::check_in_memory("test.ty".into(), src.into(), None);
         let viewport = Range {
             start: Position {
                 line: 0,
@@ -342,12 +342,12 @@ mod tests {
     fn var_type_skipped() {
         // Build a TypeIndex with only Var type — should produce no hints.
         let mut sources = SourceMap::new();
-        let id = sources.add("t.tyra".into(), "fn f()\n  let x = 1\nend\n".into());
+        let id = sources.add("t.ty".into(), "fn f()\n  let x = 1\nend\n".into());
         let stmt_span = Span::new(id, 7, 17);
         let mut type_index: TypeIndex = HashMap::new();
         type_index.insert(stmt_span, Ty::Var(0));
         let result = tyra_driver::check_in_memory(
-            "t.tyra".into(),
+            "t.ty".into(),
             "fn f()\n  let x = 1\nend\n".into(),
             None,
         );
@@ -374,12 +374,12 @@ mod tests {
     #[test]
     fn error_type_skipped() {
         let mut sources = SourceMap::new();
-        let id = sources.add("t.tyra".into(), "fn f()\n  let x = 1\nend\n".into());
+        let id = sources.add("t.ty".into(), "fn f()\n  let x = 1\nend\n".into());
         let stmt_span = Span::new(id, 7, 17);
         let mut type_index: TypeIndex = HashMap::new();
         type_index.insert(stmt_span, Ty::Error);
         let result = tyra_driver::check_in_memory(
-            "t.tyra".into(),
+            "t.ty".into(),
             "fn f()\n  let x = 1\nend\n".into(),
             None,
         );
@@ -424,7 +424,7 @@ mod tests {
     fn viewport_filters_outside_range() {
         // Two lets on different lines; viewport covers only line 1.
         let src = "fn main()\n  let a = 1\n  let b = 2\nend\n";
-        let result = tyra_driver::check_in_memory("test.tyra".into(), src.into(), None);
+        let result = tyra_driver::check_in_memory("test.ty".into(), src.into(), None);
         // viewport: only line 1 (0-indexed)
         let viewport = Range {
             start: Position {

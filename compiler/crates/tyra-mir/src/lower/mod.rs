@@ -152,7 +152,7 @@ pub fn lower(file: &SourceFile, sources: &tyra_diagnostics::SourceMap) -> Progra
     ctx.fn_param_types.insert("__bench_clock_ns".into(), vec![]);
 
     // M10 phase 1: fs stdlib intrinsics. Registered unconditionally so that
-    // `stdlib/fs.tyra` can call them without an `import` (no circularity).
+    // `stdlib/fs.ty` can call them without an `import` (no circularity).
     ctx.fn_return_types
         .insert("__fs_read_raw".into(), Ty::String);
     ctx.fn_param_types

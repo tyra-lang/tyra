@@ -130,8 +130,8 @@ mod tests {
     }
 
     fn make_doc(src: &str) -> (Url, DocState) {
-        let result = tyra_driver::check_in_memory("main.tyra".to_string(), src.to_string(), None);
-        let uri = Url::from_file_path("/workspace/main.tyra").unwrap();
+        let result = tyra_driver::check_in_memory("main.ty".to_string(), src.to_string(), None);
+        let uri = Url::from_file_path("/workspace/main.ty").unwrap();
         let state = DocState {
             text: src.to_string(),
             sources: result.sources,
@@ -153,10 +153,10 @@ mod tests {
         let mut docs = HashMap::new();
         docs.insert(uri.clone(), state);
 
-        let f = make_file_delete("/workspace/math.tyra");
+        let f = make_file_delete("/workspace/math.ty");
         let edit = compute_edits(&docs, &[f]).expect("expected WorkspaceEdit");
         let changes = edit.changes.unwrap();
-        let edits = changes.get(&uri).expect("expected edits for main.tyra");
+        let edits = changes.get(&uri).expect("expected edits for main.ty");
         assert_eq!(edits.len(), 1);
         assert_eq!(edits[0].new_text, "");
         // Range: line 0, col 0 → line 1, col 0 (the full "import math\n")
@@ -171,7 +171,7 @@ mod tests {
         let mut docs = HashMap::new();
         docs.insert(uri.clone(), state);
 
-        let f = make_file_delete("/workspace/core/foo.tyra");
+        let f = make_file_delete("/workspace/core/foo.ty");
         let edit = compute_edits(&docs, &[f]).expect("expected WorkspaceEdit");
         let edits = &edit.changes.unwrap()[&uri];
         assert_eq!(edits.len(), 1);
@@ -187,7 +187,7 @@ mod tests {
         let mut docs = HashMap::new();
         docs.insert(uri, state);
 
-        let f = make_file_delete("/workspace/math.tyra");
+        let f = make_file_delete("/workspace/math.ty");
         assert!(compute_edits(&docs, &[f]).is_none());
     }
 
@@ -201,7 +201,7 @@ mod tests {
         let mut docs = HashMap::new();
         docs.insert(uri, state);
 
-        let f = make_file_delete("/workspace/string.tyra");
+        let f = make_file_delete("/workspace/string.ty");
         assert!(compute_edits(&docs, &[f]).is_none());
     }
 
@@ -213,7 +213,7 @@ mod tests {
         let mut docs = HashMap::new();
         docs.insert(uri.clone(), state);
 
-        let f = make_file_delete("/workspace/math.tyra");
+        let f = make_file_delete("/workspace/math.ty");
         let edit = compute_edits(&docs, &[f]).expect("expected WorkspaceEdit");
         let edits = &edit.changes.unwrap()[&uri];
         assert_eq!(edits.len(), 1);
@@ -231,7 +231,7 @@ mod tests {
         let mut docs = HashMap::new();
         docs.insert(uri, state);
 
-        let f = make_file_delete("/other/math.tyra");
+        let f = make_file_delete("/other/math.ty");
         assert!(compute_edits(&docs, &[f]).is_none());
     }
 }

@@ -99,7 +99,7 @@ mod tests {
     use super::*;
 
     fn run_collect(src: &str, main_dir: Option<&Path>) -> Vec<DocumentLink> {
-        let result = tyra_driver::check_in_memory("test.tyra".to_string(), src.to_string(), None);
+        let result = tyra_driver::check_in_memory("test.ty".to_string(), src.to_string(), None);
         collect(&result.ast, src, &result.sources, main_dir)
     }
 
@@ -113,15 +113,15 @@ mod tests {
     #[test]
     fn collect_returns_link_for_local_import() {
         let dir = make_tmpdir("tyra_dl_test_local");
-        std::fs::write(dir.join("math.tyra"), "").unwrap();
+        std::fs::write(dir.join("math.ty"), "").unwrap();
 
         let src = "import math\n";
         let links = run_collect(src, Some(&dir));
         assert_eq!(links.len(), 1, "expected 1 link, got: {links:?}");
         let target = links[0].target.as_ref().expect("expected target URL");
         assert!(
-            target.path().ends_with("math.tyra"),
-            "expected math.tyra in target: {target}"
+            target.path().ends_with("math.ty"),
+            "expected math.ty in target: {target}"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -155,11 +155,11 @@ mod tests {
         // string.trim() usage triggers auto_import_stdlib to inject
         // `import string` synthetically.  Because there is no `import string`
         // token in the source, no document link should be produced even if
-        // a string.tyra file happens to be resolvable.
+        // a string.ty file happens to be resolvable.
         let dir = make_tmpdir("tyra_dl_test_autoimport");
-        // Create a resolvable string.tyra so the synthetic import would be
+        // Create a resolvable string.ty so the synthetic import would be
         // linkable if we did not filter it.
-        std::fs::write(dir.join("string.tyra"), "").unwrap();
+        std::fs::write(dir.join("string.ty"), "").unwrap();
         let src = "fn main() -> Unit\n  let s = \"hello\"\n  let _ = s.trim()\nend\n";
         let links = run_collect(src, Some(&dir));
         assert!(

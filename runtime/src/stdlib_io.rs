@@ -1,7 +1,7 @@
 //! stdin stdlib backing.
 //!
 //! Exposes `tyra_io_read_line` / `tyra_io_read_to_end` / `tyra_io_eof` to
-//! Tyra. The Tyra-side wrapper in `stdlib/io.tyra` turns these into
+//! Tyra. The Tyra-side wrapper in `stdlib/io.ty` turns these into
 //! `Option<String>` / `String` / `Bool`.
 //!
 //! v0.1 semantics:

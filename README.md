@@ -137,10 +137,10 @@ end
 
 ## Quick start: testing
 
-Create a `*_test.tyra` file and run `tyra test`:
+Create a `*_test.ty` file and run `tyra test`:
 
 ```tyra
-# math_test.tyra
+# math_test.ty
 import assert
 
 fn test_add() -> Result<Unit, String>
@@ -150,7 +150,7 @@ end
 ```
 
 ```bash
-tyra test                      # run all *_test.tyra files in the current directory
+tyra test                      # run all *_test.ty files in the current directory
 tyra test src/                 # run a specific directory
 tyra test --filter add         # run only tests whose name contains "add"
 tyra test --list               # list test functions without running
@@ -221,7 +221,7 @@ file examples/hello     # should say: statically linked
 To compile your own static binary, use the musl-targeting `tyra` (i.e. run on Alpine Linux or equivalent musl toolchain):
 
 ```bash
-tyra build --static myprogram.tyra
+tyra build --static myprogram.ty
 ```
 
 **Experimental in v0.4.0** — included but not production-ready:
@@ -257,7 +257,7 @@ tyra build --static myprogram.tyra
 - **[Design Decisions](docs/design/)** — architecture decision records explaining *why*
 - **[RFCs](docs/rfcs/)** — proposed changes for future versions
 - **[Examples](examples/)** — runnable programs demonstrating stdlib features
-  - [examples/11-stdlib-time-log.tyra](examples/11-stdlib-time-log.tyra) — `time.now_unix`, `time.monotonic_millis`, `log.info/warn/error`
+  - [examples/11-stdlib-time-log.ty](examples/11-stdlib-time-log.ty) — `time.now_unix`, `time.monotonic_millis`, `log.info/warn/error`
 
 ## Goals
 

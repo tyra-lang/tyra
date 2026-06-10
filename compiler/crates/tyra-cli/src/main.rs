@@ -1,11 +1,11 @@
 // tyra CLI: the Tyra language compiler.
 //
 // Usage:
-//   tyra check [<file.tyra>]                      Type-check without codegen
-//   tyra run   [--release] [<file.tyra>]         Compile and run a Tyra program
-//   tyra build [--release] [--static] [<file.tyra>] [-o <out>]  Compile to a native binary
-//   tyra emit-ir <file.tyra>                     Emit LLVM IR to stdout
-//   tyra fmt [--check] <file.tyra|dir>           Format source (--check: exit 1 if changed)
+//   tyra check [<file.ty>]                      Type-check without codegen
+//   tyra run   [--release] [<file.ty>]         Compile and run a Tyra program
+//   tyra build [--release] [--static] [<file.ty>] [-o <out>]  Compile to a native binary
+//   tyra emit-ir <file.ty>                     Emit LLVM IR to stdout
+//   tyra fmt [--check] <file.ty|dir>           Format source (--check: exit 1 if changed)
 //   tyra test [--filter <pat>] [--list] [--format tap|junit] [path]
 //   tyra new [--lib] [--vcs none] <name>         Scaffold a new project
 //   tyra mod init [--name <name>]                Create Tyra.toml for an existing directory
@@ -78,7 +78,7 @@ fn main() {
                     "--release" => release = true,
                     a if a.starts_with("--") => {
                         eprintln!("error: unknown flag `{a}`");
-                        eprintln!("usage: tyra run [--release] [<file.tyra>]");
+                        eprintln!("usage: tyra run [--release] [<file.ty>]");
                         process::exit(1);
                     }
                     a => {
@@ -128,7 +128,7 @@ fn main() {
                         if val.starts_with("--") {
                             eprintln!("error: `-o` requires an output path, got flag `{val}`");
                             eprintln!(
-                                "usage: tyra build [--release] [--static] [<file.tyra>] [-o <out>]"
+                                "usage: tyra build [--release] [--static] [<file.ty>] [-o <out>]"
                             );
                             process::exit(1);
                         }
@@ -137,7 +137,7 @@ fn main() {
                     a if a.starts_with("--") => {
                         eprintln!("error: unknown flag `{a}`");
                         eprintln!(
-                            "usage: tyra build [--release] [--static] [<file.tyra>] [-o <out>]"
+                            "usage: tyra build [--release] [--static] [<file.ty>] [-o <out>]"
                         );
                         process::exit(1);
                     }
@@ -208,7 +208,7 @@ fn main() {
                 match arg.as_str() {
                     a if a.starts_with("--") => {
                         eprintln!("error: unknown flag `{a}`");
-                        eprintln!("usage: tyra check [<file.tyra>]");
+                        eprintln!("usage: tyra check [<file.ty>]");
                         process::exit(1);
                     }
                     a => {
@@ -284,7 +284,7 @@ fn main() {
                     "--stdin" => stdin_mode = true,
                     a if a.starts_with("--") => {
                         eprintln!("error: unknown flag `{a}`");
-                        eprintln!("usage: tyra fmt [--check] [--stdin] <file.tyra|dir>");
+                        eprintln!("usage: tyra fmt [--check] [--stdin] <file.ty|dir>");
                         process::exit(1);
                     }
                     a => {
@@ -329,7 +329,7 @@ fn main() {
                         eprintln!(
                             "error: `tyra fmt` requires a source file, directory, or --stdin"
                         );
-                        eprintln!("usage: tyra fmt [--check] [--stdin] <file.tyra|dir>");
+                        eprintln!("usage: tyra fmt [--check] [--stdin] <file.ty|dir>");
                         process::exit(1);
                     }
                 };
@@ -462,7 +462,7 @@ fn main() {
                 if is_test_file(&path) {
                     vec![path.clone()]
                 } else {
-                    eprintln!("error: {} is not a *_test.tyra file", path.display());
+                    eprintln!("error: {} is not a *_test.ty file", path.display());
                     process::exit(1);
                 }
             } else if path.is_dir() {
@@ -479,7 +479,7 @@ fn main() {
             };
 
             if test_files.is_empty() {
-                eprintln!("no *_test.tyra files found in {}", path.display());
+                eprintln!("no *_test.ty files found in {}", path.display());
                 process::exit(0);
             }
 
@@ -611,7 +611,7 @@ fn main() {
                     let type_label = if lib_flag { "lib" } else { "bin" };
                     println!("created {type_label} project `{name}`");
                     println!("  {name}/Tyra.toml");
-                    println!("  {name}/src/{name}.tyra");
+                    println!("  {name}/src/{name}.ty");
                     if !vcs_none {
                         println!("  {name}/.gitignore");
                     }
@@ -1062,7 +1062,7 @@ fn main() {
             }
         }
         "bench" => {
-            // tyra bench [<path>]               — run *_bench.tyra files (§18.8)
+            // tyra bench [<path>]               — run *_bench.ty files (§18.8)
             // tyra bench ai-gen [<harness-args>] — AI-generation benchmark (legacy)
             let sub = args.get(2).map(String::as_str);
             if sub != Some("ai-gen") {
@@ -1075,7 +1075,7 @@ fn main() {
                     if is_bench_file(&path) {
                         vec![path.clone()]
                     } else {
-                        eprintln!("error: {} is not a *_bench.tyra file", path.display());
+                        eprintln!("error: {} is not a *_bench.ty file", path.display());
                         process::exit(1);
                     }
                 } else if path.is_dir() {
@@ -1092,7 +1092,7 @@ fn main() {
                 };
 
                 if bench_files.is_empty() {
-                    eprintln!("no *_bench.tyra files found in {}", path.display());
+                    eprintln!("no *_bench.ty files found in {}", path.display());
                     process::exit(0);
                 }
 
@@ -1149,20 +1149,20 @@ fn print_usage() {
     eprintln!();
     eprintln!("commands:");
     eprintln!(
-        "  check [<file.tyra>]                      type-check (defaults to project entry point)"
+        "  check [<file.ty>]                      type-check (defaults to project entry point)"
     );
     eprintln!(
-        "  run   [--release] [<file.tyra>]          compile and run (defaults to project entry point)"
+        "  run   [--release] [<file.ty>]          compile and run (defaults to project entry point)"
     );
     eprintln!(
-        "  build [--release] [--static] [<file.tyra>] [-o out]  compile to binary (--static: musl-only)"
+        "  build [--release] [--static] [<file.ty>] [-o out]  compile to binary (--static: musl-only)"
     );
-    eprintln!("  emit-ir <file.tyra>                      emit LLVM IR to stdout");
+    eprintln!("  emit-ir <file.ty>                      emit LLVM IR to stdout");
     eprintln!(
-        "  fmt [--check] [--stdin] <file.tyra|dir>  format source in-place; --stdin reads stdin"
+        "  fmt [--check] [--stdin] <file.ty|dir>  format source in-place; --stdin reads stdin"
     );
     eprintln!(
-        "  test [--filter <pat>] [--list]           run *_test.tyra files (default: current dir)"
+        "  test [--filter <pat>] [--list]           run *_test.ty files (default: current dir)"
     );
     eprintln!("       [--format tap|junit] [--timeout <s>] [--jobs <n>] [path]");
     eprintln!(
@@ -1182,7 +1182,7 @@ fn print_usage() {
         "  mod sync [--check] [--json] [--quiet]    clone git deps; --check validates without mutating"
     );
     eprintln!("  mod clean                                remove ~/.tyra/cache/");
-    eprintln!("  bench [path]                             run *_bench.tyra micro-benchmarks");
+    eprintln!("  bench [path]                             run *_bench.ty micro-benchmarks");
     eprintln!("  bench ai-gen [options]                   run the AI-generation benchmark");
     eprintln!("  --version                                show version info");
     eprintln!("  --help                                   show this help");
@@ -1261,11 +1261,11 @@ impl Drop for TempBinary {
 fn is_test_file(path: &Path) -> bool {
     path.file_name()
         .and_then(|n| n.to_str())
-        .map(|n| n.ends_with("_test.tyra"))
+        .map(|n| n.ends_with("_test.ty"))
         .unwrap_or(false)
 }
 
-/// Recursively collect all `*_test.tyra` files under `dir`.
+/// Recursively collect all `*_test.ty` files under `dir`.
 /// Results are in lexicographic path order (stable across OSes and filesystems).
 fn collect_test_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
     let mut files = Vec::new();
@@ -1398,7 +1398,7 @@ fn synthesize_runner(test_source: &str, test_fns: &[String]) -> String {
 
 // ─── Parallel / buffered test runner ─────────────────────────────────────────
 
-/// All outputs produced by running one `*_test.tyra` file, buffered for
+/// All outputs produced by running one `*_test.ty` file, buffered for
 /// deterministic ordered printing in parallel mode.
 struct FileTestOut {
     path: String,
@@ -1446,8 +1446,8 @@ fn run_tests_coverage(test_files: &[PathBuf], filter: Option<&str>, timeout: Opt
     for (file_idx, test_file) in test_files.iter().enumerate() {
         // Per-file covraw directory keyed by loop index, not file_stem.
         // Using file_stem would collide when two test files share the same name
-        // but live in different directories (e.g. foo/math_test.tyra and
-        // bar/math_test.tyra), causing cross-file covraw contamination.
+        // but live in different directories (e.g. foo/math_test.ty and
+        // bar/math_test.ty), causing cross-file covraw contamination.
         let covraw_dir = cov_root.join(format!("{file_idx}"));
         let _ = std::fs::create_dir_all(&covraw_dir);
 
@@ -1578,7 +1578,7 @@ fn run_test_file_coverage(
         .any(|item| matches!(item, tyra_ast::Item::Stmt(_)));
     if has_main || has_top_stmts {
         let msg = format!(
-            "error[E0216]: {}: *_test.tyra files must not contain fn main or top-level executable statements\n",
+            "error[E0216]: {}: *_test.ty files must not contain fn main or top-level executable statements\n",
             test_file.display()
         );
         diag.push_str(&msg);
@@ -1619,7 +1619,7 @@ fn run_test_file_coverage(
     let header = format!("\n# {}", test_file.display());
     let run_id = RUN_COUNTER.fetch_add(1, Ordering::Relaxed);
     let runner_name = format!(
-        "__tyra_test_runner_cov_{}_{}.tyra",
+        "__tyra_test_runner_cov_{}_{}.ty",
         std::process::id(),
         run_id
     );
@@ -1778,7 +1778,7 @@ fn run_test_file_coverage(
     }
 }
 
-/// Run one `*_test.tyra` file, buffering all output.
+/// Run one `*_test.ty` file, buffering all output.
 /// `timeout` is the per-binary execution timeout in seconds (None = unlimited).
 fn run_test_file_core(test_file: &Path, filter: Option<&str>, timeout: Option<u64>) -> FileTestOut {
     let mut diag = String::new();
@@ -1856,7 +1856,7 @@ fn run_test_file_core(test_file: &Path, filter: Option<&str>, timeout: Option<u6
         .any(|item| matches!(item, tyra_ast::Item::Stmt(_)));
     if has_main || has_top_stmts {
         let msg = format!(
-            "error[E0216]: {}: *_test.tyra files must not contain fn main or top-level executable statements\n",
+            "error[E0216]: {}: *_test.ty files must not contain fn main or top-level executable statements\n",
             test_file.display()
         );
         diag.push_str(&msg);
@@ -1866,7 +1866,7 @@ fn run_test_file_core(test_file: &Path, filter: Option<&str>, timeout: Option<u6
     let header = format!("\n# {}", test_file.display());
 
     let run_id = RUN_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let runner_name = format!("__tyra_test_runner_{}_{}.tyra", std::process::id(), run_id);
+    let runner_name = format!("__tyra_test_runner_{}_{}.ty", std::process::id(), run_id);
     let runner_path = dir.join(&runner_name);
     let runner_source = synthesize_runner(&source, &test_fns);
     if let Err(e) = std::fs::write(&runner_path, &runner_source) {
@@ -2061,7 +2061,7 @@ fn run_test_files_parallel(
     results
 }
 
-/// Recursively collect all `.tyra` files under `dir`.
+/// Recursively collect all `.ty` files under `dir`.
 /// Returns an error if any directory entry cannot be read.
 fn collect_tyra_files(dir: &Path) -> Result<Vec<std::path::PathBuf>, std::io::Error> {
     let mut files = Vec::new();
@@ -2069,7 +2069,7 @@ fn collect_tyra_files(dir: &Path) -> Result<Vec<std::path::PathBuf>, std::io::Er
         let path = entry?.path();
         if path.is_dir() {
             files.extend(collect_tyra_files(&path)?);
-        } else if path.extension().and_then(|e| e.to_str()) == Some("tyra") {
+        } else if path.extension().and_then(|e| e.to_str()) == Some("ty") {
             files.push(path);
         }
     }
@@ -2091,10 +2091,10 @@ fn project_root_and_entry() -> Result<(PathBuf, PathBuf), String> {
         tyra_manifest::load_manifest(&root).map_err(|e| format!("cannot load Tyra.toml: {e}"))?;
     let entry = root
         .join("src")
-        .join(format!("{}.tyra", manifest.package.name));
+        .join(format!("{}.ty", manifest.package.name));
     if !entry.is_file() {
         return Err(format!(
-            "entry point `{}` not found; expected `src/{}.tyra`",
+            "entry point `{}` not found; expected `src/{}.ty`",
             entry.display(),
             manifest.package.name
         ));
@@ -2203,7 +2203,7 @@ fn xml_escape(s: &str) -> String {
 fn is_bench_file(path: &Path) -> bool {
     path.file_name()
         .and_then(|n| n.to_str())
-        .map(|n| n.ends_with("_bench.tyra"))
+        .map(|n| n.ends_with("_bench.ty"))
         .unwrap_or(false)
 }
 
@@ -2259,7 +2259,7 @@ fn synthesize_bench_runner(bench_source: &str, bench_fns: &[String]) -> String {
     out
 }
 
-/// Compile and run a single `*_bench.tyra` file; print results and return
+/// Compile and run a single `*_bench.ty` file; print results and return
 /// true on success.  Mirrors run_test_file_inner: synthesizes a runner, writes
 /// it to a temp file alongside the bench file, compiles + runs, then cleans up.
 fn run_bench_file(bench_file: &Path) -> bool {
@@ -2297,7 +2297,7 @@ fn run_bench_file(bench_file: &Path) -> bool {
     let runner_source = synthesize_bench_runner(&source, &bench_fns);
 
     // Write synthesized runner alongside the bench file so import resolution works.
-    let runner_name = format!("__tyra_bench_runner_{}.tyra", std::process::id());
+    let runner_name = format!("__tyra_bench_runner_{}.ty", std::process::id());
     let runner_path = dir.join(&runner_name);
     if let Err(e) = std::fs::write(&runner_path, &runner_source) {
         eprintln!("error: cannot write bench runner: {e}");
@@ -2346,7 +2346,7 @@ mod tests {
     use super::*;
     use std::fs;
 
-    /// Write a minimal `.tyra` file with no `test_*` functions.
+    /// Write a minimal `.ty` file with no `test_*` functions.
     /// `run_test_file_core` returns immediately after `check_in_memory` without
     /// invoking LLVM, so these helpers are safe to use in fast unit tests.
     fn write_no_test_file(dir: &std::path::Path, name: &str) -> PathBuf {
@@ -2363,7 +2363,7 @@ mod tests {
         // jobs=4 runs all in one chunk; threads may complete in any order.
         // Results must come back in the same order as the input slice.
         let dir = tempfile::tempdir().unwrap();
-        let files: Vec<PathBuf> = ["a_test.tyra", "b_test.tyra", "c_test.tyra", "d_test.tyra"]
+        let files: Vec<PathBuf> = ["a_test.ty", "b_test.ty", "c_test.ty", "d_test.ty"]
             .iter()
             .map(|n| write_no_test_file(dir.path(), n))
             .collect();
@@ -2388,7 +2388,7 @@ mod tests {
     #[test]
     fn parallel_jobs_1_and_jobs_n_produce_same_order() {
         let dir = tempfile::tempdir().unwrap();
-        let files: Vec<PathBuf> = ["x_test.tyra", "y_test.tyra", "z_test.tyra"]
+        let files: Vec<PathBuf> = ["x_test.ty", "y_test.ty", "z_test.ty"]
             .iter()
             .map(|n| write_no_test_file(dir.path(), n))
             .collect();
@@ -2414,7 +2414,7 @@ mod tests {
     #[test]
     fn parallel_filter_no_match_yields_zero_tests() {
         let dir = tempfile::tempdir().unwrap();
-        let files = vec![write_no_test_file(dir.path(), "q_test.tyra")];
+        let files = vec![write_no_test_file(dir.path(), "q_test.ty")];
 
         // "nomatch" won't match anything; file also has no test_ fns anyway.
         let results = run_test_files_parallel(&files, Some("nomatch"), None, 1);
@@ -2429,11 +2429,11 @@ mod tests {
         // Output must still be in original order.
         let dir = tempfile::tempdir().unwrap();
         let names = [
-            "f1_test.tyra",
-            "f2_test.tyra",
-            "f3_test.tyra",
-            "f4_test.tyra",
-            "f5_test.tyra",
+            "f1_test.ty",
+            "f2_test.ty",
+            "f3_test.ty",
+            "f4_test.ty",
+            "f5_test.ty",
         ];
         let files: Vec<PathBuf> = names
             .iter()
@@ -2459,7 +2459,7 @@ mod tests {
     fn collect_test_files_lexicographic_order() {
         let dir = tempfile::tempdir().unwrap();
         // Write files in reverse order to confirm sorting is not filesystem-dependent.
-        for name in ["z_test.tyra", "a_test.tyra", "m_test.tyra"] {
+        for name in ["z_test.ty", "a_test.ty", "m_test.ty"] {
             fs::write(dir.path().join(name), "").unwrap();
         }
         let files = collect_test_files(dir.path()).unwrap();
@@ -2467,7 +2467,7 @@ mod tests {
             .iter()
             .filter_map(|p| p.file_name()?.to_str())
             .collect();
-        assert_eq!(names, ["a_test.tyra", "m_test.tyra", "z_test.tyra"]);
+        assert_eq!(names, ["a_test.ty", "m_test.ty", "z_test.ty"]);
     }
 
     #[test]
@@ -2477,14 +2477,14 @@ mod tests {
         let sub_a = dir.path().join("a");
         fs::create_dir_all(&sub_b).unwrap();
         fs::create_dir_all(&sub_a).unwrap();
-        fs::write(sub_b.join("b_test.tyra"), "").unwrap();
-        fs::write(sub_a.join("a_test.tyra"), "").unwrap();
+        fs::write(sub_b.join("b_test.ty"), "").unwrap();
+        fs::write(sub_a.join("a_test.ty"), "").unwrap();
         let files = collect_test_files(dir.path()).unwrap();
         let names: Vec<&str> = files
             .iter()
             .filter_map(|p| p.file_name()?.to_str())
             .collect();
-        assert_eq!(names, ["a_test.tyra", "b_test.tyra"]);
+        assert_eq!(names, ["a_test.ty", "b_test.ty"]);
     }
 
     // --- parse_tap_to_records / JUnit diag propagation (#4) ---
@@ -2504,17 +2504,17 @@ mod tests {
 
     #[test]
     fn parse_tap_compile_error_synthetic_record() {
-        let tap = "TAP version 14\n1..1\nnot ok 1 - foo_test.tyra: compile error\n";
+        let tap = "TAP version 14\n1..1\nnot ok 1 - foo_test.ty: compile error\n";
         let records = parse_tap_to_records(tap);
         assert_eq!(records.len(), 1);
         assert!(!records[0].passed);
-        assert_eq!(records[0].name, "foo_test.tyra: compile error");
+        assert_eq!(records[0].name, "foo_test.ty: compile error");
         assert!(records[0].failure_msg.is_empty());
     }
 
     #[test]
     fn junit_compile_error_diag_propagated_to_failure_msg() {
-        let tap = "TAP version 14\n1..1\nnot ok 1 - foo_test.tyra: compile error\n";
+        let tap = "TAP version 14\n1..1\nnot ok 1 - foo_test.ty: compile error\n";
         let diag = "error[E0308]: type mismatch: expected Int, found String\n";
         let mut records = parse_tap_to_records(tap);
         // Replicate the JUnit path logic.
@@ -2579,8 +2579,8 @@ mod tests {
                 failure_msg: "left=1 right=2".to_string(),
             },
         ];
-        let xml = render_junit_xml(&[("path/foo_test.tyra".to_string(), records, 0.123)]);
-        assert!(xml.contains("<testsuite name=\"path/foo_test.tyra\" tests=\"2\" failures=\"1\""));
+        let xml = render_junit_xml(&[("path/foo_test.ty".to_string(), records, 0.123)]);
+        assert!(xml.contains("<testsuite name=\"path/foo_test.ty\" tests=\"2\" failures=\"1\""));
         assert!(xml.contains("<testcase name=\"test_ok\""));
         assert!(xml.contains("<failure message=\"left=1 right=2\""));
     }
@@ -2612,7 +2612,7 @@ mod tests {
             return;
         };
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("hang_test.tyra");
+        let path = dir.path().join("hang_test.ty");
         fs::write(
             &path,
             "import assert\n\
@@ -2650,7 +2650,7 @@ mod tests {
             return;
         };
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("fast_test.tyra");
+        let path = dir.path().join("fast_test.ty");
         fs::write(
             &path,
             "import assert\n\
@@ -2689,7 +2689,7 @@ mod tests {
             return;
         };
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("panic_pass_test.tyra");
+        let path = dir.path().join("panic_pass_test.ty");
         fs::write(
             &path,
             "fn test_panics_boom() -> Result<Unit, String>\n\
@@ -2723,7 +2723,7 @@ mod tests {
             return;
         };
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("panic_normal_test.tyra");
+        let path = dir.path().join("panic_normal_test.ty");
         fs::write(
             &path,
             "fn test_panics_doesnt_panic() -> Result<Unit, String>\n\
@@ -2763,7 +2763,7 @@ mod tests {
             return;
         };
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("panic_oob_test.tyra");
+        let path = dir.path().join("panic_oob_test.ty");
         fs::write(
             &path,
             "fn test_panics_oob() -> Result<Unit, String>\n\
@@ -2801,7 +2801,7 @@ mod tests {
             return;
         };
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("named_test.tyra");
+        let path = dir.path().join("named_test.ty");
         fs::write(
             &path,
             "test \"adds two numbers\"\n\
@@ -2839,7 +2839,7 @@ mod tests {
             return;
         };
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("panics_named_test.tyra");
+        let path = dir.path().join("panics_named_test.ty");
         fs::write(
             &path,
             "test \"panics correctly\" panics\n\
@@ -2869,7 +2869,7 @@ mod tests {
             return;
         };
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("test_var_test.tyra");
+        let path = dir.path().join("test_var_test.ty");
         fs::write(
             &path,
             "fn main() -> Int\n\
@@ -2891,7 +2891,7 @@ mod tests {
         );
     }
 
-    // --- smoke file E2E tests (bench/smoke/*.tyra, require pre-built tyra binary) ---
+    // --- smoke file E2E tests (bench/smoke/*.ty, require pre-built tyra binary) ---
 
     fn smoke_path(name: &str) -> std::path::PathBuf {
         // Locate bench/smoke/ relative to the workspace root (two levels up from this crate).
@@ -2906,7 +2906,7 @@ mod tests {
             eprintln!("SKIP: tyra binary not found — run `cargo build` first");
             return;
         };
-        let path = smoke_path("test_name_syntax_smoke_test.tyra");
+        let path = smoke_path("test_name_syntax_smoke_test.ty");
         let output = std::process::Command::new(&tyra)
             .args(["test", path.to_str().unwrap()])
             .output()
@@ -2930,7 +2930,7 @@ mod tests {
             eprintln!("SKIP: tyra binary not found — run `cargo build` first");
             return;
         };
-        let path = smoke_path("test_name_non_ascii_smoke_test.tyra");
+        let path = smoke_path("test_name_non_ascii_smoke_test.ty");
         let output = std::process::Command::new(&tyra)
             .args(["test", path.to_str().unwrap()])
             .output()
@@ -2954,7 +2954,7 @@ mod tests {
             eprintln!("SKIP: tyra binary not found — run `cargo build` first");
             return;
         };
-        let path = smoke_path("test_name_panics_block_smoke_test.tyra");
+        let path = smoke_path("test_name_panics_block_smoke_test.ty");
         let output = std::process::Command::new(&tyra)
             .args(["test", path.to_str().unwrap()])
             .output()
@@ -2984,7 +2984,7 @@ mod tests {
             eprintln!("SKIP: tyra binary not found — run `cargo build` first");
             return;
         };
-        let path = smoke_path("coverage_smoke_test.tyra");
+        let path = smoke_path("coverage_smoke_test.ty");
         let output = std::process::Command::new(&tyra)
             .args(["test", "--coverage", path.to_str().unwrap()])
             .output()

@@ -20,13 +20,13 @@ tyra --version
 **Minimal reproducer**
 
 ```tyra
-# Paste the smallest .tyra file that triggers the bug
+# Paste the smallest .ty file that triggers the bug
 ```
 
 **Command**
 
 ```bash
-tyra run hello.tyra   # or: tyra check / tyra build
+tyra run hello.ty   # or: tyra check / tyra build
 ```
 
 **Expected output**

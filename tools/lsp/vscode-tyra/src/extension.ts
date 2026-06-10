@@ -31,7 +31,7 @@ export function activate(context: ExtensionContext): void {
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: "file", language: "tyra" }],
     synchronize: {
-      fileEvents: workspace.createFileSystemWatcher("**/*.tyra"),
+      fileEvents: workspace.createFileSystemWatcher("**/*.ty"),
     },
   };
 

@@ -66,7 +66,7 @@ pub enum PkgError {
         key: String,
         package_name: String,
     },
-    /// Root module `src/<name>.tyra` is absent (ADR 0009 requires it).
+    /// Root module `src/<name>.ty` is absent (ADR 0009 requires it).
     MissingRootModule(String),
     /// Same package required by two paths with incompatible revisions (E0218).
     DepConflict {
@@ -133,7 +133,7 @@ impl std::fmt::Display for PkgError {
             ),
             PkgError::MissingRootModule(dep) => write!(
                 f,
-                "dependency `{dep}` has no root module `src/{dep}.tyra` (ADR 0009 requires it)"
+                "dependency `{dep}` has no root module `src/{dep}.ty` (ADR 0009 requires it)"
             ),
             PkgError::DepConflict {
                 name,
@@ -755,7 +755,7 @@ pub fn tyra_cache_root() -> PathBuf {
     let home = std::env::var("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("."));
-    home.join(".tyra").join("cache")
+    home.join(".ty").join("cache")
 }
 
 /// `tyra mod clean`
@@ -858,7 +858,7 @@ pub fn cache_dir_for(dep_name: &str, url: &str, rev: &str) -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("."));
     let dir_name = format!("{dep_name}-{}", url_hash(url));
-    home.join(".tyra")
+    home.join(".ty")
         .join("cache")
         .join("git")
         .join(dir_name)
@@ -1054,7 +1054,7 @@ fn resolve_transitive_impl(
                             source_new: source.clone(),
                         });
                     }
-                    // ADR 0009/0010: validate package.name == dep_key, src/<name>.tyra
+                    // ADR 0009/0010: validate package.name == dep_key, `src/<name>.ty`
                     // exists, and the dep is not a bin package.
                     validate_dep_root(dep_name, &dep_root)?;
                     let pkg_version = load_manifest(&dep_root)
@@ -1248,11 +1248,11 @@ pub(crate) fn validate_dep_root(dep_name: &str, dep_root: &Path) -> Result<(), P
             package_name: dep_manifest.package.name.clone(),
         });
     }
-    // ADR 0009: root module src/<name>.tyra must exist; its absence means the
+    // ADR 0009: root module `src/<name>.ty` must exist; its absence means the
     // dependency is unusable (import would fail with E0200) and is caught here.
     let root_src = dep_root
         .join("src")
-        .join(format!("{}.tyra", dep_manifest.package.name));
+        .join(format!("{}.ty", dep_manifest.package.name));
     if !root_src.is_file() {
         return Err(PkgError::MissingRootModule(dep_name.to_string()));
     }
@@ -1979,7 +1979,7 @@ mod tests {
     fn make_src_file(dir: &Path, name: &str, content: &str) {
         let src = dir.join("src");
         fs::create_dir_all(&src).unwrap();
-        fs::write(src.join(format!("{name}.tyra")), content).unwrap();
+        fs::write(src.join(format!("{name}.ty")), content).unwrap();
     }
 
     #[test]
@@ -2025,7 +2025,7 @@ mod tests {
 
     #[test]
     fn cached_dep_no_src_file_is_error() {
-        // ADR 0009: root module src/<name>.tyra must exist; absence is an error.
+        // ADR 0009: root module `src/<name>.ty` must exist; absence is an error.
         let dir = tempfile::tempdir().unwrap();
         make_manifest(dir.path(), "mylib");
         let result = validate_dep_root("mylib", dir.path());
@@ -2177,7 +2177,7 @@ mod tests {
         let src = lib_dir.path().join("src");
         fs::create_dir_all(&src).unwrap();
         fs::write(
-            src.join("mylib.tyra"),
+            src.join("mylib.ty"),
             "export fn greet() -> String\n  \"hi\"\nend\n",
         )
         .unwrap();

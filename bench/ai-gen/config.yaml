@@ -22,7 +22,7 @@ languages:
     # Resolved relative to the repo root.
     compile_cmd: ["target/debug/tyra", "build", "{src}"]
     run_cmd: ["./{bin}"]
-    source_ext: ".tyra"
+    source_ext: ".ty"
   crystal:
     enabled: true
     compile_cmd: ["crystal", "build", "--no-color", "-o", "{bin}", "{src}"]

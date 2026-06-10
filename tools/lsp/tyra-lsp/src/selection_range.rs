@@ -380,7 +380,7 @@ mod tests {
     fn run(src: &str, line: u32, col: u32) -> Option<SelectionRange> {
         let mut sources = SourceMap::new();
         let mut report = tyra_diagnostics::Report::new();
-        let id = sources.add("test.tyra".into(), src.into());
+        let id = sources.add("test.ty".into(), src.into());
         let ast = tyra_parser::parse(id, &sources, &mut report);
         let offset = sources.offset_at_utf16(id, line, col)?;
         compute(&ast, &sources, id, offset)

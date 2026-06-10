@@ -1,7 +1,7 @@
 //! HTTP client stdlib backing (§17.3.3 candidate, Tier 2). M11 phase 1.
 //!
 //! Exposes `tyra_http_get` + accessors as C ABI intrinsics for
-//! `stdlib/http/client.tyra`. Responses are buffered fully into a heap
+//! `stdlib/http/client.ty`. Responses are buffered fully into a heap
 //! struct and handed to Tyra as an opaque `i64` handle (0 = error).
 //!
 //! Transport: the `ureq` crate with rustls TLS. ureq is a blocking

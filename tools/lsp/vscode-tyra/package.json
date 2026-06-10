@@ -22,7 +22,7 @@
           "tyra"
         ],
         "extensions": [
-          ".tyra"
+          ".ty"
         ],
         "configuration": "./language-configuration.json"
       }

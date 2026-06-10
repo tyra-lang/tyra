@@ -806,7 +806,7 @@ mod tests {
                 is_data: false,
                 recursive_fields: vec![false, false],
             }],
-            source_files: vec!["main.tyra".into()],
+            source_files: vec!["main.ty".into()],
             lower_errors: vec![],
         }
     }
@@ -1855,7 +1855,7 @@ mod tests {
             }],
             string_constants: vec![],
             struct_defs: vec![],
-            source_files: vec!["main.tyra".into()],
+            source_files: vec!["main.ty".into()],
             lower_errors: vec![],
         };
         let cg = build_module(&ctx, &program);
@@ -1921,7 +1921,7 @@ mod tests {
             }],
             string_constants: vec![],
             struct_defs: vec![],
-            source_files: vec!["main.tyra".into()],
+            source_files: vec!["main.ty".into()],
             lower_errors: vec![],
         };
         let cg = build_module(&ctx, &program);
@@ -3259,7 +3259,7 @@ mod tests {
             ],
             string_constants: vec![],
             struct_defs: vec![],
-            source_files: vec!["src/app.tyra".into()],
+            source_files: vec!["src/app.ty".into()],
             lower_errors: vec![],
         };
         // The instrumented module must verify (catches out-of-scope !dbg etc.).
@@ -3278,7 +3278,7 @@ mod tests {
             "must emit a compile unit:\n{ir}"
         );
         assert!(
-            ir.contains("!DIFile(filename: \"app.tyra\", directory: \"src\")"),
+            ir.contains("!DIFile(filename: \"app.ty\", directory: \"src\")"),
             "must emit the source file:\n{ir}"
         );
         assert!(
@@ -3334,7 +3334,7 @@ mod tests {
             }],
             string_constants: vec![],
             struct_defs: vec![],
-            source_files: vec!["src/app.tyra".into()],
+            source_files: vec!["src/app.ty".into()],
             lower_errors: vec![],
         };
         let cg = build_module(&ctx, &program);
@@ -3385,7 +3385,7 @@ mod tests {
             }],
             string_constants: vec![],
             struct_defs: vec![],
-            source_files: vec!["src/app.tyra".into()],
+            source_files: vec!["src/app.ty".into()],
             lower_errors: vec![],
         };
         let ctx = Context::create();
@@ -3442,7 +3442,7 @@ mod tests {
             }],
             string_constants: vec![],
             struct_defs: vec![option_int_def()],
-            source_files: vec!["src/app.tyra".into()],
+            source_files: vec!["src/app.ty".into()],
             lower_errors: vec![],
         };
         let ctx = Context::create();
@@ -3512,7 +3512,7 @@ mod tests {
             ],
             string_constants: vec![],
             struct_defs: vec![],
-            source_files: vec!["test.tyra".into()],
+            source_files: vec!["test.ty".into()],
             lower_errors: vec![],
         };
         // The instrumented module must verify (catches a malformed atomicrmw/gep).
@@ -3559,7 +3559,7 @@ mod tests {
             "covmap sidecar must be emitted:\n{covmap}"
         );
         assert!(
-            covmap.contains("FILE:0=test.tyra"),
+            covmap.contains("FILE:0=test.ty"),
             "covmap must list the source file:\n{covmap}"
         );
     }
@@ -3593,7 +3593,7 @@ mod tests {
             }],
             string_constants: vec![],
             struct_defs: vec![],
-            source_files: vec!["test.tyra".into()],
+            source_files: vec!["test.ty".into()],
             lower_errors: vec![],
         };
         let cg = build_module(&ctx, &program);

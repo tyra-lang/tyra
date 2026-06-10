@@ -65,7 +65,7 @@ impl From<std::io::Error> for NewError {
 ///
 /// Creates `<dest>/<name>/` with:
 /// - `Tyra.toml`
-/// - `src/<name>.tyra`
+/// - `src/<name>.ty`
 /// - `.gitignore` (unless `vcs == VcsMode::None`)
 /// - `README.md`
 ///
@@ -87,7 +87,7 @@ pub fn create_project(
     std::fs::create_dir_all(&src_dir)?;
 
     write_file(&project_dir.join("Tyra.toml"), &render_manifest(name))?;
-    write_file(&src_dir.join(format!("{name}.tyra")), render_source(kind))?;
+    write_file(&src_dir.join(format!("{name}.ty")), render_source(kind))?;
     if vcs == VcsMode::Git {
         write_file(&project_dir.join(".gitignore"), GITIGNORE)?;
     }
@@ -181,7 +181,7 @@ mod tests {
     fn bin_creates_expected_files() {
         let (_dir, proj) = scaffold("myapp", ProjectKind::Bin);
         assert!(proj.join("Tyra.toml").is_file());
-        assert!(proj.join("src/myapp.tyra").is_file());
+        assert!(proj.join("src/myapp.ty").is_file());
         assert!(proj.join(".gitignore").is_file());
         assert!(proj.join("README.md").is_file());
     }
@@ -197,7 +197,7 @@ mod tests {
     #[test]
     fn bin_source_has_fn_main_and_print() {
         let (_dir, proj) = scaffold("myapp", ProjectKind::Bin);
-        let src = std::fs::read_to_string(proj.join("src/myapp.tyra")).unwrap();
+        let src = std::fs::read_to_string(proj.join("src/myapp.ty")).unwrap();
         assert!(src.contains("fn main() -> Unit"));
         assert!(src.contains("print(\"Hello, Tyra!\\n\")"));
     }
@@ -205,7 +205,7 @@ mod tests {
     #[test]
     fn lib_source_has_export_fn_no_main() {
         let (_dir, proj) = scaffold("mylib", ProjectKind::Lib);
-        let src = std::fs::read_to_string(proj.join("src/mylib.tyra")).unwrap();
+        let src = std::fs::read_to_string(proj.join("src/mylib.ty")).unwrap();
         assert!(src.contains("export fn greet"));
         assert!(!src.contains("fn main"));
     }
@@ -257,8 +257,8 @@ mod tests {
     fn lib_root_module_named_after_package() {
         let (_dir, proj) = scaffold("mylib", ProjectKind::Lib);
         // Per ADR 0009: root module filename = package name
-        assert!(proj.join("src/mylib.tyra").is_file());
-        assert!(!proj.join("src/lib.tyra").exists());
+        assert!(proj.join("src/mylib.ty").is_file());
+        assert!(!proj.join("src/lib.ty").exists());
     }
 
     #[test]

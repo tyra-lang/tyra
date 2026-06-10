@@ -505,7 +505,7 @@ mod tests {
 
     fn lex(source: &str) -> (Vec<Token>, Report) {
         let mut sources = SourceMap::new();
-        let id = sources.add("test.tyra".into(), source.into());
+        let id = sources.add("test.ty".into(), source.into());
         let mut report = Report::new();
         let tokens = tokenize(id, &sources, &mut report);
         (tokens, report)

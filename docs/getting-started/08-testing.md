@@ -8,7 +8,7 @@ Tyra includes a built-in test runner. No third-party framework is required.
 
 ### Named test functions (`test_*`)
 
-Create a file named `*_test.tyra` (for example `math_test.tyra`) alongside your
+Create a file named `*_test.ty` (for example `math_test.ty`) alongside your
 source files. Inside, write functions whose names start with `test_` and return
 `Result<Unit, String>`:
 
@@ -69,20 +69,20 @@ are discovered automatically by `tyra test`.
 ## Running tests
 
 ```bash
-# Run all *_test.tyra files in the current directory (recursive)
+# Run all *_test.ty files in the current directory (recursive)
 tyra test
 
 # Run tests in a specific directory
 tyra test src/
 
 # Run a single test file
-tyra test math_test.tyra
+tyra test math_test.ty
 ```
 
 Output follows the TAP (Test Anything Protocol) format:
 
 ```
-# math_test.tyra
+# math_test.ty
 TAP version 14
 1..2
 ok 1 - test_addition
@@ -218,14 +218,14 @@ Run the test suite with line and function coverage instrumentation:
 ```bash
 tyra test --coverage
 tyra test --coverage src/
-tyra test --coverage math_test.tyra
+tyra test --coverage math_test.ty
 ```
 
 After all tests complete the runner prints a per-file coverage report to stderr,
 followed by a merged summary:
 
 ```
-# coverage: math_test.tyra
+# coverage: math_test.ty
 lines:     6/7  (85%)
 functions: 2/3  (66%)
 
@@ -278,7 +278,7 @@ passes, regardless of any ignored assertion results.
 
 ## Rules for test files
 
-- The file name must end with `_test.tyra`
+- The file name must end with `_test.ty`
 - Test functions must have no parameters and return `Result<Unit, String>`
 - Test files must not contain `fn main` or top-level executable statements
 

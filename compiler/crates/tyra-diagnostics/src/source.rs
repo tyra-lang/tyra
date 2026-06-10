@@ -201,15 +201,15 @@ mod tests {
     #[test]
     fn source_map_basics() {
         let mut map = SourceMap::new();
-        let id = map.add("test.tyra".into(), "hello\nworld\n".into());
-        assert_eq!(map.name(id), "test.tyra");
+        let id = map.add("test.ty".into(), "hello\nworld\n".into());
+        assert_eq!(map.name(id), "test.ty");
         assert_eq!(map.content(id), "hello\nworld\n");
     }
 
     #[test]
     fn line_col_first_line() {
         let mut map = SourceMap::new();
-        let id = map.add("test.tyra".into(), "let x = 10\nlet y = 20\n".into());
+        let id = map.add("test.ty".into(), "let x = 10\nlet y = 20\n".into());
         assert_eq!(map.line_col(id, 0), (1, 1));
         assert_eq!(map.line_col(id, 4), (1, 5));
     }
@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn line_col_second_line() {
         let mut map = SourceMap::new();
-        let id = map.add("test.tyra".into(), "let x = 10\nlet y = 20\n".into());
+        let id = map.add("test.ty".into(), "let x = 10\nlet y = 20\n".into());
         // "let x = 10\n" is 11 bytes, so line 2 starts at offset 11
         assert_eq!(map.line_col(id, 11), (2, 1));
         assert_eq!(map.line_col(id, 15), (2, 5));
@@ -226,7 +226,7 @@ mod tests {
     #[test]
     fn line_content_lookup() {
         let mut map = SourceMap::new();
-        let id = map.add("test.tyra".into(), "first\nsecond\nthird\n".into());
+        let id = map.add("test.ty".into(), "first\nsecond\nthird\n".into());
         assert_eq!(map.line_content(id, 1), "first");
         assert_eq!(map.line_content(id, 2), "second");
         assert_eq!(map.line_content(id, 3), "third");
@@ -235,7 +235,7 @@ mod tests {
     #[test]
     fn slice_extraction() {
         let mut map = SourceMap::new();
-        let id = map.add("test.tyra".into(), "hello, tyra".into());
+        let id = map.add("test.ty".into(), "hello, tyra".into());
         assert_eq!(map.slice(id, 0, 5), "hello");
         assert_eq!(map.slice(id, 7, 11), "tyra");
     }
@@ -244,7 +244,7 @@ mod tests {
     fn offset_at_basics() {
         let mut map = SourceMap::new();
         // "let x = 1\nlet y = 2\n" → line_starts = [0, 10, 20], content.len() = 20
-        let id = map.add("t.tyra".into(), "let x = 1\nlet y = 2\n".into());
+        let id = map.add("t.ty".into(), "let x = 1\nlet y = 2\n".into());
         // line 0 col 0 → byte 0
         assert_eq!(map.offset_at(id, 0, 0), Some(0));
         // line 0 col 4 → byte 4 ("x" is at col 4)
@@ -260,7 +260,7 @@ mod tests {
     #[test]
     fn empty_file() {
         let mut map = SourceMap::new();
-        let id = map.add("empty.tyra".into(), "".into());
+        let id = map.add("empty.ty".into(), "".into());
         assert_eq!(map.line_col(id, 0), (1, 1));
         assert_eq!(map.content(id), "");
     }
@@ -268,7 +268,7 @@ mod tests {
     #[test]
     fn no_trailing_newline() {
         let mut map = SourceMap::new();
-        let id = map.add("test.tyra".into(), "let x = 10".into());
+        let id = map.add("test.ty".into(), "let x = 10".into());
         assert_eq!(map.line_content(id, 1), "let x = 10");
         assert_eq!(map.line_col(id, 0), (1, 1));
         assert_eq!(map.line_col(id, 10), (1, 11));
@@ -277,7 +277,7 @@ mod tests {
     #[test]
     fn windows_line_endings() {
         let mut map = SourceMap::new();
-        let id = map.add("win.tyra".into(), "first\r\nsecond\r\n".into());
+        let id = map.add("win.ty".into(), "first\r\nsecond\r\n".into());
         assert_eq!(map.line_content(id, 1), "first");
         assert_eq!(map.line_content(id, 2), "second");
     }
@@ -288,7 +288,7 @@ mod tests {
     fn utf16_ascii_roundtrip() {
         // ASCII content: UTF-16 code units == UTF-8 bytes.
         let mut map = SourceMap::new();
-        let id = map.add("t.tyra".into(), "let x = 1\nlet y = 2\n".into());
+        let id = map.add("t.ty".into(), "let x = 1\nlet y = 2\n".into());
         assert_eq!(map.offset_at_utf16(id, 0, 0), Some(0));
         assert_eq!(map.offset_at_utf16(id, 0, 4), Some(4));
         assert_eq!(map.offset_at_utf16(id, 1, 0), Some(10));
@@ -302,7 +302,7 @@ mod tests {
         // 名 = U+540D: 3 UTF-8 bytes, 1 UTF-16 code unit (BMP)
         // "ab名cd\n" → byte offsets: a=0 b=1 名=2,3,4 c=5 d=6 \n=7
         let mut map = SourceMap::new();
-        let id = map.add("t.tyra".into(), "ab名cd\n".into());
+        let id = map.add("t.ty".into(), "ab名cd\n".into());
 
         // UTF-16 col 2 → byte offset 2 (start of '名')
         assert_eq!(map.offset_at_utf16(id, 0, 2), Some(2));
@@ -322,7 +322,7 @@ mod tests {
         // 🚀 = U+1F680: 4 UTF-8 bytes, 2 UTF-16 code units (surrogate pair)
         // "a🚀b\n" → bytes: a=0, 🚀=1,2,3,4, b=5, \n=6
         let mut map = SourceMap::new();
-        let id = map.add("t.tyra".into(), "a🚀b\n".into());
+        let id = map.add("t.ty".into(), "a🚀b\n".into());
 
         // UTF-16 col 0 → byte 0 ('a')
         assert_eq!(map.offset_at_utf16(id, 0, 0), Some(0));
@@ -346,7 +346,7 @@ mod tests {
         // text (before '\n' / '\r\n'), never into the line ending or the next
         // line.
         let mut map = SourceMap::new();
-        let id = map.add("t.tyra".into(), "abc\ndef\n".into());
+        let id = map.add("t.ty".into(), "abc\ndef\n".into());
         // Line 0: "abc\n" — visible = "abc" (3 UTF-16 units, bytes 0-2).
         // character=10 → clamp to byte 3 (one past 'c', before '\n').
         assert_eq!(map.offset_at_utf16(id, 0, 10), Some(3));
@@ -354,7 +354,7 @@ mod tests {
         assert_eq!(map.offset_at_utf16(id, 1, 10), Some(7));
 
         // CRLF line endings: '\r\n' must both be excluded.
-        let id2 = map.add("win.tyra".into(), "hi\r\nbye\r\n".into());
+        let id2 = map.add("win.ty".into(), "hi\r\nbye\r\n".into());
         // Line 0: "hi\r\n" — visible = "hi" (bytes 0-1), visible_end = 2.
         assert_eq!(map.offset_at_utf16(id2, 0, 99), Some(2));
     }
@@ -366,7 +366,7 @@ mod tests {
         // line 2: "ok\n"     (3 bytes)
         let src = "hello\n名前\nok\n";
         let mut map = SourceMap::new();
-        let id = map.add("t.tyra".into(), src.into());
+        let id = map.add("t.ty".into(), src.into());
 
         // line 1, UTF-16 col 0 → byte 6 (start of '名')
         assert_eq!(map.offset_at_utf16(id, 1, 0), Some(6));

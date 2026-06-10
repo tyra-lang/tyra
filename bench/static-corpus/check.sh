@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Compile-check every .tyra file in the static corpus.
+# Compile-check every .ty file in the static corpus.
 # Exits 0 only if ALL files compile without error.
 #
 # Usage: bash bench/static-corpus/check.sh [tyra-binary-path] [flags]
 #
 # Flags:
 #   --include-network  Include network-dependent files (04, 08).
-#   --check-only       Skip "tyra test" execution for *_test.tyra files;
+#   --check-only       Skip "tyra test" execution for *_test.ty files;
 #                      only run "tyra check". Use on platforms where LLVM
 #                      codegen is unavailable (e.g. Alpine musl / LLVM 19
 #                      where static LLVM libs SIGSEGV during test-binary
 #                      initialisation). Type-checking still validates
 #                      imports, types, and function signatures.
 #
-# bad/ subdirectory: files named Exxxx-<slug>.tyra are expected to fail
+# bad/ subdirectory: files named Exxxx-<slug>.ty are expected to fail
 # with error[Exxxx] in stderr. These exercise the negative corpus.
 
 set -euo pipefail
@@ -41,8 +41,8 @@ SKIP=0
 # Set before all loops so the script is order-independent.
 shopt -s nullglob
 
-for f in "$SCRIPT_DIR"/*.tyra; do
-  base="$(basename "$f" .tyra)"
+for f in "$SCRIPT_DIR"/*.ty; do
+  base="$(basename "$f" .ty)"
   skip=0
   # SKIP_PATTERNS may be empty; ${arr[@]:-} suppresses set -u errors on empty arrays.
   for pat in "${SKIP_PATTERNS[@]:-}"; do
@@ -64,9 +64,9 @@ for f in "$SCRIPT_DIR"/*.tyra; do
 done
 
 # Negative corpus: files in bad/ must fail with the expected error code.
-# *_test.tyra files are tested via tyra test (see below), not tyra check.
-for f in "$SCRIPT_DIR"/bad/*.tyra; do
-  base="$(basename "$f" .tyra)"
+# *_test.ty files are tested via tyra test (see below), not tyra check.
+for f in "$SCRIPT_DIR"/bad/*.ty; do
+  base="$(basename "$f" .ty)"
   [[ "$base" == *_test ]] && continue
   if [[ "$base" =~ ^(E[0-9]{4})- ]]; then
     code="${BASH_REMATCH[1]}"
@@ -95,15 +95,15 @@ for f in "$SCRIPT_DIR"/bad/*.tyra; do
   fi
 done
 
-# Test runner: run tyra test on *_test.tyra files in the corpus.
+# Test runner: run tyra test on *_test.ty files in the corpus.
 # Skipped when --check-only is passed (see header comment).
 if [[ "$CHECK_ONLY" -eq 1 ]]; then
-  for f in "$SCRIPT_DIR"/*_test.tyra; do
+  for f in "$SCRIPT_DIR"/*_test.ty; do
     echo "SKIP $f (--check-only: tyra test execution skipped on this platform)"
     SKIP=$((SKIP + 1))
   done
 else
-  for f in "$SCRIPT_DIR"/*_test.tyra; do
+  for f in "$SCRIPT_DIR"/*_test.ty; do
     set +e
     out="$("$TYRA" test "$f" 2>&1)"
     tyra_exit=$?
@@ -119,16 +119,16 @@ else
   done
 fi
 
-# Negative test runner: bad/*_test.tyra files must fail tyra test with
+# Negative test runner: bad/*_test.ty files must fail tyra test with
 # the expected error code. Skipped under --check-only for the same reason.
 if [[ "$CHECK_ONLY" -eq 1 ]]; then
-  for f in "$SCRIPT_DIR"/bad/*_test.tyra; do
+  for f in "$SCRIPT_DIR"/bad/*_test.ty; do
     echo "SKIP $f (--check-only: tyra test execution skipped on this platform)"
     SKIP=$((SKIP + 1))
   done
 else
-  for f in "$SCRIPT_DIR"/bad/*_test.tyra; do
-    base="$(basename "$f" .tyra)"
+  for f in "$SCRIPT_DIR"/bad/*_test.ty; do
+    base="$(basename "$f" .ty)"
     if [[ "$base" =~ ^(E[0-9]{4})- ]]; then
       code="${BASH_REMATCH[1]}"
     else

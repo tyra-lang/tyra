@@ -113,7 +113,7 @@ mod tests {
     fn extract_identifier_span_at_basic() {
         let mut sources = SourceMap::new();
         let src = "let foo = 1\n";
-        let id = sources.add("t.tyra".into(), src.into());
+        let id = sources.add("t.ty".into(), src.into());
         // 'f' is at byte 4
         let span = extract_identifier_span_at(src, id, 4).expect("expected span");
         assert_eq!(span.start, 4);
@@ -158,7 +158,7 @@ mod tests {
     fn find_binding_name_span_let() {
         let src = "let x: Int = 1\n";
         let mut sources = SourceMap::new();
-        let id = sources.add("t.tyra".into(), src.into());
+        let id = sources.add("t.ty".into(), src.into());
         // def_span covers the whole statement: bytes 0..15
         let def_span = Span::new(id, 0, 15);
         let span = find_binding_name_span(src, def_span, "x").expect("should find x");
@@ -172,7 +172,7 @@ mod tests {
     fn find_binding_name_span_fn() {
         let src = "fn foo() -> Int\n  0\nend\n";
         let mut sources = SourceMap::new();
-        let id = sources.add("t.tyra".into(), src.into());
+        let id = sources.add("t.ty".into(), src.into());
         let def_span = Span::new(id, 0, src.len() as u32);
         let span = find_binding_name_span(src, def_span, "foo").expect("should find foo");
         // "fn foo" — 'foo' starts at byte 3
@@ -199,7 +199,7 @@ mod tests {
         // "let xy: Int = 1" — looking for "x" should NOT match "xy"
         let src = "let xy: Int = 1\n";
         let mut sources = SourceMap::new();
-        let id = sources.add("t.tyra".into(), src.into());
+        let id = sources.add("t.ty".into(), src.into());
         let def_span = Span::new(id, 0, src.len() as u32);
         assert!(find_binding_name_span(src, def_span, "x").is_none());
     }

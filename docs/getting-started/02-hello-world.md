@@ -10,10 +10,10 @@ The simplest Tyra program is a single statement at the top level:
 print("Hello, World!\n")
 ```
 
-Save it as `hello.tyra` and run:
+Save it as `hello.ty` and run:
 
 ```bash
-tyra run hello.tyra
+tyra run hello.ty
 ```
 
 There is no required `main` function for small scripts — top-level statements execute in order. For larger programs, you define a `main` function:
@@ -30,9 +30,9 @@ end
 
 | Command | What it does |
 |---|---|
-| `tyra run file.tyra` | Compile and immediately execute |
-| `tyra build file.tyra` | Compile to a native binary (`./out` by default) |
-| `tyra build -o myapp file.tyra` | Compile to a named binary |
+| `tyra run file.ty` | Compile and immediately execute |
+| `tyra build file.ty` | Compile to a native binary (`./out` by default) |
+| `tyra build -o myapp file.ty` | Compile to a named binary |
 
 Use `tyra run` during development. Use `tyra build` when you want a binary to distribute or deploy.
 

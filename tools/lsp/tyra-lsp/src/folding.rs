@@ -226,7 +226,7 @@ mod tests {
     fn compile_ranges(src: &str) -> Vec<FoldingRange> {
         let mut sources = SourceMap::new();
         let mut report = tyra_diagnostics::Report::new();
-        let id = sources.add("test.tyra".into(), src.into());
+        let id = sources.add("test.ty".into(), src.into());
         let ast = tyra_parser::parse(id, &sources, &mut report);
         build_ranges(&ast, &sources, id)
     }

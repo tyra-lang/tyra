@@ -52,7 +52,7 @@ mod tests {
     use super::*;
 
     fn make_docs(uri: &str, src: &str) -> HashMap<Url, DocState> {
-        let result = tyra_driver::check_in_memory("test.tyra".to_string(), src.to_string(), None);
+        let result = tyra_driver::check_in_memory("test.ty".to_string(), src.to_string(), None);
         let state = crate::DocState {
             text: src.to_string(),
             sources: result.sources,
@@ -73,7 +73,7 @@ mod tests {
     #[test]
     fn empty_query_returns_all_symbols() {
         let src = "fn foo()\nend\nfn bar()\nend\n";
-        let docs = make_docs("file:///tmp/a.tyra", src);
+        let docs = make_docs("file:///tmp/a.ty", src);
         let syms = collect("", &docs);
         let names: Vec<&str> = syms.iter().map(|s| s.name.as_str()).collect();
         assert!(names.contains(&"foo"), "expected 'foo' in: {names:?}");
@@ -83,7 +83,7 @@ mod tests {
     #[test]
     fn query_filters_case_insensitive_substring() {
         let src = "fn greet()\nend\nfn foo()\nend\n";
-        let docs = make_docs("file:///tmp/b.tyra", src);
+        let docs = make_docs("file:///tmp/b.ty", src);
         let syms = collect("GREE", &docs);
         let names: Vec<&str> = syms.iter().map(|s| s.name.as_str()).collect();
         assert!(names.contains(&"greet"), "expected 'greet' in: {names:?}");

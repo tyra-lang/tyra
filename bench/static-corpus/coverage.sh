@@ -28,7 +28,7 @@ while IFS= read -r fullline; do
   printf '%s' "$before_dash" | grep -oE '[0-9]+(\.[0-9]+)*' | while IFS= read -r sid; do
     printf '%s\t%s\n' "$sid" "$fname"
   done
-done < <(grep -rn "SPEC_REF:" "$SCRIPT_DIR" --include='*.tyra') > "$tmpfile"
+done < <(grep -rn "SPEC_REF:" "$SCRIPT_DIR" --include='*.ty') > "$tmpfile"
 
 # ── 2. Cross-reference with spec headings; print report ───────────────────────
 awk -v reffile="$tmpfile" '

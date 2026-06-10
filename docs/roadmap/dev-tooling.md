@@ -32,7 +32,7 @@ and related developer experience tooling.
 ### `tyra new`
 
 - `tyra new <name> [--lib] [--vcs none]` — scaffold a bin or lib project
-- Generates `Tyra.toml`, `src/<name>.tyra`, `.gitignore`, `README.md`
+- Generates `Tyra.toml`, `src/<name>.ty`, `.gitignore`, `README.md`
 - `--lib` emits `export fn` template; `--vcs none` suppresses `.gitignore`
 
 ### `tyra mod`
@@ -53,12 +53,12 @@ and related developer experience tooling.
 
 ### `tyra fmt` (v0.2.0 baseline)
 
-- Formats a single `.tyra` file or an entire directory (recursive)
+- Formats a single `.ty` file or an entire directory (recursive)
 - Preserves all comments; 2-space indentation; idempotent
 
 ### `tyra test` (v0.2.0 baseline)
 
-- Discovers `*_test.tyra` files from the given path (default: current directory)
+- Discovers `*_test.ty` files from the given path (default: current directory)
 - TAP version 14 output; E0216 enforced
 
 ---
@@ -68,7 +68,7 @@ and related developer experience tooling.
 - Lambda C ABI and closures (spec §9.4, ADR 0011) — first-class `fn(T)->U` values with captured environments
 - Generic `List<T>` + `map`/`filter`/`fold` (spec §17.3.5) — `List<Int>` and `List<String>` fully supported
 - Generic `assert.eq<T>` / `assert.ne<T>` — overloaded for `Int`, `String`, `Bool` via compiler-known `Eq` ability
-- `tyra bench <dir>` (spec §18.8) — general-purpose wall-clock microbenchmark runner for `*_bench.tyra` files
+- `tyra bench <dir>` (spec §18.8) — general-purpose wall-clock microbenchmark runner for `*_bench.ty` files
 - `tyra test --timeout <secs>` and `--jobs N` (parallel test execution with deterministic output)
 - `Tyra.lock` + floating `branch` constraints + transitive dependency resolution (minimal solver)
 

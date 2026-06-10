@@ -18,7 +18,7 @@ mod tests {
 
     fn check_str(source: &str) -> Report {
         let mut sources = SourceMap::new();
-        let id = sources.add("test.tyra".into(), source.into());
+        let id = sources.add("test.ty".into(), source.into());
         let mut report = Report::new();
         let ast = tyra_parser::parse(id, &sources, &mut report);
         if report.has_errors() {

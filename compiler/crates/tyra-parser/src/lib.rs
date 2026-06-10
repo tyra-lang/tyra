@@ -160,7 +160,7 @@ mod tests {
 
     fn parse_str(source: &str) -> (SourceFile, Report) {
         let mut sources = SourceMap::new();
-        let id = sources.add("test.tyra".into(), source.into());
+        let id = sources.add("test.ty".into(), source.into());
         let mut report = Report::new();
         let ast = parse(id, &sources, &mut report);
         (ast, report)

@@ -18,7 +18,7 @@ mod tests {
 
     fn lower_str(source: &str) -> Program {
         let mut sources = SourceMap::new();
-        let id = sources.add("test.tyra".into(), source.into());
+        let id = sources.add("test.ty".into(), source.into());
         let mut report = Report::new();
         let ast = tyra_parser::parse(id, &sources, &mut report);
         assert!(
@@ -1474,20 +1474,20 @@ end
     /// Layout cross-check — Tyra side. The runtime's `stdlib_http_server.rs`
     /// pins `TyraRequest` / `TyraResponse` Rust layouts with `offset_of!`;
     /// this test is the authoritative Tyra counterpart. Read the real
-    /// `stdlib/http/server.tyra` file, scan for the `data Request` and
+    /// `stdlib/http/server.ty` file, scan for the `data Request` and
     /// `data Response` blocks, and assert declaration order. A maintainer
     /// reordering stdlib fields (e.g. `body, path, method`) trips this
     /// test before the runtime silently reads swapped pointers.
     #[test]
     fn http_server_tyra_struct_field_order() {
-        // Read the real stdlib/http/server.tyra file and scan its
+        // Read the real stdlib/http/server.ty file and scan its
         // `data Request` / `data Response` blocks for field order. A
         // maintainer editing the stdlib file to reorder fields must
         // update this test, which forces synchronous review of the
         // runtime-side TyraRequest/TyraResponse layout.
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let stdlib_path =
-            std::path::Path::new(manifest_dir).join("../../../stdlib/http/server.tyra");
+            std::path::Path::new(manifest_dir).join("../../../stdlib/http/server.ty");
         let src = std::fs::read_to_string(&stdlib_path).unwrap_or_else(|e| {
             panic!(
                 "cannot read {}: {e} — layout test requires the real stdlib file",
@@ -1499,14 +1499,14 @@ end
         assert_eq!(
             req_fields,
             vec!["method", "path", "body"],
-            "stdlib/http/server.tyra `data Request` field order must match \
+            "stdlib/http/server.ty `data Request` field order must match \
              runtime TyraRequest {{ method, path, body }}"
         );
         let resp_fields = extract_data_fields(&src, "Response");
         assert_eq!(
             resp_fields,
             vec!["status", "body"],
-            "stdlib/http/server.tyra `data Response` field order must match \
+            "stdlib/http/server.ty `data Response` field order must match \
              runtime TyraResponse {{ status, body }}"
         );
     }

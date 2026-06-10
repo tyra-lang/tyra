@@ -45,7 +45,7 @@ mod tests {
     use super::*;
 
     fn run(src: &str, line: u32, col: u32) -> Option<Span> {
-        let result = tyra_driver::check_in_memory("test.tyra".to_string(), src.to_string(), None);
+        let result = tyra_driver::check_in_memory("test.ty".to_string(), src.to_string(), None);
         let offset = result
             .sources
             .offset_at_utf16(result.source_id, line, col)

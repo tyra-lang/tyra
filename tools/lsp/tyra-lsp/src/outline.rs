@@ -214,7 +214,7 @@ mod tests {
     fn run(src: &str) -> Vec<DocumentSymbol> {
         let mut sources = SourceMap::new();
         let mut report = tyra_diagnostics::Report::new();
-        let id = sources.add("t.tyra".into(), src.into());
+        let id = sources.add("t.ty".into(), src.into());
         let ast = tyra_parser::parse(id, &sources, &mut report);
         build_document_symbols(id, &ast, &sources)
     }

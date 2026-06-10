@@ -42,10 +42,10 @@ else
   fail "tyra new creates Tyra.toml (not found at $APP_DIR/Tyra.toml)"
 fi
 
-if [[ -f "$APP_DIR/src/myapp.tyra" ]]; then
-  pass "tyra new creates src/<name>.tyra"
+if [[ -f "$APP_DIR/src/myapp.ty" ]]; then
+  pass "tyra new creates src/<name>.ty"
 else
-  fail "tyra new creates src/<name>.tyra (not found)"
+  fail "tyra new creates src/<name>.ty (not found)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -63,10 +63,10 @@ fi
 # ---------------------------------------------------------------------------
 LIB_DIR="$TMPDIR_BASE/mylib"
 (cd "$TMPDIR_BASE" && "$TYRA" new mylib --lib) 2>/dev/null || true
-if [[ -f "$LIB_DIR/src/mylib.tyra" ]]; then
-  pass "tyra new --lib creates src/<name>.tyra"
+if [[ -f "$LIB_DIR/src/mylib.ty" ]]; then
+  pass "tyra new --lib creates src/<name>.ty"
 else
-  fail "tyra new --lib creates src/<name>.tyra (not found)"
+  fail "tyra new --lib creates src/<name>.ty (not found)"
 fi
 
 # ---------------------------------------------------------------------------

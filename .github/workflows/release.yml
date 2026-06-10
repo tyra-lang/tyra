@@ -171,7 +171,7 @@ jobs:
 
       - name: Verify static binary
         run: |
-          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra build --static examples/01-hello.tyra -o /tmp/tyra_static_verify
+          TYRA_STDLIB=$PWD/stdlib ./target/release/tyra build --static examples/01-hello.ty -o /tmp/tyra_static_verify
           file /tmp/tyra_static_verify | grep -q "statically linked" || {
             echo "FAIL: binary is not statically linked"
             file /tmp/tyra_static_verify

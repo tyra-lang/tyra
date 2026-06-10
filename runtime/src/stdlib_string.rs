@@ -1,6 +1,6 @@
 //! String stdlib backing (§17.3.4). v0.1 scalar string operations.
 //!
-//! Exposes `tyra_string_*` intrinsics consumed by `stdlib/string.tyra`.
+//! Exposes `tyra_string_*` intrinsics consumed by `stdlib/string.ty`.
 //!
 //! Scope (v0.1): byte-length, trim, upper/lower (ASCII only), substring
 //! predicates (contains / starts_with / ends_with), and decimal parse_int
