@@ -1,0 +1,27 @@
+# stdlib/sorted_map.tyra — Key-sorted persistent SortedMap<K,V> (§11, ADR-0024).
+#
+# SortedMap<K,V> is a persistent map that iterates in ascending key order.
+# Unlike LinkedMap<K,V> (insertion order), SortedMap<K,V> always presents
+# entries sorted by the natural ordering of K.
+#
+# K must satisfy the Ord ability constraint; V is unconstrained.
+# Float keys are NOT permitted (Float has Ord but not Eq due to NaN; ADR-0002).
+# Valid key types: Int, Bool, String.
+#
+# v0.10 API:
+#   Construction:      SortedMap.new()            — returns an empty SortedMap<K,V>
+#   sm.insert(k, v) -> SortedMap<K,V>             — non-mutating; idempotent key update
+#   sm.get(k)        -> Option<V>                 — None if absent
+#   sm.remove(k)     -> SortedMap<K,V>            — non-mutating
+#   sm.contains_key(k) -> Bool
+#   sm.len()         -> Int
+#   for k, v in sm { ... }                        — iterates in ascending key order
+#
+# All operations are non-mutating from the language's perspective.
+# Internally implemented as a sorted array with path-copying (ADR-0024).
+# GC_malloc'd storage is managed by Boehm GC (ADR-0007).
+#
+# This module currently has no exported functions — all SortedMap operations are
+# accessed via SortedMap.new() construction and method-call syntax on
+# SortedMap<K,V> values.  The module exists to document the built-in API and
+# reserve the `sorted_map` namespace for future additions.

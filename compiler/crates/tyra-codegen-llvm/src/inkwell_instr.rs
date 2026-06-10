@@ -921,6 +921,28 @@ impl<'ctx> CodeGen<'ctx> {
             Instruction::LinkedSetForEachCall { handle, fat_ptr } => {
                 self.emit_for_each(handle, fat_ptr, "tyra_linked_set_for_each", "__lsfe");
             }
+            Instruction::SortedMapGetOption {
+                dest,
+                handle,
+                key,
+                key_ty,
+                val_ty,
+            } => {
+                self.emit_map_get_option(
+                    dest,
+                    handle,
+                    key,
+                    key_ty,
+                    val_ty,
+                    "tyra_sorted_map_get",
+                );
+            }
+            Instruction::SortedMapForEachCall { handle, fat_ptr } => {
+                self.emit_for_each(handle, fat_ptr, "tyra_sorted_map_for_each", "__smfe");
+            }
+            Instruction::SortedSetForEachCall { handle, fat_ptr } => {
+                self.emit_for_each(handle, fat_ptr, "tyra_sorted_set_for_each", "__ssfe");
+            }
             Instruction::Spawn {
                 dest,
                 func,

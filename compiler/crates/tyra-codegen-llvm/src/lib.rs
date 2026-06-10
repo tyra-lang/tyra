@@ -131,7 +131,8 @@ fn instruction_types(instr: &Instruction) -> Vec<&Ty> {
         | Instruction::Select { elem_type, .. } => vec![elem_type],
 
         Instruction::MapGetOption { key_ty, val_ty, .. }
-        | Instruction::LinkedMapGetOption { key_ty, val_ty, .. } => vec![key_ty, val_ty],
+        | Instruction::LinkedMapGetOption { key_ty, val_ty, .. }
+        | Instruction::SortedMapGetOption { key_ty, val_ty, .. } => vec![key_ty, val_ty],
 
         Instruction::Spawn {
             arg_types,
@@ -191,7 +192,9 @@ fn instruction_types(instr: &Instruction) -> Vec<&Ty> {
         | Instruction::MapForEachCall { .. }
         | Instruction::SetForEachCall { .. }
         | Instruction::LinkedMapForEachCall { .. }
-        | Instruction::LinkedSetForEachCall { .. } => Vec::new(),
+        | Instruction::LinkedSetForEachCall { .. }
+        | Instruction::SortedMapForEachCall { .. }
+        | Instruction::SortedSetForEachCall { .. } => Vec::new(),
     }
 }
 

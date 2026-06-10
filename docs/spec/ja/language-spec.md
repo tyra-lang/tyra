@@ -865,6 +865,8 @@ end
 - `Set<T>` — v0.6.0 で任意の `T: Eq + Hash` として新設（§17.3.7）
 - `LinkedMap<K, V>` — v0.8.0 で新設。挿入順を保持する永続 Map（ADR-0019）
 - `LinkedSet<T>` — v0.8.0 で新設。挿入順を保持する永続 Set（ADR-0019）
+- `SortedMap<K, V>` — v0.10.0 で新設。昇順キー順を保持する永続 Map（ADR-0024）
+- `SortedSet<T>` — v0.10.0 で新設。昇順要素順を保持する永続 Set（ADR-0024）
 
 リテラル:
 
@@ -949,6 +951,57 @@ let n = ls.len()           # Int — 3
 **`remove` の計算量 (v0.9.0)**: `LinkedMap` に委譲するため §11.1 と同一。
 - 要素が存在しない場合: O(1) — ラッパー構造体のみ確保。
 - 要素が存在する場合: O(entries_cap + idx_cap) — tombstone を記録。次の `insert` で compaction。
+
+### 11.3 SortedMap — キー昇順保持 Map (v0.10.0, ADR-0024)
+
+`SortedMap<K, V>` はキーの昇順を保持する永続 Map である。`for k, v in sm` は常に `K` の昇順で要素を返す。
+
+```tyra
+import sorted_map
+
+let sm: SortedMap<String, Int> = SortedMap.new()
+let sm = sm.insert("banana", 2)
+let sm = sm.insert("apple",  1)
+let sm = sm.insert("cherry", 3)
+
+for k, v in sm
+  print("#{k}: #{v}")   # 出力: apple: 1, banana: 2, cherry: 3 (昇順)
+end
+
+let found = sm.get("apple")       # Option<Int> — Some(1)
+let ok    = sm.contains_key("x")  # Bool — false
+let sm2   = sm.remove("banana")   # SortedMap<String, Int>; apple/cherry が残る
+let n     = sm.len()              # Int — 3
+```
+
+**制約**: `K` は `Ord` ability constraint を満たす必要がある。`Float` キーは E0315 コンパイルエラー（NaN は比較不能、ADR-0002）。有効なキー型: `Int` / `Bool` / `String`。
+
+**`remove` の計算量 (v0.10.0)**: ソート済み配列のパスコピー実装。
+- キーが存在しない場合: O(1) — ラッパー構造体のみ確保。
+- キーが存在する場合: O(n) — エントリ配列をコピー。
+
+### 11.4 SortedSet — 要素昇順保持 Set (v0.10.0, ADR-0024)
+
+`SortedSet<T>` は要素の昇順を保持する永続 Set である。`SortedMap<T, ()>` への薄いラッパーとして実装される。
+
+```tyra
+import sorted_set
+
+let ss: SortedSet<Int> = SortedSet.new()
+let ss = ss.insert(30)
+let ss = ss.insert(10)
+let ss = ss.insert(20)
+
+for x in ss
+  print(x)   # 出力: 10, 20, 30 (昇順)
+end
+
+let ok  = ss.contains(20)  # Bool — true
+let ss2 = ss.remove(20)    # SortedSet<Int>; 10, 30 が残る
+let n   = ss.len()          # Int — 3
+```
+
+**制約**: `T` は `Ord` ability constraint を満たす必要がある。`Float` 要素は E0315 コンパイルエラー（ADR-0002）。有効な要素型: `Int` / `Bool` / `String`。
 
 ---
 

@@ -871,6 +871,8 @@ Standard collections (design target):
 - `Set<T>` — added in v0.6.0 for arbitrary `T: Eq + Hash` (§17.3.7)
 - `LinkedMap<K, V>` — added in v0.8.0; insertion-order-preserving persistent Map (ADR-0019)
 - `LinkedSet<T>` — added in v0.8.0; insertion-order-preserving persistent Set (ADR-0019)
+- `SortedMap<K, V>` — added in v0.10.0; ascending-key-order persistent Map (ADR-0024)
+- `SortedSet<T>` — added in v0.10.0; ascending-element-order persistent Set (ADR-0024)
 
 Literals:
 
@@ -945,6 +947,56 @@ let n = ls.len()           # Int — 3
 ```
 
 **Constraint**: `T` must satisfy the `Eq + Hash` ability constraint. `Float` elements are not permitted.
+
+### 11.3 SortedMap — ascending-key-order Map (v0.10.0, ADR-0024)
+
+`SortedMap<K, V>` is a persistent map that preserves ascending key order. `for k, v in sm` always yields entries in ascending `K` order.
+
+```tyra
+import sorted_map
+
+let sm: SortedMap<String, Int> = SortedMap.new()
+let sm = sm.insert("banana", 2)
+let sm = sm.insert("apple",  1)
+let sm = sm.insert("cherry", 3)
+
+for k, v in sm
+  print("#{k}: #{v}")   # apple: 1, banana: 2, cherry: 3
+end
+
+let found = sm.get("apple")       # Option<Int> — Some(1)
+let ok    = sm.contains_key("x")  # Bool — false
+let sm2   = sm.remove("banana")   # SortedMap<String, Int>; apple/cherry remain
+let n     = sm.len()              # Int — 3
+```
+
+**Constraint**: `K` must satisfy the `Ord` ability constraint. `Float` keys are rejected at compile time with **E0315** (NaN is not comparable, ADR-0002). Valid key types: `Int`, `Bool`, `String`.
+
+> - `SortedMap<K, V>`: added in v0.10.0 (ADR-0024). `K: Ord` (no Float), arbitrary `V`. Ascending-key iteration. Requires `import sorted_map`.
+> - `SortedSet<T>`: added in v0.10.0 (ADR-0024). `T: Ord` (no Float). Ascending-element iteration. Requires `import sorted_set`.
+
+### 11.4 SortedSet — ascending-element-order Set (v0.10.0, ADR-0024)
+
+`SortedSet<T>` is a persistent set that preserves ascending element order. Implemented as a thin wrapper over `SortedMap<T, ()>`.
+
+```tyra
+import sorted_set
+
+let ss: SortedSet<Int> = SortedSet.new()
+let ss = ss.insert(30)
+let ss = ss.insert(10)
+let ss = ss.insert(20)
+
+for x in ss
+  print(x)   # 10, 20, 30
+end
+
+let ok  = ss.contains(20)  # Bool — true
+let ss2 = ss.remove(20)    # SortedSet<Int>; 10, 30 remain
+let n   = ss.len()          # Int — 3
+```
+
+**Constraint**: `T` must satisfy the `Ord` ability constraint. `Float` elements are rejected at compile time with **E0315** (ADR-0002). Valid element types: `Int`, `Bool`, `String`.
 
 ---
 

@@ -433,6 +433,35 @@ pub enum Instruction {
         /// Operand holding the `*mut __closure_fat` fat-pointer value.
         fat_ptr: Operand,
     },
+
+    /// `dest = sorted_map_get_option(handle, key)` — call `tyra_sorted_map_get`,
+    /// check for null, and construct `Option<V>`. Mirrors `LinkedMapGetOption`
+    /// but calls the SortedMap runtime (ADR-0024, v0.10.0).
+    SortedMapGetOption {
+        dest: String,
+        handle: Operand,
+        key: Operand,
+        key_ty: Ty,
+        val_ty: Ty,
+    },
+
+    /// Call `tyra_sorted_map_for_each(sm, env_ptr, fn_ptr)` where `fn_ptr`
+    /// and `env_ptr` are extracted from the fat-pointer closure.
+    /// The callback signature is `fn(ptr ctx, ptr kbox, ptr vbox) -> void`.
+    /// Iteration order is ascending key order (ADR-0024, v0.10.0).
+    SortedMapForEachCall {
+        handle: Operand,
+        fat_ptr: Operand,
+    },
+
+    /// Call `tyra_sorted_set_for_each(ss, env_ptr, fn_ptr)` where `fn_ptr`
+    /// and `env_ptr` are extracted from the fat-pointer closure.
+    /// The callback signature is `fn(ptr ctx, ptr elembox) -> void`.
+    /// Iteration order is ascending element order (ADR-0024, v0.10.0).
+    SortedSetForEachCall {
+        handle: Operand,
+        fat_ptr: Operand,
+    },
 }
 
 /// A constant value.

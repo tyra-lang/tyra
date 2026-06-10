@@ -494,6 +494,87 @@ impl super::LowerCtx<'_> {
         }
     }
 
+    /// Returns the full SortedMap<K,V> Ty for type inference (ADR-0024).
+    pub(super) fn infer_sorted_map_type(&self, expr: &Expr) -> Option<Ty> {
+        match &expr.kind {
+            ExprKind::Ident(name) => self
+                .generic_var_types
+                .get(name)
+                .filter(|t| t.is_sorted_map())
+                .cloned(),
+            ExprKind::Call(callee, args) => {
+                if let ExprKind::FieldAccess(obj, method) = &callee.kind {
+                    if method == "insert" || method == "remove" {
+                        return self.infer_sorted_map_type(obj);
+                    }
+                    if let ExprKind::Ident(mod_name) = &obj.kind
+                        && mod_name == "SortedMap"
+                        && method == "new"
+                        && args.is_empty()
+                    {
+                        let (k_ty, v_ty) = self
+                            .binding_type_hint
+                            .as_ref()
+                            .and_then(|h| h.sorted_map_kv())
+                            .map(|(k, v)| (k.clone(), v.clone()))
+                            .unwrap_or((Ty::String, Ty::Int));
+                        return Some(Ty::Generic("SortedMap".into(), vec![k_ty, v_ty]));
+                    }
+                }
+                if let ExprKind::Ident(func_name) = &callee.kind {
+                    if let Some(ret_ty) = self.fn_return_types.get(func_name.as_str()) {
+                        if ret_ty.is_sorted_map() {
+                            return Some(ret_ty.clone());
+                        }
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// Returns the full SortedSet<T> Ty for type inference (ADR-0024).
+    pub(super) fn infer_sorted_set_type(&self, expr: &Expr) -> Option<Ty> {
+        match &expr.kind {
+            ExprKind::Ident(name) => self
+                .generic_var_types
+                .get(name)
+                .filter(|t| t.is_sorted_set())
+                .cloned(),
+            ExprKind::Call(callee, args) => {
+                if let ExprKind::FieldAccess(obj, method) = &callee.kind {
+                    if method == "insert" || method == "remove" {
+                        return self.infer_sorted_set_type(obj);
+                    }
+                    if let ExprKind::Ident(mod_name) = &obj.kind
+                        && mod_name == "SortedSet"
+                        && method == "new"
+                        && args.is_empty()
+                    {
+                        let elem_ty = self
+                            .binding_type_hint
+                            .as_ref()
+                            .and_then(|h| h.sorted_set_elem())
+                            .or_else(|| self.current_fn_return_type.sorted_set_elem())
+                            .cloned()
+                            .unwrap_or(Ty::Int);
+                        return Some(Ty::Generic("SortedSet".into(), vec![elem_ty]));
+                    }
+                }
+                if let ExprKind::Ident(func_name) = &callee.kind {
+                    if let Some(ret_ty) = self.fn_return_types.get(func_name.as_str()) {
+                        if ret_ty.is_sorted_set() {
+                            return Some(ret_ty.clone());
+                        }
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
     pub(super) fn infer_set_type(&self, expr: &Expr) -> Option<Ty> {
         match &expr.kind {
             ExprKind::Ident(name) => self

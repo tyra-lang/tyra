@@ -314,6 +314,9 @@ impl super::LowerCtx<'_> {
                 // §11 / ADR-0019: insertion-order collections.
                 let is_linked_map = iter_ty.as_ref().map_or(false, |t| t.is_linked_map());
                 let is_linked_set = iter_ty.as_ref().map_or(false, |t| t.is_linked_set());
+                // ADR-0024: sorted collections.
+                let is_sorted_map = iter_ty.as_ref().map_or(false, |t| t.is_sorted_map());
+                let is_sorted_set = iter_ty.as_ref().map_or(false, |t| t.is_sorted_set());
 
                 if is_list {
                     let list_ty = iter_ty.unwrap();
@@ -520,8 +523,10 @@ impl super::LowerCtx<'_> {
 
                     // End
                     self.emit_synthetic(body, Instruction::Label(end_label));
-                } else if is_set || is_map || is_linked_map || is_linked_set {
-                    // Map/Set/LinkedMap/LinkedSet for-each via callback (v0.7.0/v0.8.0).
+                } else if is_set || is_map || is_linked_map || is_linked_set
+                    || is_sorted_map || is_sorted_set
+                {
+                    // Map/Set/LinkedMap/LinkedSet/SortedMap/SortedSet for-each via callback.
                     // Collect free variables in the body that come from the enclosing scope.
                     let binding_set: std::collections::HashSet<String> =
                         f.bindings.iter().cloned().collect();
@@ -582,7 +587,7 @@ impl super::LowerCtx<'_> {
                     }
 
                     // Determine if this is a "key-value" (map-like) or "single-value" (set-like) iter.
-                    let is_kv_iter = is_map || is_linked_map;
+                    let is_kv_iter = is_map || is_linked_map || is_sorted_map;
 
                     // Determine binding types from iter type.
                     let binding_tys: Vec<Ty> = if is_kv_iter {
@@ -613,6 +618,10 @@ impl super::LowerCtx<'_> {
                         Some("__linked_map_iter")
                     } else if is_linked_set {
                         Some("__linked_set_iter")
+                    } else if is_sorted_map {
+                        Some("__sorted_map_iter")
+                    } else if is_sorted_set {
+                        Some("__sorted_set_iter")
                     } else {
                         None // use default (__map_iter / __set_iter)
                     };
@@ -641,6 +650,10 @@ impl super::LowerCtx<'_> {
                         format!("__linked_map_iter_{iter_id}")
                     } else if is_linked_set {
                         format!("__linked_set_iter_{iter_id}")
+                    } else if is_sorted_map {
+                        format!("__sorted_map_iter_{iter_id}")
+                    } else if is_sorted_set {
+                        format!("__sorted_set_iter_{iter_id}")
                     } else {
                         format!("__set_iter_{iter_id}")
                     };
@@ -690,6 +703,22 @@ impl super::LowerCtx<'_> {
                         self.emit(
                             body,
                             Instruction::LinkedSetForEachCall {
+                                handle: Operand::Var(iter_val),
+                                fat_ptr: Operand::Var(fat_ptr),
+                            },
+                        );
+                    } else if is_sorted_map {
+                        self.emit(
+                            body,
+                            Instruction::SortedMapForEachCall {
+                                handle: Operand::Var(iter_val),
+                                fat_ptr: Operand::Var(fat_ptr),
+                            },
+                        );
+                    } else if is_sorted_set {
+                        self.emit(
+                            body,
+                            Instruction::SortedSetForEachCall {
                                 handle: Operand::Var(iter_val),
                                 fat_ptr: Operand::Var(fat_ptr),
                             },

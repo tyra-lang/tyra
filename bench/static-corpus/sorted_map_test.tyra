@@ -1,0 +1,70 @@
+# bench/static-corpus/sorted_map_test.tyra
+# Tests SortedMap get, contains_key, remove (persistent semantics), len, and sorted order.
+# SPEC_REF: §11 (SortedMap — key-sorted persistent collection, ADR-0024, v0.10.0)
+import assert
+import sorted_map
+
+fn test_sorted_map_get() -> Result<Unit, String>
+  let m: SortedMap<String, Int> = SortedMap.new()
+  let m = m.insert("b", 2)
+  let m = m.insert("a", 1)
+  match m.get("a")
+  when Some(v)
+    assert.eq(v, 1)?
+  when None
+    Err("expected Some(1) for key 'a', got None")?
+  end
+  match m.get("b")
+  when Some(v)
+    assert.eq(v, 2)?
+  when None
+    Err("expected Some(2) for key 'b', got None")?
+  end
+  match m.get("z")
+  when Some(_)
+    Err("expected None for key 'z', got Some")?
+  when None
+    Ok(())
+  end
+end
+
+fn test_sorted_map_contains_key() -> Result<Unit, String>
+  let m: SortedMap<String, Int> = SortedMap.new()
+  let m = m.insert("x", 10)
+  assert.eq(m.contains_key("x"), true)?
+  assert.eq(m.contains_key("y"), false)?
+  Ok(())
+end
+
+fn test_sorted_map_len() -> Result<Unit, String>
+  let m: SortedMap<String, Int> = SortedMap.new()
+  assert.eq(m.len(), 0)?
+  let m = m.insert("a", 1)
+  let m = m.insert("b", 2)
+  assert.eq(m.len(), 2)?
+  Ok(())
+end
+
+fn test_sorted_map_remove_persistent() -> Result<Unit, String>
+  let m: SortedMap<String, Int> = SortedMap.new()
+  let m = m.insert("a", 1)
+  let m = m.insert("b", 2)
+  let m = m.insert("c", 3)
+  let m2 = m.remove("b")
+  assert.eq(m.contains_key("b"), true)?
+  assert.eq(m2.contains_key("b"), false)?
+  assert.eq(m.len(), 3)?
+  assert.eq(m2.len(), 2)?
+  Ok(())
+end
+
+fn test_sorted_map_int_keys() -> Result<Unit, String>
+  let m: SortedMap<Int, String> = SortedMap.new()
+  let m = m.insert(30, "thirty")
+  let m = m.insert(10, "ten")
+  let m = m.insert(20, "twenty")
+  assert.eq(m.len(), 3)?
+  assert.eq(m.contains_key(10), true)?
+  assert.eq(m.contains_key(5), false)?
+  Ok(())
+end

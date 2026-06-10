@@ -1681,6 +1681,70 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     return Ty::Error;
                 }
 
+                // SortedMap.new() — key must satisfy Ord (Int/Bool/String; Float rejected).
+                if let ExprKind::Ident(mod_name) = &obj.kind
+                    && mod_name == "SortedMap"
+                    && method == "new"
+                    && args.is_empty()
+                {
+                    if let Some(sm_ty) = env
+                        .binding_type_hint
+                        .as_ref()
+                        .and_then(|t| peel_to_sorted_map(t))
+                    {
+                        check_sorted_key(sm_ty.sorted_map_kv().map(|(k, _)| k), expr.span, report);
+                        return sm_ty.clone();
+                    }
+                    if let Some(ref rt) = env.current_return_type()
+                        && let Some(sm_ty) = peel_to_sorted_map(rt)
+                    {
+                        check_sorted_key(sm_ty.sorted_map_kv().map(|(k, _)| k), expr.span, report);
+                        return sm_ty.clone();
+                    }
+                    report.add(
+                        Diagnostic::error("cannot infer SortedMap key/value types".to_string())
+                            .with_code("E0308")
+                            .with_label(Label::new(expr.span, "key/value types unknown"))
+                            .with_note(
+                                "add a type annotation: \
+                                 `let m: SortedMap<String, Int> = SortedMap.new()`",
+                            ),
+                    );
+                    return Ty::Error;
+                }
+
+                // SortedSet.new() — element must satisfy Ord (Int/Bool/String; Float rejected).
+                if let ExprKind::Ident(mod_name) = &obj.kind
+                    && mod_name == "SortedSet"
+                    && method == "new"
+                    && args.is_empty()
+                {
+                    if let Some(ss_ty) = env
+                        .binding_type_hint
+                        .as_ref()
+                        .and_then(|t| peel_to_sorted_set(t))
+                    {
+                        check_sorted_key(ss_ty.sorted_set_elem(), expr.span, report);
+                        return ss_ty.clone();
+                    }
+                    if let Some(ref rt) = env.current_return_type()
+                        && let Some(ss_ty) = peel_to_sorted_set(rt)
+                    {
+                        check_sorted_key(ss_ty.sorted_set_elem(), expr.span, report);
+                        return ss_ty.clone();
+                    }
+                    report.add(
+                        Diagnostic::error("cannot infer SortedSet element type".to_string())
+                            .with_code("E0308")
+                            .with_label(Label::new(expr.span, "element type unknown"))
+                            .with_note(
+                                "add a type annotation: \
+                                 `let s: SortedSet<Int> = SortedSet.new()`",
+                            ),
+                    );
+                    return Ty::Error;
+                }
+
                 let obj_ty = infer_expr(obj, env, report);
                 check_trait_method_call(&obj_ty, method, expr.span, env, report);
 
@@ -1787,6 +1851,68 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 // LinkedSet<T> method dispatch (ADR-0019, v0.8.0).
                 if let Ty::Generic(name, type_args) = &obj_ty
                     && name == "LinkedSet"
+                    && !type_args.is_empty()
+                {
+                    let elem_ty = type_args[0].clone();
+                    match method.as_str() {
+                        "insert" if args.len() == 1 => {
+                            let arg_ty = infer_expr(&args[0].value, env, report);
+                            check_type_match(&elem_ty, &arg_ty, args[0].span, None, env, report);
+                            return obj_ty.clone();
+                        }
+                        "remove" if args.len() == 1 => {
+                            let arg_ty = infer_expr(&args[0].value, env, report);
+                            check_type_match(&elem_ty, &arg_ty, args[0].span, None, env, report);
+                            return obj_ty.clone();
+                        }
+                        "contains" if args.len() == 1 => {
+                            let arg_ty = infer_expr(&args[0].value, env, report);
+                            check_type_match(&elem_ty, &arg_ty, args[0].span, None, env, report);
+                            return Ty::Bool;
+                        }
+                        "len" if args.is_empty() => return Ty::Int,
+                        _ => {}
+                    }
+                }
+
+                // SortedMap<K,V> method dispatch (ADR-0024, v0.10.0).
+                if let Ty::Generic(name, type_args) = &obj_ty
+                    && name == "SortedMap"
+                    && type_args.len() == 2
+                {
+                    let key_ty = type_args[0].clone();
+                    let val_ty = type_args[1].clone();
+                    match method.as_str() {
+                        "insert" if args.len() == 2 => {
+                            let arg_k = infer_expr(&args[0].value, env, report);
+                            let arg_v = infer_expr(&args[1].value, env, report);
+                            check_type_match(&key_ty, &arg_k, args[0].span, None, env, report);
+                            check_type_match(&val_ty, &arg_v, args[1].span, None, env, report);
+                            return obj_ty.clone();
+                        }
+                        "remove" if args.len() == 1 => {
+                            let arg_k = infer_expr(&args[0].value, env, report);
+                            check_type_match(&key_ty, &arg_k, args[0].span, None, env, report);
+                            return obj_ty.clone();
+                        }
+                        "contains_key" if args.len() == 1 => {
+                            let arg_k = infer_expr(&args[0].value, env, report);
+                            check_type_match(&key_ty, &arg_k, args[0].span, None, env, report);
+                            return Ty::Bool;
+                        }
+                        "get" if args.len() == 1 => {
+                            let arg_k = infer_expr(&args[0].value, env, report);
+                            check_type_match(&key_ty, &arg_k, args[0].span, None, env, report);
+                            return Ty::Generic("Option".into(), vec![val_ty]);
+                        }
+                        "len" if args.is_empty() => return Ty::Int,
+                        _ => {}
+                    }
+                }
+
+                // SortedSet<T> method dispatch (ADR-0024, v0.10.0).
+                if let Ty::Generic(name, type_args) = &obj_ty
+                    && name == "SortedSet"
                     && !type_args.is_empty()
                 {
                     let elem_ty = type_args[0].clone();
@@ -2517,7 +2643,19 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                 Ty::Generic(name, args) if name == "Map" && args.len() == 2 => {
                     (2, vec![args[0].clone(), args[1].clone()])
                 }
+                Ty::Generic(name, args) if name == "LinkedMap" && args.len() == 2 => {
+                    (2, vec![args[0].clone(), args[1].clone()])
+                }
+                Ty::Generic(name, args) if name == "SortedMap" && args.len() == 2 => {
+                    (2, vec![args[0].clone(), args[1].clone()])
+                }
                 Ty::Generic(name, args) if name == "Set" && !args.is_empty() => {
+                    (1, vec![args[0].clone()])
+                }
+                Ty::Generic(name, args) if name == "LinkedSet" && !args.is_empty() => {
+                    (1, vec![args[0].clone()])
+                }
+                Ty::Generic(name, args) if name == "SortedSet" && !args.is_empty() => {
                     (1, vec![args[0].clone()])
                 }
                 Ty::Generic(name, args) if name == "List" && !args.is_empty() => {
@@ -2990,6 +3128,61 @@ fn peel_to_linked_set(ty: &Ty) -> Option<&Ty> {
         }
     }
     None
+}
+
+fn peel_to_sorted_map(ty: &Ty) -> Option<&Ty> {
+    if ty.is_sorted_map() {
+        return Some(ty);
+    }
+    if let Ty::Generic(name, args) = ty {
+        match name.as_str() {
+            "Option" if args.len() == 1 => return peel_to_sorted_map(&args[0]),
+            "Result" if args.len() == 2 => return peel_to_sorted_map(&args[0]),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn peel_to_sorted_set(ty: &Ty) -> Option<&Ty> {
+    if ty.is_sorted_set() {
+        return Some(ty);
+    }
+    if let Ty::Generic(name, args) = ty {
+        match name.as_str() {
+            "Option" if args.len() == 1 => return peel_to_sorted_set(&args[0]),
+            "Result" if args.len() == 2 => return peel_to_sorted_set(&args[0]),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Reject Float keys for SortedMap/SortedSet (ADR-0024: Float has Ord but not Eq due to NaN).
+/// Reject any key type that is not Int, Bool, or String (ADR-0024).
+/// Float is rejected because NaN breaks total ordering (ADR-0002).
+/// All other non-primitive types (value/data/List/Map/etc.) are rejected
+/// because the codegen comparator generator only handles the three primitives.
+fn check_sorted_key(key: Option<&Ty>, span: tyra_ast::Span, report: &mut Report) {
+    let Some(key_ty) = key else { return };
+    let allowed = matches!(key_ty, Ty::Int | Ty::Bool | Ty::String);
+    if !allowed {
+        let reason = if matches!(key_ty, Ty::Float) {
+            " (NaN is not comparable)".to_string()
+        } else {
+            String::new()
+        };
+        report.add(
+            Diagnostic::error(format!(
+                "`{}` cannot be used as a SortedMap/SortedSet key{}",
+                key_ty.display_name(),
+                reason,
+            ))
+            .with_code("E0315")
+            .with_label(Label::new(span, "unsupported key type"))
+            .with_note("use Int, Bool, or String as the key type"),
+        );
+    }
 }
 
 /// Compute a conservative heuristic help message for E0308.

@@ -638,6 +638,15 @@ pub unsafe extern "C" fn tyra_cstr_eq(a: *const c_char, b: *const c_char) -> c_i
     (unsafe { CStr::from_ptr(a) } == unsafe { CStr::from_ptr(b) }) as c_int
 }
 
+/// Three-way comparison for C strings (used as SortedMap/SortedSet cmp_fn for String keys).
+/// Returns negative / 0 / positive matching strcmp semantics.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_cstr_cmp(a: *const u8, b: *const u8) -> i32 {
+    let sa = unsafe { CStr::from_ptr(a as *const c_char) };
+    let sb = unsafe { CStr::from_ptr(b as *const c_char) };
+    sa.cmp(sb) as i32
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

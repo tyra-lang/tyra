@@ -80,6 +80,18 @@ pub use stdlib_linked_set::{
     tyra_linked_set_len, tyra_linked_set_new, tyra_linked_set_remove,
 };
 
+pub mod stdlib_sorted_map;
+pub use stdlib_sorted_map::{
+    tyra_sorted_map_contains_key, tyra_sorted_map_for_each, tyra_sorted_map_get,
+    tyra_sorted_map_insert, tyra_sorted_map_len, tyra_sorted_map_new, tyra_sorted_map_remove,
+};
+
+pub mod stdlib_sorted_set;
+pub use stdlib_sorted_set::{
+    tyra_sorted_set_contains, tyra_sorted_set_for_each, tyra_sorted_set_insert,
+    tyra_sorted_set_len, tyra_sorted_set_new, tyra_sorted_set_remove,
+};
+
 mod stdlib_string;
 pub use stdlib_string::{
     tyra_string_byte_at, tyra_string_contains, tyra_string_ends_with, tyra_string_from_byte,

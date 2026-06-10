@@ -199,6 +199,34 @@ impl Ty {
         }
     }
 
+    /// Check if this is a SortedMap<K,V> type (§11, ADR-0024).
+    pub fn is_sorted_map(&self) -> bool {
+        matches!(self, Ty::Generic(name, args) if name == "SortedMap" && args.len() == 2)
+    }
+
+    /// Extract (K, V) from SortedMap<K,V>.
+    pub fn sorted_map_kv(&self) -> Option<(&Ty, &Ty)> {
+        match self {
+            Ty::Generic(name, args) if name == "SortedMap" && args.len() == 2 => {
+                Some((&args[0], &args[1]))
+            }
+            _ => None,
+        }
+    }
+
+    /// Check if this is a SortedSet<T> type (§11, ADR-0024).
+    pub fn is_sorted_set(&self) -> bool {
+        matches!(self, Ty::Generic(name, args) if name == "SortedSet" && args.len() == 1)
+    }
+
+    /// Extract T from SortedSet<T>.
+    pub fn sorted_set_elem(&self) -> Option<&Ty> {
+        match self {
+            Ty::Generic(name, args) if name == "SortedSet" && args.len() == 1 => Some(&args[0]),
+            _ => None,
+        }
+    }
+
     /// Generate a monomorphized name for codegen.
     /// e.g., Option<Int> → "Option__Int", Result<String, AppError> → "Result__String__AppError"
     pub fn monomorphized_name(&self) -> String {

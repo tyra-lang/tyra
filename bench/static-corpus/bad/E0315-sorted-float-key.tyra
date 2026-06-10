@@ -1,0 +1,8 @@
+# E0315-sorted-float-key.tyra
+# expected: error[E0315]: `Float` cannot be used as a SortedMap/SortedSet key (NaN is not comparable)
+# Exercises: ADR-0024 Float key rejection (NaN is not comparable).
+import sorted_map
+
+fn bad() -> Unit
+  let m: SortedMap<Float, Int> = SortedMap.new()
+end

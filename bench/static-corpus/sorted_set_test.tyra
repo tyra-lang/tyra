@@ -1,0 +1,49 @@
+# bench/static-corpus/sorted_set_test.tyra
+# Tests SortedSet insert, remove (persistent semantics), contains, len.
+# SPEC_REF: §11 (SortedSet — element-sorted persistent collection, ADR-0024, v0.10.0)
+import assert
+import sorted_set
+
+fn test_sorted_set_contains() -> Result<Unit, String>
+  let s: SortedSet<Int> = SortedSet.new()
+  let s = s.insert(5)
+  assert.eq(s.contains(5), true)?
+  assert.eq(s.contains(9), false)?
+  Ok(())
+end
+
+fn test_sorted_set_len() -> Result<Unit, String>
+  let s: SortedSet<Int> = SortedSet.new()
+  assert.eq(s.len(), 0)?
+  let s = s.insert(1)
+  let s = s.insert(2)
+  let s = s.insert(3)
+  assert.eq(s.len(), 3)?
+  let s = s.insert(1)
+  assert.eq(s.len(), 3)?
+  Ok(())
+end
+
+fn test_sorted_set_remove_persistent() -> Result<Unit, String>
+  let s: SortedSet<Int> = SortedSet.new()
+  let s = s.insert(1)
+  let s = s.insert(2)
+  let s = s.insert(3)
+  let s2 = s.remove(2)
+  assert.eq(s.contains(2), true)?
+  assert.eq(s2.contains(2), false)?
+  assert.eq(s.len(), 3)?
+  assert.eq(s2.len(), 2)?
+  Ok(())
+end
+
+fn test_sorted_set_string_elems() -> Result<Unit, String>
+  let s: SortedSet<String> = SortedSet.new()
+  let s = s.insert("banana")
+  let s = s.insert("apple")
+  let s = s.insert("cherry")
+  assert.eq(s.len(), 3)?
+  assert.eq(s.contains("apple"), true)?
+  assert.eq(s.contains("durian"), false)?
+  Ok(())
+end

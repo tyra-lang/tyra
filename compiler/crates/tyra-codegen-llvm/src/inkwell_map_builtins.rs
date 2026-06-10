@@ -1,26 +1,17 @@
-//! Inkwell I4e: boxed-collection builtins — `Map`/`Set`/`LinkedMap`/`LinkedSet`.
+//! Inkwell I4e: boxed-collection builtins —
+//! `Map`/`Set`/`LinkedMap`/`LinkedSet`/`SortedMap`/`SortedSet`.
 //!
-//! These four families (§17.3.6 / §11 / ADR-0015 / ADR-0019) share one shape:
-//! keys (and values) are *boxed* — `GC_malloc(8)` + a typed store — so the
-//! runtime can treat every entry uniformly behind a `ptr`, and equality/hashing
-//! go through compiler-generated `@tyra_eq_<K>` / `@tyra_hash_<K>` functions
-//! passed to the `*_new` constructor. The runtime intrinsics themselves are
-//! plain externs declared in I1; the work here is (a) emitting those eq/hash
-//! functions once per key type used in the program, and (b) boxing arguments
-//! and threading the `ptr` handle through each call.
+//! Hash families (Map/Set/LinkedMap/LinkedSet) pass two fn-ptrs to `*_new`:
+//!   `tyra_eq_<K>(ptr, ptr) -> i32` and `tyra_hash_<K>(ptr) -> i64`.
 //!
-//! Monomorphized builtin names carry the element types as a suffix:
-//!   `__map_new__K__V`, `__map_insert__K__V`, `__map_contains__K`,
-//!   `__map_remove__K`, `__map_len` (and the `set`/`linked_map`/`linked_set`
-//!   analogues). `set`/`linked_set` are single-element (no value); `linked_map`
-//!   uses `tyra_linked_map_contains_key` for `contains` (the only callee that
-//!   diverges from the regular `_contains` naming).
+//! Sorted families (SortedMap/SortedSet, ADR-0024) pass one fn-ptr to `*_new`:
+//!   `tyra_cmp_<K>(ptr, ptr) -> i32` (three-way comparison).
 //!
-//! Boxing: `Int` → store i64; `Bool` → zext i1→i8, store i8; everything else
-//! (`String`, data ptrs) → store ptr.
+//! All families box keys/values the same way: `GC_malloc(8)` + typed store.
 //!
-//! `Map`/`LinkedMap` value *retrieval* is NOT here — it lowers to the dedicated
-//! `MapGetOption`/`LinkedMapGetOption` MIR instructions, ported separately.
+//! Monomorphized builtin names:
+//!   `__sorted_map_new__K__V`, `__sorted_map_insert__K__V`, etc.
+//!   `__sorted_set_new__T`, `__sorted_set_insert__T`, etc.
 
 use inkwell::IntPredicate;
 use inkwell::module::Linkage;
@@ -41,8 +32,10 @@ struct CollFamily {
     remove: &'static str,
     contains: &'static str,
     len: &'static str,
-    /// `true` for `Map`/`LinkedMap` (insert takes key + value).
+    /// `true` for `Map`/`LinkedMap`/`SortedMap` (insert takes key + value).
     kv: bool,
+    /// `true` for sorted families: `*_new` takes one `cmp_fn` ptr, not two (eq+hash).
+    cmp_only: bool,
 }
 
 const MAP: CollFamily = CollFamily {
@@ -53,6 +46,7 @@ const MAP: CollFamily = CollFamily {
     contains: "tyra_map_contains",
     len: "tyra_map_len",
     kv: true,
+    cmp_only: false,
 };
 const SET: CollFamily = CollFamily {
     tag: "set",
@@ -62,6 +56,7 @@ const SET: CollFamily = CollFamily {
     contains: "tyra_set_contains",
     len: "tyra_set_len",
     kv: false,
+    cmp_only: false,
 };
 const LINKED_MAP: CollFamily = CollFamily {
     tag: "linked_map",
@@ -71,6 +66,7 @@ const LINKED_MAP: CollFamily = CollFamily {
     contains: "tyra_linked_map_contains_key",
     len: "tyra_linked_map_len",
     kv: true,
+    cmp_only: false,
 };
 const LINKED_SET: CollFamily = CollFamily {
     tag: "linked_set",
@@ -80,6 +76,27 @@ const LINKED_SET: CollFamily = CollFamily {
     contains: "tyra_linked_set_contains",
     len: "tyra_linked_set_len",
     kv: false,
+    cmp_only: false,
+};
+const SORTED_MAP: CollFamily = CollFamily {
+    tag: "sorted_map",
+    new: "tyra_sorted_map_new",
+    insert: "tyra_sorted_map_insert",
+    remove: "tyra_sorted_map_remove",
+    contains: "tyra_sorted_map_contains_key",
+    len: "tyra_sorted_map_len",
+    kv: true,
+    cmp_only: true,
+};
+const SORTED_SET: CollFamily = CollFamily {
+    tag: "sorted_set",
+    new: "tyra_sorted_set_new",
+    insert: "tyra_sorted_set_insert",
+    remove: "tyra_sorted_set_remove",
+    contains: "tyra_sorted_set_contains",
+    len: "tyra_sorted_set_len",
+    kv: false,
+    cmp_only: true,
 };
 
 impl<'ctx> CodeGen<'ctx> {
@@ -87,7 +104,12 @@ impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn is_collection_builtin(name: &str) -> bool {
         matches!(
             name,
-            "__map_len" | "__set_len" | "__linked_map_len" | "__linked_set_len"
+            "__map_len"
+                | "__set_len"
+                | "__linked_map_len"
+                | "__linked_set_len"
+                | "__sorted_map_len"
+                | "__sorted_set_len"
         ) || [
             "__map_new__",
             "__map_insert__",
@@ -105,15 +127,27 @@ impl<'ctx> CodeGen<'ctx> {
             "__linked_set_insert__",
             "__linked_set_remove__",
             "__linked_set_contains__",
+            "__sorted_map_new__",
+            "__sorted_map_insert__",
+            "__sorted_map_remove__",
+            "__sorted_map_contains__",
+            "__sorted_set_new__",
+            "__sorted_set_insert__",
+            "__sorted_set_remove__",
+            "__sorted_set_contains__",
         ]
         .iter()
         .any(|p| name.starts_with(p))
     }
 
-    /// Resolve the family of a collection builtin. `linked_*` is checked first
-    /// because the plain `map_`/`set_` infixes would also match its tail.
+    /// Resolve the family of a collection builtin. Longer prefixes checked first
+    /// so `sorted_map` doesn't accidentally match `map`.
     fn collection_family(fname: &str) -> Option<&'static CollFamily> {
-        if fname.starts_with("__linked_map_") {
+        if fname.starts_with("__sorted_map_") {
+            Some(&SORTED_MAP)
+        } else if fname.starts_with("__sorted_set_") {
+            Some(&SORTED_SET)
+        } else if fname.starts_with("__linked_map_") {
             Some(&LINKED_MAP)
         } else if fname.starts_with("__linked_set_") {
             Some(&LINKED_SET)
@@ -147,22 +181,33 @@ impl<'ctx> CodeGen<'ctx> {
 
         match op {
             "new" => {
-                // rest = "K__V" (map) or "T" (set); only the key/elem type drives
-                // eq/hash. `new` takes the two function pointers, no boxing.
+                // rest = "K__V" (map) or "T" (set); only the key/elem type drives eq/hash/cmp.
                 let k = rest.split("__").next().unwrap_or("String");
-                let (eq, hash) = self.eq_hash_fns(k);
                 let f = self.runtime_fn(fam.new);
-                let cs = self
-                    .builder
-                    .build_call(
-                        f,
-                        &[
-                            eq.as_global_value().as_pointer_value().into(),
-                            hash.as_global_value().as_pointer_value().into(),
-                        ],
-                        dest.as_deref().unwrap_or(""),
-                    )
-                    .unwrap();
+                let cs = if fam.cmp_only {
+                    // Sorted families: pass one cmp_fn pointer.
+                    let cmp = self.cmp_fn(k);
+                    self.builder
+                        .build_call(
+                            f,
+                            &[cmp.as_global_value().as_pointer_value().into()],
+                            dest.as_deref().unwrap_or(""),
+                        )
+                        .unwrap()
+                } else {
+                    // Hash families: pass eq + hash pointers.
+                    let (eq, hash) = self.eq_hash_fns(k);
+                    self.builder
+                        .build_call(
+                            f,
+                            &[
+                                eq.as_global_value().as_pointer_value().into(),
+                                hash.as_global_value().as_pointer_value().into(),
+                            ],
+                            dest.as_deref().unwrap_or(""),
+                        )
+                        .unwrap()
+                };
                 self.store_call_result(dest, cs);
             }
             "insert" if fam.kv => {
@@ -401,43 +446,183 @@ impl<'ctx> CodeGen<'ctx> {
     /// K is collected), so this covers every type that any reachable
     /// `get`/`insert` could need. Idempotent per type.
     pub(crate) fn emit_collection_eq_hash(&mut self, program: &Program) {
-        let mut keys: Vec<String> = Vec::new();
-        let mut seen = std::collections::HashSet::new();
+        let mut hash_keys: Vec<String> = Vec::new();
+        let mut cmp_keys: Vec<String> = Vec::new();
+        let mut seen_hash = std::collections::HashSet::new();
+        let mut seen_cmp = std::collections::HashSet::new();
         for f in &program.functions {
             for stmt in &f.body {
-                // Two sources of a key type needing eq/hash: a `*_new`/`*_contains`
-                // builtin Call, and a `Map`/`LinkedMap` `.get(k)` instruction
-                // (MapGetOption/LinkedMapGetOption boxes its key). A function that
-                // only receives a map by param and calls `.get` has no `*_new` of
-                // its own, so MapGetOption coverage is required for completeness.
-                let k: Option<String> = match &stmt.instr {
-                    Instruction::Call { func, .. } => key_type_of_call(func).map(str::to_string),
+                match &stmt.instr {
+                    Instruction::Call { func, .. } => {
+                        if let Some(k) = key_type_of_call(func) {
+                            if is_sorted_call(func) {
+                                if seen_cmp.insert(k.to_string()) {
+                                    cmp_keys.push(k.to_string());
+                                }
+                            } else if seen_hash.insert(k.to_string()) {
+                                hash_keys.push(k.to_string());
+                            }
+                        }
+                    }
                     Instruction::MapGetOption { key_ty, .. }
                     | Instruction::LinkedMapGetOption { key_ty, .. } => {
-                        Some(key_ty.monomorphized_name())
+                        let k = key_ty.monomorphized_name();
+                        if seen_hash.insert(k.clone()) {
+                            hash_keys.push(k);
+                        }
                     }
-                    _ => None,
-                };
-                let Some(k) = k else { continue };
-                if seen.insert(k.clone()) {
-                    keys.push(k);
+                    Instruction::SortedMapGetOption { key_ty, .. } => {
+                        let k = key_ty.monomorphized_name();
+                        if seen_cmp.insert(k.clone()) {
+                            cmp_keys.push(k);
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
-        for k in keys {
+        for k in hash_keys {
             self.emit_eq_hash_fns(&k);
+        }
+        for k in cmp_keys {
+            self.emit_cmp_fn(&k);
         }
     }
 
-    /// Get (creating on first use) the `(eq, hash)` function pair for key type
-    /// `k`. The functions are emitted up front by `emit_collection_eq_hash`, so
-    /// this normally just looks them up; it builds them on demand as a fallback.
+    /// Get (creating on first use) the `(eq, hash)` function pair for key type `k`.
     fn eq_hash_fns(&mut self, k: &str) -> (FunctionValue<'ctx>, FunctionValue<'ctx>) {
         self.emit_eq_hash_fns(k);
         (
             self.module.get_function(&format!("tyra_eq_{k}")).unwrap(),
             self.module.get_function(&format!("tyra_hash_{k}")).unwrap(),
         )
+    }
+
+    /// Get (creating on first use) the `tyra_cmp_<K>` function for sorted collections.
+    fn cmp_fn(&mut self, k: &str) -> FunctionValue<'ctx> {
+        self.emit_cmp_fn(k);
+        self.module
+            .get_function(&format!("tyra_cmp_{k}"))
+            .unwrap_or_else(|| panic!("tyra_cmp_{k} should have been emitted"))
+    }
+
+    /// Emit `@tyra_cmp_<K>` (`fn(ptr, ptr) -> i32`): three-way comparison for
+    /// sorted collection keys. No-op if already emitted or if `k` is not a
+    /// supported primitive (the checker rejects Float keys before codegen).
+    fn emit_cmp_fn(&mut self, k: &str) {
+        let cmp_name = format!("tyra_cmp_{k}");
+        if self.module.get_function(&cmp_name).is_some() {
+            return;
+        }
+        if !matches!(k, "Int" | "Bool" | "String") {
+            return;
+        }
+        let ptr = self.ptr();
+        let i32t = self.ctx.i32_type();
+        let i64t = self.ctx.i64_type();
+        let cmp = self.module.add_function(
+            &cmp_name,
+            i32t.fn_type(&[ptr.into(), ptr.into()], false),
+            Some(Linkage::Private),
+        );
+        let entry = self.ctx.append_basic_block(cmp, "entry");
+        let a = cmp.get_nth_param(0).unwrap().into_pointer_value();
+        let b = cmp.get_nth_param(1).unwrap().into_pointer_value();
+        self.builder.position_at_end(entry);
+        match k {
+            "Int" => {
+                let va = self
+                    .builder
+                    .build_load(i64t, a, "va")
+                    .unwrap()
+                    .into_int_value();
+                let vb = self
+                    .builder
+                    .build_load(i64t, b, "vb")
+                    .unwrap()
+                    .into_int_value();
+                // (a < b) ? -1 : (a > b) ? 1 : 0
+                let lt = self
+                    .builder
+                    .build_int_compare(IntPredicate::SLT, va, vb, "lt")
+                    .unwrap();
+                let gt = self
+                    .builder
+                    .build_int_compare(IntPredicate::SGT, va, vb, "gt")
+                    .unwrap();
+                let neg1 = i32t.const_int((-1i32) as u64, false);
+                let one = i32t.const_int(1, false);
+                let zero = i32t.const_zero();
+                let r1 = self
+                    .builder
+                    .build_select(gt, one, zero, "r1")
+                    .unwrap()
+                    .into_int_value();
+                let r = self
+                    .builder
+                    .build_select(lt, neg1, r1, "r")
+                    .unwrap()
+                    .into_int_value();
+                self.builder.build_return(Some(&r)).unwrap();
+            }
+            "Bool" => {
+                let i8t = self.ctx.i8_type();
+                let va = self
+                    .builder
+                    .build_load(i8t, a, "va")
+                    .unwrap()
+                    .into_int_value();
+                let vb = self
+                    .builder
+                    .build_load(i8t, b, "vb")
+                    .unwrap()
+                    .into_int_value();
+                let lt = self
+                    .builder
+                    .build_int_compare(IntPredicate::ULT, va, vb, "lt")
+                    .unwrap();
+                let gt = self
+                    .builder
+                    .build_int_compare(IntPredicate::UGT, va, vb, "gt")
+                    .unwrap();
+                let neg1 = i32t.const_int((-1i32) as u64, false);
+                let one = i32t.const_int(1, false);
+                let zero = i32t.const_zero();
+                let r1 = self
+                    .builder
+                    .build_select(gt, one, zero, "r1")
+                    .unwrap()
+                    .into_int_value();
+                let r = self
+                    .builder
+                    .build_select(lt, neg1, r1, "r")
+                    .unwrap()
+                    .into_int_value();
+                self.builder.build_return(Some(&r)).unwrap();
+            }
+            _ => {
+                // String: deref to the C string ptr, delegate to tyra_cstr_cmp.
+                let sa = self
+                    .builder
+                    .build_load(ptr, a, "sa")
+                    .unwrap()
+                    .into_pointer_value();
+                let sb = self
+                    .builder
+                    .build_load(ptr, b, "sb")
+                    .unwrap()
+                    .into_pointer_value();
+                let cstr_cmp = self.runtime_fn("tyra_cstr_cmp");
+                let r = self
+                    .builder
+                    .build_call(cstr_cmp, &[sa.into(), sb.into()], "r")
+                    .unwrap()
+                    .try_as_basic_value()
+                    .basic()
+                    .unwrap();
+                self.builder.build_return(Some(&r)).unwrap();
+            }
+        }
     }
 
     /// Emit `@tyra_eq_<k>` (`fn(ptr, ptr) -> i32`) and `@tyra_hash_<k>`
@@ -582,11 +767,17 @@ impl<'ctx> CodeGen<'ctx> {
     }
 }
 
-/// The key/element type name needing eq/hash for a collection `*_new` or
-/// `*_contains` builtin call, or `None` for any other call. `new` carries the
-/// key as the first suffix segment; `contains` carries it whole.
+/// The key/element type name for a collection `*_new` or `*_contains` builtin
+/// call, or `None` for any other call.
 fn key_type_of_call(func: &str) -> Option<&str> {
-    for fam in ["map", "set", "linked_map", "linked_set"] {
+    for fam in [
+        "sorted_map",
+        "sorted_set",
+        "linked_map",
+        "linked_set",
+        "map",
+        "set",
+    ] {
         if let Some(rest) = func.strip_prefix(&format!("__{fam}_new__")) {
             return rest.split("__").next();
         }
@@ -595,4 +786,9 @@ fn key_type_of_call(func: &str) -> Option<&str> {
         }
     }
     None
+}
+
+/// Returns `true` if `func` is a sorted-collection builtin (needs cmp, not eq+hash).
+fn is_sorted_call(func: &str) -> bool {
+    func.starts_with("__sorted_map_") || func.starts_with("__sorted_set_")
 }

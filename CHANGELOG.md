@@ -25,6 +25,16 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 **AI-gen benchmark: Go runner**
 - `bench/ai-gen` now supports Go (`go build`, single-file, GOCACHE confined to the throwaway workdir). Six-language sweeps: Tyra / Go / Crystal / V / Gleam / Ruby. Smoke-verified 5/5 pass.
 
+**`SortedMap<K,V>` / `SortedSet<T>` — key-sorted persistent collections (ADR-0024)**
+- Two new persistent collection types that iterate in ascending key/element order.
+- Key type must satisfy `Ord`; Float keys are rejected at compile time with **E0315** (NaN is not comparable, ADR-0002).
+- Full API: `.new()` / `.insert()` / `.remove()` / `.get()` / `.contains_key()` / `.len()` / `for k, v in sm { … }` / `for x in ss { … }`.
+- Implemented as a sorted array with path-copying; O(log n) lookup, O(n) insert/remove.
+- Single `cmp_fn(ptr, ptr) -> i32` replaces the `eq_fn + hash_fn` pair used by hash collections; codegen emits `tyra_cmp_Int` / `tyra_cmp_Bool` / `tyra_cmp_String` once per key type.
+- `import sorted_map` / `import sorted_set` enables each type.
+- Requires `import assert` + `import sorted_map` / `import sorted_set` in corpus tests.
+- Runtime: `tyra_sorted_map_*` / `tyra_sorted_set_*` + `tyra_cstr_cmp` in `tyra-runtime`.
+
 ### Known Limitations
 
 - **E0314 does not fire when the interpolated expression's type cannot be inferred**: `let p = Point(x: 1.0)` (no annotation) leaves the constructor result as an unresolved type, which passes the gate to avoid cascades and still crashes at runtime. Annotated bindings (`let p: Point = …`) are caught. Root cause: constructor-call result inference; tracked as a v0.10 checker follow-up.

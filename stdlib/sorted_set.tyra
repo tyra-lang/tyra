@@ -1,0 +1,26 @@
+# stdlib/sorted_set.tyra — Element-sorted persistent SortedSet<T> (§11, ADR-0024).
+#
+# SortedSet<T> is a persistent set that iterates in ascending element order.
+# Unlike LinkedSet<T> (insertion order), SortedSet<T> always presents
+# elements sorted by the natural ordering of T.
+#
+# T must satisfy the Ord ability constraint.
+# Float elements are NOT permitted (Float has Ord but not Eq due to NaN; ADR-0002).
+# Valid element types: Int, Bool, String.
+#
+# v0.10 API:
+#   Construction:      SortedSet.new()            — returns an empty SortedSet<T>
+#   ss.insert(x)    -> SortedSet<T>               — non-mutating; idempotent
+#   ss.remove(x)    -> SortedSet<T>               — non-mutating
+#   ss.contains(x)  -> Bool
+#   ss.len()        -> Int
+#   for x in ss { ... }                           — iterates in ascending order
+#
+# All operations are non-mutating from the language's perspective.
+# Implemented as a thin wrapper over SortedMap<T, ()> (ADR-0024).
+# GC_malloc'd storage is managed by Boehm GC (ADR-0007).
+#
+# This module currently has no exported functions — all SortedSet operations are
+# accessed via SortedSet.new() construction and method-call syntax on
+# SortedSet<T> values.  The module exists to document the built-in API and
+# reserve the `sorted_set` namespace for future additions.
