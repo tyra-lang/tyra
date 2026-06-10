@@ -1,0 +1,11 @@
+# E0314-interp-unsupported-type.tyra
+# expected: error[E0314]: `#{...}` cannot display a value of type `Option<Bool>`
+# Exercises: string interpolation of a type with no string form.
+# Option<Bool> payloads are i1 (ABI-unsafe for the scalar display extern)
+# and previously crashed at runtime (SIGSEGV); now rejected at check time.
+# SPEC_REF: §7.3 — 文字列(補間可能な型)
+
+fn main() -> Unit
+  let ob: Option<Bool> = Some(true)
+  print("#{ob}")
+end

@@ -1698,4 +1698,64 @@ end
             );
         }
     }
+
+    // ── E0314: string interpolation of non-displayable types (§7.3) ──
+
+    fn has_code(report: &Report, code: &str) -> bool {
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code.as_deref() == Some(code))
+    }
+
+    #[test]
+    fn e0314_option_bool_interp_rejected() {
+        let report = check_str(
+            "fn main() -> Unit\n  let ob: Option<Bool> = Some(true)\n  print(\"#{ob}\")\nend\n",
+        );
+        assert!(has_code(&report, "E0314"), "{:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn e0314_list_interp_rejected() {
+        let report =
+            check_str("fn main() -> Unit\n  let xs = [1, 2]\n  print(\"#{xs}\")\nend\n");
+        assert!(has_code(&report, "E0314"), "{:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn e0314_result_interp_rejected() {
+        let report = check_str(
+            "fn main() -> Unit\n  let r: Result<Int, String> = Ok(1)\n  print(\"#{r}\")\nend\n",
+        );
+        assert!(has_code(&report, "E0314"), "{:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn e0314_value_type_interp_rejected() {
+        let report = check_str(
+            "value P\n  x: Int\nend\n\nfn main() -> Unit\n  let p: P = P(x: 1)\n  print(\"#{p}\")\nend\n",
+        );
+        assert!(has_code(&report, "E0314"), "{:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn e0314_option_interp_help_suggests_match() {
+        let report = check_str(
+            "fn main() -> Unit\n  let ob: Option<Bool> = Some(true)\n  print(\"#{ob}\")\nend\n",
+        );
+        let has_match_help = report.diagnostics().iter().any(|d| {
+            d.code.as_deref() == Some("E0314")
+                && d.help.as_deref().is_some_and(|h| h.contains("match"))
+        });
+        assert!(has_match_help, "{:?}", report.diagnostics());
+    }
+
+    #[test]
+    fn interp_displayable_types_accepted() {
+        let report = check_str(
+            "fn main() -> Unit\n  let i = 1\n  let f = 1.5\n  let b = true\n  let s = \"x\"\n  let oi: Option<Int> = Some(1)\n  let os: Option<String> = Some(\"y\")\n  print(\"#{i} #{f} #{b} #{s} #{oi} #{os}\")\nend\n",
+        );
+        assert!(!report.has_errors(), "{:?}", report.diagnostics());
+    }
 }

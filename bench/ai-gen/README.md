@@ -3,11 +3,11 @@
 Per `docs/strategy.md` §6.2 item 2 and §4.1, Tyra's strongest potential
 differentiator is measurable AI auditability. This harness quantifies
 that claim by asking Claude and the Codex CLI to generate the same
-programs in Tyra, Crystal, V, Gleam, and Ruby, then grading each
+programs in Tyra, Crystal, V, Gleam, Ruby, and Go, then grading each
 output through three stages: **generation**, **compile / type-check**,
 and **execution**.
 
-The methodology mirrors the strategy doc's target: ~100 prompts, 5
+The methodology mirrors the strategy doc's target: ~100 prompts, 6
 languages, ≥1 frontier model. Headline metric per (language, model)
 pair:
 
@@ -41,6 +41,7 @@ bench/ai-gen/
     v.py              `v run`
     gleam.py          injects source into templates/gleam/
     ruby.py           `ruby -c` for type/syntax, then `ruby` to exec
+    go.py             `go build` with isolated GOCACHE, then exec
   templates/gleam/    minimal Gleam project template
   results/            JSON artifacts, one per (prompt, lang, gen) triple
 ```
@@ -103,7 +104,7 @@ Any earlier stage failing short-circuits the rest.
 ## Why compile + exec, not functional correctness
 
 The harness does not verify answer correctness by equality — that would
-require 100 reference implementations × 5 languages. Instead, each
+require 100 reference implementations × 6 languages. Instead, each
 prompt declares a few **markers** the output must include. This is a
 weaker signal than full correctness but a strictly stronger signal
 than "it compiled," and is uniform across languages with wildly
@@ -124,5 +125,5 @@ the acquisition narrative.
   `templates/gleam/src/main.gleam` before invoking `gleam run`.
 - **Tyra** — uses the in-repo debug binary at
   `target/debug/tyra`. Run `cargo build -p tyra-cli` first.
-- **Costs** — 100 prompts × 5 languages × 2 generators × N seeds gets
+- **Costs** — 100 prompts × 6 languages × 2 generators × N seeds gets
   expensive fast. Default `config.yaml` caps at seed=1; bump manually.

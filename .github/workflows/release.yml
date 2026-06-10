@@ -217,6 +217,16 @@ jobs:
         with:
           path: dist/
 
+      - name: Generate SHA256SUMS
+        # Checksums are consumed by scripts/install.sh and the Homebrew
+        # formula bump job; entries inside SHA256SUMS use bare filenames so
+        # consumers can verify a downloaded tarball in any directory.
+        run: |
+          mkdir -p checksums
+          find dist -name '*.tar.gz' -exec cp {} checksums/ \;
+          (cd checksums && sha256sum *.tar.gz > ../SHA256SUMS)
+          cat SHA256SUMS
+
       - name: Extract release notes from CHANGELOG
         run: |
           tag="${GITHUB_REF_NAME}"
@@ -228,5 +238,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body_path: release-notes.md
-          files: dist/**/*.tar.gz
+          files: |
+            dist/**/*.tar.gz
+            SHA256SUMS
           fail_on_unmatched_files: true

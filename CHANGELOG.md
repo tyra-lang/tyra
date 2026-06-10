@@ -7,6 +7,31 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ---
 
+## [Unreleased] — v0.10.0
+
+### Stable
+
+**E0314 — compile-time diagnostic for non-displayable string interpolation**
+- `"#{expr}"` with a type that has no string form (`List<T>`, `Map<K,V>`, `Result<T,E>`, `value`/`data` types, `Option<Bool>`, `Option<data-type>`, …) is now a compile error **E0314** instead of a runtime SIGSEGV / garbage output.
+- Resolves the v0.9.0 known limitation "`Option<Bool>` / `Option<data-type>` string interpolation: no compile-time diagnostic".
+- The checker now type-checks interpolation sub-expressions (previously skipped entirely); the displayable set lives in one place (`Ty::is_interp_displayable` / `Ty::option_interp_suffix` in `tyra-types`) shared by the checker gate and MIR lowering, with `debug_assert!` ICE backstops at both MIR interpolation sites.
+- Option-typed offenders get a dedicated help ("destructure the Option with `match` …").
+- spec §7.3 now defines the interpolatable-type set (ja + en); bad-corpus `E0314-interp-unsupported-type.tyra` added.
+
+**Distribution groundwork (strategy §13)**
+- `tyra` now also looks for `libtyra_runtime.a` at `<exe_dir>/../lib/tyra/` (FHS layout), matching the existing stdlib search order — enables `~/.local`-style installs (`bin/tyra` + `lib/tyra/{libtyra_runtime.a,stdlib/}`). Both the normal build path and the coverage build path share the new `find_runtime_staticlib()` helper.
+- Release workflow now publishes a `SHA256SUMS` file alongside the tarballs (consumed by the upcoming `install.sh` and the Homebrew formula bump job).
+
+**AI-gen benchmark: Go runner**
+- `bench/ai-gen` now supports Go (`go build`, single-file, GOCACHE confined to the throwaway workdir). Six-language sweeps: Tyra / Go / Crystal / V / Gleam / Ruby. Smoke-verified 5/5 pass.
+
+### Known Limitations
+
+- **E0314 does not fire when the interpolated expression's type cannot be inferred**: `let p = Point(x: 1.0)` (no annotation) leaves the constructor result as an unresolved type, which passes the gate to avoid cascades and still crashes at runtime. Annotated bindings (`let p: Point = …`) are caught. Root cause: constructor-call result inference; tracked as a v0.10 checker follow-up.
+- **`Bool` interpolation prints `1` / `0`**, not `true` / `false` (pre-existing; now documented in spec §7.3 as provisional).
+
+---
+
 ## [0.9.0] — Gentle Dream (2026-06-09)
 
 ### Stable

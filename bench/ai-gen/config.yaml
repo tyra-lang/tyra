@@ -44,6 +44,13 @@ languages:
     check_cmd: ["ruby", "-c", "{src}"]
     run_cmd: ["ruby", "{src}"]
     source_ext: ".rb"
+  go:
+    enabled: true
+    # Single-file build; no go.mod needed. The runner redirects GOCACHE
+    # into the throwaway workdir so runs leave no shared state behind.
+    compile_cmd: ["go", "build", "-o", "{bin}", "{src}"]
+    run_cmd: ["./{bin}"]
+    source_ext: ".go"
 
 timeouts:
   generate_seconds: 60

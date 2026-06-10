@@ -243,6 +243,28 @@ end
 let msg = "hello, #{user.name}"
 ```
 
+#### 補間可能な型
+
+`#{expr}` に書ける式の型は以下に限られる:
+
+| 型 | 表示 |
+| -- | -- |
+| `Int` | `42` |
+| `Float` | `1.5` |
+| `Bool` | `1` / `0`(暫定。`true` / `false` 表示への変更を検討中) |
+| `String` | そのまま |
+| `Option<Int>` / `Option<Float>` / `Option<String>` | `Some(42)` / `None` |
+
+それ以外の型(`List<T>`、`Map<K,V>`、`Result<T,E>`、`value` / `data` 型、上記以外の `Option<T>` など)を補間するとコンパイルエラー **E0314** となる。`match` で値を取り出し、表示可能な型に変換してから補間すること。
+
+```tyra
+let xs = [1, 2, 3]
+print("#{xs}")          # error[E0314]: `#{...}` cannot display a value of type `List<Int>`
+
+let n = xs.len()
+print("#{n} items")     # OK
+```
+
 エスケープシーケンス:
 
 - `\n` — 改行

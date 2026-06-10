@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """bench/ai-gen/harness.py — AI code generation benchmark runner.
 
-Per docs/strategy.md §6.2 item 2: ~100 prompts, 5 languages, measure
+Per docs/strategy.md §6.2 item 2: ~100 prompts, 6 languages, measure
 compile + execute success rates across frontier models.
 
 Usage:
@@ -183,7 +183,7 @@ def run_one(
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--languages", default="tyra,crystal,v,gleam,ruby")
+    ap.add_argument("--languages", default="tyra,crystal,v,gleam,ruby,go")
     ap.add_argument("--generators", default="claude,codex")
     ap.add_argument("--prompts", default="prompts/*.yaml")
     ap.add_argument("--seed", type=int, default=None,

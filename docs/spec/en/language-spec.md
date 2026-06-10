@@ -247,6 +247,28 @@ Regular strings support interpolation.
 let msg = "hello, #{user.name}"
 ```
 
+#### Interpolatable types
+
+The expression inside `#{expr}` is restricted to the following types:
+
+| Type | Displayed as |
+| -- | -- |
+| `Int` | `42` |
+| `Float` | `1.5` |
+| `Bool` | `1` / `0` (provisional; switching to `true` / `false` is under consideration) |
+| `String` | as-is |
+| `Option<Int>` / `Option<Float>` / `Option<String>` | `Some(42)` / `None` |
+
+Interpolating any other type (`List<T>`, `Map<K,V>`, `Result<T,E>`, `value` / `data` types, other `Option<T>`, etc.) is a compile error **E0314**. Destructure the value with `match` and convert it to a displayable type first.
+
+```tyra
+let xs = [1, 2, 3]
+print("#{xs}")          # error[E0314]: `#{...}` cannot display a value of type `List<Int>`
+
+let n = xs.len()
+print("#{n} items")     # OK
+```
+
 Escape sequences:
 
 - `\n` — newline

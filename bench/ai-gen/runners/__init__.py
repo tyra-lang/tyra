@@ -4,6 +4,7 @@ from .crystal import CrystalRunner
 from .v import VRunner
 from .gleam import GleamRunner
 from .ruby import RubyRunner
+from .go import GoRunner
 
 ALL_RUNNERS = {
     "tyra": TyraRunner,
@@ -11,6 +12,7 @@ ALL_RUNNERS = {
     "v": VRunner,
     "gleam": GleamRunner,
     "ruby": RubyRunner,
+    "go": GoRunner,
 }
 
 __all__ = [
@@ -22,5 +24,6 @@ __all__ = [
     "VRunner",
     "GleamRunner",
     "RubyRunner",
+    "GoRunner",
     "ALL_RUNNERS",
 ]

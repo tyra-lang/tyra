@@ -1359,7 +1359,48 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
         ExprKind::IntLit(_) => Ty::Int,
         ExprKind::FloatLit(_) => Ty::Float,
         ExprKind::StringLit(_) => Ty::String,
-        ExprKind::StringInterp(_) => Ty::String,
+        ExprKind::StringInterp(parts) => {
+            // §7.3: type-check each interpolated expression and reject
+            // types that have no string form (E0314). Without this gate
+            // unsupported types reach the printf-style lowering and
+            // crash at runtime.
+            for part in parts {
+                if let StringPart::Expr(e) = part {
+                    let part_ty = infer_expr(e, env, report);
+                    let resolved = env.subst.apply(&part_ty);
+                    if !resolved.is_interp_displayable() {
+                        let mut diag = Diagnostic::error(format!(
+                            "`#{{...}}` cannot display a value of type `{}`",
+                            resolved.display_name()
+                        ))
+                        .with_code("E0314")
+                        // Interp sub-expressions are re-parsed from the
+                        // string text with a private SourceMap, so their
+                        // spans are meaningless in the enclosing file.
+                        // Point at the enclosing string literal instead.
+                        .with_label(Label::new(
+                            expr.span,
+                            format!("this interpolation has type `{}`", resolved.display_name()),
+                        ));
+                        diag = if matches!(&resolved, Ty::Generic(n, _) if n == "Option") {
+                            diag.with_help(
+                                "destructure the Option with `match` and interpolate the \
+                                 inner value: `match opt when Some(x) \"#{x}\" when None \
+                                 \"none\" end`",
+                            )
+                        } else {
+                            diag.with_help(
+                                "only Int, Float, Bool, String, Option<Int>, Option<Float>, \
+                                 and Option<String> can be interpolated; convert the value \
+                                 to one of these first",
+                            )
+                        };
+                        report.add(diag);
+                    }
+                }
+            }
+            Ty::String
+        }
         ExprKind::BoolLit(_) => Ty::Bool,
         ExprKind::UnitLit => Ty::Unit,
         ExprKind::ListLit(items) => {

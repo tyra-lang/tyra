@@ -396,6 +396,55 @@ fn find_stdlib_dir(main_dir: &Path) -> Option<std::path::PathBuf> {
     None
 }
 
+/// Candidate locations for the Tyra runtime staticlib (`libtyra_runtime.a`),
+/// in resolution order:
+///
+/// 1. `<exe_dir>/libtyra_runtime.a` — dev checkout (cargo places the staticlib
+///    next to the `tyra` binary in `target/{debug,release}/`) and portable
+///    distribution (staticlib shipped beside the binary)
+/// 2. `<exe_dir>/../lib/tyra/libtyra_runtime.a` — FHS install:
+///    `/usr/local/bin/tyra` + `/usr/local/lib/tyra/libtyra_runtime.a`
+///
+/// Mirrors the layout supported by [`find_stdlib_dir`] steps 2–3 so installers
+/// can place the staticlib alongside the stdlib under `lib/tyra/`.
+fn runtime_staticlib_candidates() -> Vec<std::path::PathBuf> {
+    let Some(exe_dir) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+    else {
+        return Vec::new();
+    };
+    vec![
+        exe_dir.join("libtyra_runtime.a"),
+        exe_dir
+            .join("..")
+            .join("lib")
+            .join("tyra")
+            .join("libtyra_runtime.a"),
+    ]
+}
+
+/// Find the Tyra runtime staticlib: the first existing candidate from
+/// [`runtime_staticlib_candidates`], or `None` if no candidate exists.
+fn find_runtime_staticlib() -> Option<std::path::PathBuf> {
+    runtime_staticlib_candidates()
+        .into_iter()
+        .find(|p| p.exists())
+}
+
+/// Human-readable list of the searched staticlib locations, for diagnostics.
+fn runtime_staticlib_search_list() -> String {
+    let candidates = runtime_staticlib_candidates();
+    if candidates.is_empty() {
+        return "<unknown>".into();
+    }
+    candidates
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>()
+        .join(" or ")
+}
+
 /// Resolve import declarations by parsing module files and merging exported items.
 ///
 /// Uses the ADR 0010 three-layer uniqueness rule:
@@ -1806,29 +1855,22 @@ fn build_link_cmd_unix(
             break;
         }
     }
-    // libtyra_runtime: locate via the running compiler's target dir. The
-    // staticlib is produced by cargo alongside the `tyra` binary (workspace
-    // target/{debug,release}/). If it is missing (e.g. the user copied only
+    // libtyra_runtime: locate via find_runtime_staticlib (beside the binary,
+    // then FHS ../lib/tyra/). If it is missing (e.g. the user copied only
     // the `tyra` binary without `libtyra_runtime.a`, or installed via
     // `cargo install` without the staticlib), surface an explicit Tyra
     // diagnostic instead of letting clang emit an unresolved-symbol error.
-    let runtime_lib_path = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|d| d.join("libtyra_runtime.a")));
-    match runtime_lib_path.as_ref() {
-        Some(p) if p.exists() => {
+    match find_runtime_staticlib() {
+        Some(p) => {
             clang_args.push(p.to_string_lossy().into_owned());
         }
-        _ => {
+        None => {
             let mut report = result.report;
             report.add(
                 tyra_diagnostics::Diagnostic::error(format!(
-                    "Tyra runtime staticlib not found (expected at {}).\n\
+                    "Tyra runtime staticlib not found (searched {}).\n\
                      Build the full workspace with `cargo build` (not `-p tyra-cli`).",
-                    runtime_lib_path
-                        .as_deref()
-                        .map(|p| p.display().to_string())
-                        .unwrap_or_else(|| "<unknown>".into())
+                    runtime_staticlib_search_list()
                 ))
                 .with_code("E0502"),
             );
@@ -2218,20 +2260,18 @@ pub fn compile_to_binary_coverage(source_path: &Path, output_path: &Path) -> Com
             break;
         }
     }
-    let runtime_lib_path = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|d| d.join("libtyra_runtime.a")));
-    match runtime_lib_path.as_ref() {
-        Some(p) if p.exists() => {
+    match find_runtime_staticlib() {
+        Some(p) => {
             clang_args.push(p.to_string_lossy().into_owned());
         }
-        _ => {
+        None => {
             let _ = std::fs::remove_file(&ir_path);
             let mut report = result.report;
             report.add(
-                tyra_diagnostics::Diagnostic::error(
-                    "Tyra runtime staticlib not found for coverage build.",
-                )
+                tyra_diagnostics::Diagnostic::error(format!(
+                    "Tyra runtime staticlib not found for coverage build (searched {}).",
+                    runtime_staticlib_search_list()
+                ))
                 .with_code("E0001"),
             );
             return CompileResult {
@@ -2514,6 +2554,33 @@ fn run_opts(source_path: &Path, release: bool) -> CompileResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runtime_staticlib_candidates_cover_portable_and_fhs_layouts() {
+        let candidates = runtime_staticlib_candidates();
+        assert_eq!(candidates.len(), 2, "expected exe-dir + FHS candidates");
+        let exe_dir = std::env::current_exe()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        assert_eq!(candidates[0], exe_dir.join("libtyra_runtime.a"));
+        assert_eq!(
+            candidates[1],
+            exe_dir
+                .join("..")
+                .join("lib")
+                .join("tyra")
+                .join("libtyra_runtime.a")
+        );
+    }
+
+    #[test]
+    fn runtime_staticlib_search_list_names_both_locations() {
+        let list = runtime_staticlib_search_list();
+        assert!(list.contains("libtyra_runtime.a"));
+        assert!(list.contains(" or "), "should list both candidates: {list}");
+    }
 
     #[test]
     fn check_in_memory_clean_program() {

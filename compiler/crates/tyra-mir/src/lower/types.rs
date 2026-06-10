@@ -776,16 +776,13 @@ impl super::LowerCtx<'_> {
     ) -> Option<String> {
         let ty = expr_ty.as_ref()?;
         match ty {
-            Ty::Generic(name, args) if name == "Option" => {
-                let inner = args.first()?;
-                // Bool payload is i1 from AdtPayload — ABI mismatch with i64 extern.
-                // Composite/Named inner types carry struct payloads — not scalar-safe.
-                let suffix = match inner {
-                    Ty::Int => "Int",
-                    Ty::Float => "Float",
-                    Ty::String => "Str",
-                    _ => return None,
-                };
+            Ty::Generic(name, _) if name == "Option" => {
+                // Suffix selection is shared with the checker's E0314 gate
+                // (Ty::option_interp_suffix) so the supported set cannot
+                // drift between the two passes. Unsupported inner types
+                // return None here, but the checker has already rejected
+                // them with E0314 before lowering.
+                let suffix = ty.option_interp_suffix()?;
                 let type_name = ty.monomorphized_name();
                 let tag_tmp = self.fresh_temp();
                 self.emit(

@@ -1394,6 +1394,16 @@ impl super::LowerCtx<'_> {
                                 format_str.push_str("%g");
                                 format_args.push(Operand::Var(val));
                             } else {
+                                // ICE backstop: the checker's E0314 gate
+                                // guarantees only displayable types reach
+                                // this scalar fallback. A failure here is
+                                // a compiler bug, not a user error.
+                                debug_assert!(
+                                    expr_ty
+                                        .as_ref()
+                                        .is_none_or(|t| t.is_interp_displayable()),
+                                    "E0314 gate missed non-displayable interp type: {expr_ty:?}"
+                                );
                                 format_str.push_str("%ld");
                                 format_args.push(Operand::Var(val));
                             }

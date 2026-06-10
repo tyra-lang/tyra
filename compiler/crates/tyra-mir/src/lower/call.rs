@@ -1791,6 +1791,12 @@ impl super::LowerCtx<'_> {
                     StringPart::Expr(e) => {
                         let expr_ty = self.infer_expr_type(e);
                         let val = self.lower_expr(e, body);
+                        // ICE backstop: the checker's E0314 gate guarantees
+                        // only displayable types reach this print path.
+                        debug_assert!(
+                            expr_ty.as_ref().is_none_or(|t| t.is_interp_displayable()),
+                            "E0314 gate missed non-displayable interp type: {expr_ty:?}"
+                        );
                         let print_val = self.emit_adt_display(&val, &expr_ty, body).unwrap_or(val);
                         self.emit(
                             body,

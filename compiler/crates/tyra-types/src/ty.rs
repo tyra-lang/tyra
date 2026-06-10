@@ -133,6 +133,44 @@ impl Ty {
         }
     }
 
+    /// Display suffix for `Option<T>` string interpolation (`"#{opt}"`).
+    ///
+    /// Returns `Some("Int" | "Float" | "Str")` when `self` is an
+    /// `Option<T>` whose payload can be passed to the fixed scalar
+    /// `__display_option__*` externs, `None` otherwise. Bool payloads
+    /// arrive as i1 from AdtPayload (ABI mismatch with the i64 extern)
+    /// and composite payloads are structs — neither is scalar-safe.
+    ///
+    /// Single source of truth shared by the type checker (E0314 gate)
+    /// and MIR lowering (`emit_adt_display`) so the two cannot drift.
+    pub fn option_interp_suffix(&self) -> Option<&'static str> {
+        match self {
+            Ty::Generic(name, args) if name == "Option" && args.len() == 1 => match &args[0] {
+                Ty::Int => Some("Int"),
+                Ty::Float => Some("Float"),
+                Ty::String => Some("Str"),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Whether string interpolation (`"#{expr}"`, §7.3) can display a
+    /// value of this type. The checker rejects everything else with
+    /// E0314 before lowering, so the MIR interpolation paths only ever
+    /// see displayable types.
+    ///
+    /// `Error` and `Var` pass: `Error` is already reported elsewhere
+    /// (avoid cascades) and an unbound `Var` is caught by the E9001
+    /// ICE guard at codegen entry if it survives substitution.
+    pub fn is_interp_displayable(&self) -> bool {
+        match self {
+            Ty::Int | Ty::Float | Ty::Bool | Ty::String => true,
+            Ty::Error | Ty::Var(_) => true,
+            _ => self.option_interp_suffix().is_some(),
+        }
+    }
+
     /// Check if this is a LinkedMap<K,V> type (§11, ADR-0019).
     pub fn is_linked_map(&self) -> bool {
         matches!(self, Ty::Generic(name, args) if name == "LinkedMap" && args.len() == 2)
