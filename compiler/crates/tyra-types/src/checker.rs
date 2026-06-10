@@ -1710,6 +1710,98 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     return Ty::Error;
                 }
 
+                // LinkedMap.from(xs) — creates a LinkedMap<K,V> from a List<(K,V)>.
+                if let ExprKind::Ident(mod_name) = &obj.kind
+                    && mod_name == "LinkedMap"
+                    && method == "from"
+                    && args.len() == 1
+                {
+                    // Only list literals are supported in v0.1 — reject variables/exprs early
+                    // so the MIR unroll path is never reached with a non-literal.
+                    if !matches!(args[0].value.kind, ExprKind::ListLit(_)) {
+                        report.add(
+                            Diagnostic::error(
+                                "`LinkedMap.from` requires a list literal argument".to_string(),
+                            )
+                            .with_code("E0308")
+                            .with_label(Label::new(
+                                args[0].value.span,
+                                "expected a list literal `[...]`, not a variable",
+                            ))
+                            .with_note(
+                                "use a list literal directly: \
+                                 `LinkedMap.from([(\"a\", 1), (\"b\", 2)])`",
+                            ),
+                        );
+                        return Ty::Error;
+                    }
+
+                    let arg_ty = infer_expr(&args[0].value, env, report);
+
+                    // Extract K/V from binding hint (if present).
+                    let hint_kv: Option<(Ty, Ty)> = env
+                        .binding_type_hint
+                        .as_ref()
+                        .and_then(|t| peel_to_linked_map(t))
+                        .and_then(|lm| match lm {
+                            Ty::Generic(_, a) if a.len() == 2 => {
+                                Some((a[0].clone(), a[1].clone()))
+                            }
+                            _ => None,
+                        });
+
+                    // Extract K'/V' from the actual arg type List<(K',V')>.
+                    let arg_kv: Option<(Ty, Ty)> = if let Ty::Generic(name, a) = &arg_ty
+                        && name == "List"
+                        && a.len() == 1
+                        && let Ty::Generic(tname, telems) = &a[0]
+                        && tname == "Tuple"
+                        && telems.len() == 2
+                    {
+                        Some((telems[0].clone(), telems[1].clone()))
+                    } else {
+                        None
+                    };
+
+                    // If both hint and arg K/V are known, verify they agree.
+                    if let (Some((hk, hv)), Some((ak, av))) = (&hint_kv, &arg_kv) {
+                        if hk != ak || hv != av {
+                            report.add(
+                                Diagnostic::error(format!(
+                                    "type mismatch in `LinkedMap.from`: \
+                                     annotation expects `LinkedMap<{}, {}>` \
+                                     but argument has type `List<({}, {})>`",
+                                    hk.monomorphized_name(),
+                                    hv.monomorphized_name(),
+                                    ak.monomorphized_name(),
+                                    av.monomorphized_name(),
+                                ))
+                                .with_code("E0308")
+                                .with_label(Label::new(
+                                    args[0].value.span,
+                                    "argument element types do not match the annotation",
+                                )),
+                            );
+                            return Ty::Error;
+                        }
+                    }
+
+                    // Return the result type (hint takes priority over arg inference).
+                    if let Some((k, v)) = hint_kv.or(arg_kv) {
+                        return Ty::Generic("LinkedMap".into(), vec![k, v]);
+                    }
+                    report.add(
+                        Diagnostic::error("cannot infer LinkedMap key/value types".to_string())
+                            .with_code("E0308")
+                            .with_label(Label::new(expr.span, "key/value types unknown"))
+                            .with_note(
+                                "add a type annotation: \
+                                 `let m: LinkedMap<String, Int> = LinkedMap.from([...])`",
+                            ),
+                    );
+                    return Ty::Error;
+                }
+
                 // LinkedSet.new() — mirror set.new() inference.
                 if let ExprKind::Ident(mod_name) = &obj.kind
                     && mod_name == "LinkedSet"

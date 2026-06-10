@@ -8,14 +8,15 @@
 # Float keys are not permitted (Float is not Hash).
 #
 # v0.8 API:
-#   Construction:  LinkedMap.new()          — returns an empty LinkedMap<K,V>
-#   lm.insert(k, v) -> LinkedMap<K,V>       — non-mutating; new key appended at end;
-#                                            existing key: value updated, order preserved
-#   lm.get(k)        -> Option<V>           — None if absent
-#   lm.remove(k)     -> LinkedMap<K,V>      — non-mutating; preserves remaining order
+#   Construction:  LinkedMap.new()               — returns an empty LinkedMap<K,V>
+#   LinkedMap.from([(k1, v1), ...]) -> LinkedMap<K,V>  — construct from a list of tuples (v0.10)
+#   lm.insert(k, v) -> LinkedMap<K,V>            — non-mutating; new key appended at end;
+#                                                 existing key: value updated, order preserved
+#   lm.get(k)        -> Option<V>                — None if absent
+#   lm.remove(k)     -> LinkedMap<K,V>           — non-mutating; preserves remaining order
 #   lm.contains_key(k) -> Bool
 #   lm.len()         -> Int
-#   for k, v in lm { ... }                  — iterates in insertion order (ADR-0019)
+#   for k, v in lm { ... }                       — iterates in insertion order (ADR-0019)
 #
 # All operations are non-mutating from the language's perspective.
 # The underlying GC_malloc'd table is managed by Boehm GC (ADR-0007).

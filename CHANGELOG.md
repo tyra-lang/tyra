@@ -25,6 +25,14 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 **AI-gen benchmark: Go runner**
 - `bench/ai-gen` now supports Go (`go build`, single-file, GOCACHE confined to the throwaway workdir). Six-language sweeps: Tyra / Go / Crystal / V / Gleam / Ruby. Smoke-verified 5/5 pass.
 
+**`LinkedMap.from([...])` — construct from a list of tuples (ADR-0023)**
+- `LinkedMap.from([(k1, v1), (k2, v2)])` constructs a `LinkedMap` from a list literal of `(K, V)` tuples.
+- K/V types are inferred from the binding type annotation or from the `List<(K,V)>` argument type.
+- Desugars in MIR to `LinkedMap.new()` + sequential `insert` calls — no new runtime function.
+- Empty list `LinkedMap.from([])` is valid (requires a type annotation).
+- spec §11.1 (ja + en); corpus `bench/static-corpus/32-linked-map-from.tyra`.
+- Resolves the v0.9.0 known limitation "`LinkedMap.from` / map literal syntax: deferred to v0.10".
+
 **Tuple types — fixed-length product types with full destructuring (ADR-0022)**
 - Tuple literals `(a, b)` and type annotations `(A, B)` are now fully supported.
 - **let destructuring**: `let (a, b) = pair` — binds each element to a fresh local.
@@ -88,7 +96,6 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 ### Known Limitations
 
 - **Windows (x64-windows-msvc)**: experimental — `release-gate-windows` CI is tracking-only (`cargo check` only, `continue-on-error: true`; not part of the release gate). Building the full compiler requires a local LLVM 22 SDK with dev files. **Windows ARM64** and **native PDB debug symbols** are deferred to a future release. See [ADR-0021](docs/design/0021-windows-support.md) for the full status table.
-- **`LinkedMap.from([...])` / `LinkedMap` literal syntax**: deferred to v0.10 — requires tuple types (spec §22 deferred item, not yet implemented). Tracked in the v0.10 backlog below.
 - **`Option<Bool>` / `Option<data-type>` string interpolation**: not supported in v0.9; no compile-time diagnostic is emitted. Behavior differs by context: in `println("#{expr}")` the containing function is lowered to an `unreachable` body (the codegen gate rejects struct-typed `print` arguments); in `"prefix #{expr}"` the struct value is passed to `snprintf` as `%ld`, printing a raw integer. A compile-time E0xxx diagnostic is planned for v0.10 — tracked at `Instruction::StringFormat` arm in `inkwell_instr.rs` (~line 954) and the `StringInterp` special case in `lower/call.rs` (~line 1762).
 - **Boehm GC parallel init in `cargo test`**: running `cargo test -p tyra-runtime` without `-- --test-threads=1` causes SIGABRT on some hosts due to concurrent `GC_init()` calls. Workaround documented in CONTRIBUTING.md. Root cause is upstream in `bdw-gc`; no Tyra-side fix is planned.
 
@@ -96,11 +103,11 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 Items deferred from v0.9 with explicit tracking:
 
-1. **Tuple types** (spec §22 deferred item) — required foundation for items 2 and 3.
-2. **`LinkedMap.from([...])` / map literal syntax** — unblocked after tuple types; ADR pending.
-3. **`Option<Bool>` / `Option<data-type>` string interpolation diagnostic** — compile-time E0xxx; two-line fix in `inkwell_instr.rs` + `lower/call.rs` once the error code is assigned.
+1. ~~**Tuple types**~~ — implemented in v0.10.0 (ADR-0022).
+2. ~~**`LinkedMap.from([...])` / map literal syntax**~~ — implemented in v0.10.0 (ADR-0023).
+3. ~~**`Option<Bool>` / `Option<data-type>` string interpolation diagnostic**~~ — implemented as E0314 in v0.10.0.
 4. **Windows ARM64 / native PDB debug symbols** — see [ADR-0021](docs/design/0021-windows-support.md); blocked on upstream `llvm-sys` Windows ARM64 support.
-5. **`SortedMap<K,V>` / `SortedSet<T>`** — sort-order persistent collections; spec §11 extension.
+5. ~~**`SortedMap<K,V>` / `SortedSet<T>`**~~ — implemented in v0.10.0 (ADR-0024).
 
 ### Not in This Release
 

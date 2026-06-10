@@ -923,7 +923,15 @@ let n = lm.len()               # Int — 3
 - キーが存在しない場合: O(1) — entries/index 配列を共有した新しいラッパーのみ確保。
 - キーが存在する場合: O(entries_cap + idx_cap) — entries と index をコピーして tombstone を記録。次の `insert` で tombstone を compaction する (entries_cap ≈ live に戻る)。
 
-**`LinkedMap.from` は v0.10 予定**。タプル型が追加された後、`LinkedMap.from([(k1, v1), ...])` 構文を実装する予定。
+**`LinkedMap.from` (v0.10.0, ADR-0023)**: `(K, V)` タプルのリストリテラルから `LinkedMap` を構築できる。
+
+```tyra
+let m: LinkedMap<String, Int> = LinkedMap.from([("a", 1), ("b", 2), ("c", 3)])
+```
+
+- 型注釈から K/V 型を推論する。注釈がない場合は引数の `List<(K,V)>` 型から推論。
+- リストリテラル `[...]` のみ対応。挿入順はリテラルの要素順と一致する。
+- 空リスト `LinkedMap.from([])` も可(型注釈必須)。
 
 ### 11.2 LinkedSet — 挿入順保持 Set (v0.8.0, ADR-0019)
 

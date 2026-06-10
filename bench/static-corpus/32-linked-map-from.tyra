@@ -1,0 +1,33 @@
+# 32-linked-map-from.tyra
+# LinkedMap.from([...]) — construct from a list of (K,V) tuples (spec 11.1, ADR-0023).
+
+import assert
+import linked_map
+
+fn main() -> Int
+  # Basic construction with type annotation.
+  let m: LinkedMap<String, Int> = LinkedMap.from([("a", 1), ("b", 2), ("c", 3)])
+  let _ = assert.eq(m.len(), 3)
+
+  # get/contains_key work as normal.
+  match m.get("b")
+  when Some(v)
+    let _ = assert.eq(v, 2)
+  when None
+    let _ = assert.eq(0, 1)
+  end
+  let _ = assert.eq(m.contains_key("a"), true)
+  let _ = assert.eq(m.contains_key("z"), false)
+
+  # Insertion order is preserved (LinkedMap semantics).
+  mut keys = ""
+  for k, v in m
+    keys = "#{keys}#{k}"
+  end
+  let _ = assert.eq(keys, "abc")
+
+  # Empty list produces an empty LinkedMap.
+  let empty: LinkedMap<String, Int> = LinkedMap.from([])
+  let _ = assert.eq(empty.len(), 0)
+  0
+end

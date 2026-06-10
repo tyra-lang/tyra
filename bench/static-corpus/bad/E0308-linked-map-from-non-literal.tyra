@@ -1,0 +1,9 @@
+# E0308-linked-map-from-non-literal.tyra
+# expected: error[E0308]: `LinkedMap.from` requires a list literal argument
+import linked_map
+
+fn main() -> Int
+  let xs = [("a", 1)]
+  let m: LinkedMap<String, Int> = LinkedMap.from(xs)
+  0
+end

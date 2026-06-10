@@ -1242,6 +1242,124 @@ impl super::LowerCtx<'_> {
             return dest;
         }
 
+        // LinkedMap.from(xs) — desugars to new() + sequential inserts over a list literal.
+        // Only list literals are supported in v0.1 (no runtime loop needed).
+        if let ExprKind::FieldAccess(obj, method) = &callee.kind
+            && let ExprKind::Ident(module_name) = &obj.kind
+            && module_name == "LinkedMap"
+            && method == "from"
+            && args.len() == 1
+        {
+            let (k_ty, v_ty) = self
+                .binding_type_hint
+                .as_ref()
+                .and_then(|h| h.linked_map_kv())
+                .or_else(|| self.current_fn_return_type.linked_map_kv())
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .unwrap_or((Ty::String, Ty::Int));
+            let lm_ty = Ty::Generic("LinkedMap".into(), vec![k_ty.clone(), v_ty.clone()]);
+            self.register_adt_type(&lm_ty);
+            let lm_struct = lm_ty.monomorphized_name();
+            let k_name = k_ty.monomorphized_name();
+            let v_name = v_ty.monomorphized_name();
+
+            // Create the initial empty handle.
+            let mut cur_handle = self.fresh_temp();
+            self.emit_at(
+                body,
+                call_loc,
+                Instruction::Call {
+                    dest: Some(cur_handle.clone()),
+                    func: format!("__linked_map_new__{k_name}__{v_name}"),
+                    args: vec![],
+                },
+            );
+            self.string_vars.insert(cur_handle.clone());
+
+            // Unroll inserts over a list literal of tuples.
+            let arg_expr = &args[0].value;
+            if let ExprKind::ListLit(elements) = &arg_expr.kind {
+                let elements = elements.clone();
+                for elem in &elements {
+                    let tuple_val = self.lower_expr(elem, body);
+                    let tuple_struct = self
+                        .generic_var_types
+                        .get(&tuple_val)
+                        .map(|ty| ty.monomorphized_name())
+                        .or_else(|| self.var_types.get(&tuple_val).cloned())
+                        .unwrap_or_default();
+
+                    // Extract key (field 0).
+                    let key_var = self.fresh_temp();
+                    self.emit(
+                        body,
+                        Instruction::FieldGet {
+                            dest: key_var.clone(),
+                            obj: Operand::Var(tuple_val.clone()),
+                            type_name: tuple_struct.clone(),
+                            field_index: 0,
+                        },
+                    );
+                    match &k_ty {
+                        Ty::String => { self.string_vars.insert(key_var.clone()); }
+                        Ty::Float => { self.float_vars.insert(key_var.clone()); }
+                        Ty::Bool => { self.bool_vars.insert(key_var.clone()); }
+                        _ => {}
+                    }
+
+                    // Extract value (field 1).
+                    let val_var = self.fresh_temp();
+                    self.emit(
+                        body,
+                        Instruction::FieldGet {
+                            dest: val_var.clone(),
+                            obj: Operand::Var(tuple_val),
+                            type_name: tuple_struct,
+                            field_index: 1,
+                        },
+                    );
+                    match &v_ty {
+                        Ty::String => { self.string_vars.insert(val_var.clone()); }
+                        Ty::Float => { self.float_vars.insert(val_var.clone()); }
+                        Ty::Bool => { self.bool_vars.insert(val_var.clone()); }
+                        _ => {}
+                    }
+
+                    // Insert into the current handle.
+                    let new_handle = self.fresh_temp();
+                    self.emit_at(
+                        body,
+                        call_loc,
+                        Instruction::Call {
+                            dest: Some(new_handle.clone()),
+                            func: format!("__linked_map_insert__{k_name}__{v_name}"),
+                            args: vec![
+                                Operand::Var(cur_handle),
+                                Operand::Var(key_var),
+                                Operand::Var(val_var),
+                            ],
+                        },
+                    );
+                    self.string_vars.insert(new_handle.clone());
+                    cur_handle = new_handle;
+                }
+            }
+
+            let dest = self.fresh_temp();
+            self.emit(
+                body,
+                Instruction::StructInit {
+                    dest: dest.clone(),
+                    type_name: lm_struct.clone(),
+                    fields: vec![Operand::Var(cur_handle)],
+                },
+            );
+            self.string_vars.insert(dest.clone());
+            self.var_types.insert(dest.clone(), lm_struct);
+            self.generic_var_types.insert(dest.clone(), lm_ty);
+            return dest;
+        }
+
         // LinkedSet.new() — creates an empty LinkedSet<T>.
         if let ExprKind::FieldAccess(obj, method) = &callee.kind
             && let ExprKind::Ident(module_name) = &obj.kind

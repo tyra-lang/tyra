@@ -1,0 +1,8 @@
+# E0308-linked-map-from-type-mismatch.tyra
+# expected: error[E0308]: type mismatch in `LinkedMap.from`
+import linked_map
+
+fn main() -> Int
+  let m: LinkedMap<String, Int> = LinkedMap.from([(1, 2)])
+  0
+end

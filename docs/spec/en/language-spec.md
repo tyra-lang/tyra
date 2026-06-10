@@ -925,6 +925,16 @@ let n = lm.len()                # Int — 3
 
 **Constraint**: `K` must satisfy the `Eq + Hash` ability constraint. `Float` keys are not permitted.
 
+**`LinkedMap.from` (v0.10.0, ADR-0023)**: Construct a `LinkedMap` from a list literal of `(K, V)` tuples.
+
+```tyra
+let m: LinkedMap<String, Int> = LinkedMap.from([("a", 1), ("b", 2), ("c", 3)])
+```
+
+- K/V types are inferred from the binding type annotation; if absent, inferred from the `List<(K,V)>` argument type.
+- Only list literals `[...]` are supported. Insertion order matches the literal element order.
+- Empty list `LinkedMap.from([])` is valid (requires a type annotation).
+
 ### 11.2 LinkedSet — insertion-order Set (v0.8.0, ADR-0019)
 
 `LinkedSet<T>` is a persistent set that preserves insertion order.
