@@ -289,18 +289,34 @@ To keep the language small and predictable:
 
 See [spec §3 and §22](docs/spec/ja/language-spec.md) for the full list.
 
-## Building from source
+## Installation
 
-> Requires Rust 1.88+, LLVM 21, and Boehm GC (`bdw-gc`).
+### curl | sh (Linux x86_64 and macOS Apple Silicon)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh
+```
+
+Installs to `~/.local/bin/tyra` by default. Supports `--prefix` and `--version` flags. See [docs/getting-started/01-installation.md](docs/getting-started/01-installation.md) for details.
+
+### Homebrew (macOS)
+
+```bash
+brew install tyra-lang/tap/tyra
+```
+
+### Building from source
+
+> Requires Rust 1.88+, LLVM 22, and Boehm GC (`bdw-gc`). (LLVM 21 also works — pass `--features llvm21-1`.)
 
 Install prerequisites:
 
 ```bash
 # macOS
-brew install llvm@21 bdw-gc
+brew install llvm@22 bdw-gc
 
 # Debian / Ubuntu
-sudo apt install llvm-21 clang-21 libgc-dev
+sudo apt install llvm-22 clang-22 libgc-dev
 ```
 
 Then build:

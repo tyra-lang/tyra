@@ -1,17 +1,57 @@
 # Installation
 
-Tyra is currently distributed as source only. You will build the compiler and runtime from source using the Rust toolchain.
+Pre-built binaries are available for macOS (Apple Silicon) and Linux (x86_64, musl/Alpine).
 
-## Prerequisites
+## Quick Install (curl | sh)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh
+```
+
+This installs `tyra` to `~/.local/bin` and the runtime library + stdlib to `~/.local/lib/tyra/`.
+
+**Options:**
+
+```bash
+# Install to a custom prefix (e.g. /usr/local)
+curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh -s -- --prefix /usr/local
+
+# Install a specific version
+curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh -s -- --version v0.10.0
+```
+
+After installation, add `~/.local/bin` to your `PATH` if not already present:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Then verify:
+
+```bash
+tyra --version
+```
+
+## Homebrew (macOS)
+
+```bash
+brew install tyra-lang/tap/tyra
+```
+
+> **Note:** The Homebrew tap is available from v0.10.0. On first use, run `brew tap tyra-lang/tap` if the above command does not resolve automatically.
+
+## Build from Source
+
+### Prerequisites
 
 - **Rust** 1.88 or later — install via [rustup.rs](https://rustup.rs)
 - **Cargo** (included with Rust)
-- **LLVM** 21 — required by the compiler backend (see note below)
+- **LLVM** 22 — required by the compiler backend (see note below)
 - **Git**
 
-> **NOTE:** On macOS, LLVM can be installed with `brew install llvm@21`. On Debian/Ubuntu, use `apt install llvm-21 clang-21`. Make sure the LLVM binaries are on your `PATH`.
+> **NOTE:** On macOS, install with `brew install llvm@22`. On Debian/Ubuntu, use `apt install llvm-22 clang-22`. Make sure the LLVM binaries are on your `PATH`. (LLVM 21 also works — pass `--features llvm21-1` to `cargo build`.)
 
-## Build from Source
+### Build
 
 ```bash
 git clone https://github.com/tyra-lang/tyra
@@ -21,7 +61,7 @@ cargo build --release
 
 The build takes a few minutes on first run. The resulting binary is at `target/release/tyra`.
 
-## Environment Setup
+### Environment Setup
 
 Tyra needs to know where the standard library lives. Set the `TYRA_STDLIB` environment variable to the `stdlib/` directory in the cloned repository:
 
@@ -40,7 +80,7 @@ export PATH="$PATH:/path/to/tyra/target/release"
 
 > **NOTE:** Replace `/path/to/tyra` with the absolute path to your cloned repository.
 
-## Verify the Installation
+## Verify the Installation (source build)
 
 ```bash
 tyra --version
