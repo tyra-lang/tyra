@@ -85,6 +85,44 @@ pub fn parse_body(ts: &mut TokenStream, report: &mut Report) -> Vec<Stmt> {
 
 fn parse_let(ts: &mut TokenStream, report: &mut Report) -> Stmt {
     let start = ts.advance().span; // consume 'let'
+
+    // `let (a, b) = expr` — tuple destructure
+    if ts.check(&TokenKind::LParen) {
+        ts.advance(); // consume '('
+        let mut bindings = Vec::new();
+        loop {
+            let name = ts.expect_ident(report).unwrap_or_default();
+            bindings.push(name);
+            if !ts.eat(&TokenKind::Comma) {
+                break;
+            }
+            if ts.check(&TokenKind::RParen) {
+                break;
+            }
+        }
+        ts.expect(&TokenKind::RParen, report);
+        if bindings.len() < 2 {
+            report.add(
+                tyra_diagnostics::Diagnostic::error(
+                    "tuple destructure requires 2 or more bindings".to_string(),
+                )
+                .with_code("E0316")
+                .with_label(tyra_diagnostics::Label::new(start, "tuple destructure here")),
+            );
+        }
+        let type_annotation = parse_optional_type_annotation(ts, report);
+        ts.expect(&TokenKind::Eq, report);
+        let value = parse_expr(ts, report);
+        let span = start.merge(value.span);
+        ts.expect_newline_or_eof(report);
+        return Stmt::TupleLet(TupleLetStmt {
+            bindings,
+            type_annotation,
+            value,
+            span,
+        });
+    }
+
     let name = ts.expect_ident_or_field_keyword(report).unwrap_or_default();
     let type_annotation = parse_optional_type_annotation(ts, report);
     ts.expect(&TokenKind::Eq, report);
@@ -258,18 +296,47 @@ fn parse_match_arm(ts: &mut TokenStream, report: &mut Report) -> MatchArm {
 }
 
 /// Parse `for binding in iter body end` (§10.5)
-/// Also handles `for k, v in iter body end` for Map iteration.
+/// Also handles `for k, v in iter body end` (Map) and
+/// `for (a, b) in tuples body end` (tuple destructure, §11.5).
 pub fn parse_for(ts: &mut TokenStream, report: &mut Report) -> ForExpr {
     let start = ts.advance().span; // consume 'for'
-    let first = ts.expect_ident(report).unwrap_or_default();
-    // Check for optional second binding: `for k, v in ...`
-    let bindings = if ts.check(&TokenKind::Comma) {
-        ts.advance(); // consume ','
-        let second = ts.expect_ident(report).unwrap_or_default();
-        vec![first, second]
+
+    // `for (a, b) in tuples` — tuple destructure binding
+    let bindings = if ts.check(&TokenKind::LParen) {
+        ts.advance(); // consume '('
+        let mut names = Vec::new();
+        loop {
+            let name = ts.expect_ident(report).unwrap_or_default();
+            names.push(name);
+            if !ts.eat(&TokenKind::Comma) {
+                break;
+            }
+            if ts.check(&TokenKind::RParen) {
+                break;
+            }
+        }
+        ts.expect(&TokenKind::RParen, report);
+        if names.len() < 2 {
+            report.add(
+                tyra_diagnostics::Diagnostic::error(
+                    "tuple destructure requires 2 or more bindings".to_string(),
+                )
+                .with_code("E0316")
+                .with_label(tyra_diagnostics::Label::new(start, "tuple destructure here")),
+            );
+        }
+        ForBindings::Tuple(names)
     } else {
-        vec![first]
+        let first = ts.expect_ident(report).unwrap_or_default();
+        if ts.check(&TokenKind::Comma) {
+            ts.advance(); // consume ','
+            let second = ts.expect_ident(report).unwrap_or_default();
+            ForBindings::Idents(vec![first, second])
+        } else {
+            ForBindings::Idents(vec![first])
+        }
     };
+
     ts.expect(&TokenKind::In, report);
     let iter = parse_expr(ts, report);
     ts.expect_newline_or_eof(report);
@@ -314,6 +381,7 @@ fn parse_optional_type_annotation(ts: &mut TokenStream, report: &mut Report) -> 
 fn stmt_span(stmt: &Stmt) -> Span {
     match stmt {
         Stmt::Let(s) => s.span,
+        Stmt::TupleLet(s) => s.span,
         Stmt::Mut(s) => s.span,
         Stmt::Return(s) => s.span,
         Stmt::Defer(s) => s.span,

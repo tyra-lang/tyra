@@ -7,11 +7,38 @@ use tyra_lexer::TokenKind;
 
 use crate::token_stream::TokenStream;
 
-/// Parse a type expression: `Int`, `List<T>`, `fn(Int) -> Bool`.
+/// Parse a type expression: `Int`, `List<T>`, `fn(Int) -> Bool`, `(A, B)`.
 pub fn parse_type(ts: &mut TokenStream, report: &mut Report) -> TypeExpr {
     let start = ts.peek_span();
 
     match ts.peek().clone() {
+        // Tuple type: (A, B, ...)
+        TokenKind::LParen => {
+            ts.advance(); // consume '('
+            let mut elems = Vec::new();
+            while !ts.check(&TokenKind::RParen) && !ts.at_eof() {
+                elems.push(parse_type(ts, report));
+                if !ts.eat(&TokenKind::Comma) {
+                    break;
+                }
+            }
+            let end = ts.peek_span();
+            ts.expect(&TokenKind::RParen, report);
+            if elems.len() < 2 {
+                report.add(
+                    tyra_diagnostics::Diagnostic::error(
+                        "tuple type requires 2 or more elements".to_string(),
+                    )
+                    .with_code("E0316")
+                    .with_label(tyra_diagnostics::Label::new(start, "tuple type here")),
+                );
+            }
+            TypeExpr {
+                kind: TypeExprKind::Tuple(elems),
+                span: start.merge(end),
+            }
+        }
+
         // Function type: fn(A, B) -> C
         TokenKind::Fn => {
             ts.advance();

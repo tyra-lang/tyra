@@ -224,6 +224,10 @@ pub const PRELUDE_FUNCTIONS: &[&str] = &[
     // `linked_map` / `linked_set` are the module names (analogous to `set`).
     "linked_map",
     "linked_set",
+    // §11 / ADR-0024: SortedMap<K,V> and SortedSet<T> key-sorted collections.
+    // `sorted_map` / `sorted_set` are the module names.
+    "sorted_map",
+    "sorted_set",
     // §17.3.6 Map<K,V> generic intrinsics (ADR-0015).
     // These are synthesized by MIR lowering — never appear in Tyra source —
     // so they do not need to be prelude-visible.  The old hardcoded
@@ -269,6 +273,8 @@ pub const PRELUDE_TYPES: &[&str] = &[
     "Set",
     "LinkedMap",
     "LinkedSet",
+    "SortedMap",
+    "SortedSet",
     "Task",
     // Standard traits (§17.1)
     "Into",

@@ -166,6 +166,9 @@ fn visit_stmt_defs(stmt: &Stmt, map: &mut HashMap<Span, DefKind>) {
             }
         }
         Stmt::Defer(d) => visit_expr_defs(&d.expr, map),
+        Stmt::TupleLet(tl) => {
+            visit_expr_defs(&tl.value, map);
+        }
         Stmt::Break(_) | Stmt::Continue(_) => {}
         Stmt::Expr(e) => visit_expr_defs(&e.expr, map),
     }
@@ -244,6 +247,11 @@ fn visit_expr_defs(expr: &Expr, map: &mut HashMap<Span, DefKind>) {
         }
         ExprKind::StringInterp(_) => {
             // Subexpression spans live in a synthetic <interp> source — skip.
+        }
+        ExprKind::Tuple(elems) => {
+            for e in elems {
+                visit_expr_defs(e, map);
+            }
         }
         ExprKind::IntLit(_)
         | ExprKind::FloatLit(_)
@@ -547,6 +555,12 @@ fn visit_stmt_tokens(
         Stmt::Defer(d) => {
             visit_expr_tokens(&d.expr, def_index, def_kind_map, source_id, sources, out);
         }
+        Stmt::TupleLet(tl) => {
+            if let Some(ta) = &tl.type_annotation {
+                visit_type_expr_tokens(ta, source_id, sources, out);
+            }
+            visit_expr_tokens(&tl.value, def_index, def_kind_map, source_id, sources, out);
+        }
         Stmt::Break(_) | Stmt::Continue(_) => {}
         Stmt::Expr(e) => {
             visit_expr_tokens(&e.expr, def_index, def_kind_map, source_id, sources, out);
@@ -683,6 +697,11 @@ fn visit_expr_tokens(
             // non-overlap / ordering requirement.  The enclosing string span is
             // already emitted as STRING by the lexer pass.
         }
+        ExprKind::Tuple(elems) => {
+            for e in elems {
+                visit_expr_tokens(e, def_index, def_kind_map, source_id, sources, out);
+            }
+        }
         // Leaf: no sub-expressions to walk
         ExprKind::IntLit(_)
         | ExprKind::FloatLit(_)
@@ -733,6 +752,11 @@ fn visit_type_expr_tokens(
                 visit_type_expr_tokens(p, source_id, sources, out);
             }
             visit_type_expr_tokens(ret, source_id, sources, out);
+        }
+        TypeExprKind::Tuple(elems) => {
+            for e in elems {
+                visit_type_expr_tokens(e, source_id, sources, out);
+            }
         }
     }
 }

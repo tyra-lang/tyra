@@ -173,6 +173,10 @@ fn type_expr_name(kind: &TypeExprKind) -> String {
             }
         }
         TypeExprKind::Fn(_, _) => "fn".to_string(),
+        TypeExprKind::Tuple(elems) => {
+            let names: Vec<String> = elems.iter().map(|e| type_expr_name(&e.kind)).collect();
+            format!("({})", names.join(", "))
+        }
     }
 }
 

@@ -517,7 +517,7 @@ mod tests {
         assert!(!report.has_errors(), "errors: {:?}", report.diagnostics());
         if let Item::Stmt(Stmt::Expr(ExprStmt { expr, .. })) = &ast.items[0] {
             if let ExprKind::For(f) = &expr.kind {
-                assert_eq!(f.bindings, vec!["item".to_string()]);
+                assert_eq!(f.bindings, tyra_ast::ForBindings::Idents(vec!["item".to_string()]));
             } else {
                 panic!("expected For");
             }
@@ -673,4 +673,5 @@ print("hello")
             .collect();
         assert!(codes.contains(&"E0110"), "expected E0110, got: {codes:?}");
     }
+
 }

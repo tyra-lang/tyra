@@ -162,6 +162,11 @@ impl super::LowerCtx<'_> {
                 None
             }
             ExprKind::Ident(name) => self.var_types.get(name).cloned(),
+            ExprKind::Tuple(_) => {
+                // For Tuple literals, the struct name is computed during lowering.
+                // Return None here; lower_expr handles registration.
+                None
+            }
             _ => None,
         }
     }
@@ -621,6 +626,29 @@ impl super::LowerCtx<'_> {
     }
 
     /// Infer if an expression is a List<T> type from variable tracking.
+    /// Register a synthetic Tuple struct def in struct_fields and return its monomorphized name.
+    /// Idempotent: does nothing if the struct already exists.
+    pub(super) fn register_tuple_struct(&mut self, elem_tys: &[Ty]) -> String {
+        let struct_name = format!(
+            "Tuple{}__{}",
+            elem_tys.len(),
+            elem_tys
+                .iter()
+                .map(|t| t.monomorphized_name())
+                .collect::<Vec<_>>()
+                .join("__")
+        );
+        if !self.struct_fields.contains_key(&struct_name) {
+            let fields: Vec<(String, Ty)> = elem_tys
+                .iter()
+                .enumerate()
+                .map(|(i, ty)| (format!("_{i}"), ty.clone()))
+                .collect();
+            self.struct_fields.insert(struct_name.clone(), fields);
+        }
+        struct_name
+    }
+
     pub(super) fn infer_list_type(&self, expr: &Expr) -> Option<Ty> {
         match &expr.kind {
             ExprKind::Ident(name) => self
@@ -663,6 +691,17 @@ impl super::LowerCtx<'_> {
                 } else {
                     // Cannot determine type from tracking alone; caller should
                     // handle None (e.g., by falling back to function return type).
+                    None
+                }
+            }
+            ExprKind::Tuple(elems) => {
+                let elem_tys: Vec<Ty> = elems
+                    .iter()
+                    .map(|e| self.infer_expr_type(e).unwrap_or(Ty::Int))
+                    .collect();
+                if elem_tys.len() >= 2 {
+                    Some(Ty::Generic("Tuple".into(), elem_tys))
+                } else {
                     None
                 }
             }

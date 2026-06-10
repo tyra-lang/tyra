@@ -198,6 +198,8 @@ pub struct ImportDecl {
 pub enum Stmt {
     /// `let x = expr` or `let x: T = expr`
     Let(LetStmt),
+    /// `let (a, b) = expr` — tuple destructure (§11.5)
+    TupleLet(TupleLetStmt),
     /// `mut x = expr` or `mut x: T = expr`
     Mut(MutStmt),
     /// `return` or `return expr`
@@ -215,6 +217,15 @@ pub enum Stmt {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LetStmt {
     pub name: String,
+    pub type_annotation: Option<TypeExpr>,
+    pub value: Expr,
+    pub span: Span,
+}
+
+/// `let (a, b) = expr` — tuple destructure binding (§11.5)
+#[derive(Debug, Clone, PartialEq)]
+pub struct TupleLetStmt {
+    pub bindings: Vec<String>,
     pub type_annotation: Option<TypeExpr>,
     pub value: Expr,
     pub span: Span,
@@ -285,6 +296,8 @@ pub enum ExprKind {
     BoolLit(bool),
     /// Unit literal: `()`
     UnitLit,
+    /// Tuple literal: `(a, b)` — 2+ elements (§11.5)
+    Tuple(Vec<Expr>),
     /// List literal: `[1, 2, 3]` (§11)
     ListLit(Vec<Expr>),
     /// Map literal: `{k: v, ...}` (§11)
@@ -425,11 +438,37 @@ pub struct MatchArm {
     pub span: Span,
 }
 
+/// Binding targets in a `for` loop.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ForBindings {
+    /// `for x in list` or `for k, v in map` — flat identifier list
+    Idents(Vec<String>),
+    /// `for (a, b) in tuples` — tuple destructure of each element (§11.5)
+    Tuple(Vec<String>),
+}
+
+impl ForBindings {
+    /// Returns the underlying identifier list regardless of variant.
+    pub fn idents(&self) -> &[String] {
+        match self {
+            ForBindings::Idents(v) | ForBindings::Tuple(v) => v,
+        }
+    }
+
+    /// Returns a mutable reference to the underlying identifier list.
+    pub fn idents_mut(&mut self) -> &mut Vec<String> {
+        match self {
+            ForBindings::Idents(v) | ForBindings::Tuple(v) => v,
+        }
+    }
+}
+
 /// `for item in iter body end` (§10.5)
-/// `bindings` holds one name (List/Set) or two names (Map: key, value).
+/// `bindings` holds one name (List/Set), two names (Map: key, value),
+/// or a tuple pattern for iterating over a list of tuples.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForExpr {
-    pub bindings: Vec<String>,
+    pub bindings: ForBindings,
     pub iter: Expr,
     pub body: Vec<Stmt>,
     pub span: Span,
@@ -482,6 +521,8 @@ pub enum PatternKind {
     /// Nested patterns like `Err(Json(inner: MissingKey(key: k)))` are
     /// handled by nesting Constructor patterns within PatternField.
     Constructor(String, Vec<PatternField>),
+    /// Tuple pattern: `(a, b)` — 2+ element destructure (§11.5)
+    Tuple(Vec<Pattern>),
 }
 
 /// A field in a constructor pattern: `last4: last4` or shorthand `last4`.
@@ -514,6 +555,8 @@ pub enum TypeExprKind {
     Generic(String, Vec<TypeExpr>),
     /// Function type: `fn(Int, Int) -> Bool` (§9.4)
     Fn(Vec<TypeExpr>, Box<TypeExpr>),
+    /// Tuple type: `(Int, String)` — 2+ elements (§11.5)
+    Tuple(Vec<TypeExpr>),
 }
 
 // ============================================================================

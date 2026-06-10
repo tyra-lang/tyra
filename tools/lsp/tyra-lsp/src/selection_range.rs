@@ -57,6 +57,7 @@ fn stmt_span(stmt: &Stmt) -> Span {
         Stmt::Defer(d) => d.span,
         Stmt::Break(b) => b.span,
         Stmt::Continue(c) => c.span,
+        Stmt::TupleLet(tl) => tl.span,
         Stmt::Expr(e) => e.span,
     }
 }
@@ -138,6 +139,7 @@ fn descend_stmt(stmt: &Stmt, source_id: SourceId, offset: u32, chain: &mut Vec<S
             }
         }
         Stmt::Defer(d) => try_descend_expr(&d.expr, source_id, offset, chain),
+        Stmt::TupleLet(tl) => try_descend_expr(&tl.value, source_id, offset, chain),
         Stmt::Expr(e) => try_descend_expr(&e.expr, source_id, offset, chain),
         Stmt::Break(_) | Stmt::Continue(_) => {}
     }
@@ -311,6 +313,15 @@ fn descend_expr(expr: &Expr, source_id: SourceId, offset: u32, chain: &mut Vec<S
 
         ExprKind::Lambda(l) => {
             descend_lambda(l, source_id, offset, chain);
+        }
+
+        ExprKind::Tuple(elems) => {
+            for e in elems {
+                if span_contains(e.span, source_id, offset) {
+                    try_descend_expr(e, source_id, offset, chain);
+                    return;
+                }
+            }
         }
     }
 }

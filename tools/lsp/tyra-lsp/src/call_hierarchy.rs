@@ -295,6 +295,7 @@ fn collect_in_stmt(
         }
         Stmt::Defer(d) => collect_in_expr(&d.expr, def_index, ast, source_id, out),
         Stmt::Expr(e) => collect_in_expr(&e.expr, def_index, ast, source_id, out),
+        Stmt::TupleLet(tl) => collect_in_expr(&tl.value, def_index, ast, source_id, out),
         Stmt::Break(_) | Stmt::Continue(_) => {}
     }
 }
@@ -404,6 +405,11 @@ fn collect_in_expr(
         }
         ExprKind::Lambda(l) => {
             collect_in_stmts(&l.body, def_index, ast, source_id, out);
+        }
+        ExprKind::Tuple(elems) => {
+            for e in elems {
+                collect_in_expr(e, def_index, ast, source_id, out);
+            }
         }
         ExprKind::IntLit(_)
         | ExprKind::FloatLit(_)

@@ -118,6 +118,33 @@ pub fn parse_pattern(ts: &mut TokenStream, report: &mut Report) -> Pattern {
             }
         }
 
+        // Tuple pattern: (a, b, ...)
+        TokenKind::LParen => {
+            ts.advance(); // consume '('
+            let mut elems = Vec::new();
+            while !ts.check(&TokenKind::RParen) && !ts.at_eof() {
+                elems.push(parse_pattern(ts, report));
+                if !ts.eat(&TokenKind::Comma) {
+                    break;
+                }
+            }
+            let end = ts.peek_span();
+            ts.expect(&TokenKind::RParen, report);
+            if elems.len() < 2 {
+                report.add(
+                    tyra_diagnostics::Diagnostic::error(
+                        "tuple pattern requires 2 or more elements".to_string(),
+                    )
+                    .with_code("E0316")
+                    .with_label(tyra_diagnostics::Label::new(start, "tuple pattern here")),
+                );
+            }
+            Pattern {
+                kind: PatternKind::Tuple(elems),
+                span: start.merge(end),
+            }
+        }
+
         _ => {
             let token = ts.advance();
             report.add(

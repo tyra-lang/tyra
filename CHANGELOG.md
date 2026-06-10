@@ -25,6 +25,17 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 **AI-gen benchmark: Go runner**
 - `bench/ai-gen` now supports Go (`go build`, single-file, GOCACHE confined to the throwaway workdir). Six-language sweeps: Tyra / Go / Crystal / V / Gleam / Ruby. Smoke-verified 5/5 pass.
 
+**Tuple types — fixed-length product types with full destructuring (ADR-0022)**
+- Tuple literals `(a, b)` and type annotations `(A, B)` are now fully supported.
+- **let destructuring**: `let (a, b) = pair` — binds each element to a fresh local.
+- **match patterns**: `when (x, 0)` — matches with literal/wildcard/binding mix; type checker guarantees arity at compile time.
+- **for-loop destructuring**: `for (k, v) in pairs` — iterates `List<(A, B)>` with element binding.
+- Abilities are derived conjunctively: a tuple is `Eq`/`Hash`/`Ord`/Display-capable only when all its element types are.
+- 1-tuples `(x)` are a syntax error (parsed as a parenthesized expression).
+- Direct field access (`.0`/`.1`) is not provided; use destructuring.
+- No new runtime functions — tuples desugar to synthetic `struct` defs in MIR (`StructInit`/`FieldGet`).
+- spec §11.5 (ja + en); corpus `bench/static-corpus/31-tuples.tyra`.
+
 **`SortedMap<K,V>` / `SortedSet<T>` — key-sorted persistent collections (ADR-0024)**
 - Two new persistent collection types that iterate in ascending key/element order.
 - Key type must satisfy `Ord`; Float keys are rejected at compile time with **E0315** (NaN is not comparable, ADR-0002).

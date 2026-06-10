@@ -1005,6 +1005,67 @@ let n   = ss.len()          # Int — 3
 
 ---
 
+### 11.5 Tuple 型 (v0.10.0, ADR-0022)
+
+Tuple は 2 要素以上の固定長の積型である。値型として扱われ、構造的等価性を持つ。
+
+#### リテラルと型注釈
+
+```tyra
+let p: (Int, String) = (42, "hello")
+let q = (1, 2, 3)               -- 型推論: (Int, Int, Int)
+```
+
+1-tuple `(x)` は構文エラー（括弧式として解釈される）。
+
+#### 分構束縛 — let
+
+```tyra
+let (a, b) = p                  -- a: Int, b: String
+let (x, y, z) = (1, 2, 3)
+```
+
+#### 分構束縛 — match
+
+```tyra
+match coord
+when (0, 0)
+  "origin"
+when (x, 0)
+  "x-axis"
+when (0, y)
+  "y-axis"
+when (x, y)
+  "other"
+end
+```
+
+#### 分構束縛 — for (List\<Tuple\> の反復)
+
+```tyra
+let pairs: List<(Int, Int)> = [(1, 2), (3, 4)]
+for (k, v) in pairs
+  print("#{k} -> #{v}")
+end
+```
+
+#### Ability 自動導出
+
+Tuple が持つ ability は要素型の conjunction で決まる。
+
+| 条件 | 導出される ability |
+|------|-------------------|
+| 全要素が `Eq` | `Eq` |
+| 全要素が `Hash` | `Hash` |
+| 全要素が `Ord` | `Ord` |
+| 全要素が `Display` | 文字列補間で使用可 |
+
+#### フィールドアクセス
+
+`.0`/`.1` による直接フィールドアクセスは提供しない。分構束縛を使用すること。
+
+---
+
 ## 12. エラー処理
 
 ### 12.1 原則

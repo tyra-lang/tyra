@@ -104,6 +104,7 @@ fn visit_stmt(stmt: &Stmt, sources: &SourceMap, out: &mut Vec<FoldingRange>) {
         }
         Stmt::Defer(d) => visit_expr(&d.expr, sources, out),
         Stmt::Expr(e) => visit_expr(&e.expr, sources, out),
+        Stmt::TupleLet(tl) => visit_expr(&tl.value, sources, out),
         Stmt::Break(_) | Stmt::Continue(_) => {}
     }
 }

@@ -141,6 +141,12 @@ fn collect_sym_stmt(
                 collect_sym_expr(v, out, seen);
             }
         }
+        Stmt::TupleLet(l) => {
+            collect_sym_expr(&l.value, out, seen);
+            for name in &l.bindings {
+                record(name, CompletionKind::Variable, out, seen);
+            }
+        }
         Stmt::Defer(d) => collect_sym_expr(&d.expr, out, seen),
         Stmt::Expr(e) => collect_sym_expr(&e.expr, out, seen),
         Stmt::Break(_) | Stmt::Continue(_) => {}
@@ -155,7 +161,7 @@ fn collect_sym_expr(
     match &expr.kind {
         ExprKind::For(f) => {
             collect_sym_expr(&f.iter, out, seen);
-            for name in &f.bindings {
+            for name in f.bindings.idents() {
                 record(name, CompletionKind::Variable, out, seen);
             }
             collect_sym_stmts(&f.body, out, seen);
@@ -231,6 +237,11 @@ fn collect_sym_expr(
                 }
             }
         }
+        ExprKind::Tuple(elems) => {
+            for e in elems {
+                collect_sym_expr(e, out, seen);
+            }
+        }
         ExprKind::Ident(_)
         | ExprKind::IntLit(_)
         | ExprKind::FloatLit(_)
@@ -252,6 +263,11 @@ fn collect_sym_pattern(
         PatternKind::Constructor(_, fields) => {
             for f in fields {
                 collect_sym_pattern(&f.pattern, out, seen);
+            }
+        }
+        PatternKind::Tuple(elems) => {
+            for e in elems {
+                collect_sym_pattern(e, out, seen);
             }
         }
         PatternKind::Wildcard
@@ -310,6 +326,7 @@ fn validate_top_level_restrictions(items: &[Item], report: &mut Report) {
         let stmt_span = match first_stmt {
             Item::Stmt(s) => match s {
                 Stmt::Let(s) => s.span,
+                Stmt::TupleLet(s) => s.span,
                 Stmt::Mut(s) => s.span,
                 Stmt::Return(s) => s.span,
                 Stmt::Defer(s) => s.span,
@@ -348,6 +365,7 @@ fn check_stmt_restrictions(stmt: &Stmt, report: &mut Report) {
             );
         }
         Stmt::Let(s) => check_expr_restrictions(&s.value, report),
+        Stmt::TupleLet(s) => check_expr_restrictions(&s.value, report),
         Stmt::Mut(s) => check_expr_restrictions(&s.value, report),
         Stmt::Defer(s) => check_expr_restrictions(&s.expr, report),
         Stmt::Break(_) | Stmt::Continue(_) => {}
@@ -569,6 +587,18 @@ fn resolve_stmt(
         Stmt::Defer(s) => {
             resolve_expr(&s.expr, scopes, def_index, report);
         }
+        Stmt::TupleLet(s) => {
+            resolve_expr(&s.value, scopes, def_index, report);
+            for name in &s.bindings {
+                scopes.define(
+                    name.clone(),
+                    Symbol::Local {
+                        mutable: false,
+                        span: s.span,
+                    },
+                );
+            }
+        }
         Stmt::Break(_) | Stmt::Continue(_) => {}
         Stmt::Expr(s) => {
             resolve_expr(&s.expr, scopes, def_index, report);
@@ -644,7 +674,7 @@ fn resolve_expr(
         ExprKind::For(f) => {
             resolve_expr(&f.iter, scopes, def_index, report);
             scopes.push();
-            for name in &f.bindings {
+            for name in f.bindings.idents() {
                 scopes.define(
                     name.clone(),
                     Symbol::Local {
@@ -691,6 +721,11 @@ fn resolve_expr(
             }
         }
 
+        ExprKind::Tuple(elems) => {
+            for e in elems {
+                resolve_expr(e, scopes, def_index, report);
+            }
+        }
         // Leaves — no names to resolve
         ExprKind::IntLit(_)
         | ExprKind::FloatLit(_)
@@ -738,6 +773,11 @@ fn bind_pattern(pat: &Pattern, scopes: &mut ScopeStack) {
         PatternKind::Constructor(_, fields) => {
             for field in fields {
                 bind_pattern(&field.pattern, scopes);
+            }
+        }
+        PatternKind::Tuple(elems) => {
+            for e in elems {
+                bind_pattern(e, scopes);
             }
         }
         PatternKind::Wildcard

@@ -68,6 +68,9 @@ fn substitute_type_expr(te: &TypeExpr, subst: &HashMap<String, Ty>) -> TypeExpr 
             let new_ret = Box::new(substitute_type_expr(ret, subst));
             TypeExprKind::Fn(new_params, new_ret)
         }
+        TypeExprKind::Tuple(elems) => {
+            TypeExprKind::Tuple(elems.iter().map(|e| substitute_type_expr(e, subst)).collect())
+        }
     };
     TypeExpr {
         kind,
@@ -133,6 +136,15 @@ fn substitute_stmt(stmt: &Stmt, subst: &HashMap<String, Ty>) -> Stmt {
         }),
         Stmt::Break(s) => Stmt::Break(BreakStmt { span: s.span }),
         Stmt::Continue(s) => Stmt::Continue(ContinueStmt { span: s.span }),
+        Stmt::TupleLet(s) => Stmt::TupleLet(TupleLetStmt {
+            bindings: s.bindings.clone(),
+            type_annotation: s
+                .type_annotation
+                .as_ref()
+                .map(|t| substitute_type_expr(t, subst)),
+            value: substitute_expr(&s.value, subst),
+            span: s.span,
+        }),
         Stmt::Expr(s) => Stmt::Expr(ExprStmt {
             expr: substitute_expr(&s.expr, subst),
             span: s.span,
@@ -222,6 +234,9 @@ fn substitute_expr(expr: &Expr, subst: &HashMap<String, Ty>) -> Expr {
             body: w.body.iter().map(|s| substitute_stmt(s, subst)).collect(),
             span: w.span,
         })),
+        ExprKind::Tuple(elems) => {
+            ExprKind::Tuple(elems.iter().map(|e| substitute_expr(e, subst)).collect())
+        }
         ExprKind::Lambda(l) => {
             let new_params = l
                 .params

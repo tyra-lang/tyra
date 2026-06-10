@@ -1,0 +1,51 @@
+# 31-tuples.tyra
+# Tuple types, tuple literals, and destructuring bindings (spec 11.5, ADR-0022).
+
+import assert
+
+fn make_pair() -> (Int, String)
+  (42, "hello")
+end
+
+fn fst(pair: (Int, String)) -> Int
+  let (a, b) = pair
+  a
+end
+
+fn sum_pairs(pairs: List<(Int, Int)>) -> Int
+  mut total = 0
+  for (x, y) in pairs
+    total = total + x + y
+  end
+  total
+end
+
+fn match_coord(coord: (Int, Int)) -> String
+  match coord
+  when (0, 0)
+    "origin"
+  when (x, 0)
+    "x-axis"
+  when (0, y)
+    "y-axis"
+  when (x, y)
+    "other"
+  end
+end
+
+fn main() -> Int
+  let p = make_pair()
+  let (n, s) = p
+  let _ = assert.eq(n, 42)
+  let _ = assert.eq(s, "hello")
+  let _ = assert.eq(fst(p), 42)
+
+  let pairs: List<(Int, Int)> = [(1, 2), (3, 4), (5, 6)]
+  let _ = assert.eq(sum_pairs(pairs), 21)
+
+  let _ = assert.eq(match_coord((0, 0)), "origin")
+  let _ = assert.eq(match_coord((5, 0)), "x-axis")
+  let _ = assert.eq(match_coord((0, 3)), "y-axis")
+  let _ = assert.eq(match_coord((2, 7)), "other")
+  0
+end

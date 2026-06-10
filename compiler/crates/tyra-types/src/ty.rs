@@ -167,6 +167,10 @@ impl Ty {
         match self {
             Ty::Int | Ty::Float | Ty::Bool | Ty::String => true,
             Ty::Error | Ty::Var(_) => true,
+            // Tuple: displayable iff all elements are displayable (ADR-0022)
+            Ty::Generic(name, args) if name == "Tuple" => {
+                args.iter().all(|a| a.is_interp_displayable())
+            }
             _ => self.option_interp_suffix().is_some(),
         }
     }
@@ -223,6 +227,19 @@ impl Ty {
     pub fn sorted_set_elem(&self) -> Option<&Ty> {
         match self {
             Ty::Generic(name, args) if name == "SortedSet" && args.len() == 1 => Some(&args[0]),
+            _ => None,
+        }
+    }
+
+    /// True if this is a Tuple type with 2+ elements.
+    pub fn is_tuple(&self) -> bool {
+        matches!(self, Ty::Generic(name, args) if name == "Tuple" && args.len() >= 2)
+    }
+
+    /// Extract element types from a Tuple.
+    pub fn tuple_elems(&self) -> Option<&[Ty]> {
+        match self {
+            Ty::Generic(name, args) if name == "Tuple" && args.len() >= 2 => Some(args),
             _ => None,
         }
     }
@@ -294,6 +311,10 @@ impl Ty {
             tyra_ast::TypeExprKind::Fn(params, ret) => {
                 let param_tys: Vec<Ty> = params.iter().map(Ty::from_type_expr).collect();
                 Ty::Fn(param_tys, Box::new(Ty::from_type_expr(ret)))
+            }
+            tyra_ast::TypeExprKind::Tuple(elems) => {
+                let elem_tys: Vec<Ty> = elems.iter().map(Ty::from_type_expr).collect();
+                Ty::Generic("Tuple".into(), elem_tys)
             }
         }
     }

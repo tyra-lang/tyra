@@ -605,6 +605,18 @@ impl<'src> Printer<'src> {
                 self.out.push_str(") -> ");
                 self.print_type_expr(ret);
             }
+            TypeExprKind::Tuple(elems) => {
+                self.out.push('(');
+                let mut first = true;
+                for e in elems {
+                    if !first {
+                        self.out.push_str(", ");
+                    }
+                    self.print_type_expr(e);
+                    first = false;
+                }
+                self.out.push(')');
+            }
         }
     }
 
@@ -675,6 +687,18 @@ impl<'src> Printer<'src> {
             Stmt::Continue(_) => {
                 self.out.push_str(&indent);
                 self.out.push_str("continue");
+            }
+            Stmt::TupleLet(s) => {
+                self.out.push_str(&indent);
+                self.out.push_str("let (");
+                self.out.push_str(&s.bindings.join(", "));
+                self.out.push(')');
+                if let Some(ty) = &s.type_annotation {
+                    self.out.push_str(": ");
+                    self.print_type_expr(ty);
+                }
+                self.out.push_str(" = ");
+                self.print_expr(&s.value);
             }
             Stmt::Expr(s) => {
                 self.out.push_str(&indent);
@@ -833,6 +857,18 @@ impl<'src> Printer<'src> {
                 self.out.push_str("spawn ");
                 self.print_expr(e);
             }
+            ExprKind::Tuple(elems) => {
+                self.out.push('(');
+                let mut first = true;
+                for e in elems {
+                    if !first {
+                        self.out.push_str(", ");
+                    }
+                    self.print_expr(e);
+                    first = false;
+                }
+                self.out.push(')');
+            }
         }
     }
 
@@ -918,7 +954,14 @@ impl<'src> Printer<'src> {
         let indent = self.indent_str();
         let for_line = self.line_of(f.span.start);
         self.out.push_str("for ");
-        self.out.push_str(&f.bindings.join(", "));
+        match &f.bindings {
+            ForBindings::Idents(names) => self.out.push_str(&names.join(", ")),
+            ForBindings::Tuple(names) => {
+                self.out.push('(');
+                self.out.push_str(&names.join(", "));
+                self.out.push(')');
+            }
+        }
         self.out.push_str(" in ");
         self.print_expr(&f.iter);
         self.out.push('\n');
@@ -1018,6 +1061,18 @@ impl<'src> Printer<'src> {
                     self.out.push(')');
                 }
             }
+            PatternKind::Tuple(elems) => {
+                self.out.push('(');
+                let mut first = true;
+                for e in elems {
+                    if !first {
+                        self.out.push_str(", ");
+                    }
+                    self.print_pattern(e);
+                    first = false;
+                }
+                self.out.push(')');
+            }
         }
     }
 }
@@ -1098,6 +1153,7 @@ fn item_span(item: &Item) -> Span {
 fn stmt_span(stmt: &Stmt) -> Span {
     match stmt {
         Stmt::Let(s) => s.span,
+        Stmt::TupleLet(s) => s.span,
         Stmt::Mut(s) => s.span,
         Stmt::Return(s) => s.span,
         Stmt::Defer(s) => s.span,

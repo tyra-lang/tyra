@@ -341,7 +341,7 @@ fn parse_prefix(ts: &mut TokenStream, report: &mut Report) -> Expr {
             }
         }
 
-        // Parenthesized expression or Unit literal ()
+        // Parenthesized expression, Unit literal (), or tuple literal (a, b)
         TokenKind::LParen => {
             ts.advance();
             if ts.check(&TokenKind::RParen) {
@@ -351,9 +351,26 @@ fn parse_prefix(ts: &mut TokenStream, report: &mut Report) -> Expr {
                     span: start.merge(end),
                 }
             } else {
-                let inner = parse_expr(ts, report);
-                ts.expect(&TokenKind::RParen, report);
-                inner
+                let first = parse_expr(ts, report);
+                if ts.eat(&TokenKind::Comma) {
+                    // Tuple literal: (a, b, ...)
+                    let mut elems = vec![first];
+                    while !ts.check(&TokenKind::RParen) && !ts.at_eof() {
+                        elems.push(parse_expr(ts, report));
+                        if !ts.eat(&TokenKind::Comma) {
+                            break;
+                        }
+                    }
+                    let end = ts.peek_span();
+                    ts.expect(&TokenKind::RParen, report);
+                    Expr {
+                        kind: ExprKind::Tuple(elems),
+                        span: start.merge(end),
+                    }
+                } else {
+                    ts.expect(&TokenKind::RParen, report);
+                    first
+                }
             }
         }
 

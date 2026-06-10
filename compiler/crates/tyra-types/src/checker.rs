@@ -1005,7 +1005,7 @@ fn type_expr_name(ty: &TypeExpr) -> Option<String> {
     match &ty.kind {
         TypeExprKind::Named(name) => Some(name.clone()),
         TypeExprKind::Generic(name, _) => Some(name.clone()),
-        TypeExprKind::Fn(..) => None,
+        TypeExprKind::Fn(..) | TypeExprKind::Tuple(..) => None,
     }
 }
 
@@ -1257,6 +1257,53 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
             env.record_type(s.span, binding_ty.clone());
             env.define_let(s.name.clone(), binding_ty);
         }
+        Stmt::TupleLet(s) => {
+            let prev_hint = env.binding_type_hint.take();
+            if let Some(ann) = &s.type_annotation {
+                env.binding_type_hint = Some(Ty::from_type_expr(ann));
+            }
+            let value_ty = infer_expr(&s.value, env, report);
+            env.binding_type_hint = prev_hint;
+            let binding_ty = if let Some(annotation) = &s.type_annotation {
+                let expected = Ty::from_type_expr(annotation);
+                check_type_match(&expected, &value_ty, s.span, Some(annotation.span), env, report);
+                expected
+            } else {
+                value_ty
+            };
+            // Verify the RHS is a Tuple with matching arity.
+            let elem_tys: Vec<Ty> = if let Some(tys) = binding_ty.tuple_elems() {
+                tys.to_vec()
+            } else if !matches!(binding_ty, Ty::Error) {
+                report.add(
+                    Diagnostic::error(format!(
+                        "tuple destructure requires a Tuple type, found `{}`",
+                        binding_ty.display_name()
+                    ))
+                    .with_code("E0317")
+                    .with_label(Label::new(s.span, "expected a Tuple here")),
+                );
+                vec![Ty::Error; s.bindings.len()]
+            } else {
+                vec![Ty::Error; s.bindings.len()]
+            };
+            if !matches!(binding_ty, Ty::Error) && elem_tys.len() != s.bindings.len() {
+                report.add(
+                    Diagnostic::error(format!(
+                        "tuple destructure arity mismatch: Tuple has {} elements, found {} bindings",
+                        elem_tys.len(),
+                        s.bindings.len()
+                    ))
+                    .with_code("E0317")
+                    .with_label(Label::new(s.span, "arity mismatch")),
+                );
+            }
+            env.record_type(s.span, binding_ty);
+            for (i, name) in s.bindings.iter().enumerate() {
+                let ty = elem_tys.get(i).cloned().unwrap_or(Ty::Error);
+                env.define_let(name.clone(), ty);
+            }
+        }
         Stmt::Mut(s) => {
             let prev_hint = env.binding_type_hint.take();
             if let Some(ann) = &s.type_annotation {
@@ -1403,6 +1450,18 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
         }
         ExprKind::BoolLit(_) => Ty::Bool,
         ExprKind::UnitLit => Ty::Unit,
+        ExprKind::Tuple(elems) => {
+            if elems.len() < 2 {
+                report.add(
+                    Diagnostic::error("tuple requires at least 2 elements".to_string())
+                        .with_code("E0316")
+                        .with_label(Label::new(expr.span, "expected 2+ elements")),
+                );
+                return Ty::Error;
+            }
+            let elem_tys: Vec<Ty> = elems.iter().map(|e| infer_expr(e, env, report)).collect();
+            Ty::Generic("Tuple".into(), elem_tys)
+        }
         ExprKind::ListLit(items) => {
             if items.is_empty() {
                 Ty::Generic("List".into(), vec![Ty::Var(0)])
@@ -2595,7 +2654,7 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             let mut arm_ty: Option<Ty> = None;
             for arm in &m.arms {
                 env.push();
-                bind_pattern_types(&arm.pattern, env);
+                bind_pattern_types(&arm.pattern, Some(&subject_ty), env);
                 for stmt in &arm.body {
                     check_stmt(stmt, env, report);
                 }
@@ -2638,33 +2697,71 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
         }
         ExprKind::For(f) => {
             let iter_ty = infer_expr(&f.iter, env, report);
-            // E0313: binding count check against iterable type.
-            let (expected_bindings, binding_tys): (usize, Vec<Ty>) = match &iter_ty {
-                Ty::Generic(name, args) if name == "Map" && args.len() == 2 => {
-                    (2, vec![args[0].clone(), args[1].clone()])
-                }
-                Ty::Generic(name, args) if name == "LinkedMap" && args.len() == 2 => {
-                    (2, vec![args[0].clone(), args[1].clone()])
-                }
-                Ty::Generic(name, args) if name == "SortedMap" && args.len() == 2 => {
-                    (2, vec![args[0].clone(), args[1].clone()])
-                }
-                Ty::Generic(name, args) if name == "Set" && !args.is_empty() => {
-                    (1, vec![args[0].clone()])
-                }
-                Ty::Generic(name, args) if name == "LinkedSet" && !args.is_empty() => {
-                    (1, vec![args[0].clone()])
-                }
-                Ty::Generic(name, args) if name == "SortedSet" && !args.is_empty() => {
-                    (1, vec![args[0].clone()])
-                }
-                Ty::Generic(name, args) if name == "List" && !args.is_empty() => {
-                    (1, vec![args[0].clone()])
-                }
-                // Unknown / Error: accept any binding count, bind to Error.
-                _ => (f.bindings.len(), vec![Ty::Error; f.bindings.len()]),
+
+            // Extract the flat identifier list (for count/type checks).
+            let binding_names: &[String] = match &f.bindings {
+                ForBindings::Idents(names) => names,
+                ForBindings::Tuple(names) => names,
             };
-            if f.bindings.len() != expected_bindings
+            let is_tuple_destructure = matches!(&f.bindings, ForBindings::Tuple(_));
+
+            // For `for (a, b) in pairs`, the iter must be List<Tuple<A,B,...>>.
+            // For `for k, v in map` / `for x in list`, use the normal dispatch.
+            let (expected_bindings, binding_tys): (usize, Vec<Ty>) =
+                if is_tuple_destructure {
+                    // iter must be List<Tuple<...>>
+                    match &iter_ty {
+                        Ty::Generic(name, args)
+                            if name == "List" && args.len() == 1 && args[0].is_tuple() =>
+                        {
+                            let tys = args[0].tuple_elems().unwrap().to_vec();
+                            let n = tys.len();
+                            (n, tys)
+                        }
+                        Ty::Error => (binding_names.len(), vec![Ty::Error; binding_names.len()]),
+                        _ => {
+                            report.add(
+                                Diagnostic::error(format!(
+                                    "`for ({}) in ...` requires a `List<(...)>` iterable, found `{}`",
+                                    binding_names.join(", "),
+                                    iter_ty.display_name()
+                                ))
+                                .with_code("E0313")
+                                .with_label(Label::new(f.span, "expected List<Tuple<...>>")),
+                            );
+                            (binding_names.len(), vec![Ty::Error; binding_names.len()])
+                        }
+                    }
+                } else {
+                    // E0313: binding count check against iterable type.
+                    match &iter_ty {
+                        Ty::Generic(name, args) if name == "Map" && args.len() == 2 => {
+                            (2, vec![args[0].clone(), args[1].clone()])
+                        }
+                        Ty::Generic(name, args) if name == "LinkedMap" && args.len() == 2 => {
+                            (2, vec![args[0].clone(), args[1].clone()])
+                        }
+                        Ty::Generic(name, args) if name == "SortedMap" && args.len() == 2 => {
+                            (2, vec![args[0].clone(), args[1].clone()])
+                        }
+                        Ty::Generic(name, args) if name == "Set" && !args.is_empty() => {
+                            (1, vec![args[0].clone()])
+                        }
+                        Ty::Generic(name, args) if name == "LinkedSet" && !args.is_empty() => {
+                            (1, vec![args[0].clone()])
+                        }
+                        Ty::Generic(name, args) if name == "SortedSet" && !args.is_empty() => {
+                            (1, vec![args[0].clone()])
+                        }
+                        Ty::Generic(name, args) if name == "List" && !args.is_empty() => {
+                            (1, vec![args[0].clone()])
+                        }
+                        // Unknown / Error: accept any binding count, bind to Error.
+                        _ => (binding_names.len(), vec![Ty::Error; binding_names.len()]),
+                    }
+                };
+
+            if binding_names.len() != expected_bindings
                 && !matches!(iter_ty, Ty::Error)
                 && expected_bindings != 0
             {
@@ -2673,7 +2770,7 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                         "for loop binding count mismatch: {} requires {} binding(s), found {}",
                         iter_ty.display_name(),
                         expected_bindings,
-                        f.bindings.len(),
+                        binding_names.len(),
                     ))
                     .with_code("E0313")
                     .with_label(Label::new(f.span, "binding count mismatch here")),
@@ -2682,7 +2779,7 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             env.push();
             env.enter_loop();
             // Bind each name with its inferred type (or Error on mismatch).
-            for (i, name) in f.bindings.iter().enumerate() {
+            for (i, name) in binding_names.iter().enumerate() {
                 let ty = binding_tys.get(i).cloned().unwrap_or(Ty::Error);
                 env.define(name.clone(), ty);
             }
@@ -3307,14 +3404,24 @@ fn is_catchall_pattern(kind: &PatternKind) -> bool {
     matches!(kind, PatternKind::Wildcard | PatternKind::Ident(_))
 }
 
-fn bind_pattern_types(pat: &Pattern, env: &mut TypeEnv) {
+fn bind_pattern_types(pat: &Pattern, subject_ty: Option<&Ty>, env: &mut TypeEnv) {
     match &pat.kind {
         PatternKind::Ident(name) => {
-            env.define(name.clone(), Ty::Error); // actual type from match subject; deferred
+            // Use subject_ty if available, otherwise fall back to Error.
+            let ty = subject_ty.cloned().unwrap_or(Ty::Error);
+            env.define(name.clone(), ty);
         }
         PatternKind::Constructor(_, fields) => {
             for field in fields {
-                bind_pattern_types(&field.pattern, env);
+                bind_pattern_types(&field.pattern, None, env);
+            }
+        }
+        // Tuple pattern: bind each element with the corresponding element type.
+        PatternKind::Tuple(elems) => {
+            let elem_tys = subject_ty.and_then(|t| t.tuple_elems());
+            for (i, elem_pat) in elems.iter().enumerate() {
+                let elem_ty = elem_tys.and_then(|tys| tys.get(i)).cloned();
+                bind_pattern_types(elem_pat, elem_ty.as_ref(), env);
             }
         }
         _ => {}

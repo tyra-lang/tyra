@@ -76,6 +76,30 @@ impl super::LowerCtx<'_> {
                 dest
             }
 
+            ExprKind::Tuple(elems) => {
+                // Lower each element, infer types, register the synthetic struct, emit StructInit.
+                let lowered: Vec<String> =
+                    elems.iter().map(|e| self.lower_expr(e, body)).collect();
+                let elem_tys: Vec<Ty> = elems
+                    .iter()
+                    .map(|e| self.infer_expr_type(e).unwrap_or(Ty::Int))
+                    .collect();
+                let struct_name = self.register_tuple_struct(&elem_tys);
+                let dest = self.fresh_temp();
+                self.emit(
+                    body,
+                    Instruction::StructInit {
+                        dest: dest.clone(),
+                        type_name: struct_name.clone(),
+                        fields: lowered.into_iter().map(Operand::Var).collect(),
+                    },
+                );
+                self.var_types.insert(dest.clone(), struct_name.clone());
+                let tuple_ty = Ty::Generic("Tuple".into(), elem_tys);
+                self.generic_var_types.insert(dest.clone(), tuple_ty);
+                dest
+            }
+
             ExprKind::Ident(name) => {
                 // Check for None constructor
                 if name == "None" {
@@ -301,6 +325,13 @@ impl super::LowerCtx<'_> {
             ExprKind::For(f) => {
                 let iter_val = self.lower_expr(&f.iter, body);
 
+                // Extract binding name list regardless of ForBindings variant.
+                let binding_idents: Vec<String> = match &f.bindings {
+                    ForBindings::Idents(names) => names.clone(),
+                    ForBindings::Tuple(names) => names.clone(),
+                };
+                let is_tuple_for = matches!(&f.bindings, ForBindings::Tuple(_));
+
                 // Detect iter kind: List, Set, Map, or unknown (stub).
                 let iter_ty = self.generic_var_types.get(&iter_val).cloned();
 
@@ -321,7 +352,12 @@ impl super::LowerCtx<'_> {
                 if is_list {
                     let list_ty = iter_ty.unwrap();
                     let elem_type = list_ty.list_elem().cloned().unwrap_or(Ty::Int);
-                    let binding = f.bindings.first().cloned().unwrap_or_default();
+                    // For tuple destructure, we use a temp; otherwise use the first binding name.
+                    let binding = if is_tuple_for {
+                        self.fresh_temp()
+                    } else {
+                        binding_idents.first().cloned().unwrap_or_default()
+                    };
 
                     // Get length
                     let len = self.fresh_temp();
@@ -471,6 +507,37 @@ impl super::LowerCtx<'_> {
                         );
                     }
 
+                    // For tuple destructure: emit FieldGet for each binding name.
+                    if is_tuple_for && elem_type.is_tuple() {
+                        let struct_name = elem_type.monomorphized_name();
+                        let field_tys = elem_type.tuple_elems().map(|s| s.to_vec()).unwrap_or_default();
+                        for (idx, name) in binding_idents.iter().enumerate() {
+                            let field_ty = field_tys.get(idx).cloned().unwrap_or(Ty::Int);
+                            let field_dest = name.clone();
+                            self.local_binding_names.insert(field_dest.clone());
+                            self.emit(
+                                body,
+                                Instruction::FieldGet {
+                                    dest: field_dest.clone(),
+                                    obj: Operand::Var(binding.clone()),
+                                    type_name: struct_name.clone(),
+                                    field_index: idx as u32,
+                                },
+                            );
+                            match &field_ty {
+                                Ty::String => { self.string_vars.insert(field_dest.clone()); }
+                                Ty::Float => { self.float_vars.insert(field_dest.clone()); }
+                                Ty::Bool => {}
+                                Ty::Named(n) => { self.var_types.insert(field_dest.clone(), n.clone()); }
+                                Ty::Generic(_, _) => {
+                                    self.generic_var_types.insert(field_dest.clone(), field_ty.clone());
+                                    self.var_types.insert(field_dest.clone(), field_ty.monomorphized_name());
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+
                     // User's loop body.
                     // `continue` must jump past the user body to the increment,
                     // so introduce a dedicated continue_label before the increment.
@@ -529,7 +596,7 @@ impl super::LowerCtx<'_> {
                     // Map/Set/LinkedMap/LinkedSet/SortedMap/SortedSet for-each via callback.
                     // Collect free variables in the body that come from the enclosing scope.
                     let binding_set: std::collections::HashSet<String> =
-                        f.bindings.iter().cloned().collect();
+                        binding_idents.iter().cloned().collect();
                     let mut captures: Vec<String> = Vec::new();
                     let mut seen_cap: std::collections::HashSet<String> =
                         std::collections::HashSet::new();
@@ -631,7 +698,7 @@ impl super::LowerCtx<'_> {
                         iter_id,
                         is_kv_iter,
                         callback_prefix,
-                        &f.bindings,
+                        &binding_idents,
                         &binding_tys,
                         &f.body,
                         &captures,
@@ -735,9 +802,9 @@ impl super::LowerCtx<'_> {
                 } else {
                     // Non-list/set/map iteration: keep current stub behavior.
                     // Same invariant as the list branch: a pre-existing
-                    // slot for `f.bindings[0]` must be type-compatible with
+                    // slot for `binding_idents[0]` must be type-compatible with
                     // `iter_val`. Upheld by the type checker today.
-                    let binding = f.bindings.first().cloned().unwrap_or_default();
+                    let binding = binding_idents.first().cloned().unwrap_or_default();
                     let stub_end = self.fresh_label("for_end");
                     self.local_binding_names.insert(binding.clone());
                     if self.pattern_vars.contains(&binding) || self.mut_vars.contains(&binding) {
@@ -1503,6 +1570,12 @@ fn collect_free_in_stmts(
                 collect_free_in_expr(&s.value, enclosing, bound, captures, seen);
                 bound.insert(s.name.clone());
             }
+            Stmt::TupleLet(s) => {
+                collect_free_in_expr(&s.value, enclosing, bound, captures, seen);
+                for name in &s.bindings {
+                    bound.insert(name.clone());
+                }
+            }
             Stmt::Mut(s) => {
                 collect_free_in_expr(&s.value, enclosing, bound, captures, seen);
                 bound.insert(s.name.clone());
@@ -1623,7 +1696,7 @@ fn collect_free_in_expr(
         ExprKind::For(for_expr) => {
             collect_free_in_expr(&for_expr.iter, enclosing, bound, captures, seen);
             let mut for_bound = bound.clone();
-            for name in &for_expr.bindings {
+            for name in for_expr.bindings.idents() {
                 for_bound.insert(name.clone());
             }
             collect_free_in_stmts(&for_expr.body, enclosing, &mut for_bound, captures, seen);
@@ -1638,6 +1711,11 @@ fn collect_free_in_expr(
                 captures,
                 seen,
             );
+        }
+        ExprKind::Tuple(elems) => {
+            for e in elems {
+                collect_free_in_expr(e, enclosing, bound, captures, seen);
+            }
         }
         // Literals carry no variable references.
         ExprKind::IntLit(_)
@@ -1657,6 +1735,11 @@ fn collect_pattern_names(pat: &Pattern, bound: &mut std::collections::HashSet<St
         PatternKind::Constructor(_, fields) => {
             for f in fields {
                 collect_pattern_names(&f.pattern, bound);
+            }
+        }
+        PatternKind::Tuple(elems) => {
+            for e in elems {
+                collect_pattern_names(e, bound);
             }
         }
         PatternKind::Wildcard

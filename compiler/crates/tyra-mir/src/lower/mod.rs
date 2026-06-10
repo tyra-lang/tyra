@@ -1645,6 +1645,7 @@ impl<'a> LowerCtx<'a> {
         // Update the current source location from this statement's span (ADR 0014).
         let stmt_span = match stmt {
             Stmt::Let(s) => s.span,
+            Stmt::TupleLet(s) => s.span,
             Stmt::Mut(s) => s.span,
             Stmt::Return(s) => s.span,
             Stmt::Defer(s) => s.span,
@@ -1753,6 +1754,45 @@ impl<'a> LowerCtx<'a> {
                             source: val,
                         },
                     );
+                }
+            }
+            Stmt::TupleLet(s) => {
+                // Lower the RHS (must evaluate to a Tuple struct).
+                let val = self.lower_expr(&s.value, body);
+                // Determine the tuple struct name from generic_var_types.
+                let struct_name = self.generic_var_types
+                    .get(&val)
+                    .map(|ty| ty.monomorphized_name())
+                    .or_else(|| self.var_types.get(&val).cloned())
+                    .unwrap_or_default();
+                let tuple_ty = self.generic_var_types.get(&val).cloned();
+                let field_tys: Vec<tyra_types::Ty> = tuple_ty
+                    .as_ref()
+                    .and_then(|ty| ty.tuple_elems().map(|s| s.to_vec()))
+                    .unwrap_or_default();
+                // Emit FieldGet for each binding.
+                for (idx, name) in s.bindings.iter().enumerate() {
+                    self.local_binding_names.insert(name.clone());
+                    let field_ty = field_tys.get(idx).cloned().unwrap_or(tyra_types::Ty::Int);
+                    self.emit(
+                        body,
+                        crate::ir::Instruction::FieldGet {
+                            dest: name.clone(),
+                            obj: crate::ir::Operand::Var(val.clone()),
+                            type_name: struct_name.clone(),
+                            field_index: idx as u32,
+                        },
+                    );
+                    match &field_ty {
+                        tyra_types::Ty::String => { self.string_vars.insert(name.clone()); }
+                        tyra_types::Ty::Float => { self.float_vars.insert(name.clone()); }
+                        tyra_types::Ty::Named(n) => { self.var_types.insert(name.clone(), n.clone()); }
+                        tyra_types::Ty::Generic(_, _) => {
+                            self.generic_var_types.insert(name.clone(), field_ty.clone());
+                            self.var_types.insert(name.clone(), field_ty.monomorphized_name());
+                        }
+                        _ => {}
+                    }
                 }
             }
             Stmt::Mut(s) => {
@@ -2315,6 +2355,7 @@ fn count_defer_sites_in_stmt(s: &Stmt) -> usize {
     match s {
         Stmt::Defer(_) => 1,
         Stmt::Let(l) => count_defer_sites_in_expr(&l.value),
+        Stmt::TupleLet(l) => count_defer_sites_in_expr(&l.value),
         Stmt::Mut(m) => count_defer_sites_in_expr(&m.value),
         Stmt::Return(r) => r.value.as_ref().map(count_defer_sites_in_expr).unwrap_or(0),
         Stmt::Break(_) | Stmt::Continue(_) => 0,
@@ -2419,6 +2460,12 @@ fn collect_let_binding_counts_in_stmt(s: &Stmt, out: &mut std::collections::Hash
             *out.entry(l.name.clone()).or_insert(0) += 1;
             collect_let_binding_counts_in_expr(&l.value, out);
         }
+        Stmt::TupleLet(l) => {
+            for name in &l.bindings {
+                *out.entry(name.clone()).or_insert(0) += 1;
+            }
+            collect_let_binding_counts_in_expr(&l.value, out);
+        }
         Stmt::Mut(m) => {
             *out.entry(m.name.clone()).or_insert(0) += 1;
             collect_let_binding_counts_in_expr(&m.value, out);
@@ -2466,7 +2513,7 @@ fn collect_let_binding_counts_in_expr(e: &Expr, out: &mut std::collections::Hash
             // at different element types are rejected earlier by the
             // type checker, so we never reach here with a genuine
             // type conflict.
-            for name in &f.bindings {
+            for name in f.bindings.idents() {
                 *out.entry(name.clone()).or_insert(0) += 1;
             }
             collect_let_binding_counts_in_expr(&f.iter, out);
@@ -2496,6 +2543,7 @@ fn collect_let_binding_counts_in_else(
 fn collect_pattern_bindings_in_stmt(s: &Stmt, out: &mut std::collections::HashSet<String>) {
     match s {
         Stmt::Let(l) => collect_pattern_bindings_in_expr(&l.value, out),
+        Stmt::TupleLet(l) => collect_pattern_bindings_in_expr(&l.value, out),
         Stmt::Mut(m) => collect_pattern_bindings_in_expr(&m.value, out),
         Stmt::Return(r) => {
             if let Some(v) = &r.value {
@@ -2555,18 +2603,33 @@ fn collect_pattern_bindings_in_pattern(
     p: &PatternKind,
     out: &mut std::collections::HashSet<String>,
 ) {
-    if let PatternKind::Constructor(_, fields) = p {
-        for pf in fields {
-            match &pf.pattern.kind {
-                PatternKind::Ident(name) if name != "_" => {
-                    out.insert(name.clone());
+    match p {
+        PatternKind::Constructor(_, fields) => {
+            for pf in fields {
+                match &pf.pattern.kind {
+                    PatternKind::Ident(name) if name != "_" => {
+                        out.insert(name.clone());
+                    }
+                    PatternKind::Constructor(_, _) => {
+                        collect_pattern_bindings_in_pattern(&pf.pattern.kind, out);
+                    }
+                    _ => {}
                 }
-                PatternKind::Constructor(_, _) => {
-                    collect_pattern_bindings_in_pattern(&pf.pattern.kind, out);
-                }
-                _ => {}
             }
         }
+        PatternKind::Tuple(elems) => {
+            for pat in elems {
+                if let PatternKind::Ident(name) = &pat.kind {
+                    if name != "_" {
+                        out.insert(name.clone());
+                    }
+                }
+            }
+        }
+        PatternKind::Ident(name) if name != "_" => {
+            out.insert(name.clone());
+        }
+        _ => {}
     }
 }
 

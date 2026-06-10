@@ -956,6 +956,7 @@ fn auto_import_stdlib(ast: &mut tyra_ast::SourceFile) {
     fn walk_stmt(s: &Stmt, needed: &mut std::collections::HashSet<String>) {
         match s {
             Stmt::Let(l) => walk_expr(&l.value, needed),
+            Stmt::TupleLet(l) => walk_expr(&l.value, needed),
             Stmt::Mut(m) => walk_expr(&m.value, needed),
             Stmt::Return(r) => {
                 if let Some(v) = &r.value {
@@ -1187,6 +1188,7 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
     fn substitute_in_stmt(s: &mut Stmt, renames: &std::collections::HashMap<String, String>) {
         match s {
             Stmt::Let(l) => substitute_in_expr(&mut l.value, renames),
+            Stmt::TupleLet(l) => substitute_in_expr(&mut l.value, renames),
             Stmt::Mut(m) => substitute_in_expr(&mut m.value, renames),
             Stmt::Return(r) => {
                 if let Some(v) = &mut r.value {
@@ -1312,6 +1314,7 @@ fn rename_pattern_bindings(ast: &mut tyra_ast::SourceFile) {
     fn process_stmt(s: &mut Stmt, counter: &mut u32) {
         match s {
             Stmt::Let(l) => process_expr(&mut l.value, counter),
+            Stmt::TupleLet(l) => process_expr(&mut l.value, counter),
             Stmt::Mut(m) => process_expr(&mut m.value, counter),
             Stmt::Return(r) => {
                 if let Some(v) = &mut r.value {
@@ -1437,6 +1440,19 @@ fn rename_let_shadows(ast: &mut tyra_ast::SourceFile) {
                             self.walk_expr(v, active);
                         }
                     }
+                    Stmt::TupleLet(l) => {
+                        self.walk_expr(&mut l.value, active);
+                        for name in &mut l.bindings {
+                            if self.introduced.contains(name.as_str()) {
+                                let new = self.fresh(name);
+                                active.insert(name.clone(), new.clone());
+                                *name = new.clone();
+                                self.introduced.insert(new);
+                            } else {
+                                self.introduced.insert(name.clone());
+                            }
+                        }
+                    }
                     Stmt::Defer(d) => self.walk_expr(&mut d.expr, active),
                     Stmt::Break(_) | Stmt::Continue(_) => {}
                 }
@@ -1507,7 +1523,7 @@ fn rename_let_shadows(ast: &mut tyra_ast::SourceFile) {
                     let saved = active.clone();
                     // Each for-binding lives in MIR as a function-wide alloca;
                     // treat it like a let for shadow-rename purposes.
-                    for name in f.bindings.iter_mut() {
+                    for name in f.bindings.idents_mut() {
                         if self.introduced.contains(name.as_str()) {
                             let new = self.fresh(name);
                             active.insert(name.clone(), new.clone());
@@ -1638,6 +1654,7 @@ fn stmt_span(s: &tyra_ast::Stmt) -> tyra_ast::Span {
     use tyra_ast::Stmt;
     match s {
         Stmt::Let(l) => l.span,
+        Stmt::TupleLet(l) => l.span,
         Stmt::Mut(m) => m.span,
         Stmt::Return(r) => r.span,
         Stmt::Expr(e) => e.span,

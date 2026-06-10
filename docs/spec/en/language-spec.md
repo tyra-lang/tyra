@@ -998,6 +998,65 @@ let n   = ss.len()          # Int — 3
 
 **Constraint**: `T` must satisfy the `Ord` ability constraint. `Float` elements are rejected at compile time with **E0315** (ADR-0002). Valid element types: `Int`, `Bool`, `String`.
 
+### 11.5 Tuple types (v0.10.0, ADR-0022)
+
+A tuple is a fixed-length product type of two or more elements. Tuples are value types with structural equality.
+
+#### Literals and type annotations
+
+```tyra
+let p: (Int, String) = (42, "hello")
+let q = (1, 2, 3)               -- type inferred as (Int, Int, Int)
+```
+
+A 1-tuple `(x)` is a syntax error — it is interpreted as a parenthesized expression.
+
+#### Destructuring — let
+
+```tyra
+let (a, b) = p                  -- a: Int, b: String
+let (x, y, z) = (1, 2, 3)
+```
+
+#### Destructuring — match
+
+```tyra
+match coord
+when (0, 0)
+  "origin"
+when (x, 0)
+  "x-axis"
+when (0, y)
+  "y-axis"
+when (x, y)
+  "other"
+end
+```
+
+#### Destructuring — for (iterating `List<Tuple>`)
+
+```tyra
+let pairs: List<(Int, Int)> = [(1, 2), (3, 4)]
+for (k, v) in pairs
+  print("#{k} -> #{v}")
+end
+```
+
+#### Ability derivation
+
+The abilities a tuple carries are determined by the conjunction of its element types.
+
+| Condition | Derived ability |
+|-----------|----------------|
+| All elements satisfy `Eq` | `Eq` |
+| All elements satisfy `Hash` | `Hash` |
+| All elements satisfy `Ord` | `Ord` |
+| All elements satisfy `Display` | Usable in string interpolation |
+
+#### Field access
+
+Direct field access via `.0`/`.1` is not provided. Use destructuring instead.
+
 ---
 
 ## 12. Error handling

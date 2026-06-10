@@ -57,7 +57,7 @@ impl super::LowerCtx<'_> {
 
             // Generate pattern test
             match &arm.pattern.kind {
-                PatternKind::Wildcard | PatternKind::Ident(_) => {
+                PatternKind::Wildcard | PatternKind::Ident(_) | PatternKind::Tuple(_) => {
                     self.emit_synthetic(
                         body,
                         Instruction::Jump {
@@ -810,6 +810,54 @@ impl super::LowerCtx<'_> {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            // Bind tuple destructure: `when (a, b) => ...` emits FieldGet for each element.
+            if let PatternKind::Tuple(elems) = &arm.pattern.kind {
+                let struct_name = self.generic_var_types
+                    .get(&subject)
+                    .map(|ty| ty.monomorphized_name())
+                    .or_else(|| self.var_types.get(&subject).cloned())
+                    .unwrap_or_default();
+                let tuple_ty = self.generic_var_types.get(&subject).cloned();
+                let field_tys: Vec<Ty> = tuple_ty
+                    .as_ref()
+                    .and_then(|ty| ty.tuple_elems().map(|s| s.to_vec()))
+                    .unwrap_or_default();
+                for (idx, pat) in elems.iter().enumerate() {
+                    if let PatternKind::Ident(name) = &pat.kind {
+                        if name == "_" { continue; }
+                        let field_ty = field_tys.get(idx).cloned().unwrap_or(Ty::Int);
+                        let field_dest = name.clone();
+                        let extracted = self.fresh_temp();
+                        self.emit(
+                            body,
+                            Instruction::FieldGet {
+                                dest: extracted.clone(),
+                                obj: Operand::Var(subject.clone()),
+                                type_name: struct_name.clone(),
+                                field_index: idx as u32,
+                            },
+                        );
+                        self.emit(
+                            body,
+                            Instruction::Store {
+                                dest: field_dest.clone(),
+                                value: Operand::Var(extracted),
+                            },
+                        );
+                        match &field_ty {
+                            Ty::String => { self.string_vars.insert(field_dest.clone()); }
+                            Ty::Float => { self.float_vars.insert(field_dest.clone()); }
+                            Ty::Named(n) => { self.var_types.insert(field_dest.clone(), n.clone()); }
+                            Ty::Generic(_, _) => {
+                                self.generic_var_types.insert(field_dest.clone(), field_ty.clone());
+                                self.var_types.insert(field_dest.clone(), field_ty.monomorphized_name());
+                            }
+                            _ => {}
                         }
                     }
                 }

@@ -113,6 +113,11 @@ fn visit_stmt(
                 &e.expr, type_index, sources, source_id, vp_start, vp_end, out,
             );
         }
+        Stmt::TupleLet(tl) => {
+            visit_expr(
+                &tl.value, type_index, sources, source_id, vp_start, vp_end, out,
+            );
+        }
         Stmt::Break(_) | Stmt::Continue(_) => {}
     }
 }
