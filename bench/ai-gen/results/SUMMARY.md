@@ -1,5 +1,7 @@
 # ai-gen benchmark summary
 
+> **Provenance note:** This table is a **mixed historical aggregate** of all JSON files in `results/`. Rows with different `total` counts come from different sweep runs and are **not directly comparable** — e.g. claude rows at 100 reflect full single-seed sweeps; codex rows at 40–49 reflect partial sweeps from earlier runs. For a controlled cross-language comparison, run a single sweep with the same generator and language list and pass `--results-dir` to keep results isolated. See METHODOLOGY.md for reproduction instructions.
+
 Prompts observed: 100
 
 | language | generator | pass | check_fail | exec_fail | compile_fail | generator_fail | harness_error | skipped | total | pass% |

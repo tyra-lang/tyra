@@ -124,6 +124,18 @@ def render_markdown(
     lines: List[str] = []
     lines.append("# ai-gen benchmark summary")
     lines.append("")
+    lines.append(
+        "> **Provenance note:** This table is a **mixed historical "
+        "aggregate** of all JSON files in `results/`. Rows with different "
+        "`total` counts come from different sweep runs and are **not "
+        "directly comparable** — e.g. claude rows at 100 reflect full "
+        "single-seed sweeps; codex rows at 40–49 reflect partial sweeps "
+        "from earlier runs. For a controlled cross-language comparison, "
+        "run a single sweep with the same generator and language list "
+        "and pass `--results-dir` to keep results isolated. "
+        "See METHODOLOGY.md for reproduction instructions."
+    )
+    lines.append("")
     lines.append(f"Prompts observed: {total_prompts}")
     lines.append("")
     lines.append(

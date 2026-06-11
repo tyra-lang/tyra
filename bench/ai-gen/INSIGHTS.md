@@ -4,26 +4,33 @@ Running log of observations that raw counts in `SUMMARY.md` hide.
 
 ## v0.10.0 6-language sweep (2026-06-11) — Go added; full 6-language baseline
 
-**Scope.** First run with all 6 languages (Tyra, Crystal, V, Gleam, Ruby, Go).
-Go results are new (100 prompts, seed 1, claude default model); the other
-languages draw on accumulated `results/` JSON from prior runs.
+**Scope.** Go was added as the 6th language; this is Go's first full sweep
+(100 prompts, seed 1, claude CLI default model). The other 5 languages draw
+on accumulated `results/` JSON from prior runs at different seed counts.
+**This is not a controlled cross-language comparison** — see the provenance
+note in `results/SUMMARY.md` and METHODOLOGY.md §seed-policy.
 
-### Headline pass rates (claude generator, 100 prompts, seed 1)
+### Pass rates by language (claude generator, 100 prompts — single-seed point estimates)
 
-| language | pass% | compile_fail% | notes |
-|---|---:|---:|---|
-| ruby | 99% | 0% | very well-known |
-| crystal | 96% | 3% | well-established |
-| **go** | **81%** | 16% | first full sweep |
-| **tyra+spec** | **77%** | 11% | spec injected into prompt |
-| v | 49% | 50% | model struggles with V types |
-| gleam | 37% | 57% | single-file wrapper; pessimistic |
-| tyra (no spec) | 0% | 100% | model has no Tyra training data |
+> **Single-seed caveat:** All figures below are seed-1-only point estimates.
+> METHODOLOGY.md recommends ≥3 seeds for publishable cross-language
+> comparisons. Treat these as directional, not final.
 
-**Key finding: tyra+spec (77%) is already within 4 pp of Go (81%)** — a novel
-language with no training data, after a single spec injection. The baseline
-tyra (0%) confirms the model has no Tyra knowledge; it generates Rust/Go code
-that panics or fails to parse.
+| language | pass% | compile_fail% | runs | notes |
+|---|---:|---:|---:|---|
+| ruby | 99% | 0% | 100 | very well-known; multi-seed from prior runs |
+| crystal | 96% | 3% | 100 | well-established; multi-seed from prior runs |
+| **go** | **81%** | 16% | 100 | first sweep, seed 1 only |
+| **tyra+spec** | **77%** | 11% | 100 | spec injected; seed 1 only |
+| v | 49% | 50% | 100 | model struggles with V types |
+| gleam | 37% | 57% | 100 | single-file wrapper; pessimistic |
+| tyra (no spec) | 0% | 100% | 100 | model has no Tyra training data |
+
+**Directional finding: tyra+spec (77%) is within 4 pp of Go (81%) at seed 1.**
+This is consistent with the "AI-friendly language design" hypothesis, but
+variance at a single seed is substantial — multi-seed confirmation needed.
+The baseline tyra (0%) confirms the model has no Tyra knowledge; it generates
+Rust/Go code that panics or fails to parse.
 
 **Go compile failures (16%):** Failures are mostly type mismatches (`int` vs
 `int64`) and missing imports — the usual Go gotchas at 100-prompt scale.
@@ -32,16 +39,11 @@ that panics or fails to parse.
 project; models do not always produce valid project-level main entry points,
 depressing the true pass rate.
 
-### Narrative
-
-With spec injection, Tyra already competes with Go — a result that validates
-the "AI-friendly language design" hypothesis. The path to closing the remaining
-gap is spec coverage improvements and model training data.
-
 ### Follow-ups
 
-- Run Go sweep with ≥3 seeds to get variance estimates (current: single seed).
+- Run Go sweep with ≥3 seeds before using the 81% as a public headline.
 - Run tyra+spec sweep with ≥3 seeds; 77% is a single-seed point estimate.
+- Run a single controlled sweep (same generator, all 6 languages, same seed set) to get a comparable baseline table.
 
 ---
 

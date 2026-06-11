@@ -24,7 +24,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 **AI-gen benchmark: Go runner + 6-language full sweep**
 - `bench/ai-gen` now supports Go (`go build`, single-file, GOCACHE confined to throwaway workdir). Six-language sweeps: Tyra / Go / Crystal / V / Gleam / Ruby.
-- First 6-language full sweep (100 prompts × claude, seed 1): ruby 99%, crystal 96%, **go 81%**, **tyra+spec 77%**, v 49%, gleam 37%. Key finding: with spec injection Tyra (77%) is within 4 pp of Go (81%).
+- First 6-language run (100 prompts × claude, seed 1 — single-seed point estimates, not yet multi-seed confirmed): ruby 99%, crystal 96%, go 81%, tyra+spec 77%, v 49%, gleam 37%. Directional finding: with spec injection Tyra is within 4 pp of Go at seed 1.
 - `runners/tyra.py` now respects `TYRA_BIN` env var for external installs; falls back to in-repo release then debug build.
 - New `METHODOLOGY.md`: prompt neutrality policy, scoring criteria, model pinning, threats to validity.
 - README fully rewritten: prerequisites, quick-start, reproduction instructions, repo/site split.
