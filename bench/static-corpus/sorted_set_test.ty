@@ -47,3 +47,19 @@ fn test_sorted_set_string_elems() -> Result<Unit, String>
   assert.eq(s.contains("durian"), false)?
   Ok(())
 end
+
+fn test_sorted_set_for_loop() -> Result<Unit, String>
+  let s: SortedSet<Int> = SortedSet.new()
+  let s = s.insert(30)
+  let s = s.insert(10)
+  let s = s.insert(20)
+  let mut elems: List<Int> = []
+  for x in s
+    let elems = elems.push(x)
+  end
+  assert.eq(elems.len(), 3)?
+  assert.eq(elems.get(0), Some(10))?
+  assert.eq(elems.get(1), Some(20))?
+  assert.eq(elems.get(2), Some(30))?
+  Ok(())
+end

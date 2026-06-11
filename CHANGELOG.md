@@ -9,6 +9,12 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ## [0.10.0] — 2026-06-11
 
+**Language**: Tuple types with full destructuring (let/match/for), `SortedMap<K,V>` / `SortedSet<T>` (key-sorted persistent collections), `LinkedMap.from([...])`, E0314 compile-time diagnostic for non-displayable string interpolation, source files renamed `.tyra` → `.ty` (ADR-0025).
+
+**Distribution**: `curl|sh` installer (`scripts/install.sh`) for macOS arm64, Linux x86_64 glibc, and Linux musl; FHS-compatible runtime path lookup; SHA256SUMS in releases; Homebrew tap (`tyra-lang/tap`) published alongside this release.
+
+**AI tooling**: `llms.txt` + `docs/llms/llms-full.md` AI reference documents; Crystal comparison page (`docs/comparisons/vs-crystal.md`); 6-language AI-gen benchmark sweep (seed 1, 100 prompts × claude): ruby 99%, crystal 96%, go 81%, tyra+spec 77%, v 49%, gleam 37%.
+
 ### Stable
 
 **E0314 — compile-time diagnostic for non-displayable string interpolation**
