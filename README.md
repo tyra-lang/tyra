@@ -172,7 +172,7 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | Language specification v0.10 | ✅ Complete |
 | Lexer, Parser, Type checker | ✅ Complete |
 | LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 (glibc + musl) |
-| Standard library: string, list, fs, io, float, json, assert, time, log, sorted_map, sorted_set | ✅ Complete |
+| Standard library (e.g. string, list, map, set, fs, io, json, assert, time, log, sorted_map, sorted_set, linked_map, http) | ✅ Complete |
 | `tyra check / run / build` CLI (zero-arg project mode, `--release`) | ✅ Complete |
 | `tyra build --static` — static single binary (musl) | ✅ Complete (v0.5.0+) |
 | `tyra fmt [--check] [--stdin] <file\|dir>` — formatter + 100-col wrapping | ✅ Complete |
@@ -203,7 +203,7 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | `Tyra.lock` + floating `branch` constraints + transitive dep resolution | ✅ Complete |
 | LSP server (`tyra-lsp`) + VS Code extension | ✅ Development install |
 | DAP debugger (DWARF + lldb-dap + VS Code breakpoints/locals) | ✅ Complete (v0.6.0+) |
-| Static conformance corpus (42 positive programs + 25 error cases) | ✅ CI-gated |
+| Static conformance corpus (40 positive programs + 25 error cases) | ✅ CI-gated |
 
 ## Platform support
 
