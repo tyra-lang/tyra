@@ -1,8 +1,8 @@
 # Tyra Project Strategy
 
-- **Version**: 1.9
+- **Version**: 2.0
 - **Status**: Active
-- **Last updated**: 2026-06-09
+- **Last updated**: 2026-06-11
 - **Owner**: Project lead
 - **Review cadence**: Every 3 months, or after any major spec change
 
@@ -58,7 +58,7 @@ Each target requires a different narrative:
 
 **For Crystal users**:
 
-> "What Crystal would look like if designed after Rust and Go proved that explicit error handling is better than exceptions, and after the LLM era proved that constrained syntax is better than expressive freedom. No macros, no `responds_to?`, no exception-based control flow. Single binary on every OS, not just Alpine."
+> "What Crystal would look like if designed after Rust and Go proved that explicit error handling is better than exceptions, and after the LLM era proved that constrained syntax is better than expressive freedom. No macros, no `responds_to?`, no exception-based control flow. Explicit error types in every function signature; a project-specific installer without Docker."
 
 **For Go users**:
 
@@ -123,7 +123,7 @@ Each requires a different competitive response (see §3.2).
 
 - Result/Option with `?` propagation as the standard error model
 - True parallelism from day one (not experimental)
-- Single static binary on every major OS
+- Static binary on Linux musl (Alpine); dynamic binaries on macOS and Linux glibc; project-specific installer without Docker
 - Strict `value`/`data` distinction with enforced immutability
 - Float has no `Eq` (ADR-0002 prevents NaN bugs)
 - Ability auto-derivation with semantic rules
@@ -637,6 +637,7 @@ When updating:
 - **v1.7 (2026-05-29)**: Updated §1 current status for v0.8.0 release (HM type inference, E9001, E0308 heuristic iv, LinkedMap/LinkedSet, Windows MSVC ABI, strtol→strtoll).
 - **v1.8 (2026-06-09)**: Updated §1 current status for v0.9.0 progress (inkwell-only backend, G2 corpus fully green, Option<T> string interpolation, 100/100 codegen tests).
 - **v1.9 (2026-06-09)**: Updated §1 for v0.9.0 release (Theme A complete, Theme B HM substitution threading, Theme D tombstone O(1), G2 42/42). LLVM version updated to 22 (macOS default).
+- **v2.0 (2026-06-11)**: Added §13 Adoption Execution Plan (4 phases: Distribution, Benchmark Publication, Discoverability, Ongoing Cadence). Reflects v0.10.0 adoption work: FHS installer, Homebrew tap, Go benchmark runner, llms.txt AI reference docs, Crystal comparison page.
 
 ---
 
@@ -670,6 +671,78 @@ When updating:
 - `examples/comparisons/v/` — Same 10 example programs in V
 - `examples/comparisons/ruby/` — Same 10 example programs in Ruby
 - `examples/comparisons/crystal/` — Same 10 example programs in Crystal
+
+---
+
+## 13. Adoption Execution Plan
+
+This section translates the positioning and differentiation defined in §3–§7 into a concrete, sequenced execution plan. The plan is organized into four phases; each phase has a clear outcome criterion before the next phase begins.
+
+### Phase 1: Distribution (v0.10.0)
+
+**Goal**: Make Tyra installable in under 60 seconds on macOS and Linux, without requiring Docker or a Rust toolchain.
+
+| Action | Artifact | Status |
+| ------ | -------- | ------ |
+| FHS-compliant runtime path lookup | `compiler/crates/tyra-driver/src/lib.rs` | ✅ Done |
+| SHA256SUMS attached to GitHub releases | `.github/workflows/release.yml` | ✅ Done |
+| `curl \| sh` installer (`scripts/install.sh`) | `scripts/install.sh` | ✅ Done |
+| Homebrew tap (`tyra-lang/homebrew-tap`) | `Formula/tyra.rb` | v0.10.0 target |
+| `docs/getting-started/01-installation.md` updated | — | ✅ Done |
+
+**Outcome criterion**: `brew install tyra-lang/tap/tyra` and the `curl | sh` one-liner both produce a working `tyra` binary on macOS arm64, Linux x86_64 glibc, and Linux x86_64 musl (Alpine).
+
+### Phase 2: Benchmark Publication (v0.10.0)
+
+**Goal**: Publish reproducible, credible AI-generation benchmark results alongside the v0.10.0 release so that the AI auditability claim (§4) is independently verifiable.
+
+| Action | Artifact | Status |
+| ------ | -------- | ------ |
+| Go runner added to harness | `bench/ai-gen/runners/go.py` | ✅ Done |
+| Harness runner registration + config | `bench/ai-gen/config.yaml` | ✅ Done |
+| Methodology document | `bench/ai-gen/METHODOLOGY.md` | ✅ Done |
+| `bench/ai-gen/README.md` updated (reproducible) | — | ✅ Done |
+| 6-language full sweep (Tyra/Go/Crystal/V/Gleam/Ruby) | `results/SUMMARY.md` | ✅ Single-seed run complete |
+| Headline numbers in release notes | `CHANGELOG.md` | ✅ Done |
+
+**Outcome criterion**: `results/SUMMARY.md` shows a 6-language comparison table derived from a single deterministic sweep run with a pinned seed. The methodology is documented in `METHODOLOGY.md` with enough detail that an external party could reproduce the run.
+
+**What is not claimed**: Rankings beyond the tested seed, cost-per-run figures, or benchmark numbers from un-pinned model versions.
+
+**Current state**: Single-seed sweep (seed 1, claude, 100 prompts) is complete and recorded in `bench/ai-gen/INSIGHTS.md`. Results are in `CHANGELOG.md`. A controlled follow-up sweep with additional seeds is tracked but not required for the v0.10.0 release.
+
+### Phase 3: Discoverability (post-v0.10.0)
+
+**Goal**: Make Tyra findable by developers searching for Ruby-syntax compiled languages, explicit error handling in compiled languages, or AI-friendly statically typed languages.
+
+| Action | Artifact |
+| ------ | -------- |
+| `llms.txt` at repo root | `llms.txt` ✅ Done |
+| Full AI reference document | `docs/llms/llms-full.md` ✅ Done |
+| Error code reference | `docs/llms/error-codes.md` ✅ Done |
+| Crystal comparison page | `docs/comparisons/vs-crystal.md` ✅ Done |
+| Project website (separate repo) | `tyra-lang/tyra-site` (post-v0.10.0) |
+| Show HN / announcement post | post-v0.10.0 |
+| Exercism track | tracked, not scheduled |
+
+**Outcome criterion**: `llms.txt` is served from the canonical GitHub URL and indexed by at least one AI assistant (Claude, GPT-4o, or Gemini) when queried about Tyra. Crystal comparison page is linked from the README.
+
+### Phase 4: Ongoing Cadence
+
+**Goal**: Maintain trust signals across releases — benchmark freshness, formula correctness, and error-code documentation accuracy.
+
+| Cadence | Action |
+| ------- | ------ |
+| Every release | Re-run full 6-language benchmark sweep with the new compiler; update `results/SUMMARY.md` and headline in release notes |
+| Every release | Run `scripts/gen_llms_docs.py` and commit generated files; resolve any overlay warnings (missing error-code entries) |
+| Every release (v0.10.1+) | `bump-homebrew` CI job auto-updates `Formula/tyra.rb` in `tyra-lang/homebrew-tap` from SHA256SUMS |
+| Every 3 months | Review §1 (current status) and §5 (risks); update or close stale items |
+| After any new ADR | Update §12 References; check if §4 differentiation or §6 positioning needs revision |
+
+**Health signals to monitor**:
+- `gen_llms_docs.py` warns on missing overlay entries — each warning is a stale error-code description
+- Homebrew `audit` CI on the tap — failures mean the formula is broken
+- Benchmark pass rate delta vs prior release — regression > 5pp triggers investigation before release
 
 ---
 
