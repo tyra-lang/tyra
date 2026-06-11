@@ -285,7 +285,7 @@ jobs:
         run: |
           cd homebrew-tap
           sed -i "s|version \".*\"|version \"${VERSION}\"|" Formula/tyra.rb
-          sed -i "s|tyra-v[0-9.]*/tyra-v[0-9.]*-macos-arm64|tyra-v${VERSION}/tyra-v${VERSION}-macos-arm64|g" Formula/tyra.rb
+          sed -i "s|/download/v[0-9.]*/tyra-v[0-9.]*-macos-arm64|/download/v${VERSION}/tyra-v${VERSION}-macos-arm64|" Formula/tyra.rb
           sed -i "s|sha256 \".*\"|sha256 \"${SHA}\"|" Formula/tyra.rb
           echo "=== Updated Formula/tyra.rb ==="
           cat Formula/tyra.rb
