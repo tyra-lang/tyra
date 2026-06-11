@@ -100,38 +100,42 @@ let p1 = Point(x: 1.0, y: 2.0)
 let p2 = p1.copy(x: 3.0)
 ```
 
-## New in v0.8.0 — LinkedMap and LinkedSet
+## New in v0.10.0 — Tuple types, SortedMap, SortedSet
 
-`LinkedMap<K,V>` and `LinkedSet<T>` preserve insertion order during iteration, unlike the HAMT-based `Map`/`Set` which iterate in hash order.
+**Tuple types** with full destructuring in `let`, `match`, and `for`:
+
+```tyra
+fn min_max(xs: List<Int>) -> (Int, Int)
+  # ... returns a tuple
+end
+
+let (lo, hi) = min_max(values)   # let destructuring
+```
+
+**`SortedMap<K,V>` and `SortedSet<T>`** iterate in ascending key/element order. Key type must satisfy `Ord` (Float rejected at compile time — ADR-0002):
+
+```tyra
+import sorted_map
+
+fn main() -> Unit
+  let m: SortedMap<String, Int> = SortedMap.new()
+  let m = m.insert("banana", 2)
+  let m = m.insert("apple",  1)
+  let m = m.insert("cherry", 3)
+  for k, v in m
+    print("#{k}: #{v}")   # apple, banana, cherry — ascending order
+  end
+end
+```
+
+**`LinkedMap.from`** constructs from a tuple list:
 
 ```tyra
 import linked_map
 
 fn main() -> Unit
-  let scores: LinkedMap<String, Int> = LinkedMap.new()
-  let scores = scores.insert("alice", 95)
-  let scores = scores.insert("bob",   87)
-  let scores = scores.insert("carol", 92)
-  for name, score in scores
-    print("#{name}: #{score}")   # alice, bob, carol — insertion order guaranteed
-  end
-  let after = scores.remove("bob")
-  print("len=#{after.len()}")    # 2
-end
-```
-
-```tyra
-import linked_set
-
-fn main() -> Unit
-  let seen: LinkedSet<String> = LinkedSet.new()
-  let seen = seen.insert("apple")
-  let seen = seen.insert("banana")
-  let seen = seen.insert("apple")   # duplicate — no-op
-  print("len=#{seen.len()}")        # 2
-  for item in seen
-    print(item)                     # apple, banana — insertion order
-  end
+  let m = LinkedMap.from([("a", 1), ("b", 2), ("c", 3)])
+  print("len=#{m.len()}")   # 3
 end
 ```
 
@@ -161,14 +165,14 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 
 ## Status
 
-**Stable in v0.8.0** — supported and tested:
+**Stable in v0.10.0** — supported and tested:
 
 | Component | Notes |
 | --- | --- |
-| Language specification v0.7 | ✅ Complete |
+| Language specification v0.10 | ✅ Complete |
 | Lexer, Parser, Type checker | ✅ Complete |
 | LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 (glibc + musl) |
-| Standard library: string, list, fs, io, float, json, assert, time, log | ✅ Complete |
+| Standard library: string, list, fs, io, float, json, assert, time, log, sorted_map, sorted_set | ✅ Complete |
 | `tyra check / run / build` CLI (zero-arg project mode, `--release`) | ✅ Complete |
 | `tyra build --static` — static single binary (musl) | ✅ Complete (v0.5.0+) |
 | `tyra fmt [--check] [--stdin] <file\|dir>` — formatter + 100-col wrapping | ✅ Complete |
@@ -187,6 +191,11 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | Generic `Map<K,V>` — HAMT-persistent, `insert`/`remove`/`get`/`contains_key`/iteration | ✅ Complete (v0.7.0+) |
 | Generic `Set<T>` — HAMT-persistent, `insert`/`remove`/`contains`/iteration | ✅ Complete (v0.7.0+) |
 | `for k, v in m` / `for v in s` — Map/Set iteration | ✅ Complete (v0.7.0+) |
+| `LinkedMap<K,V>` / `LinkedSet<T>` — insertion-order persistent collections | ✅ Complete (v0.8.0+) |
+| `LinkedMap.from([(k,v), ...])` — construct from tuple list | ✅ Complete (v0.10.0+) |
+| Tuple types `(A, B)` — let/match/for destructuring (ADR-0022) | ✅ Complete (v0.10.0+) |
+| `SortedMap<K,V>` / `SortedSet<T>` — key-sorted persistent collections (ADR-0024) | ✅ Complete (v0.10.0+) |
+| E0314 — compile-time diagnostic for non-displayable string interpolation | ✅ Complete (v0.10.0+) |
 | E0308 diagnostic improvements — help hints, secondary labels, cascade dedup | ✅ Complete (v0.7.0+) |
 | E0313 — for-loop binding count mismatch diagnostic | ✅ Complete (v0.7.0+) |
 | Generic `assert.eq` / `assert.ne` (Int, String, Bool) | ✅ Complete |
@@ -194,7 +203,7 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | `Tyra.lock` + floating `branch` constraints + transitive dep resolution | ✅ Complete |
 | LSP server (`tyra-lsp`) + VS Code extension | ✅ Development install |
 | DAP debugger (DWARF + lldb-dap + VS Code breakpoints/locals) | ✅ Complete (v0.6.0+) |
-| Static conformance corpus (33 positive programs + 21 error cases) | ✅ CI-gated |
+| Static conformance corpus (42 positive programs + 25 error cases) | ✅ CI-gated |
 
 ## Platform support
 
@@ -235,7 +244,8 @@ tyra build --static myprogram.ty
 | Component | Notes |
 | --- | --- |
 | Registry (`tyra publish`), full registry-backed resolver | ⏳ Future |
-| Pre-built binaries (homebrew, apt) | ⏳ Later |
+| Homebrew tap (`tyra-lang/tap`) | ✅ v0.10.0+ |
+| apt / other package managers | ⏳ Later |
 | VS Code Marketplace publication | ⏳ Later |
 
 ## Known limitations
@@ -343,8 +353,8 @@ The compiler always declares which spec version it implements:
 
 ```console
 $ tyra --version
-tyra 0.8.0
-implementing language spec 0.8
+tyra 0.10.0
+implementing language spec 0.10
 ```
 
 While Tyra is at v0.x, **breaking changes are allowed in MINOR version bumps**. After v1.0, breaking changes will use the Edition model (similar to Rust editions).
