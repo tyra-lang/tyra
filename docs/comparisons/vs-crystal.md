@@ -16,14 +16,14 @@ this page explains what is different and why.
 | **Backend** | LLVM | LLVM |
 | **Error model** | `Result<T, E>` + `?` propagation | Exceptions only (`raise`/`rescue`) |
 | **Parallelism** | Built-in, stable | `preview_mt` — experimental since 2016 |
-| **Static binary** | Linux (glibc + musl), macOS, Windows target | Alpine Linux only |
+| **Static binary** | Linux musl (Alpine) | Alpine Linux only |
 | **Macros** | None | Compile-time macros |
 | **Operator overloading** | None | Supported |
 | **Union types** | None (nominal ADTs only) | `String \| Int32 \| Nil` |
 | **Float equality** | No `Eq` (ADR-0002, NaN-safe) | `Float64 == Float64` allowed |
 | **`copy()` on value types** | Auto-provided for all `value` types | Must write manually |
 | **Ability auto-derivation** | `Eq`/`Hash`/`Ord`/`Debug` with semantic rules | Manual `def ==`, `def hash` |
-| **AI-gen benchmark** | 77% pass with spec injection (v0.10.0, seed-1) | 96% pass (seed-1; strong prior knowledge) |
+| **AI-gen benchmark** | 77% pass with spec injection (v0.10.0, seed-1 point estimate) | 96% pass (seed-1 point estimate; strong prior knowledge) |
 
 **One-sentence summary**: Tyra is what Crystal would look like if designed after Go and
 Rust proved that explicit error handling outperforms exceptions, and after the LLM era
@@ -62,10 +62,10 @@ See [deep dive 2](#2-experimental-parallelism-preview_mt).
 
 | | Tyra | Crystal |
 | -- | -- | -- |
-| Linux musl (static) | Yes — CI-verified, glibc + musl both supported | Alpine Linux only |
-| Linux glibc | Yes | Yes (dynamic) |
-| macOS | Yes | Yes |
-| Windows | Yes (v0.10.0 target) | Limited (no official musl equivalent) |
+| Linux musl (static) | Yes — CI-verified on Alpine | Alpine Linux only |
+| Linux glibc | Yes (dynamic) | Yes (dynamic) |
+| macOS | Yes (dynamic) | Yes (dynamic) |
+| Windows | Tracked, not yet released | Limited (no official musl equivalent) |
 
 See [deep dive 3](#3-static-binary-alpine-only-for-crystal).
 
@@ -150,7 +150,7 @@ release. The `spawn` + `Task<T>` + `join_all` pattern is the standard way to
 parallelize work:
 
 ```tyra
-fn fetch_all(urls: List<String>) -> Result<List<String>, HttpError>
+async fn fetch_all(urls: List<String>) -> Result<List<String>, HttpError>
   let tasks = urls.map(fn(url) spawn fetch(url))
   tasks.join_all().await?
 end
@@ -177,52 +177,56 @@ supported.
 This means Crystal users who want portable static binaries must maintain an Alpine
 Docker build environment even for development on macOS or Debian/Ubuntu.
 
-Tyra produces static binaries on all supported platforms. The CI matrix
-(`release-gate.yml`) verifies static builds on glibc Linux, musl Linux (Alpine),
-and macOS on every pull request. The `install.sh` installer downloads a static
-binary — no Docker, no OS-matching required.
+Tyra's situation is the same as Crystal's today: `tyra build --static` is supported
+on Linux musl (Alpine) only. The `install.sh` installer distributes a static binary
+built on Alpine, and the CI matrix (`release-gate.yml`) includes an Alpine job that
+verifies the static build on every pull request. Static linking on Linux glibc and
+macOS is tracked but not yet implemented.
 
 ```sh
-# Tyra — static binary on any supported OS
+# Tyra — static binary on Linux musl (Alpine)
 tyra build --static myapp.ty
 
-# Crystal — static binary requires Alpine Linux (or Docker)
+# Crystal — same requirement: Alpine Linux (or Docker)
 docker run --rm -v $PWD:/workspace crystallang/crystal:latest \
   crystal build --release --static /workspace/myapp.cr
 ```
 
+The practical difference is in distribution: Tyra's installer handles the Alpine
+build for you and places a working static binary in `~/.local/bin/tyra`, so end
+users on macOS or glibc Linux do not need Docker. Crystal has no equivalent
+single-command installer.
+
 **Crystal's advantage here**: Alpine-based static builds are well-understood and
-widely used in Crystal's ecosystem. The Docker workflow is not a barrier for teams
-already using Docker for deployment.
+widely used in Crystal's ecosystem. Both languages share the same musl constraint.
 
 ---
 
 ## Code comparisons
 
-The same 10 programs are implemented side-by-side in both languages under
-`examples/comparisons/`:
+The Crystal implementations are in `examples/comparisons/crystal/`. The equivalent
+Tyra programs live in `bench/static-corpus/` (the compiler test corpus). The full
+head-to-head analysis is in [`examples/comparisons/ANALYSIS.md`](../../examples/comparisons/ANALYSIS.md).
 
-| # | Program | Tyra | Crystal |
-| - | ------- | ---- | ------- |
-| 01 | Hello World | [`examples/comparisons/tyra/01-hello.ty`](../../examples/comparisons/tyra/01-hello.ty) | [`examples/comparisons/crystal/01-hello.cr`](../../examples/comparisons/crystal/01-hello.cr) |
-| 02 | Fibonacci / Pattern matching | [`examples/comparisons/tyra/02-fibonacci.ty`](../../examples/comparisons/tyra/02-fibonacci.ty) | [`examples/comparisons/crystal/02-fibonacci.cr`](../../examples/comparisons/crystal/02-fibonacci.cr) |
-| 03 | Option / Result | [`examples/comparisons/tyra/03-option-result.ty`](../../examples/comparisons/tyra/03-option-result.ty) | [`examples/comparisons/crystal/03-option-result.cr`](../../examples/comparisons/crystal/03-option-result.cr) |
-| 04 | HTTP handler | [`examples/comparisons/tyra/04-http-handler.ty`](../../examples/comparisons/tyra/04-http-handler.ty) | [`examples/comparisons/crystal/04-http-handler.cr`](../../examples/comparisons/crystal/04-http-handler.cr) |
-| 05 | JSON parsing | [`examples/comparisons/tyra/05-json-parsing.ty`](../../examples/comparisons/tyra/05-json-parsing.ty) | [`examples/comparisons/crystal/05-json-parsing.cr`](../../examples/comparisons/crystal/05-json-parsing.cr) |
-| 06 | CLI args | [`examples/comparisons/tyra/06-cli-args.ty`](../../examples/comparisons/tyra/06-cli-args.ty) | [`examples/comparisons/crystal/06-cli-args.cr`](../../examples/comparisons/crystal/06-cli-args.cr) |
-| 07 | State machine | [`examples/comparisons/tyra/07-state-machine.ty`](../../examples/comparisons/tyra/07-state-machine.ty) | [`examples/comparisons/crystal/07-state-machine.cr`](../../examples/comparisons/crystal/07-state-machine.cr) |
-| 08 | Async tasks | [`examples/comparisons/tyra/08-async-tasks.ty`](../../examples/comparisons/tyra/08-async-tasks.ty) | [`examples/comparisons/crystal/08-async-tasks.cr`](../../examples/comparisons/crystal/08-async-tasks.cr) |
-| 09 | Error handling | [`examples/comparisons/tyra/09-error-handling.ty`](../../examples/comparisons/tyra/09-error-handling.ty) | [`examples/comparisons/crystal/09-error-handling.cr`](../../examples/comparisons/crystal/09-error-handling.cr) |
-| 10 | Data modeling | [`examples/comparisons/tyra/10-data-modeling.ty`](../../examples/comparisons/tyra/10-data-modeling.ty) | [`examples/comparisons/crystal/10-data-modeling.cr`](../../examples/comparisons/crystal/10-data-modeling.cr) |
-
-Full analysis: [`examples/comparisons/ANALYSIS.md`](../../examples/comparisons/ANALYSIS.md).
+| # | Program | Crystal |
+| - | ------- | ------- |
+| 01 | Hello World | [`examples/comparisons/crystal/01-hello.cr`](../../examples/comparisons/crystal/01-hello.cr) |
+| 02 | Fibonacci / Pattern matching | [`examples/comparisons/crystal/02-fibonacci.cr`](../../examples/comparisons/crystal/02-fibonacci.cr) |
+| 03 | Option / Result | [`examples/comparisons/crystal/03-option-result.cr`](../../examples/comparisons/crystal/03-option-result.cr) |
+| 04 | HTTP handler | [`examples/comparisons/crystal/04-http-handler.cr`](../../examples/comparisons/crystal/04-http-handler.cr) |
+| 05 | JSON parsing | [`examples/comparisons/crystal/05-json-parsing.cr`](../../examples/comparisons/crystal/05-json-parsing.cr) |
+| 06 | CLI args | [`examples/comparisons/crystal/06-cli-args.cr`](../../examples/comparisons/crystal/06-cli-args.cr) |
+| 07 | State machine | [`examples/comparisons/crystal/07-state-machine.cr`](../../examples/comparisons/crystal/07-state-machine.cr) |
+| 08 | Async tasks | [`examples/comparisons/crystal/08-async-tasks.cr`](../../examples/comparisons/crystal/08-async-tasks.cr) |
+| 09 | Error handling | [`examples/comparisons/crystal/09-error-handling.cr`](../../examples/comparisons/crystal/09-error-handling.cr) |
+| 10 | Data modeling | [`examples/comparisons/crystal/10-data-modeling.cr`](../../examples/comparisons/crystal/10-data-modeling.cr) |
 
 ---
 
 ## When to choose Crystal
 
-Tyra is a better fit when you need explicit error contracts, cross-platform static
-binaries, or reliable AI-generated code. Crystal is a better fit in the following cases:
+Tyra is a better fit when you need explicit error contracts, a one-command static-binary
+installer, or reliable AI-generated code. Crystal is a better fit in the following cases:
 
 **Choose Crystal if**:
 
@@ -254,16 +258,16 @@ binaries, or reliable AI-generated code. Crystal is a better fit in the followin
 | Question | Recommendation |
 | -------- | -------------- |
 | I need explicit error types in function signatures | Tyra |
-| I need static binaries on Linux glibc or macOS without Docker | Tyra |
+| I need a single-command installer that gives a static binary | Tyra |
 | I need reliable multi-core parallelism today | Tyra |
 | I need macros or operator overloading | Crystal |
 | I need `JSON::Serializable` or a richer stdlib | Crystal |
 | I need union types | Crystal |
 | My team already knows Crystal | Crystal |
-| I want AI to generate my code reliably | Tyra (77% vs 96% — Tyra's advantage grows when AI lacks prior training knowledge) |
+| I want AI to generate my code reliably | Tyra (77% vs 96%, both seed-1 point estimates — gap narrows as AI training on Tyra grows) |
 
 Tyra does not claim to be better than Crystal in every dimension. Crystal has years of
 ecosystem maturity that Tyra does not. The case for Tyra rests on three specific
-structural differences: explicit errors in types, cross-platform static binaries, and
-AI auditability through deliberate constraints. If those differences matter for your
+structural differences: explicit errors in types, a one-command static-binary installer,
+and AI auditability through deliberate constraints. If those differences matter for your
 project, Tyra is the right choice.
