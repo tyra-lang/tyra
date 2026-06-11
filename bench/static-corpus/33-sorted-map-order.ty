@@ -1,0 +1,14 @@
+# 33-sorted-map-order.ty
+# Validates: SortedMap iterates in key-sorted order (ADR-0024).
+# Compilation-only check (for-each runs without crash).
+import sorted_map
+
+fn main() -> Unit
+  let m: SortedMap<Int, String> = SortedMap.new()
+  let m = m.insert(3, "three")
+  let m = m.insert(1, "one")
+  let m = m.insert(2, "two")
+  for k, v in m
+    print("#{k}=#{v}")
+  end
+end

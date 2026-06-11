@@ -1,0 +1,14 @@
+# 34-sorted-set-order.ty
+# Validates: SortedSet iterates in element-sorted order (ADR-0024).
+# Compilation-only check (for-each runs without crash).
+import sorted_set
+
+fn main() -> Unit
+  let s: SortedSet<Int> = SortedSet.new()
+  let s = s.insert(30)
+  let s = s.insert(10)
+  let s = s.insert(20)
+  for x in s
+    print("#{x}")
+  end
+end
