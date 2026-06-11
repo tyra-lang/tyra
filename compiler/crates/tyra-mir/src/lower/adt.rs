@@ -53,6 +53,18 @@ impl super::LowerCtx<'_> {
                 mono_name,
                 vec![("handle".into(), Ty::String)], // ptr in LLVM
             );
+        } else if matches!(ty, Ty::Generic(n, _) if n == "SortedMap") {
+            // SortedMap<K,V> (ADR-0024): opaque handle ptr to runtime sorted map.
+            self.adt_struct_defs.insert(
+                mono_name,
+                vec![("handle".into(), Ty::String)], // ptr in LLVM
+            );
+        } else if matches!(ty, Ty::Generic(n, _) if n == "SortedSet") {
+            // SortedSet<T> (ADR-0024): opaque handle ptr to runtime sorted set.
+            self.adt_struct_defs.insert(
+                mono_name,
+                vec![("handle".into(), Ty::String)], // ptr in LLVM
+            );
         } else if let Some(elem_ty) = ty.list_elem() {
             // List<T> = { data: ptr, len: Int } (§11)
             // data is a heap-allocated array of T. We use Ty::String as a proxy for

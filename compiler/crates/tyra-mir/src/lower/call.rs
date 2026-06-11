@@ -515,6 +515,60 @@ impl super::LowerCtx<'_> {
                 );
                 return dest;
             }
+            // §11 / ADR-0024: SortedMap<K,V>.len()
+            if let Some(sm_ty) = self.infer_sorted_map_type(obj) {
+                let sm_struct = sm_ty.monomorphized_name();
+                let obj_val = self.lower_expr(obj, body);
+                let handle = self.fresh_temp();
+                self.emit(
+                    body,
+                    Instruction::FieldGet {
+                        dest: handle.clone(),
+                        obj: Operand::Var(obj_val),
+                        type_name: sm_struct,
+                        field_index: 0,
+                    },
+                );
+                self.string_vars.insert(handle.clone());
+                let dest = self.fresh_temp();
+                self.emit_at(
+                    body,
+                    call_loc,
+                    Instruction::Call {
+                        dest: Some(dest.clone()),
+                        func: "__sorted_map_len".to_string(),
+                        args: vec![Operand::Var(handle)],
+                    },
+                );
+                return dest;
+            }
+            // §11 / ADR-0024: SortedSet<T>.len()
+            if let Some(ss_ty) = self.infer_sorted_set_type(obj) {
+                let ss_struct = ss_ty.monomorphized_name();
+                let obj_val = self.lower_expr(obj, body);
+                let handle = self.fresh_temp();
+                self.emit(
+                    body,
+                    Instruction::FieldGet {
+                        dest: handle.clone(),
+                        obj: Operand::Var(obj_val),
+                        type_name: ss_struct,
+                        field_index: 0,
+                    },
+                );
+                self.string_vars.insert(handle.clone());
+                let dest = self.fresh_temp();
+                self.emit_at(
+                    body,
+                    call_loc,
+                    Instruction::Call {
+                        dest: Some(dest.clone()),
+                        func: "__sorted_set_len".to_string(),
+                        args: vec![Operand::Var(handle)],
+                    },
+                );
+                return dest;
+            }
         }
 
         // §17.3.x Set<T> method dispatch (ADR-0015).

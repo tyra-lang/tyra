@@ -203,7 +203,7 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | `Tyra.lock` + floating `branch` constraints + transitive dep resolution | ✅ Complete |
 | LSP server (`tyra-lsp`) + VS Code extension | ✅ Development install |
 | DAP debugger (DWARF + lldb-dap + VS Code breakpoints/locals) | ✅ Complete (v0.6.0+) |
-| Static conformance corpus (40 positive programs + 25 error cases) | ✅ CI-gated |
+| Static conformance corpus (42 positive programs + 25 error cases) | ✅ CI-gated |
 
 ## Platform support
 

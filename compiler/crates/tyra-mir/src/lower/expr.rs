@@ -724,9 +724,34 @@ impl super::LowerCtx<'_> {
                     } else {
                         format!("__set_iter_{iter_id}")
                     };
+                    // For alloca-backed (mut/pattern) captures, emit a Load first so
+                    // the ClosureBuild operand is an SSA value (in codegen `values`),
+                    // not an alloca slot name (only in `addr_slots`).
                     let env_field_operands: Vec<Operand> = captures
                         .iter()
-                        .map(|name| Operand::Var(name.clone()))
+                        .map(|name| {
+                            if self.mut_vars.contains(name.as_str())
+                                || self.pattern_vars.contains(name.as_str())
+                            {
+                                let t = self.fresh_temp();
+                                self.emit(
+                                    body,
+                                    Instruction::Load {
+                                        dest: t.clone(),
+                                        source: name.clone(),
+                                    },
+                                );
+                                if self.string_vars.contains(name.as_str()) {
+                                    self.string_vars.insert(t.clone());
+                                }
+                                if self.float_vars.contains(name.as_str()) {
+                                    self.float_vars.insert(t.clone());
+                                }
+                                Operand::Var(t)
+                            } else {
+                                Operand::Var(name.clone())
+                            }
+                        })
                         .collect();
 
                     // param_types for the fat ptr: box params (ptr = Ty::String used for ptr).

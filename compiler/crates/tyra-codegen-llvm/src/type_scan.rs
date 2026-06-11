@@ -635,7 +635,7 @@ fn register_generic_value_struct(
 ) {
     let is_value_generic = ty.is_option()
         || ty.is_result()
-        || matches!(ty, Ty::Generic(name, _) if matches!(name.as_str(), "List" | "Set" | "Map" | "LinkedMap" | "LinkedSet"));
+        || matches!(ty, Ty::Generic(name, _) if matches!(name.as_str(), "List" | "Set" | "Map" | "LinkedMap" | "LinkedSet" | "SortedMap" | "SortedSet"));
     if !is_value_generic {
         return;
     }
@@ -788,7 +788,7 @@ fn pre_scan_struct_types(
                     if let Ty::Generic(name, _) = &sig.return_type {
                         if matches!(
                             name.as_str(),
-                            "List" | "Set" | "Map" | "LinkedMap" | "LinkedSet"
+                            "List" | "Set" | "Map" | "LinkedMap" | "LinkedSet" | "SortedMap" | "SortedSet"
                         ) {
                             let mono_name = sig.return_type.monomorphized_name();
                             if struct_map.contains_key(mono_name.as_str()) {
@@ -946,7 +946,8 @@ fn pre_scan_struct_types(
             // struct name so the dest is treated as a struct (e.g. print-family
             // emittability) rather than a scalar.
             Instruction::MapGetOption { dest, val_ty, .. }
-            | Instruction::LinkedMapGetOption { dest, val_ty, .. } => {
+            | Instruction::LinkedMapGetOption { dest, val_ty, .. }
+            | Instruction::SortedMapGetOption { dest, val_ty, .. } => {
                 let opt_struct = format!("Option__{}", val_ty.monomorphized_name());
                 if struct_map.contains_key(&opt_struct) {
                     struct_temps.insert(dest.clone(), opt_struct);

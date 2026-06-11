@@ -106,6 +106,9 @@ impl<'ctx> CodeGen<'ctx> {
                 | Instruction::SetForEachCall { .. }
                 | Instruction::LinkedMapForEachCall { .. }
                 | Instruction::LinkedSetForEachCall { .. }
+                | Instruction::SortedMapGetOption { .. }
+                | Instruction::SortedMapForEachCall { .. }
+                | Instruction::SortedSetForEachCall { .. }
                 | Instruction::IndirectCall { .. }
                 // I4i concurrency: Await/JoinAll/Select dispatch to runtime
                 // externs; their handle/list operands are definedness-checked
@@ -249,11 +252,14 @@ impl<'ctx> CodeGen<'ctx> {
             }
             Instruction::ListPush { list, elem, .. } => vec![list, elem],
             Instruction::MapGetOption { handle, key, .. }
-            | Instruction::LinkedMapGetOption { handle, key, .. } => vec![handle, key],
+            | Instruction::LinkedMapGetOption { handle, key, .. }
+            | Instruction::SortedMapGetOption { handle, key, .. } => vec![handle, key],
             Instruction::MapForEachCall { handle, fat_ptr }
             | Instruction::SetForEachCall { handle, fat_ptr }
             | Instruction::LinkedMapForEachCall { handle, fat_ptr }
-            | Instruction::LinkedSetForEachCall { handle, fat_ptr } => vec![handle, fat_ptr],
+            | Instruction::LinkedSetForEachCall { handle, fat_ptr }
+            | Instruction::SortedMapForEachCall { handle, fat_ptr }
+            | Instruction::SortedSetForEachCall { handle, fat_ptr } => vec![handle, fat_ptr],
             // I4i concurrency. Spawn's `func` is a top-level function (resolvable
             // via fn_values, like ClosureBuild), so only its args are operands.
             Instruction::Spawn { args, .. } => args.iter().collect(),
@@ -1460,6 +1466,7 @@ fn instr_dest(inst: &Instruction) -> Option<&str> {
         | Instruction::ListPush { dest, .. }
         | Instruction::MapGetOption { dest, .. }
         | Instruction::LinkedMapGetOption { dest, .. }
+        | Instruction::SortedMapGetOption { dest, .. }
         | Instruction::ClosureBuild { dest, .. }
         | Instruction::Spawn { dest, .. }
         | Instruction::Await { dest, .. }
