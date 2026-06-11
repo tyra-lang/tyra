@@ -1,4 +1,4 @@
-# bench/static-corpus/sorted_set_test.tyra
+# bench/static-corpus/sorted_set_test.ty
 # Tests SortedSet insert, remove (persistent semantics), contains, len.
 # SPEC_REF: §11 (SortedSet — element-sorted persistent collection, ADR-0024, v0.10.0)
 import assert
@@ -55,7 +55,7 @@ fn test_sorted_set_for_loop() -> Result<Unit, String>
   let s = s.insert(20)
   let mut elems: List<Int> = []
   for x in s
-    let elems = elems.push(x)
+    elems = elems.push(x)
   end
   assert.eq(elems.len(), 3)?
   assert.eq(elems.get(0), Some(10))?

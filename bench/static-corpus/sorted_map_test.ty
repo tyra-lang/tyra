@@ -1,4 +1,4 @@
-# bench/static-corpus/sorted_map_test.tyra
+# bench/static-corpus/sorted_map_test.ty
 # Tests SortedMap get, contains_key, remove (persistent semantics), len, and sorted order.
 # SPEC_REF: §11 (SortedMap — key-sorted persistent collection, ADR-0024, v0.10.0)
 import assert
@@ -76,7 +76,7 @@ fn test_sorted_map_for_loop() -> Result<Unit, String>
   let m = m.insert(2, "two")
   let mut keys: List<Int> = []
   for k, v in m
-    let keys = keys.push(k)
+    keys = keys.push(k)
   end
   assert.eq(keys.len(), 3)?
   assert.eq(keys.get(0), Some(1))?
