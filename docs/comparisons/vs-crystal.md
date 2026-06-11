@@ -192,10 +192,10 @@ docker run --rm -v $PWD:/workspace crystallang/crystal:latest \
   crystal build --release --static /workspace/myapp.cr
 ```
 
-The practical difference is in distribution: Tyra's installer handles the Alpine
-build for you and places a working static binary in `~/.local/bin/tyra`, so end
-users on macOS or glibc Linux do not need Docker. Crystal has no equivalent
-single-command installer.
+The practical difference is in distribution: Tyra's installer places a working
+prebuilt binary in `~/.local/bin/tyra` without requiring Docker on any platform —
+musl Linux users get a static binary, macOS and glibc Linux users get a dynamic
+binary. Crystal has no equivalent single-command installer.
 
 **Crystal's advantage here**: Alpine-based static builds are well-understood and
 widely used in Crystal's ecosystem. Both languages share the same musl constraint.
@@ -225,8 +225,9 @@ head-to-head analysis is in [`examples/comparisons/ANALYSIS.md`](../../examples/
 
 ## When to choose Crystal
 
-Tyra is a better fit when you need explicit error contracts, a one-command static-binary
-installer, or reliable AI-generated code. Crystal is a better fit in the following cases:
+Tyra is a better fit when you need explicit error contracts, a one-command installer
+that works without Docker, or reliable AI-generated code. Crystal is a better fit in
+the following cases:
 
 **Choose Crystal if**:
 
@@ -258,7 +259,7 @@ installer, or reliable AI-generated code. Crystal is a better fit in the followi
 | Question | Recommendation |
 | -------- | -------------- |
 | I need explicit error types in function signatures | Tyra |
-| I need a single-command installer that gives a static binary | Tyra |
+| I need a single-command installer that works without Docker | Tyra |
 | I need reliable multi-core parallelism today | Tyra |
 | I need macros or operator overloading | Crystal |
 | I need `JSON::Serializable` or a richer stdlib | Crystal |
@@ -268,6 +269,6 @@ installer, or reliable AI-generated code. Crystal is a better fit in the followi
 
 Tyra does not claim to be better than Crystal in every dimension. Crystal has years of
 ecosystem maturity that Tyra does not. The case for Tyra rests on three specific
-structural differences: explicit errors in types, a one-command static-binary installer,
-and AI auditability through deliberate constraints. If those differences matter for your
+structural differences: explicit errors in types, a one-command installer that works
+without Docker, and AI auditability through deliberate constraints. If those differences matter for your
 project, Tyra is the right choice.
