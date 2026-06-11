@@ -242,3 +242,59 @@ jobs:
             dist/**/*.tar.gz
             SHA256SUMS
           fail_on_unmatched_files: true
+
+  bump-homebrew:
+    name: Bump Homebrew tap formula
+    needs: [publish]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout tyra
+        uses: actions/checkout@v5
+
+      - name: Download SHA256SUMS from GitHub Release
+        # SHA256SUMS is attached to the release by the publish job.
+        # We fetch it here because the publish job's workspace is not
+        # accessible from this job. Only the macOS arm64 sha is needed
+        # because the current formula covers macOS arm64 only.
+        # When Linux bottles are added to the formula, extend this step
+        # to extract additional platform shas.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "${GITHUB_REF_NAME}" -p SHA256SUMS -O SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Extract version and sha256 (macOS arm64)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          SHA=$(grep "macos-arm64" SHA256SUMS | awk '{print $1}')
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "SHA=${SHA}" >> "$GITHUB_ENV"
+
+      - name: Checkout homebrew-tap
+        uses: actions/checkout@v5
+        with:
+          repository: tyra-lang/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update Formula/tyra.rb
+        run: |
+          cd homebrew-tap
+          sed -i "s|version \".*\"|version \"${VERSION}\"|" Formula/tyra.rb
+          sed -i "s|tyra-v[0-9.]*/tyra-v[0-9.]*-macos-arm64|tyra-v${VERSION}/tyra-v${VERSION}-macos-arm64|g" Formula/tyra.rb
+          sed -i "s|sha256 \".*\"|sha256 \"${SHA}\"|" Formula/tyra.rb
+          echo "=== Updated Formula/tyra.rb ==="
+          cat Formula/tyra.rb
+
+      - name: Commit and push
+        run: |
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/tyra.rb
+          git commit -m "chore: bump tyra to ${VERSION}"
+          git push

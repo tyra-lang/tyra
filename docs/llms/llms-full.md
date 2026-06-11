@@ -2233,8 +2233,8 @@ tyra --version
 You should see output like:
 
 ```
-tyra 0.1.0
-implementing language spec 0.1
+tyra 0.10.1
+implementing language spec 0.10
 ```
 
 ## Test with Hello, World

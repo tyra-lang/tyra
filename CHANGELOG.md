@@ -7,6 +7,20 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ---
 
+## [0.10.1] — 2026-06-11
+
+**Fix**: `tyra --version` now correctly reports `implementing language spec 0.10` (was `0.8`). Installation docs updated to reflect current output.
+
+**Distribution**: `bump-homebrew` CI job added to `release.yml` — the Homebrew formula in `tyra-lang/homebrew-tap` is now updated automatically on each tag push.
+
+### Stable
+
+**spec version display** — `compiler/crates/tyra-cli/src/main.rs` hardcoded string corrected from `0.8` to `0.10`. `docs/getting-started/01-installation.md` example output updated to `0.10.1` / `spec 0.10`.
+
+**Homebrew formula auto-bump** — `bump-homebrew` job in `.github/workflows/release.yml` downloads `SHA256SUMS` from the published GitHub Release, extracts the macOS arm64 checksum, and pushes an updated `Formula/tyra.rb` to `tyra-lang/homebrew-tap`. Requires `HOMEBREW_TAP_TOKEN` secret (fine-grained PAT, Contents: read+write on the tap repo).
+
+---
+
 ## [0.10.0] — 2026-06-11
 
 **Language**: Tuple types with full destructuring (let/match/for), `SortedMap<K,V>` / `SortedSet<T>` (key-sorted persistent collections), `LinkedMap.from([...])`, E0314 compile-time diagnostic for non-displayable string interpolation, source files renamed `.tyra` → `.ty` (ADR-0025).
