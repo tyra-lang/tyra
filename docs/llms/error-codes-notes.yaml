@@ -1,0 +1,75 @@
+# Handwritten overlay for error-codes.md generation.
+# Each entry adds a human-readable one-line note to the auto-extracted error code.
+# Missing entries produce a WARNING from gen_llms_docs.py (freshness signal).
+# Values must be plain quoted strings — do not use unquoted backticks.
+#
+# Authoritative sources: compiler/crates/tyra-types/src/checker.rs,
+# compiler/crates/tyra-resolve/src/resolver.rs, compiler/crates/tyra-cli/src/main.rs,
+# and bench/static-corpus/bad/E*.ty corpus files.
+
+# ── Lexer errors ──────────────────────────────────────────────────────────────
+E0001: "Generic compiler error; also emitted for internal diagnostic infrastructure failures."
+E0002: "Unexpected character — the lexer encountered a character that cannot start a valid token."
+E0003: "Unterminated string literal — a string or interpolation was not closed before end of line or file."
+E0004: "Invalid escape sequence inside a string literal."
+E0005: "Invalid numeric literal (e.g. 0x with no hex digits, double underscores)."
+
+# ── Parser errors ─────────────────────────────────────────────────────────────
+E0100: "Unexpected token — the parser expected a specific token but got something else."
+E0101: "Unexpected end of input — the source ended before the parser could complete a construct."
+E0102: "Expected an identifier but found a keyword or symbol."
+E0103: "Invalid expression — the parser cannot interpret the token as the start of an expression."
+E0104: "Invalid function call syntax (e.g. missing closing parenthesis or bad argument list)."
+E0105: "Invalid pattern — the token cannot start a pattern in match or let."
+E0106: "Invalid pattern inside a match arm; check for missing commas or unsupported pattern forms."
+E0107: "Invalid type expression — the token cannot start a type annotation."
+E0108: "Unexpected top-level item — only fn, data, value, type, import, and export are allowed at the top level."
+E0109: "Invalid declaration syntax."
+E0110: "Invalid statement inside a function body."
+
+# ── Name resolution / module errors ──────────────────────────────────────────
+E0200: "Name resolution failure — undefined name or module not found in any resolution layer (local / dependency / stdlib)."
+E0201: "Circular import detected between two or more modules."
+E0204: "Unknown method or member — the type does not expose a member with that name."
+E0206: "Assignment to an immutable let-bound variable; use let mut to allow reassignment."
+E0210: "Export name conflict — the same name is exported more than once from this module."
+E0211: "Import statement appears after non-import statements; all imports must be at the top of the file."
+E0212: "Imported name is not defined or was not exported by the source module."
+E0213: "Duplicate import of the same module name."
+E0214: "break used outside a while or for loop."
+E0215: "continue used outside a while or for loop."
+E0216: "*_test.ty files must not contain fn main or top-level executable statements."
+E0217: "Ambiguous import — the same module name resolves to more than one layer (local / dependency / stdlib)."
+E0218: "Bin package cannot be imported as a library dependency."
+
+# ── Type errors ───────────────────────────────────────────────────────────────
+E0300: "Type cannot be used as a Map or LinkedMap key; the key type must satisfy the Eq + Hash ability constraints."
+E0301: "Arity mismatch — wrong number of arguments in a function or higher-order function call."
+E0302: "The ? operator was applied to a non-Option/non-Result type; ? requires Option or Result."
+E0304: "Condition expression must be Bool — if and while conditions have the wrong type."
+E0305: "Type mismatch in a binary expression — arithmetic, comparison, or match-arm operand types are incompatible."
+E0306: "Type does not implement Eq — Float equality (==) is not allowed; custom types without auto-derived Eq cannot use ==."
+E0307: "Type does not implement Ord — comparison operators (<, <=, >, >=) require the Ord ability."
+E0308: "Type inference failed — the compiler cannot determine the type from context; add an explicit annotation."
+E0309: "Return type mismatch — the returned expression's type differs from the declared return type."
+E0310: "The ? operator is used in a function whose return type is incompatible with the propagated Option/Result family."
+E0311: "The ? operator cannot convert the inner error type to the enclosing function's error type; no Into impl found."
+E0312: "Match pattern type mismatch — a constructor pattern (e.g. Some/None) is used against an incompatible subject type."
+E0313: "For-loop binding count or iterable type mismatch — e.g. one binding given for a Map (requires two), or tuple destructuring on a non-tuple-list."
+E0314: "Type cannot be interpolated inside #{} — only Int, Float, String, Bool, and Option<displayable> are supported; use match to extract a displayable value first."
+E0315: "SortedMap key and SortedSet element types are restricted to Int, Bool, and String; Float is excluded because NaN makes it non-comparable (ADR-0002)."
+E0316: "Tuple literal requires at least 2 elements; a 1-tuple is not valid in Tyra."
+E0317: "Map key or value type is not supported in this version of the compiler."
+
+# ── Match exhaustiveness ──────────────────────────────────────────────────────
+E0400: "Non-exhaustive match — not all variants or patterns are covered; add a wildcard _ arm or cover missing cases."
+E0401: "Non-exhaustive nested match at depth 1 — e.g. Err(SomeVariant) where not all inner ADT variants are covered."
+E0402: "Closure rebinding of an outer mut variable is forbidden; closures capture outer mut bindings by reference but cannot reassign them (spec §9.4)."
+
+# ── Build / infrastructure errors ─────────────────────────────────────────────
+E0500: "Build infrastructure error — a required file (runtime staticlib, stdlib path) could not be found."
+E0501: "Required source file not found during compilation."
+E0502: "Build configuration error (e.g. malformed tyra.toml)."
+
+# ── Internal errors ───────────────────────────────────────────────────────────
+E9001: "Internal compiler error (ICE) — this should not occur in normal use; please file a bug report."

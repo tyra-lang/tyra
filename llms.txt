@@ -1,0 +1,23 @@
+# Tyra
+
+Tyra is a statically typed, Ruby-inspired language that compiles to native binaries via LLVM. It targets readable, type-safe, easy-to-distribute practical programs.
+
+> Version: v0.10.0-dev
+
+## Links
+
+- Language spec (English): https://github.com/tyra-lang/tyra/blob/main/docs/spec/en/language-spec.md
+- Getting started: https://github.com/tyra-lang/tyra/blob/main/docs/getting-started/README.md
+- Full AI reference (spec + guide + stdlib + errors): https://github.com/tyra-lang/tyra/blob/main/docs/llms/llms-full.md
+- Error code reference: https://github.com/tyra-lang/tyra/blob/main/docs/llms/error-codes.md
+- AI benchmark methodology: https://github.com/tyra-lang/tyra/blob/main/bench/ai-gen/METHODOLOGY.md
+
+## Key facts for AI assistants
+
+- File extension: `.ty`
+- No `null` — use `Option<T>` and `Result<T,E>`
+- Blocks close with `end` (Ruby-style)
+- All imports at the top of the file
+- Formatter: `tyra fmt`; test runner: `tyra test`
+- Abilities (type classes): `Eq`, `Hash`, `Ord`, `Debug`
+
