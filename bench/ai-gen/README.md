@@ -1,31 +1,32 @@
 # ai-gen — AI Code Generation Benchmark
 
-Per `docs/strategy.md` §6.2 item 2 and §4.1, Tyra's strongest potential
+Per `docs/strategy.md` §6.2 and §4.1, Tyra's strongest potential
 differentiator is measurable AI auditability. This harness quantifies
-that claim by asking Claude and the Codex CLI to generate the same
-programs in Tyra, Crystal, V, Gleam, Ruby, and Go, then grading each
-output through three stages: **generation**, **compile / type-check**,
-and **execution**.
+that claim by asking frontier models to generate the same programs in
+Tyra, Crystal, V, Gleam, Ruby, and Go, then grading each output
+through three stages: **generation**, **compile / type-check**, and
+**execution**.
 
-The methodology mirrors the strategy doc's target: ~100 prompts, 6
-languages, ≥1 frontier model. Headline metric per (language, model)
-pair:
+See [METHODOLOGY.md](METHODOLOGY.md) for prompt neutrality policy,
+scoring criteria, model pinning strategy, and threats to validity.
 
-- `pass` rate — code compiled and executed and produced the expected
-  stdout markers
-- `compile_fail` rate — compiler / type-checker rejected the output
-- `exec_fail` rate — compiled but crashed, hung, or produced wrong
-  output
-- `generator_fail` — model refused or produced unparseable output
-- `skipped_no_compiler` — the compiler is not installed on the host
-  (the harness never fails the whole run on a missing toolchain)
+## Headline metrics (per language × model pair)
+
+| Metric | Meaning |
+|---|---|
+| `pass` | Generated, compiled, executed, and matched all expected output markers |
+| `compile_fail` | Compiler / type-checker rejected the output |
+| `exec_fail` | Compiled but crashed, timed out, or produced wrong output |
+| `generator_fail` | Model refused or returned unparseable output |
+| `skipped_no_compiler` | Compiler not found on host; run skipped (not an error) |
 
 ## Layout
 
 ```
 bench/ai-gen/
   README.md           this file
-  harness.py          main entrypoint; orchestrates prompt × lang × model
+  METHODOLOGY.md      prompt neutrality, scoring, model pinning, validity
+  harness.py          main entrypoint — orchestrates prompt × lang × model
   report.py           aggregates results/*.json into Markdown + CSV
   config.yaml         languages, models, timeouts, compiler commands
   requirements.txt    Python deps (anthropic, pyyaml)
@@ -33,18 +34,81 @@ bench/ai-gen/
   generators/
     base.py           abstract Generator
     claude.py         `claude -p` CLI subprocess wrapper
-    codex.py          `codex exec` subprocess wrapper
+    codex.py          `codex` CLI subprocess wrapper
   runners/
     base.py           abstract Runner (compile + execute)
-    tyra.py           shells to the in-repo `tyra` binary
+    tyra.py           tyra binary (TYRA_BIN env or in-repo build)
     crystal.py        `crystal build`
-    v.py              `v run`
-    gleam.py          injects source into templates/gleam/
-    ruby.py           `ruby -c` for type/syntax, then `ruby` to exec
+    v.py              `v -o` build then exec
+    gleam.py          injects source into templates/gleam/ project
+    ruby.py           `ruby -c` syntax check, then `ruby` to exec
     go.py             `go build` with isolated GOCACHE, then exec
   templates/gleam/    minimal Gleam project template
-  results/            JSON artifacts, one per (prompt, lang, gen) triple
+  results/            committed summary + JSON artifacts (run dirs gitignored)
 ```
+
+## Prerequisites
+
+Install language compilers:
+
+| Language | Install |
+|---|---|
+| Tyra | `cargo build -p tyra-cli` (in-repo), or set `TYRA_BIN=/path/to/tyra` |
+| Go | [go.dev/dl](https://go.dev/dl) |
+| Crystal | `brew install crystal` (macOS) / apt crystal |
+| V | [vlang.io](https://vlang.io) |
+| Gleam | `brew install gleam` (macOS) / [gleam.run](https://gleam.run) |
+| Ruby | System ruby or rbenv |
+
+Install Python dependencies:
+
+```bash
+cd bench/ai-gen
+pip install -r requirements.txt
+```
+
+Authenticate AI generators:
+
+```bash
+# claude CLI — one-time login
+claude /login
+
+# codex CLI — one-time auth
+codex auth
+```
+
+## Quick start
+
+```bash
+cd bench/ai-gen
+
+# Dry run — validate prompts, print the execution plan
+python3 harness.py --dry-run
+
+# Run all 100 prompts, all 6 languages, claude generator only, seed 1
+python3 harness.py --generators claude
+
+# Run a single language
+python3 harness.py --languages tyra --generators claude
+
+# Run with an installed tyra binary instead of in-repo build
+TYRA_BIN=~/.local/bin/tyra python3 harness.py --languages tyra --generators claude
+
+# Aggregate results into Markdown
+python3 report.py > results/SUMMARY.md
+```
+
+Flags:
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--languages` | all | Comma-list of languages to run |
+| `--generators` | all | `claude`, `codex`, or both |
+| `--prompts` | `prompts/*.yaml` | Glob for prompt files |
+| `--seed` / `--seeds` | 1 | Seed or seed range (`1,2,3` or `N`=1..N) |
+| `--dry-run` | off | Print plan without running |
+| `--inject-tyra-spec` | off | Append full spec to Tyra system prompt |
+| `--results-dir` | auto | Override the per-run output directory |
 
 ## Prompt schema
 
@@ -63,67 +127,65 @@ execution:
   timeout_seconds: 10
 ```
 
-Every language is given the same prose description. Prompts intentionally
-avoid language-specific type or syntax hints; the whole point is to
-measure how well each language's idioms align with what a frontier model
-spontaneously produces.
+Every language receives the identical prose description with no
+language-specific syntax hints. See [METHODOLOGY.md](METHODOLOGY.md)
+for the full neutrality policy.
 
-## Running
+## Evaluation pipeline
 
-```sh
-cd bench/ai-gen
-pip install -r requirements.txt
-# Both generators authenticate via the installed CLI's own config.
-# - claude: `claude /login` first if not already logged in
-# - codex:  `codex auth` first if not already logged in
-python3 harness.py --languages tyra,ruby --generators claude
-python3 report.py > results/SUMMARY.md
+1. **generate** — model returns a code string. Failure = API error,
+   refusal, or empty output.
+2. **compile** — runner compiles (or `ruby -c` for Ruby). Type errors
+   → `compile_fail`.
+3. **execute** — runner feeds `execution.stdin`, waits up to
+   `timeout_seconds`, captures stdout/stderr and exit code. `pass`
+   requires exit 0 + all `stdout_must_contain` markers present + no
+   `stdout_must_not_contain` string present.
+
+An earlier stage failing short-circuits the rest.
+
+## Reproducing published results
+
+Results committed to `results/SUMMARY.md` were produced from a
+specific tyra version and model config. To reproduce:
+
+```bash
+# 1. Build the same tyra version
+git checkout <tag>
+cargo build --release -p tyra-cli
+
+# 2. Run the sweep (or use TYRA_BIN for an installed binary)
+python3 bench/ai-gen/harness.py \
+  --generators claude \
+  --seeds 3
+
+# 3. Aggregate
+python3 bench/ai-gen/report.py > bench/ai-gen/results/SUMMARY.md
 ```
 
-Flags:
+The per-run directories (`results-run*/`) are gitignored. Only the
+aggregated `results/SUMMARY.md` is committed.
 
-- `--languages` — comma-list (default: all). Missing compilers are
-  skipped, not errored.
-- `--generators` — `claude`, `codex`, or both (default: both).
-- `--prompts` — glob (default: `prompts/*.yaml`).
-- `--dry-run` — load + validate prompts and print the plan.
+## Repo / site split
 
-## Evaluation stages
-
-1. **generate** — generator returns a code string. Failure = API error,
-   refusal, or empty output.
-2. **compile** — language runner compiles (or, for Ruby, runs
-   `ruby -c`). Type errors count as `compile_fail`.
-3. **execute** — runner feeds `execution.stdin` to the binary, waits
-   up to `timeout_seconds`, captures stdout/stderr and exit code.
-   `pass` requires exit 0 + all `stdout_must_contain` strings present
-   + no `stdout_must_not_contain` string present.
-
-Any earlier stage failing short-circuits the rest.
-
-## Why compile + exec, not functional correctness
-
-The harness does not verify answer correctness by equality — that would
-require 100 reference implementations × 6 languages. Instead, each
-prompt declares a few **markers** the output must include. This is a
-weaker signal than full correctness but a strictly stronger signal
-than "it compiled," and is uniform across languages with wildly
-different stdlibs. See `docs/strategy.md` §4.1 for how this feeds into
-the acquisition narrative.
+- **This repo** — benchmark code, prompts, raw methodology, and the
+  aggregated `results/SUMMARY.md`.
+- **tyra-lang/site** (separate repo, future) — the public-facing
+  comparison page that displays these numbers.
 
 ## Caveats
 
-- **Non-determinism** — frontier models are sampled. Every run produces
-  a different code string. The harness records raw code alongside the
-  pass/fail verdict so reruns can be diffed. Aggregates should average
-  over ≥3 runs for headline numbers.
-- **Codex CLI** — wraps whatever model the local Codex install is
-  configured to use. The harness records that model name in the result
-  for traceability; it does not force a specific model.
-- **Gleam** — single-file generation does not match Gleam's project
-  model. The runner writes the generated code into
-  `templates/gleam/src/main.gleam` before invoking `gleam run`.
-- **Tyra** — uses the in-repo debug binary at
-  `target/debug/tyra`. Run `cargo build -p tyra-cli` first.
-- **Costs** — 100 prompts × 6 languages × 2 generators × N seeds gets
-  expensive fast. Default `config.yaml` caps at seed=1; bump manually.
+- **Non-determinism** — frontier models are sampled; every run
+  produces different code. The harness stores the raw generated code
+  alongside the pass/fail verdict so reruns can be diffed.
+  Aggregate over ≥3 seeds for stable headline numbers.
+- **Codex CLI** — uses whatever model the local install is configured
+  for; the harness records that model name in each result JSON but
+  cannot force a specific model version.
+- **Gleam** — the runner wraps generated code in
+  `templates/gleam/src/aigen_bench.gleam`; single-file generation
+  does not match Gleam's native project structure, so results may be
+  pessimistic.
+- **Costs** — 100 prompts × 6 languages × N generators × N seeds adds
+  up quickly. Default `config.yaml` runs seed=1; bump `--seeds`
+  deliberately.

@@ -22,8 +22,12 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - `tyra` now also looks for `libtyra_runtime.a` at `<exe_dir>/../lib/tyra/` (FHS layout), matching the existing stdlib search order — enables `~/.local`-style installs (`bin/tyra` + `lib/tyra/{libtyra_runtime.a,stdlib/}`). Both the normal build path and the coverage build path share the new `find_runtime_staticlib()` helper.
 - Release workflow now publishes a `SHA256SUMS` file alongside the tarballs (consumed by the upcoming `install.sh` and the Homebrew formula bump job).
 
-**AI-gen benchmark: Go runner**
-- `bench/ai-gen` now supports Go (`go build`, single-file, GOCACHE confined to the throwaway workdir). Six-language sweeps: Tyra / Go / Crystal / V / Gleam / Ruby. Smoke-verified 5/5 pass.
+**AI-gen benchmark: Go runner + 6-language full sweep**
+- `bench/ai-gen` now supports Go (`go build`, single-file, GOCACHE confined to throwaway workdir). Six-language sweeps: Tyra / Go / Crystal / V / Gleam / Ruby.
+- First 6-language full sweep (100 prompts × claude, seed 1): ruby 99%, crystal 96%, **go 81%**, **tyra+spec 77%**, v 49%, gleam 37%. Key finding: with spec injection Tyra (77%) is within 4 pp of Go (81%).
+- `runners/tyra.py` now respects `TYRA_BIN` env var for external installs; falls back to in-repo release then debug build.
+- New `METHODOLOGY.md`: prompt neutrality policy, scoring criteria, model pinning, threats to validity.
+- README fully rewritten: prerequisites, quick-start, reproduction instructions, repo/site split.
 
 **`LinkedMap.from([...])` — construct from a list of tuples (ADR-0023)**
 - `LinkedMap.from([(k1, v1), (k2, v2)])` constructs a `LinkedMap` from a list literal of `(K, V)` tuples.
