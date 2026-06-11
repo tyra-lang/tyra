@@ -2,7 +2,7 @@
 
 A statically-typed, AI-friendly programming language for backend services, CLI tools, and business applications.
 
-> **v0.9.0 "Gentle Dream"** — inkwell-only LLVM backend (ADR-0018 Theme A complete), Hindley-Milner substitution threading (Theme B), `LinkedMap`/`LinkedSet` remove tombstone optimization (Theme D, key-absent O(1)), `Option<T>` string interpolation. G2 static-corpus harness fully green. Test counts: 100 codegen / 121 types / 116 runtime. [See known limitations](#known-limitations) before using in production.
+> **v0.10.0** — Tuple types with full destructuring (ADR-0022), `SortedMap`/`SortedSet` (ADR-0024), `LinkedMap.from`, E0314 interpolation diagnostic, source files renamed `.tyra` → `.ty` (ADR-0025), `curl|sh` installer. AI-gen 6-language sweep (seed 1): ruby 99%, crystal 96%, go 81%, tyra+spec 77%. [See known limitations](#known-limitations) before using in production.
 
 ---
 

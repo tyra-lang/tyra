@@ -2,7 +2,7 @@
 
 Tyra is a statically typed, Ruby-inspired language that compiles to native binaries via LLVM. It targets readable, type-safe, easy-to-distribute practical programs.
 
-> Version: v0.10.0-dev
+> Version: v0.10.0
 
 ## Links
 

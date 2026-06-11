@@ -2,7 +2,7 @@
 
 バックエンドサービス、CLI ツール、業務アプリケーションのための、AI フレンドリーな静的型付け言語。
 
-> **v0.8.0** — Hindley-Milner 型推論 (rank-1)、E0500 LLVM クラッシュ撲滅 (E9001 ICE ガード)、`LinkedMap<K,V>` / `LinkedSet<T>` (挿入順保持)、E0308 ヒューリスティック iv (ADT バリアント提案)、Windows MSVC ABI 実験的サポート。本番利用前に [既知の制限](#既知の制限) をご確認ください。
+> **v0.10.0** — タプル型と完全な分構束縛 (ADR-0022)、`SortedMap`/`SortedSet` (ADR-0024)、`LinkedMap.from`、E0314 補間診断、ソースファイル拡張子 `.tyra` → `.ty` (ADR-0025)、`curl|sh` インストーラ。AI 生成ベンチマーク 6言語スイープ (seed 1): ruby 99%、crystal 96%、go 81%、tyra+spec 77%。本番利用前に [既知の制限](#既知の制限) をご確認ください。
 
 ---
 

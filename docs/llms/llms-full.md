@@ -2182,7 +2182,7 @@ tyra --version
 brew install tyra-lang/tap/tyra
 ```
 
-> **Note:** The Homebrew tap is available from v0.10.0. On first use, run `brew tap tyra-lang/tap` if the above command does not resolve automatically.
+> **Note:** The Homebrew tap is published alongside the v0.10.0 release. On first use, run `brew tap tyra-lang/tap` if the above command does not resolve automatically.
 
 ## Build from Source
 

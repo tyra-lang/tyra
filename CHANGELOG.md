@@ -7,7 +7,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ---
 
-## [Unreleased] — v0.10.0
+## [0.10.0] — 2026-06-11
 
 ### Stable
 
@@ -16,7 +16,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - Resolves the v0.9.0 known limitation "`Option<Bool>` / `Option<data-type>` string interpolation: no compile-time diagnostic".
 - The checker now type-checks interpolation sub-expressions (previously skipped entirely); the displayable set lives in one place (`Ty::is_interp_displayable` / `Ty::option_interp_suffix` in `tyra-types`) shared by the checker gate and MIR lowering, with `debug_assert!` ICE backstops at both MIR interpolation sites.
 - Option-typed offenders get a dedicated help ("destructure the Option with `match` …").
-- spec §7.3 now defines the interpolatable-type set (ja + en); bad-corpus `E0314-interp-unsupported-type.tyra` added.
+- spec §7.3 now defines the interpolatable-type set (ja + en); bad-corpus `E0314-interp-unsupported-type.ty` added.
 
 **Distribution groundwork (strategy §13)**
 - `tyra` now also looks for `libtyra_runtime.a` at `<exe_dir>/../lib/tyra/` (FHS layout), matching the existing stdlib search order — enables `~/.local`-style installs (`bin/tyra` + `lib/tyra/{libtyra_runtime.a,stdlib/}`). Both the normal build path and the coverage build path share the new `find_runtime_staticlib()` helper.
@@ -34,7 +34,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - K/V types are inferred from the binding type annotation or from the `List<(K,V)>` argument type.
 - Desugars in MIR to `LinkedMap.new()` + sequential `insert` calls — no new runtime function.
 - Empty list `LinkedMap.from([])` is valid (requires a type annotation).
-- spec §11.1 (ja + en); corpus `bench/static-corpus/32-linked-map-from.tyra`.
+- spec §11.1 (ja + en); corpus `bench/static-corpus/32-linked-map-from.ty`.
 - Resolves the v0.9.0 known limitation "`LinkedMap.from` / map literal syntax: deferred to v0.10".
 
 **Tuple types — fixed-length product types with full destructuring (ADR-0022)**
@@ -46,7 +46,7 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - 1-tuples `(x)` are a syntax error (parsed as a parenthesized expression).
 - Direct field access (`.0`/`.1`) is not provided; use destructuring.
 - No new runtime functions — tuples desugar to synthetic `struct` defs in MIR (`StructInit`/`FieldGet`).
-- spec §11.5 (ja + en); corpus `bench/static-corpus/31-tuples.tyra`.
+- spec §11.5 (ja + en); corpus `bench/static-corpus/31-tuples.ty`.
 
 **Source file extension renamed `.tyra` → `.ty` (ADR-0025)**
 - All Tyra source files now use the `.ty` extension (v0.10.0 breaking change; pre-1.0 policy).
