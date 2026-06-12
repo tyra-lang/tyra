@@ -100,14 +100,24 @@ fn main() {
                     }
                 },
             };
-            let result = if release {
+            let outcome = if release {
                 tyra_driver::run_release(&path)
             } else {
                 tyra_driver::run(&path)
             };
-            if result.report.has_errors() {
-                eprint!("{}", result.report.render(&result.sources));
+            if outcome.compile.report.has_errors() {
+                eprint!(
+                    "{}",
+                    outcome.compile.report.render(&outcome.compile.sources)
+                );
                 process::exit(1);
+            }
+            // ADR-0029: propagate the program's own exit status (Err-main
+            // exits 1, sys.exit(n) is explicit) instead of flattening it.
+            if let Some(code) = outcome.program_exit
+                && code != 0
+            {
+                process::exit(code);
             }
         }
         "build" => {
@@ -2888,6 +2898,139 @@ mod tests {
         assert!(
             output.status.success(),
             "variable named `test` must still compile and run (contextual keyword regression):\nstderr={stderr:?}"
+        );
+    }
+
+    // --- ADR-0029: Err-returning main semantics ---
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn err_main_reports_to_stderr_and_exits_1() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("err_main.ty");
+        fs::write(
+            &path,
+            "fn main() -> Result<Unit, String>\n  Err(\"boom\")\nend\n",
+        )
+        .unwrap();
+
+        let output = std::process::Command::new(&tyra)
+            .args(["run", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(1), "Err main must exit 1");
+        assert!(
+            stderr.contains("error: boom"),
+            "stderr must carry the payload: {stderr:?}"
+        );
+        assert!(
+            !stderr.contains("E0501"),
+            "exit 1 is a normal outcome, not E0501: {stderr:?}"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn err_main_non_displayable_prints_type_name() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("err_main_adt.ty");
+        fs::write(
+            &path,
+            "type AppError =\n  | Timeout\n  | NotFound(name: String)\n\n\
+             fn main() -> Result<Unit, AppError>\n  Err(AppError.Timeout)\nend\n",
+        )
+        .unwrap();
+
+        let output = std::process::Command::new(&tyra)
+            .args(["run", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(
+            stderr.contains("error: main returned Err(AppError)"),
+            "non-displayable E renders as type name: {stderr:?}"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn ok_main_still_exits_0() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ok_main.ty");
+        fs::write(
+            &path,
+            "fn main() -> Result<Unit, String>\n  Ok(())\nend\n",
+        )
+        .unwrap();
+
+        let output = std::process::Command::new(&tyra)
+            .args(["run", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+        assert_eq!(output.status.code(), Some(0));
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn run_propagates_explicit_exit_code_without_e0501() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("exit3.ty");
+        fs::write(
+            &path,
+            "import core.sys\n\nfn main() -> Unit\n  sys.exit(3)\nend\n",
+        )
+        .unwrap();
+
+        let output = std::process::Command::new(&tyra)
+            .args(["run", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(3), "exit code must propagate");
+        assert!(
+            !stderr.contains("E0501"),
+            "explicit exit is not E0501: {stderr:?}"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn panic_is_still_e0501() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("panics.ty");
+        fs::write(&path, "fn main() -> Unit\n  panic(\"down\")\nend\n").unwrap();
+
+        let output = std::process::Command::new(&tyra)
+            .args(["run", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(
+            stderr.contains("E0501"),
+            "panic remains an E0501 abnormal termination: {stderr:?}"
         );
     }
 

@@ -256,6 +256,22 @@ fn compile_to_ir_impl(
         );
     }
 
+    // ADR-0029: rewrite `fn main() -> Result<Unit, E>` so an Err return is
+    // reported on stderr and exits 1. Runs after type checking (the checker
+    // validates the original main form) and before MIR lowering.
+    desugar_err_main(&mut ast, &mut sources, &mut report);
+    if report.has_errors() {
+        return (
+            CompileResult {
+                success: false,
+                report,
+                sources,
+                llvm_ir: None,
+            },
+            None,
+        );
+    }
+
     // MIR lowering
     let mir = tyra_mir::lower(&ast, &sources);
     for diag in mir.lower_errors.iter().cloned() {
@@ -453,6 +469,346 @@ fn runtime_staticlib_search_list() -> String {
 ///   (c) stdlib (`TYRA_STDLIB` env or walk-up for `stdlib/`)
 ///
 /// 0 candidates → E0200; 2+ candidates → E0217 E_IMPORT_AMBIGUOUS; 1 → use it.
+/// Minimal type-expression renderer for ADR-0029's type-name fallback
+/// (`error: main returned Err(<type name>)`).
+fn type_expr_display(te: &tyra_ast::TypeExpr) -> String {
+    use tyra_ast::TypeExprKind;
+    match &te.kind {
+        TypeExprKind::Named(n) => n.clone(),
+        TypeExprKind::Generic(n, args) => {
+            let inner = args
+                .iter()
+                .map(type_expr_display)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{n}<{inner}>")
+        }
+        _ => "?".to_string(),
+    }
+}
+
+/// ADR-0029: `fn main() -> Result<Unit, E>` returning `Err` must report to
+/// stderr and exit 1 (today it silently exits 0). The original main is
+/// renamed `__tyra_main_inner` and a synthesized wrapper becomes the entry
+/// point:
+///
+/// ```text
+/// fn main() -> Unit
+///   match __tyra_main_inner()
+///   when Ok(_)
+///     ()
+///   when Err(__tyra_err)
+///     eprintln("error: #{__tyra_err}")   # displayable E — full payload
+///     sys__exit(1)                       # codegen sentinel; no import needed
+///   end
+/// end
+/// ```
+///
+/// Non-displayable `E` (no Debug rendering exists yet — see ADR-0029
+/// implementation scope note) prints `error: main returned Err(<type name>)`
+/// instead. The wrapper is parsed from generated source so it flows through
+/// the normal lowering path. Must run AFTER type checking (the checker
+/// validates the user-visible main form; `sys__exit` and the rename are
+/// lowering-level concerns).
+fn desugar_err_main(
+    ast: &mut tyra_ast::SourceFile,
+    sources: &mut SourceMap,
+    report: &mut Report,
+) {
+    use tyra_ast::{Item, TypeExprKind};
+
+    let (err_te, is_async) = {
+        let Some(f) = ast.items.iter().find_map(|item| {
+            if let Item::FnDef(f) = item
+                && f.name == "main"
+            {
+                Some(f)
+            } else {
+                None
+            }
+        }) else {
+            return;
+        };
+        let Some(ret) = &f.return_type else { return };
+        let TypeExprKind::Generic(ret_name, ret_args) = &ret.kind else {
+            return;
+        };
+        if ret_name != "Result" || ret_args.len() != 2 {
+            return;
+        }
+        (ret_args[1].clone(), f.is_async)
+    };
+
+    // Displayable judged by the SAME boundary the checker uses
+    // (Ty::is_interp_displayable, cf. E0314/E0319) — not a syntactic
+    // re-approximation. Type aliases are deliberately NOT expanded here:
+    // the checker does not expand them either (an alias-typed value is
+    // not interpolable today), and the MIR interp lowering would trip its
+    // E0314-gate debug assert on an alias-typed payload. When checker-side
+    // alias resolution lands, switching this to the resolved type picks
+    // the improvement up automatically.
+    let err_ty = tyra_types::Ty::from_type_expr(&err_te);
+    let displayable = err_ty.is_interp_displayable();
+    let err_report = if displayable {
+        r##"eprintln("error: #{__tyra_err}")"##.to_string()
+    } else {
+        format!(
+            r##"eprintln("error: main returned Err({})")"##,
+            type_expr_display(&err_te)
+        )
+    };
+
+    // Rename the definition itself…
+    for item in &mut ast.items {
+        if let Item::FnDef(f) = item
+            && f.name == "main"
+        {
+            f.name = "__tyra_main_inner".into();
+            break;
+        }
+    }
+    // …then follow the rename through every free `main` reference in the file
+    // (self-recursion inside the old main body, or other functions calling
+    // `main()`); otherwise those references would silently retarget to the
+    // wrapper and re-enter the Err-reporting logic. Locally-bound names
+    // (`let main = ...`, params, pattern bindings) shadow the function and
+    // are left untouched.
+    rename_free_fn_refs(ast, "main", "__tyra_main_inner");
+
+    let call = if is_async {
+        "__tyra_main_inner().await"
+    } else {
+        "__tyra_main_inner()"
+    };
+    let async_kw = if is_async { "async " } else { "" };
+    let wrapper_src = format!(
+        "{async_kw}fn main() -> Unit
+  match {call}
+  when Ok(_)
+    ()
+  when Err(__tyra_err)
+    {err_report}
+    sys__exit(1)
+  end
+end
+"
+    );
+    let sid = sources.add("<err-main-wrapper>".into(), wrapper_src);
+    let wrapper_ast = tyra_parser::parse(sid, sources, report);
+    ast.items.extend(wrapper_ast.items);
+}
+
+
+/// Rewrite every FREE reference to function `target` into `replacement`
+/// across all function bodies, impl methods, and top-level statements.
+/// References shadowed by a local binding of the same name (let/mut/tuple
+/// bindings, fn/lambda params, for bindings, match pattern bindings) are
+/// left untouched. Used by ADR-0029's main rename.
+fn rename_free_fn_refs(ast: &mut tyra_ast::SourceFile, target: &str, replacement: &str) {
+    use std::collections::HashSet;
+    use tyra_ast::{ElseBranch, Expr, ExprKind, Item, Pattern, PatternKind, Stmt, StringPart};
+
+    struct Pass<'a> {
+        target: &'a str,
+        replacement: &'a str,
+    }
+
+    impl Pass<'_> {
+        fn collect_pattern_idents(p: &Pattern, out: &mut HashSet<String>) {
+            match &p.kind {
+                PatternKind::Ident(name) => {
+                    out.insert(name.clone());
+                }
+                PatternKind::Constructor(_, fields) => {
+                    for f in fields {
+                        Self::collect_pattern_idents(&f.pattern, out);
+                    }
+                }
+                PatternKind::Tuple(elems) => {
+                    for e in elems {
+                        Self::collect_pattern_idents(e, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        fn walk_stmts(&self, stmts: &mut [Stmt], bound: &mut HashSet<String>) {
+            for stmt in stmts.iter_mut() {
+                match stmt {
+                    Stmt::Let(l) => {
+                        self.walk_expr(&mut l.value, bound);
+                        bound.insert(l.name.clone());
+                    }
+                    Stmt::Mut(m) => {
+                        self.walk_expr(&mut m.value, bound);
+                        bound.insert(m.name.clone());
+                    }
+                    Stmt::TupleLet(l) => {
+                        self.walk_expr(&mut l.value, bound);
+                        for name in &l.bindings {
+                            bound.insert(name.clone());
+                        }
+                    }
+                    Stmt::Expr(e) => self.walk_expr(&mut e.expr, bound),
+                    Stmt::Return(r) => {
+                        if let Some(v) = &mut r.value {
+                            self.walk_expr(v, bound);
+                        }
+                    }
+                    Stmt::Defer(d) => self.walk_expr(&mut d.expr, bound),
+                    Stmt::Break(_) | Stmt::Continue(_) => {}
+                }
+            }
+        }
+
+        fn walk_expr(&self, e: &mut Expr, bound: &mut HashSet<String>) {
+            match &mut e.kind {
+                ExprKind::Ident(name) => {
+                    if name == self.target && !bound.contains(self.target) {
+                        *name = self.replacement.to_string();
+                    }
+                }
+                ExprKind::Call(callee, args) => {
+                    self.walk_expr(callee, bound);
+                    for a in args {
+                        self.walk_expr(&mut a.value, bound);
+                    }
+                }
+                ExprKind::TurbofishCall(callee, _, args) => {
+                    self.walk_expr(callee, bound);
+                    for a in args {
+                        self.walk_expr(&mut a.value, bound);
+                    }
+                }
+                ExprKind::FieldAccess(obj, _) => self.walk_expr(obj, bound),
+                ExprKind::BinaryOp(l, _, r) => {
+                    self.walk_expr(l, bound);
+                    self.walk_expr(r, bound);
+                }
+                ExprKind::UnaryOp(_, inner) => self.walk_expr(inner, bound),
+                ExprKind::Assign(l, r) => {
+                    self.walk_expr(l, bound);
+                    self.walk_expr(r, bound);
+                }
+                ExprKind::If(i) => {
+                    self.walk_expr(&mut i.condition, bound);
+                    let saved = bound.clone();
+                    self.walk_stmts(&mut i.then_body, bound);
+                    *bound = saved.clone();
+                    if let Some(eb) = &mut i.else_body {
+                        self.walk_else(eb, bound);
+                        *bound = saved;
+                    }
+                }
+                ExprKind::Match(m) => {
+                    self.walk_expr(&mut m.subject, bound);
+                    for arm in &mut m.arms {
+                        let mut arm_bound = bound.clone();
+                        Self::collect_pattern_idents(&arm.pattern, &mut arm_bound);
+                        self.walk_stmts(&mut arm.body, &mut arm_bound);
+                    }
+                }
+                ExprKind::While(w) => {
+                    self.walk_expr(&mut w.condition, bound);
+                    let saved = bound.clone();
+                    self.walk_stmts(&mut w.body, bound);
+                    *bound = saved;
+                }
+                ExprKind::For(f) => {
+                    self.walk_expr(&mut f.iter, bound);
+                    let mut body_bound = bound.clone();
+                    for name in f.bindings.idents() {
+                        body_bound.insert(name.clone());
+                    }
+                    self.walk_stmts(&mut f.body, &mut body_bound);
+                }
+                ExprKind::ListLit(items) => {
+                    for it in items {
+                        self.walk_expr(it, bound);
+                    }
+                }
+                ExprKind::MapLit(pairs) => {
+                    for (k, v) in pairs {
+                        self.walk_expr(k, bound);
+                        self.walk_expr(v, bound);
+                    }
+                }
+                ExprKind::StringInterp(parts) => {
+                    for p in parts {
+                        if let StringPart::Expr(inner) = p {
+                            self.walk_expr(inner, bound);
+                        }
+                    }
+                }
+                ExprKind::Index(obj, idx) => {
+                    self.walk_expr(obj, bound);
+                    self.walk_expr(idx, bound);
+                }
+                ExprKind::Propagate(inner) | ExprKind::Await(inner) | ExprKind::Spawn(inner) => {
+                    self.walk_expr(inner, bound);
+                }
+                ExprKind::Tuple(items) => {
+                    for it in items {
+                        self.walk_expr(it, bound);
+                    }
+                }
+                ExprKind::Lambda(lam) => {
+                    let mut lam_bound = bound.clone();
+                    for p in &lam.params {
+                        lam_bound.insert(p.name.clone());
+                    }
+                    self.walk_stmts(&mut lam.body, &mut lam_bound);
+                }
+                _ => {}
+            }
+        }
+
+        fn walk_else(&self, eb: &mut ElseBranch, bound: &mut HashSet<String>) {
+            match eb {
+                ElseBranch::Else(stmts) => self.walk_stmts(stmts, bound),
+                ElseBranch::ElseIf(i) => {
+                    self.walk_expr(&mut i.condition, bound);
+                    let saved = bound.clone();
+                    self.walk_stmts(&mut i.then_body, bound);
+                    *bound = saved.clone();
+                    if let Some(inner) = &mut i.else_body {
+                        self.walk_else(inner, bound);
+                        *bound = saved;
+                    }
+                }
+            }
+        }
+    }
+
+    let pass = Pass {
+        target,
+        replacement,
+    };
+    for item in &mut ast.items {
+        match item {
+            Item::FnDef(f) => {
+                let mut bound: HashSet<String> =
+                    f.params.iter().map(|p| p.name.clone()).collect();
+                pass.walk_stmts(&mut f.body, &mut bound);
+            }
+            Item::ImplDef(impl_def) => {
+                for method in &mut impl_def.methods {
+                    let mut bound: HashSet<String> =
+                        method.params.iter().map(|p| p.name.clone()).collect();
+                    bound.insert("self".to_string());
+                    pass.walk_stmts(&mut method.body, &mut bound);
+                }
+            }
+            Item::Stmt(stmt) => {
+                let mut bound = HashSet::new();
+                pass.walk_stmts(std::slice::from_mut(stmt), &mut bound);
+            }
+            _ => {}
+        }
+    }
+}
+
 fn resolve_imports(
     ast: &mut tyra_ast::SourceFile,
     main_dir: &Path,
@@ -2509,21 +2865,33 @@ pub fn run_and_capture_with_timeout(source_path: &Path, timeout_secs: u64) -> Ca
     }
 }
 
-pub fn run(source_path: &Path) -> CompileResult {
+/// Outcome of `tyra run` (ADR-0029): the compilation result plus the child
+/// process exit status when the program actually ran.
+pub struct ProgramRunResult {
+    pub compile: CompileResult,
+    /// `Some(code)` when the program ran to completion; `None` when it was
+    /// killed by a signal or could not be executed.
+    pub program_exit: Option<i32>,
+}
+
+pub fn run(source_path: &Path) -> ProgramRunResult {
     run_opts(source_path, false)
 }
 
-pub fn run_release(source_path: &Path) -> CompileResult {
+pub fn run_release(source_path: &Path) -> ProgramRunResult {
     run_opts(source_path, true)
 }
 
-fn run_opts(source_path: &Path, release: bool) -> CompileResult {
+fn run_opts(source_path: &Path, release: bool) -> ProgramRunResult {
     let tmp_dir = std::env::temp_dir();
     let binary_path = tmp_dir.join(format!("tyra_run_{}", std::process::id()));
 
     let result = compile_to_binary_opts(source_path, &binary_path, release, false);
     if !result.success {
-        return result;
+        return ProgramRunResult {
+            compile: result,
+            program_exit: None,
+        };
     }
 
     // Execute the compiled binary
@@ -2534,23 +2902,52 @@ fn run_opts(source_path: &Path, release: bool) -> CompileResult {
 
     match run_result {
         Ok(status) => {
-            if !status.success() {
-                let mut report = result.report;
-                report.add(
-                    tyra_diagnostics::Diagnostic::error(format!(
-                        "program exited with status {}",
-                        status.code().unwrap_or(-1)
-                    ))
-                    .with_code("E0501"),
-                );
-                return CompileResult {
-                    success: false,
-                    report,
-                    sources: result.sources,
-                    llvm_ir: result.llvm_ir,
-                };
+            match status.code() {
+                // ADR-0029: a nonzero exit code is a normal program outcome
+                // (Err-returning main exits 1; sys.exit(n) is explicit).
+                // E0501 is reserved for abnormal termination: panic (101)
+                // and signal kills (no exit code).
+                Some(101) => {
+                    let mut report = result.report;
+                    report.add(
+                        tyra_diagnostics::Diagnostic::error(
+                            "program exited with status 101".to_string(),
+                        )
+                        .with_code("E0501"),
+                    );
+                    ProgramRunResult {
+                        compile: CompileResult {
+                            success: false,
+                            report,
+                            sources: result.sources,
+                            llvm_ir: result.llvm_ir,
+                        },
+                        program_exit: Some(101),
+                    }
+                }
+                Some(code) => ProgramRunResult {
+                    compile: result,
+                    program_exit: Some(code),
+                },
+                None => {
+                    let mut report = result.report;
+                    report.add(
+                        tyra_diagnostics::Diagnostic::error(
+                            "program terminated by signal".to_string(),
+                        )
+                        .with_code("E0501"),
+                    );
+                    ProgramRunResult {
+                        compile: CompileResult {
+                            success: false,
+                            report,
+                            sources: result.sources,
+                            llvm_ir: result.llvm_ir,
+                        },
+                        program_exit: None,
+                    }
+                }
             }
-            result
         }
         Err(e) => {
             let mut report = result.report;
@@ -2558,11 +2955,14 @@ fn run_opts(source_path: &Path, release: bool) -> CompileResult {
                 tyra_diagnostics::Diagnostic::error(format!("cannot execute binary: {e}"))
                     .with_code("E0501"),
             );
-            CompileResult {
-                success: false,
-                report,
-                sources: result.sources,
-                llvm_ir: result.llvm_ir,
+            ProgramRunResult {
+                compile: CompileResult {
+                    success: false,
+                    report,
+                    sources: result.sources,
+                    llvm_ir: result.llvm_ir,
+                },
+                program_exit: None,
             }
         }
     }

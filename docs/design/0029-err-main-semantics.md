@@ -81,6 +81,46 @@ report renders as:
 Exit status 1 applies in all cases. The spec text for 0.11 documents this
 two-tier rendering explicitly.
 
+### As landed (2026-06-12)
+
+- **Mechanism**: the driver desugars `fn main() -> Result<Unit, E>` after
+  type checking — the original main is renamed `__tyra_main_inner` and a
+  synthesized wrapper (parsed from generated source) matches the result,
+  reports via `eprintln`, and calls the `sys__exit` codegen sentinel
+  (registered unconditionally in MIR lowering). Sync and async main both
+  covered; `defer` blocks run at inner-scope exit, before the report.
+- **Pre-existing bug found and fixed**: `eprint`/`eprintln` wrote to
+  **stdout** — they lowered to the same printf/puts path as `print`. MIR
+  now normalizes the eprint argument to a single String (interpolation
+  formatting reused for scalars) and codegen routes it to new runtime
+  stderr writers `tyra_eprint_str` / `tyra_eprintln_str`.
+- **`tyra run` exit codes**: `run`/`run_release` now return
+  `ProgramRunResult { compile, program_exit }`; the CLI propagates the
+  child's exit code. E0501 fires only for status 101 (panic), signal
+  kills, and spawn failures — exactly the table above.
+- Verified by 5 CLI integration tests (`err_main_*`, `ok_main_*`,
+  `run_propagates_*`, `panic_is_still_e0501`) plus the full corpus.
+
+### Review fixes (2026-06-12, second pass)
+
+- **Free `main` references follow the rename**: `rename_free_fn_refs`
+  rewrites every free reference to `main` across all fn bodies, impl
+  methods, and top-level statements (self-recursion included), respecting
+  local shadows (let/mut/tuple/for/lambda params/pattern bindings).
+- **Displayability uses the checker's own boundary**:
+  `tyra_types::Ty::from_type_expr(E).is_interp_displayable()` — no
+  syntactic re-approximation. Empirically on HEAD this boundary excludes
+  `Option<Bool>` (E0314 rejects it in user code too) and type aliases
+  (the checker performs no alias expansion anywhere — alias-typed scalar
+  bindings already fail E0308). Both therefore take the type-name
+  fallback, consistently with what user-written interpolation would do.
+- **Pre-existing payload bugs surfaced while testing** (independent of
+  this ADR — the inner `Err(...)` construction itself miscompiles):
+  `Result<Unit, MyErr>` with `type MyErr = String` emits mismatched
+  struct names (`Result__Unit__MyErr` vs `Result__Unit__String`), and
+  `Result<Unit, (Int, String)>` trips a `Tuple2__`/`Tuple__` struct-name
+  inconsistency. Recorded as follow-ups alongside the known alias gaps.
+
 ## Consequences
 
 - Shell scripts, CI, and agents finally observe failure: `tyra run prog.ty

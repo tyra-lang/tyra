@@ -151,6 +151,12 @@ pub fn lower(file: &SourceFile, sources: &tyra_diagnostics::SourceMap) -> Progra
         .insert("__bench_clock_ns".into(), Ty::Int);
     ctx.fn_param_types.insert("__bench_clock_ns".into(), vec![]);
 
+    // ADR-0029: the driver-synthesized Err-main wrapper calls `sys__exit(1)`
+    // directly (codegen sentinel). Register it unconditionally — like the
+    // fs intrinsics below — so the wrapper works without `import core.sys`.
+    ctx.fn_return_types.insert("sys__exit".into(), Ty::Never);
+    ctx.fn_param_types.insert("sys__exit".into(), vec![Ty::Int]);
+
     // M10 phase 1: fs stdlib intrinsics. Registered unconditionally so that
     // `stdlib/fs.ty` can call them without an `import` (no circularity).
     ctx.fn_return_types
