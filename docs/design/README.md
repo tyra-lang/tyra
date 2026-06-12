@@ -77,3 +77,12 @@ ADRs are numbered sequentially: `0001`, `0002`, etc. Numbers are never reused. I
 | [0016](0016-persistent-collections.md) | Persistent collections — HAMT-based `Map<K,V>` and `Set<T>` (v0.7) | Accepted | 2026-05-27 |
 | [0017](0017-diagnostic-quality.md) | Diagnostic quality for type-mismatch errors E0308 (v0.7) | Accepted | 2026-05-27 |
 | [0018](0018-inkwell-migration.md) | Inkwell migration for type-safe LLVM IR generation (v0.7) | Accepted | 2026-05-27 |
+| [0019](0019-linked-collections.md) | Insertion-ordered collections — `LinkedMap<K,V>` and `LinkedSet<T>` (v0.8) | Accepted | 2026-06-09 |
+| [0020](0020-hm-inference.md) | Hindley-Milner type inference, rank-1 (v0.8) | Accepted | 2026-05-30 |
+| [0021](0021-windows-support.md) | Windows (x64-MSVC) support (v0.8) | Accepted | 2026-06-09 |
+| 0022–0024 | (gap — referenced by README/strategy for tuples / sorted collections but files were never committed; to be backfilled or re-pointed) | — | — |
+| [0025](0025-source-file-extension.md) | Source file extension `.tyra` → `.ty` (v0.10) | Accepted | 2026-06-10 |
+| [0026](0026-machine-readable-diagnostics.md) | Machine-readable diagnostics — `--error-format json` (v0.11) | Accepted | 2026-06-12 |
+| [0027](0027-string-char-api.md) | Character-level string API (USV) and list sorting (v0.11) | Accepted | 2026-06-12 |
+| [0028](0028-checker-module-signatures.md) | Type-checking imported module function calls (v0.11) | Accepted | 2026-06-12 |
+| [0029](0029-err-main-semantics.md) | Runtime semantics of Err-returning `main` (v0.11) | Accepted | 2026-06-12 |
