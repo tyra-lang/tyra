@@ -232,6 +232,29 @@ impl<'ctx> CodeGen<'ctx> {
     fn emit_print(&mut self, dest: &Option<String>, fname: &str, args: &[Operand]) {
         let is_println = fname == "println" || fname == "eprintln";
 
+        // ADR-0029 fix: eprint family targets stderr. MIR lowering has
+        // normalized the argument to a single String (or none), so this
+        // reduces to one runtime call. NULL means "no text".
+        if fname == "eprint" || fname == "eprintln" {
+            let helper = if is_println {
+                "tyra_eprintln_str"
+            } else {
+                "tyra_eprint_str"
+            };
+            let f = self.module.get_function(helper).unwrap();
+            let arg: BasicMetadataValueEnum<'ctx> = match args.first() {
+                Some(a) => self.operand(a).into(),
+                None => self
+                    .ctx
+                    .ptr_type(inkwell::AddressSpace::default())
+                    .const_null()
+                    .into(),
+            };
+            let cs = self.builder.build_call(f, &[arg], "").unwrap();
+            self.store_print_result(dest, cs);
+            return;
+        }
+
         // Empty args: `println()` prints a blank line (legacy `puts(@.fmt.str)`);
         // `print()` is a no-op.
         if args.is_empty() {

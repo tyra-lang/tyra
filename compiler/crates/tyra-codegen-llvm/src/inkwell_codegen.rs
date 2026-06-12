@@ -509,6 +509,11 @@ impl<'ctx> CodeGen<'ctx> {
             ("tyra_sorted_set_for_each", V, &[P, P, P], false),
             ("abort", V, &[], false),
             ("exit", V, &[I32], false),
+            // ADR-0029 fix: eprint family writes to stderr via runtime
+            // helpers (printf/puts always target stdout). NULL arg means
+            // "no text" (eprintln() prints just the newline).
+            ("tyra_eprint_str", V, &[P], false),
+            ("tyra_eprintln_str", V, &[P], false),
             ("strcmp", I32, &[P, P], false),
             ("__bench_clock_ns", I64, &[], false),
             ("strtoll", I64, &[P, P, I32], false),

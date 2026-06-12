@@ -86,3 +86,38 @@ pub extern "C" fn tyra_io_read_to_end() -> *const c_char {
 pub extern "C" fn tyra_io_eof() -> c_int {
     IO_EOF.with(|e| e.get())
 }
+
+/// ADR-0029: stderr writer backing `eprint`. `printf`/`puts` in generated
+/// code always target stdout; the eprint family routes here instead.
+/// A NULL pointer means "no text" (used by `eprintln()` for a bare newline).
+///
+/// # Safety
+/// `s` must be NULL or a valid NUL-terminated UTF-8 string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_eprint_str(s: *const c_char) {
+    use std::io::Write;
+    if s.is_null() {
+        return;
+    }
+    let bytes = unsafe { std::ffi::CStr::from_ptr(s) }.to_bytes();
+    let mut err = io::stderr().lock();
+    let _ = err.write_all(bytes);
+    let _ = err.flush();
+}
+
+/// ADR-0029: stderr writer backing `eprintln` — like [`tyra_eprint_str`]
+/// plus a trailing newline. NULL prints just the newline.
+///
+/// # Safety
+/// `s` must be NULL or a valid NUL-terminated UTF-8 string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_eprintln_str(s: *const c_char) {
+    use std::io::Write;
+    let mut err = io::stderr().lock();
+    if !s.is_null() {
+        let bytes = unsafe { std::ffi::CStr::from_ptr(s) }.to_bytes();
+        let _ = err.write_all(bytes);
+    }
+    let _ = err.write_all(b"\n");
+    let _ = err.flush();
+}

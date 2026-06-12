@@ -2288,10 +2288,73 @@ impl super::LowerCtx<'_> {
             }
         }
 
-        // Special case: print/println/eprint/eprintln with StringInterp argument.
+        // ADR-0029 fix: eprint/eprintln must write to stderr, but the
+        // printf/puts lowering below targets stdout. Normalize the argument
+        // to a single String — interpolation and string expressions lower
+        // directly; scalars format through StringFormat with the same
+        // specifiers interpolation uses (%g / %ld) — then call the
+        // "eprint"/"eprintln" builtins, which codegen routes to the
+        // tyra_eprint(ln)_str runtime stderr writers.
+        if let ExprKind::Ident(fname) = &callee.kind
+            && matches!(fname.as_str(), "eprint" | "eprintln")
+            && args.len() <= 1
+        {
+            let func = fname.clone();
+            let sval: Option<String> = if args.is_empty() {
+                None
+            } else {
+                let arg_expr = &args[0].value;
+                let is_stringy = matches!(&arg_expr.kind, ExprKind::StringInterp(_))
+                    || self.is_string_expr(arg_expr);
+                if is_stringy {
+                    Some(self.lower_expr(arg_expr, body))
+                } else {
+                    let is_float = self.is_float_expr(arg_expr);
+                    let val = self.lower_expr(arg_expr, body);
+                    let fmt = if is_float { "%g" } else { "%ld" };
+                    let format_ref = self.intern_string(fmt);
+                    let dest = self.fresh_temp();
+                    self.emit(
+                        body,
+                        Instruction::StringFormat {
+                            dest: dest.clone(),
+                            format_ref,
+                            args: vec![Operand::Var(val)],
+                        },
+                    );
+                    Some(dest)
+                }
+            };
+            let call_args = match sval {
+                Some(s) => {
+                    self.string_vars.insert(s.clone());
+                    vec![Operand::Var(s)]
+                }
+                None => vec![],
+            };
+            self.emit(
+                body,
+                Instruction::Call {
+                    dest: None,
+                    func,
+                    args: call_args,
+                },
+            );
+            let dest = self.fresh_temp();
+            self.emit(
+                body,
+                Instruction::Const {
+                    dest: dest.clone(),
+                    value: Constant::Unit,
+                },
+            );
+            return dest;
+        }
+
+        // Special case: print/println with StringInterp argument.
         // Emit separate print calls for each segment.
         if let ExprKind::Ident(fname) = &callee.kind
-            && matches!(fname.as_str(), "print" | "println" | "eprint" | "eprintln")
+            && matches!(fname.as_str(), "print" | "println")
             && args.len() == 1
             && let ExprKind::StringInterp(parts) = &args[0].value.kind
         {
