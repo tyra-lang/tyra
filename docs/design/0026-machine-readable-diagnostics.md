@@ -69,6 +69,29 @@ argument parsing; anything that prints before argument parsing completes
 (e.g. clap usage errors) must also be wrapped — clap errors are caught and
 re-emitted as `{"type":"error","kind":"usage"}`.
 
+## Implementation note (2026-06-12, as landed)
+
+- NDJSON rendering lives in `tyra-diagnostics::json` (hand-rolled
+  serialization, no serde — the crate is foundational). `Report::render_json`
+  emits diagnostics + the summary record; `json_error_record` /
+  `json_summary_record` are public for CLI-level failures.
+- The `diagnostic` record gained a `notes` array (string list) beyond the
+  ADR sketch — part of the append-only schema from day one.
+- The CLI does not use clap; `tyra check`/`tyra build` hand-parse args. JSON
+  mode is detected by a **pre-scan** of the raw args before any validation
+  (`wants_json_errors`), so a usage error on a flag that precedes
+  `--error-format json` still emits NDJSON. All failure paths route through
+  `fail_cli` (error record + summary, exit 1).
+- `--error-format text` is accepted as the explicit default. The summary
+  record is emitted on success too (`errors:0`), as decided.
+- The global panic hook is JSON-aware (review fix): when json mode is
+  active (`JSON_ERRORS_ACTIVE`), an ICE emits
+  `{"type":"error","kind":"internal",…}` + summary instead of text. A
+  hidden `TYRA_TEST_ICE` env hook makes the path deterministically
+  testable.
+- Verified by 5 CLI integration tests (`json_errors_*`), including stderr
+  purity assertions on file-not-found, usage-error, and ICE paths.
+
 ## Consequences
 
 - Agents and editors get a stable, parseable interface; the self-correction

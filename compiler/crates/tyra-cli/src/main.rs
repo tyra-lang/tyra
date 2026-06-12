@@ -32,11 +32,67 @@ static RUN_COUNTER: AtomicUsize = AtomicUsize::new(0);
 // The rlib is not used from Rust-side code.
 use tyra_runtime as _;
 
+
+/// ADR-0026: scan raw subcommand args for `--error-format json` BEFORE any
+/// other validation, so even usage errors honour the NDJSON contract.
+fn wants_json_errors(raw: &[String]) -> bool {
+    let mut json = false;
+    let mut i = 0;
+    while i < raw.len() {
+        if raw[i] == "--error-format" {
+            if let Some(v) = raw.get(i + 1) {
+                json = v == "json";
+            }
+            i += 2;
+            continue;
+        }
+        if let Some(v) = raw[i].strip_prefix("--error-format=") {
+            json = v == "json";
+        }
+        i += 1;
+    }
+    json
+}
+
+/// ADR-0026: report a non-diagnostic CLI failure and exit 1. In json mode
+/// stderr stays NDJSON-only; the summary record terminates the stream.
+fn fail_cli(json: bool, kind: &str, msg: &str, usage: Option<&str>) -> ! {
+    if json {
+        eprintln!("{}", tyra_diagnostics::json_error_record(kind, msg));
+        eprintln!("{}", tyra_diagnostics::json_summary_record(1, 0));
+    } else {
+        eprintln!("error: {msg}");
+        if let Some(u) = usage {
+            eprintln!("usage: {u}");
+        }
+    }
+    process::exit(1);
+}
+
+/// ADR-0026: validate an `--error-format` value.
+fn check_error_format_value(json: bool, v: &str, usage: &str) {
+    if v != "json" && v != "text" {
+        fail_cli(
+            json,
+            "usage",
+            &format!("`--error-format` must be `json` or `text`, got `{v}`"),
+            Some(usage),
+        );
+    }
+}
+
+/// ADR-0026: set while `--error-format json` is active so the panic hook
+/// (internal-error path) keeps stderr NDJSON-pure too.
+static JSON_ERRORS_ACTIVE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 fn main() {
     // Catch MIR panics (e.g. E0204 unknown module function) and present them
     // as a clean diagnostic rather than the default "thread 'main' panicked"
     // backtrace dump. Strips the location-prefix that `panic!` prepends so a
-    // user sees the canonical "error[E0xxx]: ..." line.
+    // user sees the canonical "error[E0xxx]: ..." line. With
+    // `--error-format json` the same path emits an NDJSON `internal` error
+    // record + summary instead (ADR-0026 stream purity covers ICEs too).
     std::panic::set_hook(Box::new(|info| {
         let msg = info
             .payload()
@@ -44,6 +100,14 @@ fn main() {
             .map(|s| s.to_string())
             .or_else(|| info.payload().downcast_ref::<String>().cloned())
             .unwrap_or_else(|| "internal compiler error".to_string());
+        if JSON_ERRORS_ACTIVE.load(std::sync::atomic::Ordering::Relaxed) {
+            eprintln!(
+                "{}",
+                tyra_diagnostics::json_error_record("internal", &msg)
+            );
+            eprintln!("{}", tyra_diagnostics::json_summary_record(1, 0));
+            return;
+        }
         if let Some(rest) = msg.strip_prefix("[E")
             && let Some(close) = rest.find(']')
         {
@@ -121,40 +185,70 @@ fn main() {
             }
         }
         "build" => {
+            const USAGE: &str =
+                "tyra build [--release] [--static] [--error-format json|text] [<file.ty>] [-o <out>]";
             let mut release = false;
             let mut static_link = false;
             let mut file_arg: Option<String> = None;
             let mut output_arg: Option<String> = None;
-            let mut rest_iter = args[2..].iter().peekable();
+            let raw: Vec<String> = args[2..].to_vec();
+            // ADR-0026: detect json mode before validating anything else so
+            // that even usage errors keep stderr NDJSON-pure.
+            let json_errors = wants_json_errors(&raw);
+            JSON_ERRORS_ACTIVE.store(json_errors, std::sync::atomic::Ordering::Relaxed);
+            // Deterministic ICE-path test hook (used by the
+            // json_errors_internal_panic_is_ndjson integration test).
+            if json_errors && std::env::var_os("TYRA_TEST_ICE").is_some() {
+                panic!("simulated internal compiler error (TYRA_TEST_ICE)");
+            }
+            let mut rest_iter = raw.iter().peekable();
             while let Some(arg) = rest_iter.next() {
                 match arg.as_str() {
                     "--release" => release = true,
                     "--static" => static_link = true,
+                    "--error-format" => {
+                        let v = rest_iter.next().map(String::as_str).unwrap_or("");
+                        check_error_format_value(json_errors, v, USAGE);
+                    }
+                    a if a.starts_with("--error-format=") => {
+                        let v = a.strip_prefix("--error-format=").unwrap_or("");
+                        check_error_format_value(json_errors, v, USAGE);
+                    }
                     "-o" => {
                         let val = rest_iter.next().cloned().unwrap_or_else(|| {
-                            eprintln!("error: `-o` requires an output path");
-                            process::exit(1);
+                            fail_cli(
+                                json_errors,
+                                "usage",
+                                "`-o` requires an output path",
+                                Some(USAGE),
+                            );
                         });
                         if val.starts_with("--") {
-                            eprintln!("error: `-o` requires an output path, got flag `{val}`");
-                            eprintln!(
-                                "usage: tyra build [--release] [--static] [<file.ty>] [-o <out>]"
+                            fail_cli(
+                                json_errors,
+                                "usage",
+                                &format!("`-o` requires an output path, got flag `{val}`"),
+                                Some(USAGE),
                             );
-                            process::exit(1);
                         }
                         output_arg = Some(val);
                     }
                     a if a.starts_with("--") => {
-                        eprintln!("error: unknown flag `{a}`");
-                        eprintln!(
-                            "usage: tyra build [--release] [--static] [<file.ty>] [-o <out>]"
+                        fail_cli(
+                            json_errors,
+                            "usage",
+                            &format!("unknown flag `{a}`"),
+                            Some(USAGE),
                         );
-                        process::exit(1);
                     }
                     a => {
                         if file_arg.is_some() {
-                            eprintln!("error: unexpected argument `{a}`");
-                            process::exit(1);
+                            fail_cli(
+                                json_errors,
+                                "usage",
+                                &format!("unexpected argument `{a}`"),
+                                Some(USAGE),
+                            );
                         }
                         file_arg = Some(a.to_string());
                     }
@@ -169,10 +263,7 @@ fn main() {
                         let name = entry.file_stem().unwrap_or_default().to_os_string();
                         (entry, Some(root.join(name)))
                     }
-                    Err(e) => {
-                        eprintln!("error: {e}");
-                        process::exit(1);
-                    }
+                    Err(e) => fail_cli(json_errors, "project", &format!("{e}"), None),
                 },
             };
             let output_path = match output_arg {
@@ -182,15 +273,19 @@ fn main() {
             if static_link && !is_musl_host() {
                 let triple = clang_target_triple()
                     .unwrap_or_else(|| "unknown (clang not found)".to_string());
-                eprintln!("error: --static is only supported on musl Linux (Alpine or similar).");
-                eprintln!("       detected clang target: {triple}");
-                eprintln!("       glibc static linking is known to break getaddrinfo and NSS.");
-                eprintln!(
-                    "       recommended environment: Alpine Linux (apk add gc-dev clang llvm musl-dev)"
+                fail_cli(
+                    json_errors,
+                    "unsupported-target",
+                    &format!(
+                        "--static is only supported on musl Linux (Alpine or similar).\n\
+                         detected clang target: {triple}\n\
+                         glibc static linking is known to break getaddrinfo and NSS.\n\
+                         recommended environment: Alpine Linux (apk add gc-dev clang llvm musl-dev)\n\
+                         Build with the musl-compiled tyra binary (e.g. on Alpine) to\n\
+                         produce a static output. See README § Platform support."
+                    ),
+                    None,
                 );
-                eprintln!("       Build with the musl-compiled tyra binary (e.g. on Alpine) to");
-                eprintln!("       produce a static output. See README § Platform support.");
-                process::exit(1);
             }
             let result = match (static_link, release) {
                 (true, true) => {
@@ -200,7 +295,12 @@ fn main() {
                 (false, true) => tyra_driver::compile_to_binary_release(&source_path, &output_path),
                 (false, false) => tyra_driver::compile_to_binary(&source_path, &output_path),
             };
-            if result.report.has_errors() {
+            if json_errors {
+                eprint!("{}", result.report.render_json(&result.sources));
+                if result.report.has_errors() {
+                    process::exit(1);
+                }
+            } else if result.report.has_errors() {
                 eprint!("{}", result.report.render(&result.sources));
                 process::exit(1);
             }
@@ -213,40 +313,67 @@ fn main() {
             println!("compiled to {}{mode}", output_path.display());
         }
         "check" => {
-            let mut file_arg: Option<&str> = None;
-            for arg in &args[2..] {
-                match arg.as_str() {
-                    a if a.starts_with("--") => {
-                        eprintln!("error: unknown flag `{a}`");
-                        eprintln!("usage: tyra check [<file.ty>]");
-                        process::exit(1);
-                    }
-                    a => {
-                        if file_arg.is_some() {
-                            eprintln!("error: unexpected argument `{a}`");
-                            process::exit(1);
-                        }
-                        file_arg = Some(a);
-                    }
+            const USAGE: &str = "tyra check [--error-format json|text] [<file.ty>]";
+            let raw: Vec<String> = args[2..].to_vec();
+            // ADR-0026: detect json mode before validating anything else so
+            // that even usage errors keep stderr NDJSON-pure.
+            let json_errors = wants_json_errors(&raw);
+            JSON_ERRORS_ACTIVE.store(json_errors, std::sync::atomic::Ordering::Relaxed);
+            // Deterministic ICE-path test hook (used by the
+            // json_errors_internal_panic_is_ndjson integration test).
+            if json_errors && std::env::var_os("TYRA_TEST_ICE").is_some() {
+                panic!("simulated internal compiler error (TYRA_TEST_ICE)");
+            }
+            let mut file_arg: Option<String> = None;
+            let mut i = 0;
+            while i < raw.len() {
+                let a = raw[i].as_str();
+                if a == "--error-format" {
+                    let v = raw.get(i + 1).map(String::as_str).unwrap_or("");
+                    check_error_format_value(json_errors, v, USAGE);
+                    i += 2;
+                    continue;
                 }
+                if let Some(v) = a.strip_prefix("--error-format=") {
+                    check_error_format_value(json_errors, v, USAGE);
+                    i += 1;
+                    continue;
+                }
+                if a.starts_with("--") {
+                    fail_cli(
+                        json_errors,
+                        "usage",
+                        &format!("unknown flag `{a}`"),
+                        Some(USAGE),
+                    );
+                }
+                if file_arg.is_some() {
+                    fail_cli(
+                        json_errors,
+                        "usage",
+                        &format!("unexpected argument `{a}`"),
+                        Some(USAGE),
+                    );
+                }
+                file_arg = Some(a.to_string());
+                i += 1;
             }
             let path_buf = match file_arg {
-                Some(f) => PathBuf::from(f),
+                Some(ref f) => PathBuf::from(f),
                 None => match project_entry_point() {
                     Ok(p) => p,
-                    Err(e) => {
-                        eprintln!("error: {e}");
-                        process::exit(1);
-                    }
+                    Err(e) => fail_cli(json_errors, "project", &format!("{e}"), None),
                 },
             };
             let path = path_buf.as_path();
             let source = match std::fs::read_to_string(path) {
                 Ok(s) => s,
-                Err(e) => {
-                    eprintln!("error: cannot read {}: {e}", path.display());
-                    process::exit(1);
-                }
+                Err(e) => fail_cli(
+                    json_errors,
+                    "file-not-found",
+                    &format!("cannot read {}: {e}", path.display()),
+                    None,
+                ),
             };
             // Full display path (not bare basename) is intentional: diagnostics
             // printed by `tyra check` appear in CI/script output where the path
@@ -264,7 +391,15 @@ fn main() {
             let tyra_driver::CheckResult {
                 report, sources, ..
             } = tyra_driver::check_in_memory(file_name, source, workspace_dir);
-            if report.has_errors() {
+            if json_errors {
+                // ADR-0026: NDJSON diagnostics + terminating summary record,
+                // emitted on success too (errors=0) so consumers can detect
+                // normal termination.
+                eprint!("{}", report.render_json(&sources));
+                if report.has_errors() {
+                    process::exit(1);
+                }
+            } else if report.has_errors() {
                 eprint!("{}", report.render(&sources));
                 process::exit(1);
             }
@@ -2898,6 +3033,152 @@ mod tests {
         assert!(
             output.status.success(),
             "variable named `test` must still compile and run (contextual keyword regression):\nstderr={stderr:?}"
+        );
+    }
+
+    // --- ADR-0026: --error-format json (NDJSON, stderr purity) ---
+
+    fn assert_ndjson_pure(stderr: &str) {
+        assert!(!stderr.is_empty(), "expected NDJSON output");
+        for line in stderr.trim_end().lines() {
+            assert!(
+                line.starts_with("{\"type\":\""),
+                "stderr line is not an NDJSON record: {line:?}"
+            );
+            assert!(line.ends_with('}'), "truncated record: {line:?}");
+        }
+        let last = stderr.trim_end().lines().last().unwrap();
+        assert!(
+            last.starts_with("{\"type\":\"summary\""),
+            "last line must be the summary record: {last:?}"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn json_errors_diagnostics_are_ndjson() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bad.ty");
+        fs::write(
+            &path,
+            "fn main() -> Unit\n  let x: Int = \"s\"\n  print(\"#{x}\")\nend\n",
+        )
+        .unwrap();
+        let output = std::process::Command::new(&tyra)
+            .args(["check", "--error-format", "json", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(1));
+        assert_ndjson_pure(&stderr);
+        assert!(stderr.contains("\"type\":\"diagnostic\""));
+        assert!(stderr.contains("\"code\":\"E0308\""), "stderr: {stderr}");
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn json_errors_success_emits_summary_only() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ok.ty");
+        fs::write(&path, "fn main() -> Unit\n  print(\"hi\")\nend\n").unwrap();
+        let output = std::process::Command::new(&tyra)
+            .args(["check", "--error-format=json", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(0));
+        assert_eq!(
+            stderr.trim_end(),
+            "{\"type\":\"summary\",\"errors\":0,\"warnings\":0}"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn json_errors_failure_paths_stay_ndjson_pure() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        // file not found
+        let output = std::process::Command::new(&tyra)
+            .args(["check", "--error-format", "json", "definitely_missing.ty"])
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(1));
+        assert_ndjson_pure(&stderr);
+        assert!(stderr.contains("\"kind\":\"file-not-found\""));
+
+        // unknown flag — json mode detected even though the bogus flag
+        // comes first (ADR-0026 stream purity on usage errors)
+        let output = std::process::Command::new(&tyra)
+            .args(["check", "--bogus", "--error-format", "json"])
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(1));
+        assert_ndjson_pure(&stderr);
+        assert!(stderr.contains("\"kind\":\"usage\""));
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn json_errors_build_renders_ndjson_diagnostics() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bad.ty");
+        fs::write(
+            &path,
+            "fn main() -> Unit\n  let x: Int = \"s\"\n  print(\"#{x}\")\nend\n",
+        )
+        .unwrap();
+        let out_bin = dir.path().join("out");
+        let output = std::process::Command::new(&tyra)
+            .args([
+                "build",
+                "--error-format",
+                "json",
+                path.to_str().unwrap(),
+                "-o",
+                out_bin.to_str().unwrap(),
+            ])
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(1));
+        assert_ndjson_pure(&stderr);
+        assert!(stderr.contains("\"type\":\"diagnostic\""));
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn json_errors_internal_panic_is_ndjson() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let output = std::process::Command::new(&tyra)
+            .args(["check", "--error-format", "json", "whatever.ty"])
+            .env("TYRA_TEST_ICE", "1")
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_ndjson_pure(&stderr);
+        assert!(
+            stderr.contains("\"kind\":\"internal\""),
+            "ICE must surface as an internal error record: {stderr}"
         );
     }
 

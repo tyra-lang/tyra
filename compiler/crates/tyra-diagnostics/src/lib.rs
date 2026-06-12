@@ -6,11 +6,13 @@
 // spec reference: AGENTS.md "Diagnostics" section
 
 mod diagnostic;
+mod json;
 mod report;
 mod source;
 mod span;
 
 pub use diagnostic::{Diagnostic, Label, Level};
+pub use json::{json_error_record, json_summary_record};
 pub use report::Report;
 pub use source::{SourceId, SourceMap};
 pub use span::Span;
