@@ -76,6 +76,18 @@ partially addressed:
   match bindings are covered). Constructor typing is a **follow-up** —
   same architecture gap as B1, larger surface (named args, generics).
 
+Follow-ups found during B2 (2026-06-12, all pre-existing):
+
+- **eprint/eprintln wrote to stdout** — fixed with B2 (runtime
+  `tyra_eprint(ln)_str` + MIR argument normalization).
+- **Type aliases are unusable for scalars**: `type MyErr = String` then
+  `let e: MyErr = "x"` fails E0308 (checker never expands aliases), and
+  `Result<Unit, MyErr>` miscompiles at codegen (struct name mismatch
+  `Result__Unit__MyErr` vs `Result__Unit__String`).
+- **Tuple payloads in Result miscompile**: `Err((404, "x"))` against
+  `Result<Unit, (Int, String)>` emits inconsistent struct names
+  (`Tuple2__Int__String` vs `Tuple__Int__String`) and fails E0500.
+
 B1 landed as the merge-model bridge (see ADR-0028 implementation note):
 module calls now resolve against the merged `m__f` symbols; new diagnostics
 E0318 (unknown module function) and corpus cases
