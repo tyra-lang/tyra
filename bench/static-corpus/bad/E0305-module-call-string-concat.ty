@@ -1,0 +1,11 @@
+# ADR-0028 regression: `String + <module call returning String>` must be
+# rejected by the checker (E0305), not crash codegen with an inkwell ICE.
+# Before ADR-0028 the module call was silently typed Ty::Error, which
+# suppressed the E0305 check entirely (ai-gen cases 053/100).
+import string
+
+fn main() -> Unit
+  mut result = ""
+  result = result + string.from_byte(65)
+  println(result)
+end

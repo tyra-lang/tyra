@@ -206,6 +206,18 @@ impl TypeEnv {
         None
     }
 
+    /// ADR-0028: true if at least one merged symbol of module `local_name`
+    /// exists in the global scope (`{local_name}__*`). resolve_imports merges
+    /// exported module functions under mangled names; builtin modules
+    /// (core.sys / core.tasks) and pipelines that skip resolve_imports have
+    /// no merged symbols, and module-call diagnostics must stay silent there.
+    pub fn module_has_merged_symbols(&self, local_name: &str) -> bool {
+        let prefix = format!("{local_name}__");
+        self.bindings
+            .first()
+            .is_some_and(|globals| globals.keys().any(|k| k.starts_with(&prefix)))
+    }
+
     /// Enter a lambda body: snapshot all current `mut`-bound names from every
     /// enclosing scope and push them onto the lambda_outer_muts stack (E0402).
     pub fn enter_lambda_scope(&mut self) {
@@ -2450,6 +2462,123 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     }
                 }
 
+                // ADR-0028: imported module function calls. resolve_imports
+                // (tyra-driver) merges each exported `fn f` of module `m`
+                // into this file as a top-level `m__f`, and
+                // collect_top_level_types registered its declared signature.
+                // Bridge `m.f(args)` to that symbol so module calls are
+                // type-checked instead of silently becoming Ty::Error.
+                // Placed after the richer special cases above (assert.eq,
+                // fold shapes, …) so their semantic checks keep priority.
+                // The `lookup(mod_name).is_none()` guard skips receivers
+                // that are value bindings which merely share a module name.
+                if let ExprKind::Ident(mod_name) = &obj.kind
+                    && env.imported_modules.contains_key(mod_name.as_str())
+                    && env.lookup(mod_name).is_none()
+                {
+                    let canonical = env
+                        .imported_modules
+                        .get(mod_name.as_str())
+                        .cloned()
+                        .unwrap_or_else(|| mod_name.clone());
+                    let mangled = format!("{mod_name}__{method}");
+
+                    // list structural ops (len/get/push/contains/index_of and
+                    // the Int-only sum/max/min) are checked with element-aware
+                    // shapes instead of the declared signature: stdlib/list.ty
+                    // declares them Int-specialised while MIR dispatches the
+                    // structural ones generically. Guarded on the merged
+                    // declaration matching the known stdlib shape so a user
+                    // module that happens to be named `list` is not misrouted.
+                    if canonical == "list"
+                        && let Some(result) = check_list_structural_call(
+                            method, &mangled, args, expr.span, env, report,
+                        )
+                    {
+                        return result;
+                    }
+
+                    if let Some(Ty::Fn(param_tys, ret_ty)) = env.lookup(&mangled) {
+                        if args.len() != param_tys.len() {
+                            report.add(
+                                Diagnostic::error(format!(
+                                    "{mod_name}.{method} expects {} argument{}, found {}",
+                                    param_tys.len(),
+                                    if param_tys.len() == 1 { "" } else { "s" },
+                                    args.len()
+                                ))
+                                .with_code("E0301")
+                                .with_label(Label::new(expr.span, "wrong number of arguments")),
+                            );
+                            for arg in args {
+                                infer_expr(&arg.value, env, report);
+                            }
+                            // ADR-0017 §4: declared return type, not Ty::Error.
+                            return (*ret_ty).clone();
+                        }
+                        let arg_tys: Vec<Ty> = args
+                            .iter()
+                            .map(|arg| infer_expr(&arg.value, env, report))
+                            .collect();
+                        // ADR-0028 decision 4 (generics limitation), narrowed
+                        // per review: when an argument disagrees with the
+                        // declared type only in the element type under the
+                        // same container head (Int-specialised declaration vs
+                        // generic MIR dispatch), skip that single pair — but
+                        // still check every other argument, and return
+                        // Ty::Error rather than the declared (Int-element)
+                        // return type, which would poison downstream inference.
+                        let mut skipped_container_pair = false;
+                        for ((arg, param_ty), arg_ty) in
+                            args.iter().zip(param_tys.iter()).zip(arg_tys.iter())
+                        {
+                            let pa = env.subst.apply(param_ty);
+                            let aa = env.subst.apply(arg_ty);
+                            if let (Ty::Generic(pn, _), Ty::Generic(an, _)) = (&pa, &aa)
+                                && pn == an
+                                && pa != aa
+                            {
+                                let mut tmp = env.subst.clone();
+                                if unify(&pa, &aa, &mut tmp).is_err() {
+                                    skipped_container_pair = true;
+                                    continue;
+                                }
+                            }
+                            check_type_match(param_ty, arg_ty, arg.span, None, env, report);
+                        }
+                        if skipped_container_pair {
+                            return Ty::Error;
+                        }
+                        let ret = env.subst.apply(&ret_ty);
+                        env.record_type(expr.span, ret.clone());
+                        return ret;
+                    }
+
+                    // Builtin modules (core.sys / core.tasks) are
+                    // compiler-internal: no .ty file, no merged symbols.
+                    // Type their spec-defined surface here so typos get
+                    // E0318 like every other stdlib module.
+                    if !env.module_has_merged_symbols(mod_name)
+                        && matches!(canonical.as_str(), "sys" | "tasks")
+                    {
+                        return check_builtin_module_call(
+                            &canonical, method, args, expr.span, env, report,
+                        );
+                    }
+
+                    // Known imported module, but no such exported function.
+                    // Diagnose only when the module's symbols were actually
+                    // merged; resolve-skipping pipelines keep the silent
+                    // fallback below.
+                    if env.module_has_merged_symbols(mod_name) {
+                        report.add(unknown_module_fn_diag(&canonical, method, expr.span));
+                        for arg in args {
+                            infer_expr(&arg.value, env, report);
+                        }
+                        return Ty::Error;
+                    }
+                }
+
                 // Still infer arg types so argument errors surface.
                 for arg in args {
                     infer_expr(&arg.value, env, report);
@@ -2557,6 +2686,45 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     );
                 }
                 return Ty::Error;
+            }
+
+            // print family: arguments render through the same printf-style
+            // lowering as `#{...}` interpolation, which supports only
+            // displayable types (cf. E0314). Reject anything else here
+            // (E0319) — previously such calls compiled and crashed at
+            // runtime. The prelude-signature guard (`Fn([Error], Unit)`)
+            // skips user-defined functions that happen to share the name.
+            if let ExprKind::Ident(fn_name) = &callee.kind
+                && matches!(fn_name.as_str(), "print" | "println" | "eprint" | "eprintln")
+                && args.len() == 1
+                && matches!(
+                    env.lookup(fn_name),
+                    Some(Ty::Fn(ref params, ref ret))
+                        if params.as_slice() == [Ty::Error] && **ret == Ty::Unit
+                )
+            {
+                let arg_ty = infer_expr(&args[0].value, env, report);
+                let resolved = env.subst.apply(&arg_ty);
+                if !resolved.is_interp_displayable() {
+                    report.add(
+                        Diagnostic::error(format!(
+                            "`{fn_name}` cannot display a value of type `{}`",
+                            resolved.display_name()
+                        ))
+                        .with_code("E0319")
+                        .with_label(Label::new(
+                            args[0].span,
+                            format!("this argument has type `{}`", resolved.display_name()),
+                        ))
+                        .with_help(
+                            "only Int, Float, Bool, String, Option of these, and tuples of \
+                             these can be printed; convert the value first (e.g. extract a \
+                             displayable field with `match`)",
+                        ),
+                    );
+                }
+                env.record_type(expr.span, Ty::Unit);
+                return Ty::Unit;
             }
 
             let callee_ty = infer_expr(callee, env, report);
@@ -2999,6 +3167,201 @@ fn check_if(if_expr: &IfExpr, env: &mut TypeEnv, report: &mut Report) -> Ty {
     }
 }
 
+/// E0318 diagnostic shared by merged-module and builtin-module lookups.
+fn unknown_module_fn_diag(canonical: &str, method: &str, span: Span) -> Diagnostic {
+    Diagnostic::error(format!(
+        "module `{canonical}` has no exported function `{method}`"
+    ))
+    .with_code("E0318")
+    .with_label(Label::new(span, "unknown module function"))
+    .with_help(
+        "exported functions of each stdlib module are listed in \
+         the module's documentation; check the function name",
+    )
+}
+
+/// ADR-0028 implementation note: list structural functions are
+/// element-generic at MIR level while stdlib/list.ty declares them
+/// Int-specialised. Returns Some(result type) when `method` is one of the
+/// structural functions AND the merged declaration matches the known stdlib
+/// shape (guards against a user module named `list`); None lets the caller
+/// fall through to the declared-signature path.
+fn check_list_structural_call(
+    method: &str,
+    mangled: &str,
+    args: &[Arg],
+    span: Span,
+    env: &mut TypeEnv,
+    report: &mut Report,
+) -> Option<Ty> {
+    let int_list = Ty::Generic("List".into(), vec![Ty::Int]);
+    let opt_int = Ty::Generic("Option".into(), vec![Ty::Int]);
+    let expected_decl: Ty = match method {
+        "len" => Ty::Fn(vec![int_list.clone()], Box::new(Ty::Int)),
+        "get" => Ty::Fn(vec![int_list.clone(), Ty::Int], Box::new(opt_int.clone())),
+        "push" => Ty::Fn(vec![int_list.clone(), Ty::Int], Box::new(int_list.clone())),
+        "contains" => Ty::Fn(vec![int_list.clone(), Ty::Int], Box::new(Ty::Bool)),
+        "index_of" => Ty::Fn(vec![int_list.clone(), Ty::Int], Box::new(opt_int.clone())),
+        "sum" => Ty::Fn(vec![int_list.clone()], Box::new(Ty::Int)),
+        "max" | "min" => Ty::Fn(vec![int_list.clone()], Box::new(opt_int.clone())),
+        _ => return None,
+    };
+    if env.lookup(mangled).as_ref() != Some(&expected_decl) {
+        return None;
+    }
+    let Ty::Fn(param_tys, _) = &expected_decl else {
+        return None;
+    };
+    if args.len() != param_tys.len() {
+        report.add(
+            Diagnostic::error(format!(
+                "list.{method} expects {} argument{}, found {}",
+                param_tys.len(),
+                if param_tys.len() == 1 { "" } else { "s" },
+                args.len()
+            ))
+            .with_code("E0301")
+            .with_label(Label::new(span, "wrong number of arguments")),
+        );
+        for arg in args {
+            infer_expr(&arg.value, env, report);
+        }
+        return Some(Ty::Error);
+    }
+
+    // sum/max/min are genuinely Int-only at MIR level — strict check.
+    if matches!(method, "sum" | "max" | "min") {
+        let a0 = infer_expr(&args[0].value, env, report);
+        check_type_match(&Ty::Generic("List".into(), vec![Ty::Int]), &a0, args[0].span, None, env, report);
+        return Some(match method {
+            "sum" => Ty::Int,
+            _ => Ty::Generic("Option".into(), vec![Ty::Int]),
+        });
+    }
+
+    let a0_raw = infer_expr(&args[0].value, env, report);
+    let a0 = env.subst.apply(&a0_raw);
+    let elem: Option<Ty> = match &a0 {
+        Ty::Generic(n, a) if n == "List" && a.len() == 1 => Some(a[0].clone()),
+        // Untyped receiver (Ty::Error from an unchecked construct, or an
+        // unresolved inference variable): stay lenient, like before.
+        Ty::Error | Ty::Var(_) => None,
+        _ => {
+            report.add(
+                Diagnostic::error(format!(
+                    "list.{method} expects a List, found {}",
+                    a0.display_name()
+                ))
+                .with_code("E0308")
+                .with_label(Label::new(args[0].span, "not a List")),
+            );
+            for arg in &args[1..] {
+                infer_expr(&arg.value, env, report);
+            }
+            return Some(Ty::Error);
+        }
+    };
+
+    match method {
+        "len" => Some(Ty::Int),
+        "get" => {
+            let a1 = infer_expr(&args[1].value, env, report);
+            check_type_match(&Ty::Int, &a1, args[1].span, None, env, report);
+            Some(match elem {
+                Some(e) => Ty::Generic("Option".into(), vec![e]),
+                None => Ty::Error,
+            })
+        }
+        "push" | "contains" | "index_of" => {
+            let a1 = infer_expr(&args[1].value, env, report);
+            if let Some(e) = &elem {
+                check_type_match(e, &a1, args[1].span, None, env, report);
+            }
+            Some(match method {
+                "push" => {
+                    if elem.is_some() {
+                        a0.clone()
+                    } else {
+                        Ty::Error
+                    }
+                }
+                "contains" => Ty::Bool,
+                _ => Ty::Generic("Option".into(), vec![Ty::Int]),
+            })
+        }
+        _ => None,
+    }
+}
+
+/// ADR-0028 review fix: type the spec-defined surface of the builtin
+/// modules (`core.sys` / `core.tasks`, spec §17 stdlib tables) and report
+/// typos with E0318. These modules have no .ty file, so the merged-symbol
+/// path can never cover them.
+fn check_builtin_module_call(
+    canonical: &str,
+    method: &str,
+    args: &[Arg],
+    span: Span,
+    env: &mut TypeEnv,
+    report: &mut Report,
+) -> Ty {
+    let arity_err = |expected: usize, report: &mut Report| {
+        report.add(
+            Diagnostic::error(format!(
+                "{canonical}.{method} expects {expected} argument{}, found {}",
+                if expected == 1 { "" } else { "s" },
+                args.len()
+            ))
+            .with_code("E0301")
+            .with_label(Label::new(span, "wrong number of arguments")),
+        );
+    };
+    match (canonical, method) {
+        ("sys", "args") => {
+            if !args.is_empty() {
+                arity_err(0, report);
+                for arg in args {
+                    infer_expr(&arg.value, env, report);
+                }
+            }
+            Ty::Generic("List".into(), vec![Ty::String])
+        }
+        ("sys", "env") => {
+            if args.len() != 1 {
+                arity_err(1, report);
+            } else {
+                let a0 = infer_expr(&args[0].value, env, report);
+                check_type_match(&Ty::String, &a0, args[0].span, None, env, report);
+            }
+            Ty::Generic("Option".into(), vec![Ty::String])
+        }
+        ("sys", "exit") => {
+            if args.len() != 1 {
+                arity_err(1, report);
+            } else {
+                let a0 = infer_expr(&args[0].value, env, report);
+                check_type_match(&Ty::Int, &a0, args[0].span, None, env, report);
+            }
+            Ty::Never
+        }
+        ("tasks", "join_all") | ("tasks", "select") => {
+            // Generic over T (spec §17 core.tasks); typed during MIR
+            // lowering today. Keep the pre-ADR silent typing.
+            for arg in args {
+                infer_expr(&arg.value, env, report);
+            }
+            Ty::Error
+        }
+        _ => {
+            report.add(unknown_module_fn_diag(canonical, method, span));
+            for arg in args {
+                infer_expr(&arg.value, env, report);
+            }
+            Ty::Error
+        }
+    }
+}
+
 /// Infer binary operator result type.
 fn infer_binop(
     op: BinOp,
@@ -3018,15 +3381,25 @@ fn infer_binop(
             if left == right && matches!(left, Ty::Int | Ty::Float) {
                 left.clone()
             } else {
-                report.add(
-                    Diagnostic::error(format!(
-                        "arithmetic operator requires matching Int or Float operands, found {} and {}",
-                        left.display_name(),
-                        right.display_name()
-                    ))
-                    .with_code("E0305")
-                    .with_label(Label::new(span, "type mismatch")),
-                );
+                let mut diag = Diagnostic::error(format!(
+                    "arithmetic operator requires matching Int or Float operands, found {} and {}",
+                    left.display_name(),
+                    right.display_name()
+                ))
+                .with_code("E0305")
+                .with_label(Label::new(span, "type mismatch"));
+                // `+` on two Strings is the most common LLM/newcomer slip
+                // (other languages concatenate with `+`). Point at the
+                // Tyra way instead of leaving only the generic message.
+                if matches!(op, BinOp::Add)
+                    && matches!(left, Ty::String)
+                    && matches!(right, Ty::String)
+                {
+                    diag = diag.with_help(
+                        "Tyra has no `+` string concatenation; use interpolation: \"#{a}#{b}\"",
+                    );
+                }
+                report.add(diag);
                 Ty::Error
             }
         }

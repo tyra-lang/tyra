@@ -1,0 +1,11 @@
+# ADR-0028 (review fix): typos on builtin modules (core.sys / core.tasks)
+# get the same E0318 as merged stdlib modules. Builtins have no .ty file,
+# so their spec-defined surface (sys: args/env/exit; tasks: join_all/select)
+# is typed directly in the checker.
+# `argz` is a typo of `args`.
+import core.sys
+
+fn main() -> Unit
+  let args = sys.argz()
+  print("x")
+end

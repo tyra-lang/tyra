@@ -1,0 +1,15 @@
+# E0319: print/println/eprint/eprintln accept only displayable types
+# (same whitelist as #{} interpolation / E0314). Before v0.11 this
+# compiled and crashed at runtime (printf-style lowering on a struct).
+value Point
+  x: Int
+  y: Int
+end
+
+fn show(_ p: Point) -> Unit
+  print(p)
+end
+
+fn main() -> Unit
+  show(Point(x: 1, y: 2))
+end

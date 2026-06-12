@@ -1,0 +1,10 @@
+# ADR-0028: calling a function that the imported module does not export
+# must be a compile-time diagnostic (E0318), not a silent Ty::Error that
+# only fails later during MIR lowering or codegen.
+# `fro_byte` is a typo of `from_byte`.
+import string
+
+fn main() -> Unit
+  let x = string.fro_byte(65)
+  print(x)
+end
