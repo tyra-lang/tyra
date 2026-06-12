@@ -2,6 +2,104 @@
 
 Running log of observations that raw counts in `SUMMARY.md` hide.
 
+## tyra+spec failure triage (2026-06-12) — 23 failures re-verified against HEAD
+
+**Scope.** All 23 non-pass results from `results/*tyra+spec__claude__s1.json`
+(pass 77 / check_fail 12 / compile_fail 11) were read individually, then —
+critically — **every failing generated program was re-run against a local
+HEAD build (v0.10.1 + main)** with the prompt's stdin and markers.
+
+**Headline 1: the stored results are stale. 18 of 23 failures already pass
+on HEAD.** The recorded sweep ran against an older binary; the codegen
+defects visible in the stored stderr (LLVM local-name collisions, ptr/i64
+confusion, Option-payload corruption printing heap addresses) have since
+been fixed on main. The published 77% understates the current compiler.
+
+**Headline 2: only 5 failures remain on HEAD — 2 compiler-side, 3 model-side.**
+
+### Still failing on HEAD — compiler side (→ v0.11.0; v0.10.2 skipped per maintainer decision 2026-06-12)
+
+- **B1 — `String + String` escapes the type checker when the RHS is a call**
+  (053-toggle-case, 100-pipeline). `result + ","` correctly fires E0305
+  (see 080), but `result + string.from_byte(out)` passes `tyra check`
+  (exit 0) and then dies in inkwell codegen with an ICE-grade message
+  (`Found PointerValue … but expected the IntValue variant`, exit 101).
+  Minimal repro:
+
+  ```tyra
+  import string
+  fn main() -> Unit
+    mut result = ""
+    result = result + string.from_byte(65)
+    println(result)
+  end
+  ```
+
+  Fix: make E0305 fire on this path (checker), which also removes the ICE.
+
+- **B2 — `fn main() -> Result<Unit, E>` returning `Err` exits 0 silently**
+  (observed via 064; confirmed with a 2-line repro on HEAD). Spec §
+  (async 型規則, line ~1240) permits Result-returning main but does not
+  define Err behaviour — **spec gap, maintainer decision needed**
+  (proposal: print the error to stderr, exit 1, like `?`-style runtimes).
+
+### Still failing on HEAD — genuinely the model's fault (3 cases)
+
+- **064-count-down**: read N from `sys.args()` although the prompt says
+  stdin. (Its silent-success is B2 above.)
+- **080-collect-errors**: wrote `result + ","`; E0305 fired correctly.
+  **v0.11.0 diagnostic candidate**: add help to E0305 when both operands
+  are String ("use interpolation `\"#{a}#{b}\"`").
+- **088-histogram**: model wrote a `set_slot` helper that is a no-op stub
+  (`mut out = xs` / `out`) — counts never increment. Pure logic error.
+
+### Stale artifacts (now passing)
+
+- 18 previously-failing programs pass on HEAD unchanged: 007, 011, 018,
+  034, 038, 041, 050, 055, 066, 067, 068, 073, 076, 083, 084, 085, 089, 095.
+- 089-unique-words is double-stale: the stored marker (`unique=6`) belongs
+  to an older prompt version; the current YAML expects `unique=5`, which
+  the program prints.
+
+### Addendum (2026-06-12, during B1 implementation)
+
+Two more silent-`Ty::Error` holes in the same family as B1 were found and
+partially addressed:
+
+- **print family accepted any type and crashed at runtime** on
+  non-displayable values (`print(adt)` → segfault, surfaced as E0501
+  status -1). Fixed: new **E0319** applies the E0314 displayable whitelist
+  to `print`/`println`/`eprint`/`eprintln` at compile time.
+- **Constructor calls are not typed by the checker**: `Point(x: 1, y: 2)`
+  and `AppError.NotFound(...)` infer as `Ty::Error`, so E0319/E0314 cannot
+  fire on directly-constructed values (annotated bindings, fn params, and
+  match bindings are covered). Constructor typing is a **follow-up** —
+  same architecture gap as B1, larger surface (named args, generics).
+
+B1 landed as the merge-model bridge (see ADR-0028 implementation note):
+module calls now resolve against the merged `m__f` symbols; new diagnostics
+E0318 (unknown module function) and corpus cases
+`bad/E0305-module-call-string-concat.ty`, `bad/E0318-unknown-module-fn.ty`,
+`bad/E0319-print-non-displayable.ty`. Gate: static-corpus 77/0, workspace
+tests green, examples clean.
+
+### Implications for the release plan
+
+- **v0.10.2 is skipped (maintainer decision 2026-06-12)**: B1 (stdlib module
+  signature table in the checker) and B2 (Err main → stderr + exit 1, spec
+  addition) both go into v0.11.0. No codegen rewrite needed — the historical
+  bugs are already fixed on main.
+- **A fresh tyra+spec sweep against HEAD is mandatory before quoting any
+  number.** Expected ceiling on this prompt set: 95/100 with B1 fixed
+  (064/080/088 remain model errors), but the 77 stored passes must be
+  re-confirmed too.
+- **v0.11.0 evidence**: models hand-rolled byte-level whitespace tokenizers
+  in at least 6 programs instead of using `string.split_whitespace` — spec
+  injection may under-surface stdlib; cheap win for the llms docs. No
+  failure was caused by missing multi-line strings → **per plan, multi-line
+  strings stay out of v0.11.0** (§22 deferral stands). Diagnostics: E0305
+  String help (above); B1's ICE replacement is the other diagnostics win.
+
 ## v0.10.0 6-language sweep (2026-06-11) — Go added; full 6-language baseline
 
 **Scope.** Go was added as the 6th language; this is Go's first full sweep
