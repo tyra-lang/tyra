@@ -69,6 +69,7 @@ pub use stdlib_set::{
 };
 
 pub mod stdlib_linked_map;
+pub mod stdlib_list;
 pub use stdlib_linked_map::{
     tyra_linked_map_contains_key, tyra_linked_map_for_each, tyra_linked_map_get,
     tyra_linked_map_insert, tyra_linked_map_len, tyra_linked_map_new, tyra_linked_map_remove,

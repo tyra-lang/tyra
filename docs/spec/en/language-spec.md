@@ -1606,8 +1606,8 @@ excerpted from `stdlib/string.ty`.
 export fn len(_ s: String) -> Int
 export fn is_empty(_ s: String) -> Bool
 export fn trim(_ s: String) -> String
-export fn to_upper(_ s: String) -> String
-export fn to_lower(_ s: String) -> String
+export fn to_ascii_upper(_ s: String) -> String
+export fn to_ascii_lower(_ s: String) -> String
 export fn contains(_ s: String, _ needle: String) -> Bool
 export fn starts_with(_ s: String, _ prefix: String) -> Bool
 export fn ends_with(_ s: String, _ suffix: String) -> Bool
@@ -1624,7 +1624,7 @@ export fn split(_ s: String, _ sep: String) -> List<String>
   count (`len("あ")` is `3`). A code-point-based length is out of
   scope for v0.1.
 - `trim` strips **ASCII whitespace only** from both ends (non-ASCII
-  whitespace such as U+3000 is not trimmed). `to_upper` / `to_lower`
+  whitespace such as U+3000 is not trimmed). `to_ascii_upper` / `to_ascii_lower`
   case-map ASCII letters only; other characters pass through
   unchanged. Full Unicode support is deferred to v0.2+.
 - `contains` / `starts_with` / `ends_with` perform byte-level

@@ -28,7 +28,10 @@ use crate::inkwell_codegen::CodeGen;
 const STRING_LIST: &[&str] = &[
     "__string_split_whitespace",
     "__string_split",
+    "__string_chars",
     "__string_join",
+    "__list_sort",
+    "__list_sort_str",
 ];
 
 impl<'ctx> CodeGen<'ctx> {
@@ -51,7 +54,13 @@ impl<'ctx> CodeGen<'ctx> {
                 self.emit_string_split(d, args, "tyra_string_split_whitespace", false)
             }
             "__string_split" => self.emit_string_split(d, args, "tyra_string_split", true),
+            // ADR-0027: chars rides the same out-parameter shape as split.
+            "__string_chars" => self.emit_string_split(d, args, "tyra_string_chars", false),
             "__string_join" => self.emit_string_join(d, args),
+            // ADR-0027: sort passes the list in by ref AND receives the
+            // sorted list through an out-parameter.
+            "__list_sort" => self.emit_list_sort(d, args, "tyra_list_sort_int", Ty::Int),
+            "__list_sort_str" => self.emit_list_sort(d, args, "tyra_list_sort_str", Ty::String),
             _ => return false,
         }
         true
@@ -96,6 +105,39 @@ impl<'ctx> CodeGen<'ctx> {
         self.builder.build_call(f, &call_args, "").unwrap();
 
         let result = self.builder.build_load(list_ty, slot, d).unwrap();
+        self.values.insert(d.to_string(), result);
+    }
+
+    /// `__list_sort[_str](xs) -> List<elem>` (ADR-0027) — both directions of
+    /// the by-ref protocol: store the input list into a slot (pointer passed
+    /// first, runtime reads it), alloca an output slot (pointer passed
+    /// second, runtime fills it), then load the sorted list back.
+    fn emit_list_sort(&mut self, dest: Option<&str>, args: &[Operand], callee: &str, elem: Ty) {
+        let d = dest.unwrap_or("_sort");
+        let mono = Ty::Generic("List".into(), vec![elem]).monomorphized_name();
+        let list_ty = *self
+            .struct_types
+            .get(&mono)
+            .unwrap_or_else(|| panic!("`{mono}` struct must be registered for list sort"));
+        let in_slot = self
+            .builder
+            .build_alloca(list_ty, &format!("{d}.in"))
+            .unwrap();
+        self.builder
+            .build_store(in_slot, self.operand(&args[0]))
+            .unwrap();
+        let out_slot = self
+            .builder
+            .build_alloca(list_ty, &format!("{d}.out"))
+            .unwrap();
+        let f = self
+            .module
+            .get_function(callee)
+            .unwrap_or_else(|| panic!("runtime extern `{callee}` must be declared (I1)"));
+        self.builder
+            .build_call(f, &[in_slot.into(), out_slot.into()], "")
+            .unwrap();
+        let result = self.builder.build_load(list_ty, out_slot, d).unwrap();
         self.values.insert(d.to_string(), result);
     }
 

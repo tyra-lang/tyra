@@ -1,0 +1,10 @@
+# ADR-0027: list.sort is Int-only (sort_str exists for String lists).
+# Passing a List<String> is a real element-type mismatch and must be
+# E0308 — not the silent container fallback of the generic module-call
+# path (the checker's list structural table checks sort strictly).
+import list
+
+fn main() -> Unit
+  let xs = list.sort(["b", "a"])
+  print("#{list.len(xs)}")
+end

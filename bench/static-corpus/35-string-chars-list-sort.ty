@@ -1,0 +1,58 @@
+# ADR-0027: USV character-level string API + list sorting.
+# chars/char_at operate on Unicode scalar values (λ is one USV, not two
+# bytes); to_ascii_upper maps ASCII letters only; sort/sort_str are stable
+# ascending (sort_str by UTF-8 byte order).
+import string
+import list
+
+fn main() -> Unit
+  let cs = string.chars("aBλ")
+  print("n=#{list.len(cs)}")
+
+  match string.char_at("aBλ", 2)
+  when Some(c)
+    print(" at=#{c}")
+  when None
+    print(" at=none")
+  end
+
+  match string.char_code("A")
+  when Some(n)
+    print(" code=#{n}")
+  when None
+    print(" code=none")
+  end
+
+  match string.from_char_code(955)
+  when Some(c)
+    print(" from=#{c}")
+  when None
+    print(" from=none")
+  end
+
+  # surrogate is rejected, never replaced
+  match string.from_char_code(55296)
+  when Some(c)
+    print(" surr=#{c}")
+  when None
+    print(" surr=none")
+  end
+
+  print(" up=#{string.to_ascii_upper("abλ")}")
+  print(" low=#{string.to_ascii_lower("ABλ")}")
+
+  let xs = list.sort([3, 1, 2])
+  match list.get(xs, 0)
+  when Some(v)
+    print(" s0=#{v}")
+  when None
+    print(" s0=none")
+  end
+  let ss = list.sort_str(["banana", "apple", "cherry"])
+  match list.get(ss, 2)
+  when Some(v)
+    print(" ss2=#{v}")
+  when None
+    print(" ss2=none")
+  end
+end

@@ -77,3 +77,17 @@ end
 export fn fold_str(_ xs: List<String>, _ init: String, _ f: fn(String,String)->String) -> String
   __list_fold_str(xs, init, f)
 end
+
+# ── ADR-0027: sorting ─────────────────────────────────────────────────
+# Stable ascending sort into a new list (persistent-collections convention).
+# The name `sort_by` is reserved for a future generic `sort_by<T, K: Ord>`.
+
+export fn sort(_ xs: List<Int>) -> List<Int>
+  __list_sort(xs)
+end
+
+# Stable ascending sort by UTF-8 byte order (the same order SortedMap uses
+# for String keys; no locale collation).
+export fn sort_str(_ xs: List<String>) -> List<String>
+  __list_sort_str(xs)
+end

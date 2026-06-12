@@ -139,7 +139,7 @@ mod tests {
         let mut report = Report::new();
         report.add(
             Diagnostic::error("boom".to_string())
-                .with_code("E9999")
+                .with_code("E9001")
                 .with_label(Label::new(Span::new(sid, 0, 3), "here"))
                 .with_help("try harder"),
         );
@@ -147,7 +147,7 @@ mod tests {
         let lines: Vec<&str> = out.trim_end().lines().collect();
         assert_eq!(lines.len(), 2);
         assert!(lines[0].contains("\"type\":\"diagnostic\""));
-        assert!(lines[0].contains("\"code\":\"E9999\""));
+        assert!(lines[0].contains("\"code\":\"E9001\""));
         assert!(lines[0].contains("\"file\":\"t.ty\""));
         assert!(lines[0].contains("\"help\":\"try harder\""));
         assert_eq!(lines[1], "{\"type\":\"summary\",\"errors\":1,\"warnings\":0}");

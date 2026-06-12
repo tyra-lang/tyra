@@ -626,7 +626,38 @@ fn register_prelude(env: &mut TypeEnv) {
         "__string_from_byte".to_string(),
         Ty::Fn(vec![Ty::Int], Box::new(Ty::String)),
     );
+    // ADR-0027: USV character-level intrinsics (wrapped by stdlib/string.ty).
+    env.define(
+        "__string_char_at".to_string(),
+        Ty::Fn(vec![Ty::String, Ty::Int], Box::new(Ty::String)),
+    );
+    env.define(
+        "__string_char_errno".to_string(),
+        Ty::Fn(vec![], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__string_char_code".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(Ty::Int)),
+    );
+    env.define(
+        "__string_from_char_code".to_string(),
+        Ty::Fn(vec![Ty::Int], Box::new(Ty::String)),
+    );
     let list_string = Ty::Generic("List".into(), vec![Ty::String]);
+    env.define(
+        "__string_chars".to_string(),
+        Ty::Fn(vec![Ty::String], Box::new(list_string.clone())),
+    );
+    // ADR-0027: list sorting intrinsics (wrapped by stdlib/list.ty).
+    let list_int = Ty::Generic("List".into(), vec![Ty::Int]);
+    env.define(
+        "__list_sort".to_string(),
+        Ty::Fn(vec![list_int.clone()], Box::new(list_int)),
+    );
+    env.define(
+        "__list_sort_str".to_string(),
+        Ty::Fn(vec![list_string.clone()], Box::new(list_string.clone())),
+    );
     env.define(
         "__string_split_whitespace".to_string(),
         Ty::Fn(vec![Ty::String], Box::new(list_string.clone())),
@@ -3204,6 +3235,14 @@ fn check_list_structural_call(
         "index_of" => Ty::Fn(vec![int_list.clone(), Ty::Int], Box::new(opt_int.clone())),
         "sum" => Ty::Fn(vec![int_list.clone()], Box::new(Ty::Int)),
         "max" | "min" => Ty::Fn(vec![int_list.clone()], Box::new(opt_int.clone())),
+        // ADR-0027: sort is Int-only, sort_str String-only — strict, so a
+        // mismatched element type is E0308 instead of the per-pair silent
+        // fallback in the generic module-call path.
+        "sort" => Ty::Fn(vec![int_list.clone()], Box::new(int_list.clone())),
+        "sort_str" => {
+            let str_list = Ty::Generic("List".into(), vec![Ty::String]);
+            Ty::Fn(vec![str_list.clone()], Box::new(str_list))
+        }
         _ => return None,
     };
     if env.lookup(mangled).as_ref() != Some(&expected_decl) {
@@ -3229,13 +3268,16 @@ fn check_list_structural_call(
         return Some(Ty::Error);
     }
 
-    // sum/max/min are genuinely Int-only at MIR level — strict check.
-    if matches!(method, "sum" | "max" | "min") {
+    // sum/max/min/sort are Int-only, sort_str String-only — strict check.
+    if matches!(method, "sum" | "max" | "min" | "sort" | "sort_str") {
+        let expected_elem = if method == "sort_str" { Ty::String } else { Ty::Int };
+        let expected = Ty::Generic("List".into(), vec![expected_elem]);
         let a0 = infer_expr(&args[0].value, env, report);
-        check_type_match(&Ty::Generic("List".into(), vec![Ty::Int]), &a0, args[0].span, None, env, report);
+        check_type_match(&expected, &a0, args[0].span, None, env, report);
         return Some(match method {
             "sum" => Ty::Int,
-            _ => Ty::Generic("Option".into(), vec![Ty::Int]),
+            "max" | "min" => Ty::Generic("Option".into(), vec![Ty::Int]),
+            _ => expected,
         });
     }
 

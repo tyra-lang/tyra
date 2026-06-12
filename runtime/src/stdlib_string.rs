@@ -660,3 +660,89 @@ mod tests {
         assert_eq!(unsafe { CStr::from_ptr(p4) }.to_str().unwrap(), "");
     }
 }
+
+// ── ADR-0027: USV character-level API ───────────────────────────────────────
+
+thread_local! {
+    static CHAR_ERRNO: std::cell::Cell<c_int> = const { std::cell::Cell::new(0) };
+}
+
+fn set_char_errno(v: c_int) {
+    CHAR_ERRNO.with(|e| e.set(v));
+}
+
+/// `__string_char_errno() -> Int` — 0 when the most recent `char_at` /
+/// `from_char_code` on this thread succeeded, 1 otherwise.
+#[unsafe(no_mangle)]
+pub extern "C" fn tyra_string_char_errno() -> c_int {
+    CHAR_ERRNO.with(|e| e.get())
+}
+
+/// `__string_chars(s, out)` — fills `out` with one single-USV string per
+/// Unicode scalar value of `s` (ADR-0027: "character" = USV; grapheme
+/// clusters are split into their constituent USVs).
+///
+/// # Safety
+/// `s` must be null-terminated UTF-8 (or null). `out` must point at a
+/// valid 16-byte (List<String>) slot.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_string_chars(s: *const c_char, out: *mut ListStringRet) {
+    let input = borrow_utf8(s);
+    let parts: Vec<*const c_char> = input
+        .chars()
+        .map(|c| alloc_gc_cstring(c.encode_utf8(&mut [0u8; 4])))
+        .collect();
+    unsafe { fill_list_string_ret(out, parts) };
+}
+
+/// `__string_char_at(s, index) -> String` — the USV at `index` (0-based,
+/// O(n): UTF-8 has no random access). Sets char_errno to 1 and returns ""
+/// when out of range.
+///
+/// # Safety
+/// `s` must be null-terminated UTF-8 (or null).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_string_char_at(s: *const c_char, index: i64) -> *const c_char {
+    let input = borrow_utf8(s);
+    if index >= 0
+        && let Some(c) = input.chars().nth(index as usize)
+    {
+        set_char_errno(0);
+        return alloc_gc_cstring(c.encode_utf8(&mut [0u8; 4]));
+    }
+    set_char_errno(1);
+    alloc_gc_cstring("")
+}
+
+/// `__string_char_code(s) -> Int` — the code point when `s` is exactly one
+/// USV; -1 otherwise (empty or multi-USV). No "first character" guessing
+/// (ADR-0027).
+///
+/// # Safety
+/// `s` must be null-terminated UTF-8 (or null).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tyra_string_char_code(s: *const c_char) -> i64 {
+    let input = borrow_utf8(s);
+    let mut it = input.chars();
+    match (it.next(), it.next()) {
+        (Some(c), None) => c as i64,
+        _ => -1,
+    }
+}
+
+/// `__string_from_char_code(code) -> String` — the single-USV string for a
+/// valid code point. Surrogates and out-of-range values set char_errno to 1
+/// and return "" — no silent replacement character (ADR-0027).
+#[unsafe(no_mangle)]
+pub extern "C" fn tyra_string_from_char_code(code: i64) -> *const c_char {
+    match u32::try_from(code).ok().and_then(char::from_u32) {
+        Some(c) => {
+            set_char_errno(0);
+            alloc_gc_cstring(c.encode_utf8(&mut [0u8; 4]))
+        }
+        None => {
+            set_char_errno(1);
+            alloc_gc_cstring("")
+        }
+    }
+}

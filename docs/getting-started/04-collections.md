@@ -147,15 +147,15 @@ let trimmed = string.trim(s)
 print("'#{trimmed}'\n")
 ```
 
-### `string.to_upper` / `string.to_lower`
+### `string.to_ascii_upper` / `string.to_ascii_lower`
 
 ASCII case conversion:
 
 ```tyra
 import string
 
-print("#{string.to_upper("hello")}\n")
-print("#{string.to_lower("WORLD")}\n")
+print("#{string.to_ascii_upper("hello")}\n")
+print("#{string.to_ascii_lower("WORLD")}\n")
 ```
 
 ### `string.contains`, `string.starts_with`, `string.ends_with`

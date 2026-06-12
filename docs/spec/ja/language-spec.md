@@ -1602,8 +1602,8 @@ end
 export fn len(_ s: String) -> Int
 export fn is_empty(_ s: String) -> Bool
 export fn trim(_ s: String) -> String
-export fn to_upper(_ s: String) -> String
-export fn to_lower(_ s: String) -> String
+export fn to_ascii_upper(_ s: String) -> String
+export fn to_ascii_lower(_ s: String) -> String
 export fn contains(_ s: String, _ needle: String) -> Bool
 export fn starts_with(_ s: String, _ prefix: String) -> Bool
 export fn ends_with(_ s: String, _ suffix: String) -> Bool
@@ -1621,7 +1621,7 @@ export fn join(_ parts: List<String>, _ sep: String) -> String
 - `len` は UTF-8 バイト長を返す。Unicode コードポイント数ではない
   (`len("あ")` は `3`)。コードポイント単位の長さは v0.2 以降のスコープ。
 - `trim` は **ASCII 空白のみ** 両端から取り除く (U+3000 のような非 ASCII
-  空白は対象外)。`to_upper` / `to_lower` も ASCII 英字のみ大文字/小文字
+  空白は対象外)。`to_ascii_upper` / `to_ascii_lower` も ASCII 英字のみ大文字/小文字
   変換し、その他の文字は変更しない。Unicode 完全対応は v0.2 以降。
 - `contains` / `starts_with` / `ends_with` はバイト単位の部分文字列
   一致を返す。

@@ -98,6 +98,28 @@ export fn sort_str(_ xs: List<String>) -> List<String>        # ascending, byte 
   `__string_char_code`, `__string_from_char_code`, `__list_sort`,
   `__list_sort_str`.
 
+## Implementation note (2026-06-13, as landed)
+
+- Runtime: `tyra_string_chars` rides the same `ListStringRet` out-parameter
+  protocol as split; `char_at`/`from_char_code` use a thread-local
+  `char_errno` (mirroring `parse_int`); `char_code` uses the -1 sentinel
+  (mirroring `byte_at`). Sorting lives in new `runtime/src/stdlib_list.rs`
+  (`tyra_list_sort_int` — GC-atomic output array; `tyra_list_sort_str` —
+  scanned array, byte-order comparison), passing lists by ref in AND out.
+- Codegen: `__string_chars` reuses the split out-param emitter;
+  `__list_sort[_str]` got a dedicated in+out by-ref emitter; scalar char
+  intrinsics ride the SIMPLE table. Registered in resolver / checker / MIR
+  intrinsic tables like their predecessors.
+- Checker: `sort`/`sort_str` were added to the list structural table as
+  strict shapes, so `list.sort(List<String>)` is E0308 (corpus
+  `bad/E0308-sort-elem-mismatch.ty`) rather than the silent container
+  fallback.
+- `to_upper`/`to_lower` exports removed as decided; in-repo users
+  (corpus 18, getting-started 04) migrated. The runtime symbols
+  (`tyra_string_to_upper/lower`) are unchanged.
+- End-to-end corpus case: `35-string-chars-list-sort.ty` (USV counting on
+  multi-byte input, surrogate rejection, ASCII-only casing, both sorts).
+
 ## Alternatives considered
 
 | Option | Rejected because |

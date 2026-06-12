@@ -316,7 +316,40 @@ pub fn lower(file: &SourceFile, sources: &tyra_diagnostics::SourceMap) -> Progra
         .insert("__string_from_byte".into(), Ty::String);
     ctx.fn_param_types
         .insert("__string_from_byte".into(), vec![Ty::Int]);
+    // ADR-0027: USV character-level intrinsics.
+    ctx.fn_return_types
+        .insert("__string_char_at".into(), Ty::String);
+    ctx.fn_param_types
+        .insert("__string_char_at".into(), vec![Ty::String, Ty::Int]);
+    ctx.fn_return_types
+        .insert("__string_char_errno".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__string_char_errno".into(), vec![]);
+    ctx.fn_return_types
+        .insert("__string_char_code".into(), Ty::Int);
+    ctx.fn_param_types
+        .insert("__string_char_code".into(), vec![Ty::String]);
+    ctx.fn_return_types
+        .insert("__string_from_char_code".into(), Ty::String);
+    ctx.fn_param_types
+        .insert("__string_from_char_code".into(), vec![Ty::Int]);
     let list_string = Ty::Generic("List".into(), vec![Ty::String]);
+    ctx.fn_return_types
+        .insert("__string_chars".into(), list_string.clone());
+    ctx.fn_param_types
+        .insert("__string_chars".into(), vec![Ty::String]);
+    // ADR-0027: list sorting intrinsics. Struct types register lazily on
+    // first use (unconditional registration would pollute struct_defs for
+    // every program).
+    let list_int_sort = Ty::Generic("List".into(), vec![Ty::Int]);
+    ctx.fn_return_types
+        .insert("__list_sort".into(), list_int_sort.clone());
+    ctx.fn_param_types
+        .insert("__list_sort".into(), vec![list_int_sort]);
+    ctx.fn_return_types
+        .insert("__list_sort_str".into(), list_string.clone());
+    ctx.fn_param_types
+        .insert("__list_sort_str".into(), vec![list_string.clone()]);
     ctx.fn_return_types
         .insert("__string_split_whitespace".into(), list_string.clone());
     ctx.fn_param_types

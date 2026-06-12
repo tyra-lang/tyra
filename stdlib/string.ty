@@ -4,8 +4,8 @@
 #   string.len(s)                    -> Int        (UTF-8 byte length)
 #   string.is_empty(s)               -> Bool
 #   string.trim(s)                   -> String     (ASCII whitespace only)
-#   string.to_upper(s)               -> String     (ASCII only)
-#   string.to_lower(s)               -> String     (ASCII only)
+#   string.to_ascii_upper(s)         -> String     (ASCII only)
+#   string.to_ascii_lower(s)         -> String     (ASCII only)
 #   string.contains(s, needle)       -> Bool
 #   string.starts_with(s, prefix)    -> Bool
 #   string.ends_with(s, suffix)      -> Bool
@@ -22,7 +22,7 @@
 # v0.1 caveats:
 # - All length / index operations work in UTF-8 bytes, not Unicode code
 #   points. `len("あ")` returns 3.
-# - trim / to_upper / to_lower handle ASCII only. Non-ASCII whitespace
+# - trim / to_ascii_upper / to_ascii_lower handle ASCII only. Non-ASCII whitespace
 #   (e.g. U+3000) is not trimmed; non-ASCII letters are left unchanged by
 #   the case-mapping functions.
 # - parse_int accepts optional leading `+`/`-` and ASCII decimal digits.
@@ -40,11 +40,15 @@ export fn trim(_ s: String) -> String
   __string_trim(s)
 end
 
-export fn to_upper(_ s: String) -> String
+# ASCII-only upper-casing: ASCII letters are mapped, every other USV
+# passes through unchanged. The name encodes the constraint (ADR-0027);
+# full Unicode case mapping is out of scope.
+export fn to_ascii_upper(_ s: String) -> String
   __string_to_upper(s)
 end
 
-export fn to_lower(_ s: String) -> String
+# ASCII-only lower-casing — see to_ascii_upper.
+export fn to_ascii_lower(_ s: String) -> String
   __string_to_lower(s)
 end
 
@@ -135,4 +139,48 @@ end
 # that element unchanged (no trailing separator).
 export fn join(_ parts: List<String>, _ sep: String) -> String
   __string_join(parts, sep)
+end
+
+# ── ADR-0027: USV character-level API ─────────────────────────────────
+# "Character" means Unicode scalar value (USV). Grapheme clusters are out
+# of scope: combining sequences and emoji ZWJ sequences split into their
+# constituent USVs. Byte-level access stays available via byte_at/from_byte.
+
+# One single-USV string per element. O(n) time and memory.
+export fn chars(_ s: String) -> List<String>
+  __string_chars(s)
+end
+
+# The USV at `index` (0-based), or None when out of range. O(n) in the
+# number of USVs — UTF-8 has no random access; iterate with chars()
+# instead of calling char_at in a loop.
+export fn char_at(_ s: String, _ index: Int) -> Option<String>
+  let c = __string_char_at(s, index)
+  if __string_char_errno() == 0
+    Some(c)
+  else
+    None
+  end
+end
+
+# The code point when `s` is exactly one USV; None otherwise (empty or
+# multi-USV — no "first character" guessing).
+export fn char_code(_ s: String) -> Option<Int>
+  let n = __string_char_code(s)
+  if n < 0
+    None
+  else
+    Some(n)
+  end
+end
+
+# The single-USV string for a valid code point. Surrogates (0xD800..=0xDFFF)
+# and values above 0x10FFFF return None — never a replacement character.
+export fn from_char_code(_ code: Int) -> Option<String>
+  let c = __string_from_char_code(code)
+  if __string_char_errno() == 0
+    Some(c)
+  else
+    None
+  end
 end

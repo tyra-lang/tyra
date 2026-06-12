@@ -81,7 +81,7 @@ def _load_tyra_context() -> str:
         "String *methods* in v0.1. Use the `string` module instead: "
         "`import string` then call `string.trim(s)`, `string.len(s)`, "
         "`string.contains(s, needle)`, `string.starts_with(s, p)`, "
-        "`string.ends_with(s, p)`, `string.to_upper(s)`, `string.to_lower(s)`, "
+        "`string.ends_with(s, p)`, `string.to_ascii_upper(s)`, `string.to_ascii_lower(s)`, "
         "`string.is_empty(s)`, `string.parse_int(s)` (returns Option<Int>). "
         "Tokenizing helpers: `string.split_whitespace(s)` returns "
         "`List<String>` of non-whitespace runs (collapses adjacent ws), "

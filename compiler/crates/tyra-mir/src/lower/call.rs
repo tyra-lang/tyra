@@ -2521,7 +2521,7 @@ impl super::LowerCtx<'_> {
                     .with_note(format!("at {}:{}:{}", file, call_loc.line, call_loc.col))
                     .with_help(
                         "Available string functions: string.len, string.is_empty, \
-                         string.trim, string.to_upper, string.to_lower, string.contains, \
+                         string.trim, string.to_ascii_upper, string.to_ascii_lower, string.contains, \
                          string.starts_with, string.ends_with, string.parse_int, \
                          string.byte_at, string.substring, string.reverse, \
                          string.from_byte, string.split, string.split_whitespace, \

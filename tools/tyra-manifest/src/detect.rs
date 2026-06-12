@@ -101,7 +101,7 @@ end
 import string
 
 export fn shout(s: String) -> String
-  string.to_upper(s)
+  string.to_ascii_upper(s)
 end
 ";
         assert!(!is_bin_source(src));
