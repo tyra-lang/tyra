@@ -131,16 +131,20 @@ note in `results/SUMMARY.md` and METHODOLOGY.md §seed-policy.
 | ruby | 99% | 0% | 100 | very well-known; multi-seed from prior runs |
 | crystal | 96% | 3% | 100 | well-established; multi-seed from prior runs |
 | **go** | **81%** | 16% | 100 | first sweep, seed 1 only |
-| **tyra+spec** | **77%** | 11% | 100 | spec injected; seed 1 only |
+| **tyra+spec (v0.10)** | **77%** | 11% | 100 | spec injected; seed 1 only; stale binary |
+| **tyra+spec (v0.11.0)** | **84%** | 13% | 100 | run55, seed 1; v0.11.0 release binary (2026-06-13) |
 | v | 49% | 50% | 100 | model struggles with V types |
 | gleam | 37% | 57% | 100 | single-file wrapper; pessimistic |
 | tyra (no spec) | 0% | 100% | 100 | model has no Tyra training data |
 
-**Directional finding: tyra+spec (77%) is within 4 pp of Go (81%) at seed 1.**
-This is consistent with the "AI-friendly language design" hypothesis, but
-variance at a single seed is substantial — multi-seed confirmation needed.
-The baseline tyra (0%) confirms the model has no Tyra knowledge; it generates
-Rust/Go code that panics or fails to parse.
+**v0.11.0 result: tyra+spec 84% (+7 pp over the stale 77% baseline).**
+The 16 regressions vs run53 s1 (which had 98 pass) are all LLM-quality
+issues — new stricter diagnostics (E0110/E0204/E0213/E0211) correctly
+rejecting malformed code that the older binary silently miscompiled. No
+compiler bugs were found in the regression set.
+
+**Directional finding: tyra+spec (84%) now exceeds Go (81%) at seed 1.**
+Multi-seed confirmation is still needed before using this as a public headline.
 
 **Go compile failures (16%):** Failures are mostly type mismatches (`int` vs
 `int64`) and missing imports — the usual Go gotchas at 100-prompt scale.
@@ -152,7 +156,7 @@ depressing the true pass rate.
 ### Follow-ups
 
 - Run Go sweep with ≥3 seeds before using the 81% as a public headline.
-- Run tyra+spec sweep with ≥3 seeds; 77% is a single-seed point estimate.
+- Run tyra+spec sweep with ≥3 seeds; 84% is a single-seed point estimate (run55).
 - Run a single controlled sweep (same generator, all 6 languages, same seed set) to get a comparable baseline table.
 
 ---
