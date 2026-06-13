@@ -30,6 +30,12 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - `tyra run` no longer wraps every nonzero exit in E0501.
 - Code that previously compiled because module calls were unchecked may now fail with real type errors (E0305/E0308/E0301/E0318/E0319). These were latent bugs.
 
+### ai-gen benchmark (v0.11.0)
+
+Re-sweep after all v0.11 fixes: **tyra+spec 84%** (seed 1, 100 prompts, claude-sonnet-4-6, run55 — 2026-06-13).  
+Previous published figure was 77% (stale v0.10 binary). The +7 pp improvement confirms the module-call type-checking and diagnostic hardening directly address the LLM failure modes identified in the Phase A triage. All 16 regressions vs run53 are LLM-quality issues (new strict diagnostics catching code the older binary silently miscompiled); no compiler bugs found.  
+_Single-seed point estimate; multi-seed sweep planned for v0.11.1._
+
 ### Known Limitations
 
 - Constructor-call expressions (`Point(x: 1)`) are still untyped in the checker; E0314/E0319 cannot fire on directly-constructed values.
