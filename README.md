@@ -2,7 +2,7 @@
 
 A statically-typed, AI-friendly programming language for backend services, CLI tools, and business applications.
 
-> **v0.11.0 — AI self-correction** — imported module calls are fully type-checked (new E0318/E0319; `String + string.from_byte(x)` no longer crashes codegen), `Err`-returning main reports to stderr and exits 1 (ADR-0029), `tyra check/build --error-format json` emits NDJSON diagnostics for agent loops (ADR-0026), USV character API + `list.sort`/`sort_str` (ADR-0027), and `to_upper`/`to_lower` are renamed `to_ascii_upper`/`to_ascii_lower` (breaking). The published ai-gen numbers (tyra+spec 77%) predate these fixes — a re-sweep is pending. [See known limitations](#known-limitations) before using in production.
+> **v0.11.0 — AI self-correction** — imported module calls are fully type-checked (new E0318/E0319; `String + string.from_byte(x)` no longer crashes codegen), `Err`-returning main reports to stderr and exits 1 (ADR-0029), `tyra check/build --error-format json` emits NDJSON diagnostics for agent loops (ADR-0026), USV character API + `list.sort`/`sort_str` (ADR-0027), and `to_upper`/`to_lower` are renamed `to_ascii_upper`/`to_ascii_lower` (breaking). Re-sweep after these fixes: **tyra+spec 84%** (seed 1, 100 prompts, v0.11.0). [See known limitations](#known-limitations) before using in production.
 
 ---
 

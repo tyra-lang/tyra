@@ -225,6 +225,7 @@ benchmarks/results/
 bench/ai-gen/results/*.json
 bench/ai-gen/results/*.csv
 bench/ai-gen/results-run*
+!bench/ai-gen/results-run*-manifest.csv
 *.bench.json
 criterion/
 
