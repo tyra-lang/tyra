@@ -43,8 +43,7 @@ Multi-seed sweep (run56, 3 seeds × 100 prompts, claude-sonnet-4-6, 2026-06-13):
 | all_pass% (all 3 seeds pass) | **77.0%** |
 | prompts failing all 3 seeds | 2 (`034-group-even-odd`, `096-rate-limit`) |
 
-Same-condition seed-1 comparison: run55 84% → run53 s1 77% = **+7 pp** (run55 vs run53 s1, both single-seed).  
-The multi-seed mean (88.7%) vs. seed-1 baseline (77%) is directional only — methodology differs.
+No same-condition baseline exists for run56. The previously published 77% used a different (stale v0.10) binary with single-seed only; any comparison is directional only.
 
 ### Known Limitations
 

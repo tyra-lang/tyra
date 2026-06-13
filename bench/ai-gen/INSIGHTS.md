@@ -139,8 +139,7 @@ note in `results/SUMMARY.md` and METHODOLOGY.md §seed-policy.
 
 **v0.11.0 multi-seed result: tyra+spec 88.7% mean** (run56, 3 seeds × 100 prompts = 300 runs).
 Only 2 prompts fail on all 3 seeds (`034-group-even-odd`, `096-rate-limit`).
-Same-condition seed-1 comparison: run55 84% vs run53 s1 77% = **+7 pp**.
-The multi-seed mean (88.7%) vs. seed-1 baseline (77%) is directional only — methodology differs.
+No same-condition baseline exists for run56. The previously published 77% used a different (stale v0.10) binary with single-seed only; any comparison is directional only.
 
 **tyra+spec multi-seed mean (88.7%) exceeds Go's existing seed-1 point estimate (81%).**
 Go has not yet been swept with multiple seeds, so this is not a same-condition comparison.
