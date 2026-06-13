@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Tyra language installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh
-#        curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh -s -- --version v0.10.0
+#        curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh -s -- --version v0.11.0
 #        sh install.sh --prefix /usr/local
 
 set -eu
