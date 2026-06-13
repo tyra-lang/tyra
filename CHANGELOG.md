@@ -7,6 +7,16 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ---
 
+## [Unreleased]
+
+### Planned follow-ups (v0.11.1 candidates)
+
+- **multi-seed ai-gen sweep**: run the 100-prompt benchmark with ≥3 seeds to produce a publishable cross-language comparison table. The current 84% headline is a seed-1 point estimate; variance at a single seed is substantial and the tyra+spec > Go finding needs multi-seed confirmation before being used as an external claim.
+- **constructor-call type checking**: `Point(x: 1)` and other ADT constructor expressions are currently untyped in the checker (`Ty::Unresolved` reaches the print-family gate), so E0314/E0319 cannot fire on directly-constructed values passed to `print`. Same root cause as the B1 module-call hole (ADR-0028), one layer deeper.
+- **Err-main payload rendering**: `fn main() -> Result<Unit, E>` returning `Err(payload)` currently prints `error: main returned Err(<type-name>)` for non-primitive payloads. Full Debug rendering (`impl Debug for E`) is deferred; the display should at minimum show the variant name for ADTs.
+
+---
+
 ## [0.11.0] — 2026-06-13
 
 **Theme: AI self-correction** — the compiler catches what it used to silently miss, reports it machine-readably, and programs report their own failures.
