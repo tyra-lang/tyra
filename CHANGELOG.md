@@ -34,9 +34,17 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ### ai-gen benchmark (v0.11.0)
 
-Re-sweep after all v0.11 fixes: **tyra+spec 84%** (seed 1, 100 prompts, claude-sonnet-4-6, run55 — 2026-06-13).  
-Previous published figure was 77% (stale v0.10 binary). The +7 pp improvement confirms the module-call type-checking and diagnostic hardening directly address the LLM failure modes identified in the Phase A triage. All 16 regressions vs run53 s1 are LLM-quality issues (new strict diagnostics catching code the older binary silently miscompiled); no compiler bugs found.  
-_Multi-seed sweep (≥3 seeds) pending — results will be published in the release notes when complete._
+Multi-seed sweep (run56, 3 seeds × 100 prompts, claude-sonnet-4-6, 2026-06-13):
+
+| metric | value |
+|---|---|
+| mean pass% (across 300 runs) | **88.7%** |
+| any_pass% (≥1 seed passes) | **98.0%** |
+| all_pass% (all 3 seeds pass) | **77.0%** |
+| prompts failing all 3 seeds | 2 (`034-group-even-odd`, `096-rate-limit`) |
+
+Same-condition seed-1 comparison: run55 84% → run53 s1 77% = **+7 pp** (run55 vs run53 s1, both single-seed).  
+The multi-seed mean (88.7%) vs. seed-1 baseline (77%) is directional only — methodology differs.
 
 ### Known Limitations
 

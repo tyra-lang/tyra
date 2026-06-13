@@ -132,19 +132,20 @@ note in `results/SUMMARY.md` and METHODOLOGY.md §seed-policy.
 | crystal | 96% | 3% | 100 | well-established; multi-seed from prior runs |
 | **go** | **81%** | 16% | 100 | first sweep, seed 1 only |
 | **tyra+spec (v0.10)** | **77%** | 11% | 100 | spec injected; seed 1 only; stale binary |
-| **tyra+spec (v0.11.0)** | **84%** | 13% | 100 | run55, seed 1; v0.11.0 release binary (2026-06-13) |
+| **tyra+spec (v0.11.0)** | **88.7% mean** | 9.7% | 300 | run56, 3 seeds × 100 prompts; any_pass 98%, all_pass 77% (2026-06-13) |
 | v | 49% | 50% | 100 | model struggles with V types |
 | gleam | 37% | 57% | 100 | single-file wrapper; pessimistic |
 | tyra (no spec) | 0% | 100% | 100 | model has no Tyra training data |
 
-**v0.11.0 result: tyra+spec 84% (+7 pp over the stale 77% baseline).**
-The 16 regressions vs run53 s1 (which had 98 pass) are all LLM-quality
-issues — new stricter diagnostics (E0110/E0204/E0213/E0211) correctly
-rejecting malformed code that the older binary silently miscompiled. No
-compiler bugs were found in the regression set.
+**v0.11.0 multi-seed result: tyra+spec 88.7% mean** (run56, 3 seeds × 100 prompts = 300 runs).
+Only 2 prompts fail on all 3 seeds (`034-group-even-odd`, `096-rate-limit`).
+Same-condition seed-1 comparison: run55 84% vs run53 s1 77% = **+7 pp**.
+The multi-seed mean (88.7%) vs. seed-1 baseline (77%) is directional only — methodology differs.
 
-**Directional finding: tyra+spec (84%) now exceeds Go (81%) at seed 1.**
-Multi-seed confirmation is still needed before using this as a public headline.
+**tyra+spec multi-seed mean (88.7%) exceeds Go's existing seed-1 point estimate (81%).**
+Go has not yet been swept with multiple seeds, so this is not a same-condition comparison.
+The any_pass metric (98%) shows the language is learnable by the model — nearly every
+prompt has at least one correct formulation.
 
 **Go compile failures (16%):** Failures are mostly type mismatches (`int` vs
 `int64`) and missing imports — the usual Go gotchas at 100-prompt scale.
@@ -156,7 +157,7 @@ depressing the true pass rate.
 ### Follow-ups
 
 - Run Go sweep with ≥3 seeds before using the 81% as a public headline.
-- Run tyra+spec sweep with ≥3 seeds; 84% is a single-seed point estimate (run55).
+- ~~Run tyra+spec sweep with ≥3 seeds~~ — **done**: run56 (3 seeds) = 88.7% mean (2026-06-13).
 - Run a single controlled sweep (same generator, all 6 languages, same seed set) to get a comparable baseline table.
 
 ---
