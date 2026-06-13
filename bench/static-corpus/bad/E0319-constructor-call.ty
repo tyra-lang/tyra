@@ -1,0 +1,11 @@
+# E0319: value-type constructor result passed directly to print.
+# Before this fix, Point(x:1, y:2) typed as Ty::Error (displayable) so E0319
+# was silently skipped. Now value constructors type as Named("Point").
+value Point
+  x: Int
+  y: Int
+end
+
+fn main() -> Unit
+  println(Point(x: 1, y: 2))
+end

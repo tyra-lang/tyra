@@ -908,13 +908,53 @@ fn collect_top_level_types(items: &[Item], env: &mut TypeEnv) {
                     let names: Vec<String> = variants.iter().map(|v| v.name.clone()).collect();
                     env.register_adt(t.name.clone(), names);
                     env.register_user_type(t.name.clone());
+                    // Register variant constructors so Call expressions type as Named(adt).
+                    // Skipped for generic ADTs — HM unification would be needed to infer
+                    // the concrete type arguments.
+                    if t.type_params.is_empty() {
+                        for variant in variants {
+                            let field_tys: Vec<Ty> = variant
+                                .fields
+                                .iter()
+                                .map(|f| Ty::from_type_expr(&f.type_annotation))
+                                .collect();
+                            env.define(
+                                variant.name.clone(),
+                                Ty::Fn(field_tys, Box::new(Ty::Named(t.name.clone()))),
+                            );
+                        }
+                    }
                 }
             }
             Item::ValueDef(v) => {
                 env.register_user_type(v.name.clone());
+                // Register value constructor (non-generic only).
+                if v.type_params.is_empty() {
+                    let field_tys: Vec<Ty> = v
+                        .fields
+                        .iter()
+                        .map(|f| Ty::from_type_expr(&f.type_annotation))
+                        .collect();
+                    env.define(
+                        v.name.clone(),
+                        Ty::Fn(field_tys, Box::new(Ty::Named(v.name.clone()))),
+                    );
+                }
             }
             Item::DataDef(d) => {
                 env.register_user_type(d.name.clone());
+                // Register data constructor (non-generic only).
+                if d.type_params.is_empty() {
+                    let field_tys: Vec<Ty> = d
+                        .fields
+                        .iter()
+                        .map(|f| Ty::from_type_expr(&f.type_annotation))
+                        .collect();
+                    env.define(
+                        d.name.clone(),
+                        Ty::Fn(field_tys, Box::new(Ty::Named(d.name.clone()))),
+                    );
+                }
             }
             Item::TraitDef(t) => {
                 let methods: Vec<String> = t.methods.iter().map(|m| m.name.clone()).collect();
@@ -2776,8 +2816,15 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                         for arg in args {
                             infer_expr(&arg.value, env, report);
                         }
+                    } else if args.iter().any(|a| a.label.is_some()) {
+                        // Named-arg (constructor) call: label order may differ from field
+                        // declaration order, so skip positional type-checking. Still infer
+                        // each argument to surface errors within the argument expressions.
+                        for arg in args {
+                            infer_expr(&arg.value, env, report);
+                        }
                     } else {
-                        // Check each argument type against parameter type
+                        // Positional call: check each argument type against parameter type.
                         for (arg, param_ty) in args.iter().zip(param_tys.iter()) {
                             let arg_ty = infer_expr(&arg.value, env, report);
                             check_type_match(param_ty, &arg_ty, arg.span, None, env, report);
@@ -2792,8 +2839,8 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                     Ty::Error
                 }
                 _ => {
-                    // Could be a constructor call (e.g., Point(x: 1.0, y: 2.0))
-                    // For now, accept and return Error
+                    // Callee resolved to an unknown type — neither a function nor a
+                    // registered constructor. Infer args to surface errors within them.
                     for arg in args {
                         infer_expr(&arg.value, env, report);
                     }

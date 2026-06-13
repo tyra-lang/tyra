@@ -469,6 +469,50 @@ fn runtime_staticlib_search_list() -> String {
 ///   (c) stdlib (`TYRA_STDLIB` env or walk-up for `stdlib/`)
 ///
 /// 0 candidates → E0200; 2+ candidates → E0217 E_IMPORT_AMBIGUOUS; 1 → use it.
+/// If `type_name` is a locally-defined non-generic ADT, return its variants.
+/// Used by `desugar_err_main` to emit variant-name display for Err payloads.
+fn find_local_adt_variants<'a>(
+    items: &'a [tyra_ast::Item],
+    type_name: &str,
+) -> Option<&'a Vec<tyra_ast::Variant>> {
+    use tyra_ast::{Item, TypeDefKind};
+    for item in items {
+        if let Item::TypeDef(t) = item
+            && t.name == type_name
+            && t.type_params.is_empty()
+            && let TypeDefKind::Adt(variants) = &t.kind
+        {
+            return Some(variants);
+        }
+    }
+    None
+}
+
+/// Generate Tyra statements that bind `__tyra_err_str` to the variant name of
+/// the ADT value in `binding` via a match, then call eprintln with it.
+fn adt_variant_name_report(variants: &[tyra_ast::Variant], binding: &str) -> String {
+    let arms = variants
+        .iter()
+        .map(|v| {
+            if v.fields.is_empty() {
+                format!("  when {}\n    \"{}\"", v.name, v.name)
+            } else {
+                let wildcards = v
+                    .fields
+                    .iter()
+                    .map(|f| format!("{}: _", f.name))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("  when {}({})\n    \"{}\"", v.name, wildcards, v.name)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "let __tyra_err_str = match {binding}\n{arms}\n  end\neprintln(\"error: #{{__tyra_err_str}}\")"
+    )
+}
+
 /// Minimal type-expression renderer for ADR-0029's type-name fallback
 /// (`error: main returned Err(<type name>)`).
 fn type_expr_display(te: &tyra_ast::TypeExpr) -> String {
@@ -551,6 +595,17 @@ fn desugar_err_main(
     let displayable = err_ty.is_interp_displayable();
     let err_report = if displayable {
         r##"eprintln("error: #{__tyra_err}")"##.to_string()
+    } else if let tyra_types::Ty::Named(ref type_name) = err_ty {
+        // For a locally-defined non-generic ADT, show the variant name at runtime
+        // rather than the static type name (e.g. "NotFound" instead of "AppError").
+        if let Some(variants) = find_local_adt_variants(&ast.items, type_name) {
+            adt_variant_name_report(variants, "__tyra_err")
+        } else {
+            format!(
+                r##"eprintln("error: main returned Err({})")"##,
+                type_expr_display(&err_te)
+            )
+        }
     } else {
         format!(
             r##"eprintln("error: main returned Err({})")"##,

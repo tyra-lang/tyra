@@ -7,16 +7,6 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ---
 
-## [Unreleased]
-
-### Planned follow-ups (v0.11.1 candidates)
-
-- **multi-seed ai-gen sweep**: run the 100-prompt benchmark with ≥3 seeds to produce a publishable cross-language comparison table. The current 84% headline is a seed-1 point estimate; variance at a single seed is substantial and the tyra+spec > Go finding needs multi-seed confirmation before being used as an external claim.
-- **constructor-call type checking**: `Point(x: 1)` and other ADT constructor expressions are currently untyped in the checker (`Ty::Unresolved` reaches the print-family gate), so E0314/E0319 cannot fire on directly-constructed values passed to `print`. Same root cause as the B1 module-call hole (ADR-0028), one layer deeper.
-- **Err-main payload rendering**: `fn main() -> Result<Unit, E>` returning `Err(payload)` currently prints `error: main returned Err(<type-name>)` for non-primitive payloads. Full Debug rendering (`impl Debug for E`) is deferred; the display should at minimum show the variant name for ADTs.
-
----
-
 ## [0.11.0] — 2026-06-13
 
 **Theme: AI self-correction** — the compiler catches what it used to silently miss, reports it machine-readably, and programs report their own failures.
@@ -31,6 +21,8 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 - **List sorting (ADR-0027)**: `list.sort` (Int) and `list.sort_str` (String, UTF-8 byte order), stable ascending.
 - **eprint/eprintln fixed**: they now write to stderr (previously stdout).
 - **E0305 help**: `String + String` suggests interpolation.
+- **Constructor-call type checking**: value-type and data-type constructor expressions (`Point(x: 1, y: 2)`) are now typed as `Named("Point")` in the checker. Previously they resolved to `Ty::Error` (displayable), so E0319 silently missed `println(Point(...))`. Now E0319 fires correctly on directly-constructed non-displayable values.
+- **Err-main payload rendering**: for locally-defined non-generic ADT error types, the variant name is shown at runtime (`error: NotFound` instead of `error: main returned Err(AppError)`). Full Debug rendering remains deferred.
 - Language specification 0.11 (entry-point exit semantics + exit-status table, USV character API, sorting, `--error-format json` reference).
 
 ### Breaking Changes
@@ -44,13 +36,12 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 Re-sweep after all v0.11 fixes: **tyra+spec 84%** (seed 1, 100 prompts, claude-sonnet-4-6, run55 — 2026-06-13).  
 Previous published figure was 77% (stale v0.10 binary). The +7 pp improvement confirms the module-call type-checking and diagnostic hardening directly address the LLM failure modes identified in the Phase A triage. All 16 regressions vs run53 s1 are LLM-quality issues (new strict diagnostics catching code the older binary silently miscompiled); no compiler bugs found.  
-_Single-seed point estimate; multi-seed sweep planned for v0.11.1._
+_Multi-seed sweep (≥3 seeds) pending — results will be published in the release notes when complete._
 
 ### Known Limitations
 
-- Constructor-call expressions (`Point(x: 1)`) are still untyped in the checker; E0314/E0319 cannot fire on directly-constructed values.
 - Type aliases remain unusable for scalars (E0308 on alias-typed bindings) and miscompile as Result payloads; tuple payloads in `Result` miscompile (struct-name mismatch). Tracked as follow-ups.
-- ADT payloads in Err-main reports render as the type name only (no Debug rendering yet).
+- ADT debug rendering (`impl Debug for E`) is deferred — Err-main reports for ADTs show the variant name but not field values.
 
 ---
 
