@@ -62,6 +62,7 @@ E0316: "Tuple literal requires at least 2 elements; a 1-tuple is not valid in Ty
 E0317: "Map key or value type is not supported in this version of the compiler."
 E0318: "The imported module has no exported function with this name — check the function name against the module's documentation (ADR-0028)."
 E0319: "print/println/eprint/eprintln can only display Int, Float, Bool, String, Option of these, and tuples of these — the same whitelist as #{} interpolation (E0314); extract a displayable value first."
+E0320: "Type does not implement Stringable — to_string() requires an explicit `impl Stringable for T`; primitive types and prelude types have implicit Stringable."
 
 # ── Match exhaustiveness ──────────────────────────────────────────────────────
 E0400: "Non-exhaustive match — not all variants or patterns are covered; add a wildcard _ arm or cover missing cases."
@@ -70,7 +71,7 @@ E0402: "Closure rebinding of an outer mut variable is forbidden; closures captur
 
 # ── Build / infrastructure errors ─────────────────────────────────────────────
 E0500: "Build infrastructure error — a required file (runtime staticlib, stdlib path) could not be found."
-E0501: "Required source file not found during compilation."
+E0501: "Abnormal program termination detected by `tyra run` — exit code 101 (panic), process killed by signal, or spawn failure."
 E0502: "Build configuration error (e.g. malformed tyra.toml)."
 
 # ── Internal errors ───────────────────────────────────────────────────────────

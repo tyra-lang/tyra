@@ -77,7 +77,7 @@ pub struct TypeEnv {
     /// their fields/variants in collect_top_level_types.
     type_abilities: HashMap<String, HashSet<Ability>>,
     /// User-defined type names (value/data/ADT). Used to distinguish user types
-    /// from primitives for checks like Stringable impl requirement (E0501).
+    /// from primitives for checks like Stringable impl requirement (E0320).
     user_defined_types: HashSet<String>,
     /// Span → Ty map populated during type checking for LSP hover support.
     pub(crate) type_index: TypeIndex,
@@ -3615,7 +3615,7 @@ fn check_trait_method_call(
             Diagnostic::error(format!(
                 "type `{type_name}` does not implement Stringable; `to_string()` requires an explicit `impl Stringable for {type_name}`"
             ))
-            .with_code("E0501")
+            .with_code("E0320")
             .with_label(Label::new(span, "no Stringable impl for this type"))
             .with_note(
                 "add `impl Stringable for ...` or call the method on a type that implements it.",

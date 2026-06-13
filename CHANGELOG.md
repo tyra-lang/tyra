@@ -7,6 +7,37 @@ Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
 
 ---
 
+## [0.11.0] — 2026-06-13
+
+**Theme: AI self-correction** — the compiler catches what it used to silently miss, reports it machine-readably, and programs report their own failures.
+
+### Stable
+
+- **Module-call type checking (ADR-0028)**: calls to imported module functions are now type-checked against their declared signatures (previously silently untyped, letting errors like `String + string.from_byte(x)` crash codegen). New diagnostics: **E0318** (unknown exported function, including typos on the builtin `core.sys` / `core.tasks`), **E0319** (`print` family rejects non-displayable arguments at compile time — previously crashed at runtime). `sys.args` / `sys.env` / `sys.exit` are fully typed. list structural ops (`len`/`get`/`push`/`contains`/`index_of`) are checked element-aware.
+- **Err-returning main (ADR-0029)**: `fn main() -> Result<Unit, E>` returning `Err` now reports `error: …` on stderr and exits 1 (previously exited 0 silently). Displayable `E` prints the payload; other types print `error: main returned Err(<type>)`. `defer` runs before the report. Sync and async main covered.
+- **`tyra run` exit codes (ADR-0029)**: the child's exit status propagates (`sys.exit(3)` → 3, Err main → 1). E0501 is now reserved for abnormal termination (panic 101, signals, spawn failures).
+- **`--error-format json` (ADR-0026)**: `tyra check` / `tyra build` emit NDJSON diagnostics on stderr — `diagnostic` / `error` / `summary` records, with stderr guaranteed NDJSON-only on every path (usage errors, missing files, ICEs included). Built for agent self-correction loops.
+- **USV character API (ADR-0027)**: `string.chars` / `char_at` / `char_code` / `from_char_code` operate on Unicode scalar values; surrogates and out-of-range code points return `None`.
+- **List sorting (ADR-0027)**: `list.sort` (Int) and `list.sort_str` (String, UTF-8 byte order), stable ascending.
+- **eprint/eprintln fixed**: they now write to stderr (previously stdout).
+- **E0305 help**: `String + String` suggests interpolation.
+- Language specification 0.11 (entry-point exit semantics + exit-status table, USV character API, sorting, `--error-format json` reference).
+
+### Breaking Changes
+
+- `string.to_upper` / `to_lower` renamed to **`to_ascii_upper` / `to_ascii_lower`** (the name now encodes the ASCII-only behaviour; no aliases kept).
+- `Err`-returning main exits 1 instead of 0 — scripts relying on the old silent success will observe the failure.
+- `tyra run` no longer wraps every nonzero exit in E0501.
+- Code that previously compiled because module calls were unchecked may now fail with real type errors (E0305/E0308/E0301/E0318/E0319). These were latent bugs.
+
+### Known Limitations
+
+- Constructor-call expressions (`Point(x: 1)`) are still untyped in the checker; E0314/E0319 cannot fire on directly-constructed values.
+- Type aliases remain unusable for scalars (E0308 on alias-typed bindings) and miscompile as Result payloads; tuple payloads in `Result` miscompile (struct-name mismatch). Tracked as follow-ups.
+- ADT payloads in Err-main reports render as the type name only (no Debug rendering yet).
+
+---
+
 ## [0.10.1] — 2026-06-11
 
 **Fix**: `tyra --version` now correctly reports `implementing language spec 0.10` (was `0.8`). Installation docs updated to reflect current output.

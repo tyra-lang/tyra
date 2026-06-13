@@ -6,9 +6,9 @@
 
 # Tyra Language Specification
 
-- **Version**: 0.8
+- **Version**: 0.11
 - **Status**: Stable
-- **Last updated**: 2026-05-27
+- **Last updated**: 2026-06-13
 
 > This is the English translation of the Tyra Language Specification.
 > The Japanese version (`docs/spec/ja/language-spec.md`) is the **authoritative source**.
@@ -613,6 +613,32 @@ async fn main() -> Result<Unit, AppError>
   app.listen(port: 8080).await?
 end
 ```
+
+#### Exit semantics of main (v0.11.0, ADR-0029)
+
+When `fn main() -> Result<Unit, E>` (sync or async) returns `Err(e)`, the
+runtime writes a one-line report to stderr and the process exits with
+status 1. Returning `Err` is a normal scope exit: `defer` blocks run
+before the report.
+
+- If `E` is displayable (Int / Float / Bool / String / Options of these /
+  tuples of these — the same boundary as `#{...}` interpolation, §7.3):
+  `error: <value>` is printed.
+- Any other `E` (ADTs, …) prints `error: main returned Err(<type name>)`
+  (full Debug payload rendering is a future extension).
+
+Exit-status map:
+
+| Outcome | Exit status |
+| --- | --- |
+| `main` returns `Unit` / `Ok(())` | 0 |
+| `main` returns `Err(e)` | 1 (after printing `error: …` to stderr) |
+| `panic(...)` | 101 (`tyra run` reports it as E0501) |
+| `core.sys.exit(n)` | n (explicit) |
+
+`tyra run` propagates the child process's exit status unchanged. A
+nonzero exit is a normal program outcome; E0501 is reserved for abnormal
+termination (panic's 101, signal kills, spawn failures).
 
 ### 9.2 Calls
 
@@ -1419,7 +1445,7 @@ Operator correspondences:
 These modules are practically important but do not affect language semantics. Their APIs are defined separately in `docs/stdlib/`.
 
 - `string` — string operations (len, trim, contains, starts_with, etc.; v0.1 API frozen in §17.3.4)
-- `list` — `List<Int>` operations (push, sum, max, min, contains, index_of; v0.1 API frozen in §17.3.5, generic `List<T>` deferred to §22)
+- `list` — `List<Int>` operations (push, sum, max, min, contains, index_of; v0.1 API frozen in §17.3.5) plus `sort` / `sort_str` (v0.11.0). Generic `List<T>` deferred to §22
 - `Map<K, V>` — arbitrary `K: Eq + Hash`, arbitrary `V`; fully generalized in v0.6.0 (§17.3.6)
 - `Set<T>` — arbitrary `T: Eq + Hash`; added in v0.6.0 (§17.3.7)
 - `collections` — methods on `List`, `Map`, `Set` (sort_by, min_by, max_by, map, filter, etc.)
@@ -1624,6 +1650,14 @@ export fn reverse(_ s: String) -> String
 export fn from_byte(_ b: Int) -> String
 export fn split_whitespace(_ s: String) -> List<String>
 export fn split(_ s: String, _ sep: String) -> List<String>
+export fn replace(_ s: String, _ from: String, _ to: String) -> String
+export fn join(_ parts: List<String>, _ sep: String) -> String
+
+# v0.11.0 — USV character-level API (ADR-0027)
+export fn chars(_ s: String) -> List<String>
+export fn char_at(_ s: String, _ index: Int) -> Option<String>
+export fn char_code(_ s: String) -> Option<Int>
+export fn from_char_code(_ code: Int) -> Option<String>
 ```
 
 - `len` returns the UTF-8 byte length, not the Unicode code-point
@@ -1664,8 +1698,27 @@ export fn split(_ s: String, _ sep: String) -> List<String>
   matching Rust's `str::split`). Adjacent separators yield empty-string
   entries. An empty `sep` is NOT split between every character in v0.1
   — the function returns the single-element list `[s]`.
-- `replace` / `join` / `char_at` / regex are NOT part of this freeze.
-  Tracked in §22 as "extended `string` API".
+- `replace(s, from, to)` replaces every non-overlapping occurrence of
+  `from` with `to` (byte-level, matching Rust's `str::replace`). An
+  empty `from` inserts `to` before every byte and at the end — this
+  is implementation-defined and should not be relied upon.
+- `join(parts, sep)` concatenates all elements of `parts` with `sep`
+  between them. An empty list returns an empty string.
+- **Character-level API (v0.11.0)**: "character" means **Unicode scalar
+  value (USV)**. Grapheme clusters are out of scope — combining
+  sequences and emoji ZWJ sequences split into their constituent USVs.
+  Byte-level access remains available via `byte_at` / `from_byte`.
+- `chars(s)` returns a `List<String>` with one USV per element. O(n)
+  time and memory.
+- `char_at(s, i)` returns `Some` of the i-th USV (0-based) or `None`
+  when out of range. **O(n)** — UTF-8 has no random access; enumerate
+  once with `chars()` instead of calling `char_at` in a loop.
+- `char_code(s)` returns `Some(code point)` iff `s` is exactly one USV;
+  empty or multi-USV strings return `None` (no "first character"
+  guessing).
+- `from_char_code(code)` builds the single-USV string for a valid code
+  point. Surrogates (0xD800..=0xDFFF) and values above 0x10FFFF return
+  `None` — never a silent replacement character.
 
 #### 17.3.5 list
 
@@ -1681,6 +1734,10 @@ export fn max(_ list: List<Int>) -> Option<Int>
 export fn min(_ list: List<Int>) -> Option<Int>
 export fn contains(_ list: List<Int>, _ x: Int) -> Bool
 export fn index_of(_ list: List<Int>, _ x: Int) -> Option<Int>
+
+# v0.11.0 — sorting (ADR-0027)
+export fn sort(_ xs: List<Int>) -> List<Int>
+export fn sort_str(_ xs: List<String>) -> List<String>
 ```
 
 - All operations are **immutable**. Functions returning `List<Int>`
@@ -1699,6 +1756,14 @@ export fn index_of(_ list: List<Int>, _ x: Int) -> Option<Int>
   monomorphization plumbing; tracked in §22).
 - `map` / `filter` / `fold` are out of scope for v0.1 (lambda passing
   through a C ABI is required). Tracked in §22 as "extended `list` API".
+- **`sort(xs)` / `sort_str(xs)` (v0.11.0)** return a stable ascending
+  sort as a new list. `sort` is `List<Int>`-only and `sort_str` is
+  `List<String>`-only; `sort_str` orders by UTF-8 byte sequence (the
+  same order `SortedMap` uses for String keys; no locale collation).
+  A mismatched element type (e.g. `sort(List<String>)`) is a compile
+  error (E0308). The name `sort_by` is reserved for the future generic
+  `sort_by<T, K: Ord>` (an ability constraint) and is not provided in
+  v0.11 (§22).
 - Implementation emits LLVM IR directly (`__list_int_*` intrinsics →
   inline `GC_malloc` + loops); no runtime C ABI is involved. Safe because
   the `List<Int>` layout (`{ptr data, i64 len}`) is compiler-owned.
@@ -1837,6 +1902,11 @@ tyra check src/myapp.ty    # specify file directly
 
 - No errors → exit 0; errors → exit 1
 - Project mode: walks up from the current directory to find `Tyra.toml`, then checks `src/<name>.ty`
+- `--error-format json` (v0.11.0, ADR-0026): emits diagnostics as NDJSON
+  on stderr (also available on `tyra build`). stderr carries NDJSON only
+  on every path — including usage errors, missing files, and internal
+  errors — and the last line is always `{"type":"summary",...}`. See
+  ADR-0026 for the record schema
 
 ### 18.2 tyra run
 
@@ -2114,8 +2184,8 @@ The following are postponed for later specification:
 - tuple types
 - structured concurrency
 - Module-level initialization semantics (`let`/`mut` at module scope)
-- Extended `string` API (replace, join, char_at, regex) — `split` and `split_whitespace` are frozen in §17.3.4; everything else is a later release
-- Extended `list` API — generic `List<T>`, `map` / `filter` / `fold`, and `List<String>` are implemented in v0.4.0 (§17.3.5). `sort_by` and other additional operations are a later release
+- Extended `string` API — the USV character-level API (`chars` / `char_at` / `char_code` / `from_char_code`) shipped in v0.11.0 (§17.3.4, ADR-0027). Regex and grapheme-cluster support are a later release
+- Extended `list` API — generic `List<T>`, `map` / `filter` / `fold`, and `List<String>` shipped in v0.4.0; `sort` / `sort_str` shipped in v0.11.0 (§17.3.5). The key-function name `sort_by` is reserved for the future generic `sort_by<T, K: Ord>` and is a later release
 - `Map<K,V>` — HAMT persistent in v0.7.0 (§17.3.6). `remove` / `for k, v in m` iteration implemented. User-defined `value` type keys and merge/diff operations are a later release
 - `Set<T>` — HAMT persistent in v0.7.0 (§17.3.7). `remove` / `for v in s` iteration implemented. Set-literal syntax and `union`/`intersection` are a later release
 - `test "name"` language syntax — implemented in v0.6.0 (ADR-0013)
@@ -2161,7 +2231,7 @@ This installs `tyra` to `~/.local/bin` and the runtime library + stdlib to `~/.l
 curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh -s -- --prefix /usr/local
 
 # Install a specific version
-curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh -s -- --version v0.10.0
+curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh -s -- --version v0.11.0
 ```
 
 After installation, add `~/.local/bin` to your `PATH` if not already present:
@@ -2182,7 +2252,7 @@ tyra --version
 brew install tyra-lang/tap/tyra
 ```
 
-> **Note:** The Homebrew tap is published alongside the v0.10.0 release. On first use, run `brew tap tyra-lang/tap` if the above command does not resolve automatically.
+> **Note:** The Homebrew tap is published alongside the v0.11.0 release. On first use, run `brew tap tyra-lang/tap` if the above command does not resolve automatically.
 
 ## Build from Source
 
@@ -2233,8 +2303,8 @@ tyra --version
 You should see output like:
 
 ```
-tyra 0.10.1
-implementing language spec 0.10
+tyra 0.11.0
+implementing language spec 0.11
 ```
 
 ## Test with Hello, World
@@ -4696,7 +4766,7 @@ The following 17 stdlib module(s) ship with Tyra. Import them by name without a 
 
 > Auto-generated by `scripts/gen_llms_docs.py`. Do not edit manually — edit `docs/llms/error-codes-notes.yaml` instead.
 
-Total codes: 55
+Total codes: 56
 
 | Code | Description |
 | ---- | ----------- |
@@ -4748,11 +4818,12 @@ Total codes: 55
 | `E0317` | Map key or value type is not supported in this version of the compiler. |
 | `E0318` | The imported module has no exported function with this name — check the function name against the module's documentation (ADR-0028). |
 | `E0319` | print/println/eprint/eprintln can only display Int, Float, Bool, String, Option of these, and tuples of these — the same whitelist as #{} interpolation (E0314); extract a displayable value first. |
+| `E0320` | Type does not implement Stringable — to_string() requires an explicit `impl Stringable for T`; primitive types and prelude types have implicit Stringable. |
 | `E0400` | Non-exhaustive match — not all variants or patterns are covered; add a wildcard _ arm or cover missing cases. |
 | `E0401` | Non-exhaustive nested match at depth 1 — e.g. Err(SomeVariant) where not all inner ADT variants are covered. |
 | `E0402` | Closure rebinding of an outer mut variable is forbidden; closures capture outer mut bindings by reference but cannot reassign them (spec §9.4). |
 | `E0500` | Build infrastructure error — a required file (runtime staticlib, stdlib path) could not be found. |
-| `E0501` | Required source file not found during compilation. |
+| `E0501` | Abnormal program termination detected by `tyra run` — exit code 101 (panic), process killed by signal, or spawn failure. |
 | `E0502` | Build configuration error (e.g. malformed tyra.toml). |
 | `E9001` | Internal compiler error (ICE) — this should not occur in normal use; please file a bug report. |
 

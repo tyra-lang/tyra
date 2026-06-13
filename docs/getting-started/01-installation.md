@@ -17,7 +17,7 @@ This installs `tyra` to `~/.local/bin` and the runtime library + stdlib to `~/.l
 curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh -s -- --prefix /usr/local
 
 # Install a specific version
-curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh -s -- --version v0.10.0
+curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh -s -- --version v0.11.0
 ```
 
 After installation, add `~/.local/bin` to your `PATH` if not already present:
@@ -38,7 +38,7 @@ tyra --version
 brew install tyra-lang/tap/tyra
 ```
 
-> **Note:** The Homebrew tap is published alongside the v0.10.0 release. On first use, run `brew tap tyra-lang/tap` if the above command does not resolve automatically.
+> **Note:** The Homebrew tap is published alongside the v0.11.0 release. On first use, run `brew tap tyra-lang/tap` if the above command does not resolve automatically.
 
 ## Build from Source
 
@@ -89,8 +89,8 @@ tyra --version
 You should see output like:
 
 ```
-tyra 0.10.1
-implementing language spec 0.10
+tyra 0.11.0
+implementing language spec 0.11
 ```
 
 ## Test with Hello, World

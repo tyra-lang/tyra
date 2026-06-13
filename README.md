@@ -2,7 +2,7 @@
 
 A statically-typed, AI-friendly programming language for backend services, CLI tools, and business applications.
 
-> **v0.10.0** — Tuple types with full destructuring (ADR-0022), `SortedMap`/`SortedSet` (ADR-0024), `LinkedMap.from`, E0314 interpolation diagnostic, source files renamed `.tyra` → `.ty` (ADR-0025), `curl|sh` installer. AI-gen 6-language sweep (seed 1): ruby 99%, crystal 96%, go 81%, tyra+spec 77%. [See known limitations](#known-limitations) before using in production.
+> **v0.11.0 — AI self-correction** — imported module calls are fully type-checked (new E0318/E0319; `String + string.from_byte(x)` no longer crashes codegen), `Err`-returning main reports to stderr and exits 1 (ADR-0029), `tyra check/build --error-format json` emits NDJSON diagnostics for agent loops (ADR-0026), USV character API + `list.sort`/`sort_str` (ADR-0027), and `to_upper`/`to_lower` are renamed `to_ascii_upper`/`to_ascii_lower` (breaking). The published ai-gen numbers (tyra+spec 77%) predate these fixes — a re-sweep is pending. [See known limitations](#known-limitations) before using in production.
 
 ---
 
@@ -165,11 +165,11 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 
 ## Status
 
-**Stable in v0.10.0** — supported and tested:
+**Stable in v0.11.0** — supported and tested:
 
 | Component | Notes |
 | --- | --- |
-| Language specification v0.10 | ✅ Complete |
+| Language specification v0.11 | ✅ Complete |
 | Lexer, Parser, Type checker | ✅ Complete |
 | LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 (glibc + musl) |
 | Standard library (e.g. string, list, map, set, fs, io, json, assert, time, log, sorted_map, sorted_set, linked_map, http) | ✅ Complete |
@@ -196,6 +196,10 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | Tuple types `(A, B)` — let/match/for destructuring (ADR-0022) | ✅ Complete (v0.10.0+) |
 | `SortedMap<K,V>` / `SortedSet<T>` — key-sorted persistent collections (ADR-0024) | ✅ Complete (v0.10.0+) |
 | E0314 — compile-time diagnostic for non-displayable string interpolation | ✅ Complete (v0.10.0+) |
+| Module-call type checking — E0318 unknown module fn, E0319 print displayable gate (ADR-0028) | ✅ Complete (v0.11.0+) |
+| `Err`-returning main → stderr report + exit 1; `tyra run` propagates exit codes (ADR-0029) | ✅ Complete (v0.11.0+) |
+| `tyra check/build --error-format json` — NDJSON diagnostics, stderr-pure on all paths (ADR-0026) | ✅ Complete (v0.11.0+) |
+| USV character API (`string.chars`/`char_at`/`char_code`/`from_char_code`) + `list.sort`/`sort_str` (ADR-0027) | ✅ Complete (v0.11.0+) |
 | E0308 diagnostic improvements — help hints, secondary labels, cascade dedup | ✅ Complete (v0.7.0+) |
 | E0313 — for-loop binding count mismatch diagnostic | ✅ Complete (v0.7.0+) |
 | Generic `assert.eq` / `assert.ne` (Int, String, Bool) | ✅ Complete |
@@ -353,8 +357,8 @@ The compiler always declares which spec version it implements:
 
 ```console
 $ tyra --version
-tyra 0.10.0
-implementing language spec 0.10
+tyra 0.11.0
+implementing language spec 0.11
 ```
 
 While Tyra is at v0.x, **breaking changes are allowed in MINOR version bumps**. After v1.0, breaking changes will use the Edition model (similar to Rust editions).

@@ -6,7 +6,7 @@ This file provides guidance to AI coding assistants (Claude Code, Codex, Cursor,
 
 Tyra is a statically-typed, AI-friendly programming language designed for backend services, CLI tools, and business applications. It compiles to native binaries via LLVM.
 
-**Current stage**: Pre-alpha. Implementing Language Spec v0.4.
+**Current stage**: Pre-1.0. Implementing Language Spec v0.11.
 
 **Core design principles** (from spec §2):
 
@@ -145,7 +145,7 @@ tyra/
 ├── stdlib/                        # Standard library, written in Tyra
 ├── runtime/                       # GC and async scheduler (Rust/C)
 ├── tools/                         # tyra-fmt, tyra-lsp, tyra-mod
-├── tests/conformance/             # Spec compliance tests
+├── bench/static-corpus/           # Spec compliance corpus (positive + bad/ negative cases)
 └── examples/                      # User-facing sample programs and spec-by-example
 ```
 
@@ -156,7 +156,7 @@ Before making any non-trivial change, AI assistants should read these in order:
 1. `docs/spec/ja/language-spec.md` — entire spec, especially §8 (type system) and §12 (error handling)
 2. `docs/design/` — past design decisions and their rationale (ADRs 0001-0006)
 3. The relevant crate's `README.md` if present
-4. Existing tests in `tests/conformance/` for the area being modified
+4. Existing corpus programs in `bench/static-corpus/` (and crate tests) for the area being modified
 
 For strategic decisions (new features, competitive positioning, roadmap changes), start with **`docs/strategy.md`** and the "Project Positioning" section above (in this file) before reading the spec.
 
@@ -200,7 +200,7 @@ cargo test --test conformance
 cargo build --release
 ```
 
-When implementing a new feature, **always add a corresponding conformance test** in `tests/conformance/` with a comment referencing the spec section.
+When implementing a new feature, **always add a corresponding corpus program** in `bench/static-corpus/` (error cases go in `bad/` with the expected `Exxxx` code as the filename prefix) plus crate-level unit tests, with a comment referencing the spec section.
 
 ## Spec Compliance Rules
 
@@ -365,11 +365,11 @@ Never silently make a design choice that the spec doesn't endorse. The point of 
 
   ```console
   $ tyra --version
-  tyra 0.4.0
-  implementing language spec 0.4
+  tyra 0.11.0
+  implementing language spec 0.11
   ```
 
-Spec status is currently **Stable** (v0.4). Breaking changes are allowed in MINOR bumps until v1.0.
+Spec status is currently **Stable** (v0.11). Breaking changes are allowed in MINOR bumps until v1.0.
 
 ## Implementation Strategy
 
@@ -391,7 +391,7 @@ Each phase should have:
 
 - Unit tests in the crate
 - Integration tests in `compiler/tests/`
-- Conformance tests in `tests/conformance/` referencing spec sections
+- Corpus programs in `bench/static-corpus/` referencing spec sections
 
 ## Useful Spec Sections by Task
 

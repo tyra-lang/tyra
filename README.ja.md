@@ -2,7 +2,7 @@
 
 バックエンドサービス、CLI ツール、業務アプリケーションのための、AI フレンドリーな静的型付け言語。
 
-> **v0.10.0** — タプル型と完全な分構束縛 (ADR-0022)、`SortedMap`/`SortedSet` (ADR-0024)、`LinkedMap.from`、E0314 補間診断、ソースファイル拡張子 `.tyra` → `.ty` (ADR-0025)、`curl|sh` インストーラ。AI 生成ベンチマーク 6言語スイープ (seed 1): ruby 99%、crystal 96%、go 81%、tyra+spec 77%。本番利用前に [既知の制限](#既知の制限) をご確認ください。
+> **v0.11.0 — AI self-correction** — import したモジュール呼び出しを完全に型検査 (新診断 E0318/E0319。`String + string.from_byte(x)` が codegen でクラッシュしなくなりました)、`Err` を返す main は stderr 報告 + exit 1 (ADR-0029)、`tyra check/build --error-format json` がエージェントループ向け NDJSON 診断を出力 (ADR-0026)、USV 文字 API + `list.sort`/`sort_str` (ADR-0027)、`to_upper`/`to_lower` は `to_ascii_upper`/`to_ascii_lower` にリネーム (破壊的変更)。掲載中の AI 生成ベンチ数値 (tyra+spec 77%) はこれらの修正以前のもので、再スイープ待ちです。本番利用前に [既知の制限](#既知の制限) をご確認ください。
 
 ---
 
@@ -141,11 +141,11 @@ end
 
 ## 開発状況
 
-**v0.10.0 で安定** — サポート済み・テスト済み:
+**v0.11.0 で安定** — サポート済み・テスト済み:
 
 | コンポーネント | 備考 |
 | --- | --- |
-| 言語仕様 v0.10 | ✅ 完成 |
+| 言語仕様 v0.11 | ✅ 完成 |
 | Lexer / Parser / 型検査器 | ✅ 完成 |
 | Hindley-Milner 型推論 (rank-1)、E9001 ICE ガード | ✅ 完成 (v0.8.0+) |
 | E0308 ヒューリスティック iv — ADT バリアント提案 | ✅ 完成 (v0.8.0+) |
@@ -267,8 +267,8 @@ Tyra は2系統のバージョンを持ちます:
 
 ```console
 $ tyra --version
-tyra 0.10.0
-implementing language spec 0.10
+tyra 0.11.0
+implementing language spec 0.11
 ```
 
 Tyra が v0.x の間は **MINOR バージョンアップで破壊的変更を許容** します。v1.0 以降は Rust の Edition モデルに似た方式で破壊的変更を管理します。

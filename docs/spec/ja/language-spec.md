@@ -1,8 +1,8 @@
 # Tyra Language Specification
 
-- **Version**: 0.8
+- **Version**: 0.11
 - **Status**: Stable
-- **Last updated**: 2026-05-27
+- **Last updated**: 2026-06-13
 
 ## 1. 目的
 
@@ -603,6 +603,32 @@ async fn main() -> Result<Unit, AppError>
   app.listen(port: 8080).await?
 end
 ```
+
+#### main の終了セマンティクス (v0.11.0, ADR-0029)
+
+`fn main() -> Result<Unit, E>`(sync / async とも)が `Err(e)` を返した
+場合、ランタイムは stderr に 1 行のエラー報告を出力し、終了ステータス 1 で
+終了する。`Err` 返却は通常のスコープ脱出であり、`defer` は報告の前に実行
+される。
+
+- `E` が表示可能型(Int / Float / Bool / String / これらの Option /
+  これらの tuple — §7.3 の interpolation と同じ境界)の場合:
+  `error: <値>` を出力する
+- それ以外の `E`(ADT 等)の場合: `error: main returned Err(<型名>)` を
+  出力する(ペイロードの Debug 表示は将来の拡張で値表示に置き換わる)
+
+終了ステータスの対応表:
+
+| 結果 | 終了ステータス |
+| --- | --- |
+| `main` が `Unit` / `Ok(())` を返す | 0 |
+| `main` が `Err(e)` を返す | 1(stderr に `error: …` を出力後) |
+| `panic(...)` | 101(`tyra run` は E0501 として報告) |
+| `core.sys.exit(n)` | n(明示指定) |
+
+`tyra run` は子プロセスの終了ステータスをそのまま伝播する。非ゼロ終了は
+正常なプログラム結果であり、E0501 は異常終了(panic の 101、シグナル、
+起動失敗)のみに使われる。
 
 ### 9.2 呼び出し
 
@@ -1418,7 +1444,7 @@ ADT バリアント:
 言語意味論には影響しないが、実用上重要なモジュール。API 仕様は `docs/stdlib/` に別途定義する。
 
 - `string` — 文字列操作 (len, trim, contains, starts_with 等。§17.3.4 で v0.1 API 凍結)
-- `list` — `List<Int>` の操作 (push, sum, max, min, contains, index_of。§17.3.5 で v0.1 API 凍結、`List<T>` 全般は §22 で延期)
+- `list` — `List<Int>` の操作 (push, sum, max, min, contains, index_of。§17.3.5 で v0.1 API 凍結) + `sort` / `sort_str` (v0.11.0)。`List<T>` 全般は §22 で延期
 - `Map<K, V>` — 任意 `K: Eq + Hash`, 任意 `V`。v0.6.0 で完全一般化（§17.3.6）。
 - `Set<T>` — 任意 `T: Eq + Hash`。v0.6.0 で新設（§17.3.7）。
 - `collections` — `List`, `Map`, `Set` のメソッド (sort_by, min_by, max_by, map, filter 等)
@@ -1616,6 +1642,12 @@ export fn split_whitespace(_ s: String) -> List<String>
 export fn split(_ s: String, _ sep: String) -> List<String>
 export fn replace(_ s: String, _ from: String, _ to: String) -> String
 export fn join(_ parts: List<String>, _ sep: String) -> String
+
+# v0.11.0 — USV 文字単位 API (ADR-0027)
+export fn chars(_ s: String) -> List<String>
+export fn char_at(_ s: String, _ index: Int) -> Option<String>
+export fn char_code(_ s: String) -> Option<Int>
+export fn from_char_code(_ code: Int) -> Option<String>
 ```
 
 - `len` は UTF-8 バイト長を返す。Unicode コードポイント数ではない
@@ -1648,10 +1680,26 @@ export fn join(_ parts: List<String>, _ sep: String) -> String
   空白からは空要素が生じない。空文字列・空白のみの入力は空リストを返す。
 - `split(s, sep)` は `sep` の出現ごとに分割する (Rust の `str::split` と
   同等のバイトレベル動作)。連続する区切りからは空文字列要素が生じる。
+- **文字単位 API (v0.11.0)** における「1 文字」は **Unicode scalar value
+  (USV)** である。grapheme cluster は対象外で、結合文字列・絵文字 ZWJ
+  シーケンスは構成 USV に分割される。バイト単位アクセスは従来どおり
+  `byte_at` / `from_byte` を使う。
+- `chars(s)` は 1 要素 = 1 USV の `List<String>` を返す。時間・メモリ
+  ともに O(n)。
+- `char_at(s, i)` は USV 単位の `i` 番目 (0-based) を `Some` で返し、
+  範囲外は `None`。UTF-8 にはランダムアクセスがないため **O(n)** である。
+  位置を変えながら繰り返し呼ぶ用途では `chars()` で一度列挙すること。
+- `char_code(s)` は `s` がちょうど 1 USV のときそのコードポイントを
+  `Some(Int)` で返す。空文字列・複数 USV は `None`(「先頭文字」の推測は
+  しない)。
+- `from_char_code(code)` は有効なコードポイントから 1 USV の文字列を
+  生成する。サロゲート (0xD800..=0xDFFF) と 0x10FFFF 超は `None` を返す
+  (置換文字への黙示変換はしない)。
   `sep` が空文字列の場合、v0.1 では文字単位での分割は行わず単一要素
   リスト `[s]` を返す。
-- `char_at` / 正規表現は本凍結には含まれない。§22
-  の「`string` の拡張 API」として追跡する。
+- 正規表現は本凍結には含まれない。§22 の「`string` の拡張 API」として
+  追跡する (`char_at` 等の USV 文字単位 API は v0.11.0 で追加済み —
+  下記)。
 
 #### 17.3.5 list
 
@@ -1666,6 +1714,10 @@ export fn max(_ list: List<Int>) -> Option<Int>
 export fn min(_ list: List<Int>) -> Option<Int>
 export fn contains(_ list: List<Int>, _ x: Int) -> Bool
 export fn index_of(_ list: List<Int>, _ x: Int) -> Option<Int>
+
+# v0.11.0 — ソート (ADR-0027)
+export fn sort(_ xs: List<Int>) -> List<Int>
+export fn sort_str(_ xs: List<String>) -> List<String>
 ```
 
 - すべて **不変操作**。戻り値が `List<Int>` であるもの (`push`) は新しい
@@ -1683,6 +1735,14 @@ export fn index_of(_ list: List<Int>, _ x: Int) -> Option<Int>
   §22 で追跡)。
 - `map` / `filter` / `fold` は v0.1 の範囲外 (ラムダの C ABI 通し配管が
   必要なため)。§22 の「list 拡張 API」として追跡する。
+- **`sort(xs)` / `sort_str(xs)` (v0.11.0)** は安定 (stable) 昇順ソートの
+  新リストを返す。`sort` は `List<Int>` 専用、`sort_str` は
+  `List<String>` 専用で、`sort_str` の順序は UTF-8 バイト順
+  (`SortedMap` の String キーと同一順序、ロケール照合なし)。要素型の
+  不一致 (例: `sort(List<String>)`) はコンパイルエラー (E0308)。
+  キー関数を取る `sort_by` という名前は将来のジェネリック版
+  `sort_by<T, K: Ord>` (ability constraint) のために予約し、v0.11 では
+  提供しない (§22)。
 - 実装は LLVM IR 直接生成 (`__list_int_*` intrinsic → `GC_malloc` + ループ)
   で行い、C ABI ランタイムは経由しない。`List<Int>` のレイアウト
   (`{ptr data, i64 len}`) はコンパイラ専有のため、これが安全に可能。
@@ -1827,6 +1887,10 @@ tyra check src/myapp.ty    # ファイルを直接指定
 
 - 型エラーなし → exit 0、エラーあり → exit 1
 - プロジェクトモード: カレントディレクトリから上位を walk-up して `Tyra.toml` を発見し、`src/<name>.ty` を対象とする
+- `--error-format json` (v0.11.0, ADR-0026): 診断を NDJSON で stderr に
+  出力する (`tyra build` でも利用可)。usage エラー・ファイル未発見・
+  内部エラーを含む全経路で stderr は NDJSON のみとなり、最終行は常に
+  `{"type":"summary",...}`。レコード仕様は ADR-0026 を参照
 
 ### 18.2 tyra run
 
@@ -2104,8 +2168,8 @@ end
 - tuple 型
 - structured concurrency
 - モジュールレベルの初期化セマンティクス (`let`/`mut` のモジュールスコープ)
-- `string` の拡張 API (char_at, 正規表現) — `split` / `split_whitespace` / `replace` / `join` は §17.3.4 に凍結済み、それ以外は後続リリース以降
-- `list` の拡張 API — ジェネリック `List<T>`、`map` / `filter` / `fold`、`List<String>` は v0.4.0 で実装済み (§17.3.5)。`sort_by` 等の追加 API は後続リリース以降
+- `string` の拡張 API — USV 文字単位 API (`chars` / `char_at` / `char_code` / `from_char_code`) は v0.11.0 で実装済み (§17.3.4, ADR-0027)。正規表現・grapheme cluster 対応は後続リリース以降
+- `list` の拡張 API — ジェネリック `List<T>`、`map` / `filter` / `fold`、`List<String>` は v0.4.0 で、`sort` / `sort_str` は v0.11.0 で実装済み (§17.3.5)。キー関数を取る `sort_by` はジェネリック版 `sort_by<T, K: Ord>` の名前として予約し、後続リリース以降
 - `Map<K,V>` — v0.7.0 で HAMT persistent 化済み (§17.3.6)。`remove` / `for k, v in m` イテレーション実装済み。ユーザー定義 `value` 型キー・マージ演算は後続リリース以降
 - `Set<T>` — v0.7.0 で HAMT persistent 化済み (§17.3.7)。`remove` / `for v in s` イテレーション実装済み。セットリテラル構文・`union`/`intersection` 等の集合演算は後続リリース以降
 - `test "name"` 言語構文 — v0.6.0 で実装済み (ADR-0013)

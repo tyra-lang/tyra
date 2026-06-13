@@ -1136,14 +1136,14 @@ end
     }
 
     // ========================================================================
-    // Stringable explicit impl requirement (§8.7, E0501)
+    // Stringable explicit impl requirement (§8.7, E0320)
     // ========================================================================
 
-    fn has_e0501(report: &Report) -> bool {
+    fn has_e0320(report: &Report) -> bool {
         report
             .diagnostics()
             .iter()
-            .any(|d| d.code.as_deref() == Some("E0501"))
+            .any(|d| d.code.as_deref() == Some("E0320"))
     }
 
     #[test]
@@ -1158,8 +1158,8 @@ end
 "#;
         let report = check_str(source);
         assert!(
-            has_e0501(&report),
-            "expected E0501 for .to_string() without impl; got: {:?}",
+            has_e0320(&report),
+            "expected E0320 for .to_string() without impl; got: {:?}",
             report.diagnostics()
         );
     }
@@ -1477,7 +1477,7 @@ end
 "#;
         let report = check_str(source);
         assert!(
-            !has_e0501(&report),
+            !has_e0320(&report),
             "impl'd Stringable should not error; got: {:?}",
             report.diagnostics()
         );
