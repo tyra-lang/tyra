@@ -614,8 +614,9 @@ end
 - `E` が表示可能型(Int / Float / Bool / String / これらの Option /
   これらの tuple — §7.3 の interpolation と同じ境界)の場合:
   `error: <値>` を出力する
-- それ以外の `E`(ADT 等)の場合: `error: main returned Err(<型名>)` を
-  出力する(ペイロードの Debug 表示は将来の拡張で値表示に置き換わる)
+- ローカル定義の非ジェネリック ADT の場合: `error: <バリアント名>` を出力する
+  (例: `error: Timeout`。フィールド値の表示は将来の Debug 拡張で対応予定)
+- それ以外の `E` の場合: `error: main returned Err(<型名>)` を出力する
 
 終了ステータスの対応表:
 

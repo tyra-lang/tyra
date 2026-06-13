@@ -618,8 +618,9 @@ before the report.
 - If `E` is displayable (Int / Float / Bool / String / Options of these /
   tuples of these — the same boundary as `#{...}` interpolation, §7.3):
   `error: <value>` is printed.
-- Any other `E` (ADTs, …) prints `error: main returned Err(<type name>)`
-  (full Debug payload rendering is a future extension).
+- If `E` is a locally-defined non-generic ADT: `error: <variant name>` is
+  printed (e.g. `error: Timeout`; field values are a future Debug extension).
+- Any other `E` prints `error: main returned Err(<type name>)`.
 
 Exit-status map:
 

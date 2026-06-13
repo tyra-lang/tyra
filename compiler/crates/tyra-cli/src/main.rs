@@ -3217,7 +3217,7 @@ mod tests {
 
     #[test]
     #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
-    fn err_main_non_displayable_prints_type_name() {
+    fn err_main_non_displayable_prints_variant_name() {
         let Some(tyra) = find_tyra_binary() else {
             eprintln!("SKIP: tyra binary not found — run `cargo build` first");
             return;
@@ -3238,8 +3238,8 @@ mod tests {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert_eq!(output.status.code(), Some(1));
         assert!(
-            stderr.contains("error: main returned Err(AppError)"),
-            "non-displayable E renders as type name: {stderr:?}"
+            stderr.contains("error: Timeout"),
+            "non-displayable local ADT renders variant name: {stderr:?}"
         );
     }
 

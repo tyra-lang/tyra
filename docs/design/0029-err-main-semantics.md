@@ -74,12 +74,12 @@ report renders as:
 
 - `E` displayable (Int / Float / Bool / String / Option of these / tuples of
   these): `error: <value>` — full payload.
-- any other `E`: `error: main returned Err(<type name>)` — type name only,
-  payload elided. Extends to full Debug rendering when print/eprintln gain
-  it (follow-up, v0.12 candidate).
+- locally-defined non-generic ADT: `error: <variant name>` — e.g. `error: Timeout`.
+  Field values elided; extends to full Debug rendering in a future release (v0.12 candidate).
+- any other `E`: `error: main returned Err(<type name>)` — type name only.
 
 Exit status 1 applies in all cases. The spec text for 0.11 documents this
-two-tier rendering explicitly.
+three-tier rendering explicitly.
 
 ### As landed (2026-06-12)
 
