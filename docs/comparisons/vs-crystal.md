@@ -23,7 +23,7 @@ this page explains what is different and why.
 | **Float equality** | No `Eq` (ADR-0002, NaN-safe) | `Float64 == Float64` allowed |
 | **`copy()` on value types** | Auto-provided for all `value` types | Must write manually |
 | **Ability auto-derivation** | `Eq`/`Hash`/`Ord`/`Debug` with semantic rules | Manual `def ==`, `def hash` |
-| **AI-gen benchmark** | 84% pass with spec injection (v0.11.0, seed-1 point estimate) | 96% pass (seed-1 point estimate; strong prior knowledge) |
+| **AI-gen benchmark** | 84% pass with spec injection (v0.11.0, seed-1); multi-seed mean 88.7% (3 seeds × 100 prompts — not same-condition vs Crystal) | 96% pass (seed-1 point estimate; strong prior knowledge) |
 
 **One-sentence summary**: Tyra is what Crystal would look like if designed after Go and
 Rust proved that explicit error handling outperforms exceptions, and after the LLM era
@@ -265,7 +265,7 @@ is a better fit in the following cases:
 | I need `JSON::Serializable` or a richer stdlib | Crystal |
 | I need union types | Crystal |
 | My team already knows Crystal | Crystal |
-| I want AI to generate my code reliably | Tyra (84% vs 96%, both seed-1 point estimates — gap narrows as AI training on Tyra grows) |
+| I want AI to generate my code reliably | Tyra (84% vs 96%, both seed-1; Tyra multi-seed mean 88.7% — not same-condition vs Crystal; gap narrows as AI training on Tyra grows) |
 
 Tyra does not claim to be better than Crystal in every dimension. Crystal has years of
 ecosystem maturity that Tyra does not. The case for Tyra rests on three specific
