@@ -92,6 +92,7 @@ pub fn create_project(
         write_file(&project_dir.join(".gitignore"), GITIGNORE)?;
     }
     write_file(&project_dir.join("README.md"), &render_readme(name))?;
+    write_file(&project_dir.join("AGENTS.md"), &render_agents(name, kind))?;
 
     Ok(())
 }
@@ -113,6 +114,33 @@ fn render_source(kind: ProjectKind) -> &'static str {
 
 fn render_readme(name: &str) -> String {
     format!("# {name}\n")
+}
+
+fn render_agents(name: &str, kind: ProjectKind) -> String {
+    let run_line = match kind {
+        ProjectKind::Bin => format!("- `tyra run src/{name}.ty` — run\n"),
+        ProjectKind::Lib => String::new(),
+    };
+    format!(
+        "# AGENTS.md\n\
+         \n\
+         This project is written in the [Tyra](https://github.com/tyra-lang/tyra) language.\n\
+         \n\
+         ## Commands\n\
+         \n\
+         - `tyra build` — compile\n\
+         {run_line}\
+         - `tyra fmt` — format\n\
+         - `tyra test` — run tests\n\
+         \n\
+         ## Key facts\n\
+         \n\
+         - File extension: `.ty`\n\
+         - No `null` — use `Option<T>` and `Result<T, E>`\n\
+         - Blocks close with `end` (Ruby-style)\n\
+         - String interpolation: `\"Hello, #{{name}}!\"`\n\
+         - Full language reference: https://github.com/tyra-lang/tyra/blob/main/llms.txt\n"
+    )
 }
 
 const BIN_SOURCE: &str = "\
@@ -184,6 +212,7 @@ mod tests {
         assert!(proj.join("src/myapp.ty").is_file());
         assert!(proj.join(".gitignore").is_file());
         assert!(proj.join("README.md").is_file());
+        assert!(proj.join("AGENTS.md").is_file());
     }
 
     #[test]
@@ -215,6 +244,21 @@ mod tests {
         let (_dir, proj) = scaffold("myapp", ProjectKind::Bin);
         let readme = std::fs::read_to_string(proj.join("README.md")).unwrap();
         assert_eq!(readme, "# myapp\n");
+    }
+
+    #[test]
+    fn bin_agents_contains_run_command() {
+        let (_dir, proj) = scaffold("myapp", ProjectKind::Bin);
+        let agents = std::fs::read_to_string(proj.join("AGENTS.md")).unwrap();
+        assert!(agents.contains("tyra run src/myapp.ty"), "bin AGENTS.md must include run command");
+    }
+
+    #[test]
+    fn lib_agents_omits_run_command() {
+        let (_dir, proj) = scaffold("mylib", ProjectKind::Lib);
+        let agents = std::fs::read_to_string(proj.join("AGENTS.md")).unwrap();
+        assert!(!agents.contains("tyra run"), "lib AGENTS.md must not include tyra run");
+        assert!(agents.contains("tyra build"), "lib AGENTS.md must include tyra build");
     }
 
     #[test]
