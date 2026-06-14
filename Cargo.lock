@@ -1173,6 +1173,7 @@ dependencies = [
  "tyra-ast",
  "tyra-codegen-llvm",
  "tyra-diagnostics",
+ "tyra-frontend",
  "tyra-manifest",
  "tyra-mir",
  "tyra-parser",
@@ -1188,6 +1189,19 @@ dependencies = [
  "tyra-diagnostics",
  "tyra-lexer",
  "tyra-parser",
+]
+
+[[package]]
+name = "tyra-frontend"
+version = "0.11.0"
+dependencies = [
+ "tempfile",
+ "tyra-ast",
+ "tyra-diagnostics",
+ "tyra-mir",
+ "tyra-parser",
+ "tyra-resolve",
+ "tyra-types",
 ]
 
 [[package]]

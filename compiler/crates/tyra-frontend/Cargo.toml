@@ -1,0 +1,18 @@
+[package]
+name = "tyra-frontend"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "wasm-safe frontend pipeline for the Tyra language (parse → check → MIR)"
+
+[dependencies]
+tyra-diagnostics.workspace = true
+tyra-ast.workspace = true
+tyra-parser.workspace = true
+tyra-resolve.workspace = true
+tyra-types.workspace = true
+tyra-mir.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
