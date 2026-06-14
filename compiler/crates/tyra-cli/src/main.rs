@@ -136,13 +136,15 @@ fn main() {
         }
         "run" => {
             let mut release = false;
+            let mut interpret = false;
             let mut file_arg: Option<&str> = None;
             for arg in &args[2..] {
                 match arg.as_str() {
                     "--release" => release = true,
+                    "--interpret" => interpret = true,
                     a if a.starts_with("--") => {
                         eprintln!("error: unknown flag `{a}`");
-                        eprintln!("usage: tyra run [--release] [<file.ty>]");
+                        eprintln!("usage: tyra run [--release] [--interpret] [<file.ty>]");
                         process::exit(1);
                     }
                     a => {
@@ -164,24 +166,63 @@ fn main() {
                     }
                 },
             };
-            let outcome = if release {
-                tyra_driver::run_release(&path)
+            if interpret {
+                let source = match std::fs::read_to_string(&path) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("error: cannot read {}: {e}", path.display());
+                        process::exit(1);
+                    }
+                };
+                let file_name = path.display().to_string();
+                let main_dir = path
+                    .parent()
+                    .map(|p| if p.as_os_str().is_empty() { Path::new(".") } else { p })
+                    .unwrap_or(Path::new("."))
+                    .to_path_buf();
+                let loader = tyra_driver::FsImportLoader { main_dir };
+                let fr = tyra_frontend::compile_unit(&file_name, &source, &loader);
+                if fr.check.report.has_errors() {
+                    eprint!("{}", fr.check.report.render(&fr.check.sources));
+                    process::exit(1);
+                }
+                let program = match fr.program {
+                    Some(p) => p,
+                    None => {
+                        eprintln!("error: MIR lowering produced no program");
+                        process::exit(1);
+                    }
+                };
+                let outcome = tyra_interpreter::run(&program);
+                if !outcome.stdout.is_empty() {
+                    print!("{}", outcome.stdout);
+                }
+                if !outcome.stderr.is_empty() {
+                    eprint!("{}", outcome.stderr);
+                }
+                if outcome.exit_code != 0 {
+                    process::exit(outcome.exit_code);
+                }
             } else {
-                tyra_driver::run(&path)
-            };
-            if outcome.compile.report.has_errors() {
-                eprint!(
-                    "{}",
-                    outcome.compile.report.render(&outcome.compile.sources)
-                );
-                process::exit(1);
-            }
-            // ADR-0029: propagate the program's own exit status (Err-main
-            // exits 1, sys.exit(n) is explicit) instead of flattening it.
-            if let Some(code) = outcome.program_exit
-                && code != 0
-            {
-                process::exit(code);
+                let outcome = if release {
+                    tyra_driver::run_release(&path)
+                } else {
+                    tyra_driver::run(&path)
+                };
+                if outcome.compile.report.has_errors() {
+                    eprint!(
+                        "{}",
+                        outcome.compile.report.render(&outcome.compile.sources)
+                    );
+                    process::exit(1);
+                }
+                // ADR-0029: propagate the program's own exit status (Err-main
+                // exits 1, sys.exit(n) is explicit) instead of flattening it.
+                if let Some(code) = outcome.program_exit
+                    && code != 0
+                {
+                    process::exit(code);
+                }
             }
         }
         "build" => {
@@ -1297,7 +1338,7 @@ fn print_usage() {
         "  check [<file.ty>]                      type-check (defaults to project entry point)"
     );
     eprintln!(
-        "  run   [--release] [<file.ty>]          compile and run (defaults to project entry point)"
+        "  run   [--release] [--interpret] [<file.ty>]  compile and run (--interpret: MIR VM, no LLVM)"
     );
     eprintln!(
         "  build [--release] [--static] [<file.ty>] [-o out]  compile to binary (--static: musl-only)"

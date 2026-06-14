@@ -9,6 +9,7 @@ members = [
     "compiler/crates/tyra-mir",
     "compiler/crates/tyra-codegen-llvm",
     "compiler/crates/tyra-frontend",
+    "compiler/crates/tyra-interpreter",
     "compiler/crates/tyra-driver",
     "compiler/crates/tyra-cli",
     "runtime",
@@ -37,6 +38,7 @@ tyra-types = { path = "compiler/crates/tyra-types" }
 tyra-mir = { path = "compiler/crates/tyra-mir" }
 tyra-codegen-llvm = { path = "compiler/crates/tyra-codegen-llvm", default-features = false }
 tyra-frontend = { path = "compiler/crates/tyra-frontend" }
+tyra-interpreter = { path = "compiler/crates/tyra-interpreter" }
 tyra-driver = { path = "compiler/crates/tyra-driver", default-features = false }
 tyra-runtime = { path = "runtime" }
 tyra-fmt      = { path = "tools/tyra-fmt" }

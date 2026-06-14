@@ -1145,6 +1145,8 @@ dependencies = [
  "tyra-diagnostics",
  "tyra-driver",
  "tyra-fmt",
+ "tyra-frontend",
+ "tyra-interpreter",
  "tyra-manifest",
  "tyra-new",
  "tyra-pkg",
@@ -1201,6 +1203,15 @@ dependencies = [
  "tyra-mir",
  "tyra-parser",
  "tyra-resolve",
+ "tyra-types",
+]
+
+[[package]]
+name = "tyra-interpreter"
+version = "0.11.0"
+dependencies = [
+ "tyra-frontend",
+ "tyra-mir",
  "tyra-types",
 ]
 
