@@ -10,6 +10,7 @@ members = [
     "compiler/crates/tyra-codegen-llvm",
     "compiler/crates/tyra-frontend",
     "compiler/crates/tyra-interpreter",
+    "compiler/crates/tyra-wasm",
     "compiler/crates/tyra-driver",
     "compiler/crates/tyra-cli",
     "runtime",
@@ -45,3 +46,4 @@ tyra-fmt      = { path = "tools/tyra-fmt" }
 tyra-manifest = { path = "tools/tyra-manifest" }
 tyra-new      = { path = "tools/tyra-new" }
 tyra-pkg      = { path = "tools/tyra-pkg" }
+wasm-bindgen  = "0.2"

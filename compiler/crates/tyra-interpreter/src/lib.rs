@@ -24,7 +24,10 @@ pub struct RunOutcome {
 }
 
 /// Interpret `program`, returning stdout/stderr/exit_code.
-/// Panics (with a clear message) on unsupported MIR instructions (async, etc.).
+/// User-visible runtime errors (execution limit, async, division by zero) return
+/// exit_code=101 via Signal::Panic — they do NOT trap. Internal compiler-bug panics
+/// (type-mismatch instructions that should never reach a type-checked program) may
+/// still panic in debug; in production these represent interpreter bugs, not user errors.
 pub fn run(program: &Program) -> RunOutcome {
     interpret(program)
 }

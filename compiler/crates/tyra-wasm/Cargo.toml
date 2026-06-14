@@ -1,0 +1,18 @@
+[package]
+name = "tyra-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "WASM/wasm-bindgen wrapper for the Tyra Playground"
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tyra-frontend.workspace = true
+tyra-interpreter.workspace = true
+wasm-bindgen.workspace = true
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false

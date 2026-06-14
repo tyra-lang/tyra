@@ -100,7 +100,10 @@ impl<'p> Interpreter<'p> {
 
             self.instruction_count += 1;
             if self.instruction_count > EXEC_LIMIT {
-                panic!("interpreter: execution limit exceeded ({}M instructions)", EXEC_LIMIT / 1_000_000);
+                return Signal::Panic(format!(
+                    "interpreter: execution limit exceeded ({}M instructions)",
+                    EXEC_LIMIT / 1_000_000
+                ));
             }
 
             let stmt = &func.body[pc];
@@ -129,7 +132,10 @@ impl<'p> Interpreter<'p> {
                 Instruction::BinOp { dest, op, lhs, rhs } => {
                     let l = self.resolve_operand(lhs, &locals);
                     let r = self.resolve_operand(rhs, &locals);
-                    let result = eval_binop(*op, &l, &r);
+                    let result = match eval_binop(*op, &l, &r) {
+                        Ok(v) => v,
+                        Err(msg) => return Signal::Panic(msg),
+                    };
                     locals.insert(dest.clone(), result);
                     pc += 1;
                 }
@@ -553,17 +559,17 @@ impl<'p> Interpreter<'p> {
                 }
 
                 // ── Async (unsupported) ──────────────────────────────────────
-                Instruction::Spawn { .. } => panic!(
-                    "interpreter: async 'spawn' is not supported (not available in Playground or --interpret mode)"
+                Instruction::Spawn { .. } => return Signal::Panic(
+                    "interpreter: async 'spawn' is not supported (not available in Playground or --interpret mode)".into()
                 ),
-                Instruction::Await { .. } => panic!(
-                    "interpreter: async 'await' is not supported (not available in Playground or --interpret mode)"
+                Instruction::Await { .. } => return Signal::Panic(
+                    "interpreter: async 'await' is not supported (not available in Playground or --interpret mode)".into()
                 ),
-                Instruction::JoinAll { .. } => panic!(
-                    "interpreter: async 'join_all' is not supported (not available in Playground or --interpret mode)"
+                Instruction::JoinAll { .. } => return Signal::Panic(
+                    "interpreter: async 'join_all' is not supported (not available in Playground or --interpret mode)".into()
                 ),
-                Instruction::Select { .. } => panic!(
-                    "interpreter: async 'select' is not supported (not available in Playground or --interpret mode)"
+                Instruction::Select { .. } => return Signal::Panic(
+                    "interpreter: async 'select' is not supported (not available in Playground or --interpret mode)".into()
                 ),
             }
         }
@@ -685,20 +691,20 @@ fn list_vals(v: &Value, ctx: &str) -> Vec<Value> {
     }
 }
 
-fn eval_binop(op: tyra_mir::MirBinOp, l: &Value, r: &Value) -> Value {
+fn eval_binop(op: tyra_mir::MirBinOp, l: &Value, r: &Value) -> Result<Value, String> {
     use tyra_mir::MirBinOp::*;
-    match op {
+    Ok(match op {
         AddInt => Value::Int(l.as_int().wrapping_add(r.as_int())),
         SubInt => Value::Int(l.as_int().wrapping_sub(r.as_int())),
         MulInt => Value::Int(l.as_int().wrapping_mul(r.as_int())),
         DivInt => {
             let rhs = r.as_int();
-            if rhs == 0 { panic!("interpreter: integer division by zero"); }
+            if rhs == 0 { return Err("interpreter: integer division by zero".into()); }
             Value::Int(l.as_int() / rhs)
         }
         RemInt => {
             let rhs = r.as_int();
-            if rhs == 0 { panic!("interpreter: integer modulo by zero"); }
+            if rhs == 0 { return Err("interpreter: integer modulo by zero".into()); }
             Value::Int(l.as_int() % rhs)
         }
         AddFloat => Value::Float(l.as_float() + r.as_float()),
@@ -719,7 +725,7 @@ fn eval_binop(op: tyra_mir::MirBinOp, l: &Value, r: &Value) -> Value {
         NeqString => Value::Bool(l.as_str() != r.as_str()),
         And => Value::Bool(l.as_bool() && r.as_bool()),
         Or => Value::Bool(l.as_bool() || r.as_bool()),
-    }
+    })
 }
 
 /// Entry point: interpret a Program and return stdout/stderr/exit_code.
