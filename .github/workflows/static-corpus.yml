@@ -48,3 +48,6 @@ jobs:
 
       - name: Run static corpus check (tyra check + tyra test)
         run: bash bench/static-corpus/check.sh ./target/debug/tyra
+
+      - name: Run launch-surface snippet gate (fmt + check + run)
+        run: bash examples/launch/check.sh ./target/debug/tyra

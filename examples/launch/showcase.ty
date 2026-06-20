@@ -1,0 +1,36 @@
+# A tiny pricing model in Tyra: algebraic data types, exhaustive
+# matching, errors as values (Result), and no null anywhere.
+type Plan =
+  | Free
+  | Pro(seats: Int)
+  | Enterprise(seats: Int, discount: Int)
+
+fn monthly_cost(plan: Plan) -> Result<Int, String>
+  match plan
+  when Free
+    Ok(0)
+
+  when Pro(seats)
+    Ok(seats * 20)
+
+  when Enterprise(seats, discount)
+    if discount < 0 or discount > 100
+      Err("discount #{discount}% is out of range")
+    else
+      Ok(((seats * 15) * (100 - discount)) / 100)
+    end
+  end
+end
+
+fn main() -> Unit
+  let plans = [Plan.Free, Plan.Pro(seats: 5), Plan.Enterprise(seats: 50, discount: 20)]
+  for plan in plans
+    match monthly_cost(plan)
+    when Ok(cost)
+      println("$#{cost}/mo")
+
+    when Err(msg)
+      println("error: #{msg}")
+    end
+  end
+end

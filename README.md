@@ -1,8 +1,66 @@
 # Tyra
 
-A statically-typed, AI-friendly programming language for backend services, CLI tools, and business applications.
+**A readable, statically-typed, Ruby-flavored compiled language.**
+Compiles to native binaries via LLVM. No null, `Result`/`Option`, exhaustive pattern matching, and one unified toolchain.
 
-> **v0.11.0 — AI self-correction** — imported module calls are fully type-checked (new E0318/E0319; `String + string.from_byte(x)` no longer crashes codegen), `Err`-returning main reports to stderr and exits 1 (ADR-0029), `tyra check/build --error-format json` emits NDJSON diagnostics for agent loops (ADR-0026), USV character API + `list.sort`/`sort_str` (ADR-0027), and `to_upper`/`to_lower` are renamed `to_ascii_upper`/`to_ascii_lower` (breaking). Multi-seed sweep after these fixes: **tyra+spec 88.7% mean** (3 seeds × 100 prompts, v0.11.0). [See known limitations](#known-limitations) before using in production.
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Language spec](https://img.shields.io/badge/language%20spec-v0.11-informational)](docs/spec/en/language-spec.md)
+[![Run in your browser](https://img.shields.io/badge/playground-run%20in%20browser-brightgreen)](https://tyra-lang.github.io/playground)
+
+**[▶ Try Tyra in your browser](https://tyra-lang.github.io/playground)** — no install · [Website](https://tyra-lang.github.io) · [Getting started](docs/getting-started/README.md) · [Spec](docs/spec/en/language-spec.md)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh
+# or: brew install tyra-lang/tap/tyra
+```
+
+```tyra
+# A tiny pricing model in Tyra: algebraic data types, exhaustive
+# matching, errors as values (Result), and no null anywhere.
+type Plan =
+  | Free
+  | Pro(seats: Int)
+  | Enterprise(seats: Int, discount: Int)
+
+fn monthly_cost(plan: Plan) -> Result<Int, String>
+  match plan
+  when Free
+    Ok(0)
+
+  when Pro(seats)
+    Ok(seats * 20)
+
+  when Enterprise(seats, discount)
+    if discount < 0 or discount > 100
+      Err("discount #{discount}% is out of range")
+    else
+      Ok(((seats * 15) * (100 - discount)) / 100)
+    end
+  end
+end
+
+fn main() -> Unit
+  let plans = [Plan.Free, Plan.Pro(seats: 5), Plan.Enterprise(seats: 50, discount: 20)]
+  for plan in plans
+    match monthly_cost(plan)
+    when Ok(cost)
+      println("$#{cost}/mo")
+
+    when Err(msg)
+      println("error: #{msg}")
+    end
+  end
+end
+```
+
+```console
+$ tyra run pricing.ty
+$0/mo
+$100/mo
+$600/mo
+```
+
+Tyra reads like Ruby and ships like Go — one toolchain, a single native binary (static builds on musl). Its design also makes code unusually predictable: given only the language spec and no prior training data, Claude writes correct Tyra on the **first try 88.7% of the time** (3 seeds × 100 prompts; [methodology](bench/ai-gen/METHODOLOGY.md)). The example above is runnable and CI-checked ([examples/launch/showcase.ty](examples/launch/showcase.ty)).
 
 ---
 
@@ -162,6 +220,10 @@ tyra test --format junit       # emit JUnit XML (for CI test summaries)
 ```
 
 See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for the full guide.
+
+## What's new in v0.11.0
+
+> **AI self-correction** — imported module calls are fully type-checked (new E0318/E0319; `String + string.from_byte(x)` no longer crashes codegen), `Err`-returning main reports to stderr and exits 1 (ADR-0029), `tyra check/build --error-format json` emits NDJSON diagnostics for agent loops (ADR-0026), USV character API + `list.sort`/`sort_str` (ADR-0027), and `to_upper`/`to_lower` are renamed `to_ascii_upper`/`to_ascii_lower` (breaking). Multi-seed sweep after these fixes: **tyra+spec 88.7% mean** (3 seeds × 100 prompts, v0.11.0). [See known limitations](#known-limitations) before using in production. Full history: [CHANGELOG.md](CHANGELOG.md).
 
 ## Status
 
