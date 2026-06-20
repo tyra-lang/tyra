@@ -5,9 +5,9 @@ Compiles to native binaries via LLVM. No null, `Result`/`Option`, exhaustive pat
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Language spec](https://img.shields.io/badge/language%20spec-v0.11-informational)](docs/spec/en/language-spec.md)
-[![Run in your browser](https://img.shields.io/badge/playground-run%20in%20browser-brightgreen)](https://tyra-lang.github.io/playground)
+[![Run in your browser](https://img.shields.io/badge/playground-run%20in%20browser-brightgreen)](https://tyra-lang.github.io/playground/?sample=showcase&run=1)
 
-**[▶ Try Tyra in your browser](https://tyra-lang.github.io/playground)** — no install · [Website](https://tyra-lang.github.io) · [Getting started](docs/getting-started/README.md) · [Spec](docs/spec/en/language-spec.md)
+**[▶ Try Tyra in your browser](https://tyra-lang.github.io/playground/?sample=showcase&run=1)** — no install · [Website](https://tyra-lang.github.io) · [Getting started](docs/getting-started/README.md) · [Spec](docs/spec/en/language-spec.md)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh
