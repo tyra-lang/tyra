@@ -45,7 +45,7 @@ done
 PREFIX="${PREFIX:-$DEFAULT_PREFIX}"
 
 # ---------- helpers ----------
-info()  { printf '\033[1;32m==> \033[0m%s\n' "$*"; }
+info()  { printf '\033[1;32m==> \033[0m%s\n' "$*" >&2; }
 warn()  { printf '\033[1;33mwarn:\033[0m %s\n' "$*" >&2; }
 error() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
@@ -103,11 +103,15 @@ verify_checksum() {
   archive="$1"
   expected_line="$2"   # "<sha256>  <filename>" line from SHA256SUMS
 
-  if command -v sha256sum >/dev/null 2>&1; then
-    echo "$expected_line" | sha256sum --check --status \
-      || error "SHA256 checksum mismatch for $(basename "$archive")"
-  elif command -v shasum >/dev/null 2>&1; then
+  # `shasum` (Perl, GNU-flag-compatible) is tried first: macOS ships a BSD-native
+  # /sbin/sha256sum that rejects --check/--status, so preferring sha256sum there
+  # always fails. `shasum` works correctly on every platform that has it; only
+  # fall back to sha256sum where shasum is absent (most non-macOS Linux images).
+  if command -v shasum >/dev/null 2>&1; then
     echo "$expected_line" | shasum -a 256 --check --status \
+      || error "SHA256 checksum mismatch for $(basename "$archive")"
+  elif command -v sha256sum >/dev/null 2>&1; then
+    echo "$expected_line" | sha256sum --check --status \
       || error "SHA256 checksum mismatch for $(basename "$archive")"
   else
     warn "No sha256sum or shasum found — skipping checksum verification"

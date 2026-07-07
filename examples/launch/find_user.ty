@@ -1,0 +1,29 @@
+fn find_user(_ id: Int) -> Option<String>
+  if id == 1
+    Some("alice")
+  else
+    None
+  end
+end
+
+fn user_greeting(_ id: Int) -> Option<String>
+  let name = find_user(id)?
+  Some("hello, #{name}")
+end
+
+fn main() -> Unit
+  match user_greeting(1)
+  when Some(msg)
+    println(msg)
+
+  when None
+    println("no such user")
+  end
+  match user_greeting(2)
+  when Some(msg)
+    println(msg)
+
+  when None
+    println("no such user")
+  end
+end

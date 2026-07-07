@@ -1,0 +1,52 @@
+import fs
+
+import string
+
+type Payment =
+  | Card(last4: String)
+  | Bank(bank_name: String)
+  | Cash
+
+fn label(payment: Payment) -> String
+  match payment
+  when Card(last4)
+    "card: #{last4}"
+
+  when Bank(bank_name)
+    "bank: #{bank_name}"
+
+  when Cash
+    "cash"
+  end
+end
+
+fn read_port() -> Result<Int, String>
+  match fs.read_to_string("app.conf")
+  when Err(_)
+    Err("could not read app.conf")
+
+  when Ok(contents)
+    string.parse_int(contents).ok_or("invalid port number")
+  end
+end
+
+value Point
+  x: Float
+  y: Float
+end
+
+fn main() -> Unit
+  println(label(Payment.Card(last4: "1234")))
+  println(label(Payment.Bank(bank_name: "Chase")))
+  println(label(Payment.Cash))
+  match read_port()
+  when Ok(n)
+    println("#{n}")
+
+  when Err(e)
+    println("error: #{e}")
+  end
+  let p1 = Point(x: 1.0, y: 2.0)
+  let p2 = p1.copy(x: 3.0)
+  println("#{p2.x}, #{p2.y}")
+end

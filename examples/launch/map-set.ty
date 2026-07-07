@@ -1,0 +1,17 @@
+import set
+
+fn main() -> Unit
+  let m: Map<String, Int> = {"a": 1, "b": 2}
+  match m.get("a")
+  when Some(v)
+    println("a=#{v}")
+
+  when None
+    println("not found")
+  end
+  let s: Set<String> = set.new()
+  let s = s.insert("x")
+  let s = s.insert("y")
+  let has_x = s.contains("x")
+  println("has_x=#{has_x}")
+end

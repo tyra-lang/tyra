@@ -4,6 +4,7 @@
 Compiles to native binaries via LLVM. No null, `Result`/`Option`, exhaustive pattern matching, and one unified toolchain.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/tyra-lang/tyra/actions/workflows/release-gate.yml/badge.svg)](https://github.com/tyra-lang/tyra/actions/workflows/release-gate.yml)
 [![Language spec](https://img.shields.io/badge/language%20spec-v0.11-informational)](docs/spec/en/language-spec.md)
 [![Run in your browser](https://img.shields.io/badge/playground-run%20in%20browser-brightgreen)](https://tyra-lang.github.io/playground/?sample=showcase&run=1)
 
@@ -13,6 +14,8 @@ Compiles to native binaries via LLVM. No null, `Result`/`Option`, exhaustive pat
 curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh
 # or: brew install tyra-lang/tap/tyra
 ```
+
+<img src="docs/assets/demo.gif" alt="Install Tyra, write a program, compile, and run it — in under 60 seconds" width="720">
 
 ```tyra
 # A tiny pricing model in Tyra: algebraic data types, exhaustive
@@ -54,7 +57,7 @@ end
 ```
 
 ```console
-$ tyra run pricing.ty
+$ tyra build pricing.ty -o pricing && ./pricing
 $0/mo
 $100/mo
 $600/mo
@@ -73,16 +76,23 @@ import fs
 import string
 
 fn word_count(path: String) -> Result<Int, fs.FsError>
-  let text = fs.read_to_string(path)?
-  Ok(string.split_whitespace(text).len())
+  match fs.read_to_string(path)
+  when Err(e)
+    Err(e)
+
+  when Ok(contents)
+    let words = string.split_whitespace(contents)
+    Ok(words.len())
+  end
 end
 
 fn main() -> Unit
   match word_count("notes.txt")
   when Ok(n)
     print("#{n} words")
-  when Err(e)
-    print("error: #{e}")
+
+  when Err(_)
+    print("error: could not read file")
   end
 end
 ```
@@ -133,19 +143,24 @@ type Payment =
 
 fn label(payment: Payment) -> String
   match payment
-  when Card(last4: last4)
+  when Card(last4)
     "card: #{last4}"
-  when Bank(bank_name: bank_name)
+  when Bank(bank_name)
     "bank: #{bank_name}"
   when Cash
     "cash"
   end
 end
 
-# Errors as values, propagated with ?
+# Errors as values, no exceptions
 fn read_port() -> Result<Int, String>
-  let text = fs.read_to_string("app.conf")?
-  string.parse_int(text).ok_or("invalid port number")?
+  match fs.read_to_string("app.conf")
+  when Err(_)
+    Err("could not read app.conf")
+
+  when Ok(contents)
+    string.parse_int(contents).ok_or("invalid port number")
+  end
 end
 
 # Value types with auto-derived equality

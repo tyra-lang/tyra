@@ -1,0 +1,8 @@
+import string
+
+fn main() -> Unit
+  let s = "hello, tyra!"
+  println(string.to_ascii_upper(s))
+  println(string.reverse(s))
+  println(string.len(s))
+end

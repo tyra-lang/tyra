@@ -1,0 +1,24 @@
+import json
+
+fn main() -> Unit
+  let text = "{\"name\":\"Tyra\",\"version\":1}"
+  match json.parse(text)
+  when Ok(doc)
+    match doc.get(key: "name")
+    when Some(v)
+      match v.as_string()
+      when Some(s)
+        println("name=#{s}")
+
+      when None
+        println("not a string")
+      end
+
+    when None
+      println("no name key")
+    end
+
+  when Err(_)
+    println("parse error")
+  end
+end

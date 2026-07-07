@@ -1,8 +1,69 @@
 # Tyra
 
-バックエンドサービス、CLI ツール、業務アプリケーションのための、AI フレンドリーな静的型付け言語。
+**読みやすく、静的型付けで、Ruby 風味の、コンパイル言語。**
+LLVM 経由でネイティブバイナリにコンパイルされます。null なし、`Result`/`Option`、網羅的パターンマッチ、統一されたツールチェーン。
 
-> **v0.11.0 — AI self-correction** — import したモジュール呼び出しを完全に型検査 (新診断 E0318/E0319。`String + string.from_byte(x)` が codegen でクラッシュしなくなりました)、`Err` を返す main は stderr 報告 + exit 1 (ADR-0029)、`tyra check/build --error-format json` がエージェントループ向け NDJSON 診断を出力 (ADR-0026)、USV 文字 API + `list.sort`/`sort_str` (ADR-0027)、`to_upper`/`to_lower` は `to_ascii_upper`/`to_ascii_lower` にリネーム (破壊的変更)。修正後のマルチシードスイープ結果: **tyra+spec 88.7% mean** (3 seeds × 100 プロンプト、v0.11.0)。本番利用前に [既知の制限](#既知の制限) をご確認ください。
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/tyra-lang/tyra/actions/workflows/release-gate.yml/badge.svg)](https://github.com/tyra-lang/tyra/actions/workflows/release-gate.yml)
+[![Language spec](https://img.shields.io/badge/language%20spec-v0.11-informational)](docs/spec/ja/language-spec.md)
+[![Run in your browser](https://img.shields.io/badge/playground-run%20in%20browser-brightgreen)](https://tyra-lang.github.io/playground/?sample=showcase&run=1)
+
+**[▶ ブラウザで Tyra を試す](https://tyra-lang.github.io/playground/?sample=showcase&run=1)** — インストール不要 · [サイト](https://tyra-lang.github.io) · [はじめに](docs/getting-started/README.md) · [言語仕様](docs/spec/ja/language-spec.md)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh
+# または: brew install tyra-lang/tap/tyra
+```
+
+<img src="docs/assets/demo.gif" alt="インストールからコンパイル・実行までを60秒以内で" width="720">
+
+```tyra
+# Tyra による小さな価格モデル: 代数的データ型、網羅的パターンマッチ、
+# 値としてのエラー (Result)、そして null がどこにもない。
+type Plan =
+  | Free
+  | Pro(seats: Int)
+  | Enterprise(seats: Int, discount: Int)
+
+fn monthly_cost(plan: Plan) -> Result<Int, String>
+  match plan
+  when Free
+    Ok(0)
+
+  when Pro(seats)
+    Ok(seats * 20)
+
+  when Enterprise(seats, discount)
+    if discount < 0 or discount > 100
+      Err("discount #{discount}% is out of range")
+    else
+      Ok(((seats * 15) * (100 - discount)) / 100)
+    end
+  end
+end
+
+fn main() -> Unit
+  let plans = [Plan.Free, Plan.Pro(seats: 5), Plan.Enterprise(seats: 50, discount: 20)]
+  for plan in plans
+    match monthly_cost(plan)
+    when Ok(cost)
+      println("$#{cost}/mo")
+
+    when Err(msg)
+      println("error: #{msg}")
+    end
+  end
+end
+```
+
+```console
+$ tyra build pricing.ty -o pricing && ./pricing
+$0/mo
+$100/mo
+$600/mo
+```
+
+Tyra は Ruby のように読め、Go のように配布できます — 単一のツールチェーン、単一のネイティブバイナリ (musl では静的ビルド)。設計上、コードは異例なほど予測可能です: 言語仕様だけを与えられ事前学習なしで、Claude は Tyra を**初回で 88.7% の確率**で正しく書けます (3 seeds × 100 プロンプト、[手法](bench/ai-gen/METHODOLOGY.md))。上記の例は実行可能で CI 検証済みです ([examples/launch/showcase.ty](examples/launch/showcase.ty))。
 
 ---
 
@@ -15,16 +76,23 @@ import fs
 import string
 
 fn word_count(path: String) -> Result<Int, fs.FsError>
-  let text = fs.read_to_string(path)?
-  Ok(string.split_whitespace(text).len())
+  match fs.read_to_string(path)
+  when Err(e)
+    Err(e)
+
+  when Ok(contents)
+    let words = string.split_whitespace(contents)
+    Ok(words.len())
+  end
 end
 
 fn main() -> Unit
   match word_count("notes.txt")
   when Ok(n)
     print("#{n} words")
-  when Err(e)
-    print("error: #{e}")
+
+  when Err(_)
+    print("error: could not read file")
   end
 end
 ```
@@ -75,19 +143,24 @@ type Payment =
 
 fn label(payment: Payment) -> String
   match payment
-  when Card(last4: last4)
+  when Card(last4)
     "card: #{last4}"
-  when Bank(bank_name: bank_name)
+  when Bank(bank_name)
     "bank: #{bank_name}"
   when Cash
     "cash"
   end
 end
 
-# エラーを値として扱い、? で伝播
-fn read_port() -> Result<Int, ConfigError>
-  let text = fs.read_to_string("app.conf")?
-  parse_int(text)?
+# エラーを値として扱い、例外を使わない
+fn read_port() -> Result<Int, String>
+  match fs.read_to_string("app.conf")
+  when Err(_)
+    Err("could not read app.conf")
+
+  when Ok(contents)
+    string.parse_int(contents).ok_or("invalid port number")
+  end
 end
 
 # 等価性が自動導出される値型
@@ -139,6 +212,34 @@ fn main() -> Unit
 end
 ```
 
+## クイックスタート: テスト
+
+`*_test.ty` ファイルを作成して `tyra test` を実行します:
+
+```tyra
+# math_test.ty
+import assert
+
+fn test_add() -> Result<Unit, String>
+  assert.eq(1 + 1, 2)?
+  Ok(())
+end
+```
+
+```bash
+tyra test                      # カレントディレクトリの全 *_test.ty を実行
+tyra test src/                 # 特定ディレクトリを実行
+tyra test --filter add         # 名前に "add" を含むテストのみ実行
+tyra test --list               # テスト関数を一覧表示するだけで実行しない
+tyra test --format junit       # JUnit XML を出力 (CI のテストサマリ用)
+```
+
+完全なガイドは [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) を参照してください。
+
+## v0.11.0 の新機能
+
+> **AI self-correction** — import したモジュール呼び出しを完全に型検査 (新診断 E0318/E0319。`String + string.from_byte(x)` が codegen でクラッシュしなくなりました)、`Err` を返す main は stderr 報告 + exit 1 (ADR-0029)、`tyra check/build --error-format json` がエージェントループ向け NDJSON 診断を出力 (ADR-0026)、USV 文字 API + `list.sort`/`sort_str` (ADR-0027)、`to_upper`/`to_lower` は `to_ascii_upper`/`to_ascii_lower` にリネーム (破壊的変更)。修正後のマルチシードスイープ結果: **tyra+spec 88.7% mean** (3 seeds × 100 プロンプト、v0.11.0)。本番利用前に [既知の制限](#既知の制限) をご確認ください。全履歴は [CHANGELOG.md](CHANGELOG.md) を参照。
+
 ## 開発状況
 
 **v0.11.0 で安定** — サポート済み・テスト済み:
@@ -147,42 +248,84 @@ end
 | --- | --- |
 | 言語仕様 v0.11 | ✅ 完成 |
 | Lexer / Parser / 型検査器 | ✅ 完成 |
-| Hindley-Milner 型推論 (rank-1)、E9001 ICE ガード | ✅ 完成 (v0.8.0+) |
-| E0308 ヒューリスティック iv — ADT バリアント提案 | ✅ 完成 (v0.8.0+) |
+| LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 (glibc + musl) |
+| 標準ライブラリ (例: string, list, map, set, fs, io, json, assert, time, log, sorted_map, sorted_set, linked_map, http) | ✅ 完成 |
+| `tyra check / run / build` CLI (ゼロ引数プロジェクトモード、`--release`) | ✅ 完成 |
+| `tyra build --static` — 静的単一バイナリ (musl) | ✅ 完成 (v0.5.0+) |
+| `tyra fmt [--check] [--stdin] <file\|dir>` — フォーマッタ + 100 桁ラッピング | ✅ 完成 |
+| `tyra test [--filter] [--list] [--format tap\|junit] [--timeout] [--jobs N]` | ✅ 完成 |
+| `tyra test --coverage` — ライン / 関数カバレッジレポート | ✅ 完成 (v0.6.0+) |
+| `tyra test` のテストごとのプロセス分離 | ✅ 完成 (v0.5.0+) |
+| panic 期待 (`test_panics_*` / `test "name" panics`) | ✅ 完成 (v0.6.0+) |
+| `test "name" [panics] <body> end` 言語構文 | ✅ 完成 (v0.6.0+) |
+| `continue` 文 | ✅ 完成 |
+| `tyra new <name> [--lib] [--vcs none]` — プロジェクトスキャフォールディング | ✅ 完成 |
+| `tyra mod init/add/update/remove/show/tree/sync/clean [--locked]` | ✅ 完成 |
+| `tyra bench ai-gen` — AI 生成ベンチマークランナー | ✅ 完成 |
+| `tyra bench <dir>` — 汎用 wall-clock マイクロベンチマークランナー | ✅ 完成 |
+| ラムダ / クロージャ (spec §9.4, ADR 0011) | ✅ 完成 |
+| ジェネリック `List<T>` + `map`/`filter`/`fold` | ✅ 完成 |
+| ジェネリック `Map<K,V>` — HAMT 永続、`insert`/`remove`/`get`/`contains_key`/イテレーション | ✅ 完成 (v0.7.0+) |
+| ジェネリック `Set<T>` — HAMT 永続、`insert`/`remove`/`contains`/イテレーション | ✅ 完成 (v0.7.0+) |
+| `for k, v in m` / `for v in s` — Map/Set イテレーション | ✅ 完成 (v0.7.0+) |
 | `LinkedMap<K,V>` / `LinkedSet<T>` — 挿入順保持 永続コレクション | ✅ 完成 (v0.8.0+) |
 | `LinkedMap.from([(k,v), ...])` — タプルリストから構築 | ✅ 完成 (v0.10.0+) |
 | タプル型 `(A, B)` — let/match/for 分構束縛 (ADR-0022) | ✅ 完成 (v0.10.0+) |
 | `SortedMap<K,V>` / `SortedSet<T>` — キーソート永続コレクション (ADR-0024) | ✅ 完成 (v0.10.0+) |
 | E0314 — 非表示型の文字列補間コンパイル時診断 | ✅ 完成 (v0.10.0+) |
-| Windows MSVC ABI サポート (ソースレベル) | ⚠️ 実験的 (v0.8.0+; CI は LLVM-free crates の `cargo check` のみ) |
-| LLVM codegen + Boehm GC runtime | ✅ macOS arm64 / Linux x86_64 (glibc + musl) |
-| 標準ライブラリ (例: string, list, map, set, fs, io, json, assert, time, log, sorted_map, sorted_set, linked_map, http) | ✅ 完成 |
-| `tyra check / run / build / fmt / test / new / mod / bench` CLI | ✅ 完成 |
-| `tyra test --timeout` / `--jobs N` / `--coverage` | ✅ 完成 |
-| `tyra bench <dir>` — 汎用 wall-clock ベンチランナー | ✅ 完成 |
-| ラムダ / クロージャ (spec §9.4, ADR 0011) | ✅ 完成 |
-| ジェネリック `List<T>` + `map`/`filter`/`fold` | ✅ 完成 |
+| モジュール呼び出しの型検査 — E0318 (未知のモジュール関数)、E0319 (print の表示可能性ゲート) (ADR-0028) | ✅ 完成 (v0.11.0+) |
+| `Err` を返す main → stderr 報告 + exit 1; `tyra run` は終了コードを伝播 (ADR-0029) | ✅ 完成 (v0.11.0+) |
+| `tyra check/build --error-format json` — NDJSON 診断、全経路で stderr のみ (ADR-0026) | ✅ 完成 (v0.11.0+) |
+| USV 文字 API (`string.chars`/`char_at`/`char_code`/`from_char_code`) + `list.sort`/`sort_str` (ADR-0027) | ✅ 完成 (v0.11.0+) |
+| E0308 診断の改善 — ヘルプヒント、セカンダリラベル、カスケード重複排除 | ✅ 完成 (v0.7.0+) |
+| E0313 — for ループの束縛数不一致診断 | ✅ 完成 (v0.7.0+) |
+| ジェネリック `assert.eq` / `assert.ne` (Int, String, Bool) | ✅ 完成 |
+| `string.replace` / `string.join` | ✅ 完成 (v0.5.0+) |
 | `Tyra.lock` + floating `branch` 制約 + 推移的依存解決 | ✅ 完成 |
-| `Tyra.toml` マニフェスト + `tyra mod` 依存管理 (`--locked` CI モード) | ✅ 完成 |
-| HAMT 永続 `Map<K,V>` / `Set<T>` + `for k, v in m` / `for v in s` | ✅ 完成 (v0.7.0+) |
-| DAP デバッガ (DWARF + lldb-dap + VS Code ブレークポイント / ローカル変数) | ✅ 完成 (v0.6.0+) |
-| `tyra test --coverage` — ライン / 関数カバレッジレポート | ✅ 完成 (v0.6.0+) |
 | LSP サーバ (`tyra-lsp`) + VS Code 拡張 | ✅ 開発インストール可 |
+| DAP デバッガ (DWARF + lldb-dap + VS Code ブレークポイント / ローカル変数) | ✅ 完成 (v0.6.0+) |
 | 静的適合コーパス (42 本 + エラー事例 25 本) | ✅ CI ゲート済み |
 
-**実験的** — 含まれているが本番利用不可:
+## プラットフォームサポート
+
+> **唯一の正典。** このセクションはプラットフォームおよびリンクモードのサポート状況に関する唯一の正典です。他のドキュメント (AGENTS.md、リリースノート) はここを参照します。
+
+| プラットフォーム | バイナリ種別 | ステータス |
+|----------|-------------|--------|
+| Linux x86_64 (glibc) | 動的 | サポート済み |
+| Linux x86_64 (musl) | 静的 | サポート済み (v0.5.0+) |
+| macOS arm64 | 動的 | サポート済み |
+| Windows x86_64 (MSVC) | 動的 (`gc.dll` を同階層に配置) | 実験的 (v0.8.0+; トラッキング専用 CI — [既知の制限](#既知の制限) 参照) |
+
+**musl 静的リリースアーティファクトの使用方法:**
+
+`tyra-*-linux-musl-x86_64-static.tar.gz` リリースには、ビルド済みの静的 `examples/hello` バイナリが含まれます。お使いの環境で静的リンクが機能するか確認するには:
+
+```bash
+tar xzf tyra-*-linux-musl-x86_64-static.tar.gz
+cd tyra-*/
+./examples/hello        # 出力: hello, tyra
+file examples/hello     # 出力に "statically linked" を含むはず
+```
+
+自分のプログラムを静的バイナリとしてコンパイルするには、musl 向けの `tyra` を使用します (Alpine Linux または同等の musl ツールチェーン上で実行):
+
+```bash
+tyra build --static myprogram.ty
+```
+
+**v0.4.0 での実験的機能** — 含まれているが本番利用不可:
 
 | コンポーネント | 備考 |
 | --- | --- |
 | `http.server` 標準ライブラリ | ⚠️ 基本 GET/POST ルーティングのみ、本番利用不可 |
 
-**配布・エコシステム**:
+**バックログ** — 未実装:
 
 | コンポーネント | 備考 |
 | --- | --- |
+| レジストリ (`tyra publish`)、完全なレジストリバックドリゾルバ | ⏳ 将来予定 |
 | Homebrew tap (`tyra-lang/tap`) | ✅ v0.10.0+ |
-| registry-backed SemVer リゾルバ、`tyra publish` | ⏳ 将来予定 |
-| Windows ARM64 / MSVC PDB デバッグシンボル | ⏳ 将来予定 |
 | apt / その他パッケージマネージャ | ⏳ 将来予定 |
 | VS Code Marketplace 公開 | ⏳ 将来予定 |
 
@@ -197,10 +340,15 @@ end
 
 ## ドキュメント
 
+- **[はじめに](docs/getting-started/README.md)** — インストール、hello world、テスト、プロジェクトライフサイクル
+  - [プロジェクトライフサイクル](docs/getting-started/09-project-lifecycle.md) — `tyra new`、`tyra mod`、依存関係、ビルド
+  - [デバッグ](docs/getting-started/10-debugging.md) — DAP デバッガ、VS Code ブレークポイント、lldb-dap セットアップ
 - **[言語仕様 (日本語)](docs/spec/ja/language-spec.md)** — 唯一の正典
 - **[言語仕様 (英語)](docs/spec/en/language-spec.md)** — 翻訳。最新版から遅れることがあります
 - **[設計判断記録](docs/design/)** — なぜそう決めたかの記録 (ADR)
 - **[RFC](docs/rfcs/)** — 将来バージョンへの変更提案
+- **[サンプル](examples/)** — 標準ライブラリ機能を示す実行可能プログラム
+  - [examples/11-stdlib-time-log.ty](examples/11-stdlib-time-log.ty) — `time.now_unix`、`time.monotonic_millis`、`log.info/warn/error`
 
 ## 想定領域
 
@@ -232,7 +380,23 @@ Tyra は次の用途には **適していません**:
 
 完全なリストは [仕様 §3 と §22](docs/spec/ja/language-spec.md) を参照してください。
 
-## ソースからのビルド
+## インストール
+
+### curl | sh (Linux x86_64 と macOS Apple Silicon)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh
+```
+
+デフォルトで `~/.local/bin/tyra` にインストールされます。`--prefix` と `--version` フラグに対応しています。詳細は [docs/getting-started/01-installation.md](docs/getting-started/01-installation.md) を参照してください。
+
+### Homebrew (macOS)
+
+```bash
+brew install tyra-lang/tap/tyra
+```
+
+### ソースからのビルド
 
 > Rust 1.88+、LLVM 22、および Boehm GC (`bdw-gc`) が必要です。(LLVM 21 も動作します — `--features llvm21-1` を付けてください)
 

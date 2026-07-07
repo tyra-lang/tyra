@@ -1,0 +1,24 @@
+import fs
+
+import string
+
+fn word_count(path: String) -> Result<Int, FsError>
+  match fs.read_to_string(path)
+  when Err(e)
+    Err(e)
+
+  when Ok(contents)
+    let words = string.split_whitespace(contents)
+    Ok(words.len())
+  end
+end
+
+fn main() -> Unit
+  match word_count("examples/launch/notes.txt")
+  when Ok(n)
+    print("#{n} words")
+
+  when Err(_)
+    print("error: could not read file")
+  end
+end
