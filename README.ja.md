@@ -73,9 +73,10 @@ Tyra は、人間と LLM がコードを共同編集する時代に向けて、�
 
 ```tyra
 import fs
+
 import string
 
-fn word_count(path: String) -> Result<Int, fs.FsError>
+fn word_count(path: String) -> Result<Int, FsError>
   match fs.read_to_string(path)
   when Err(e)
     Err(e)
@@ -127,7 +128,7 @@ Tyra は既存言語から **選択的に** 借りています。丸ごと真似
 ## Hello, World
 
 ```tyra
-export fn main() -> Unit
+fn main() -> Unit
   print("hello, tyra")
 end
 ```
@@ -135,6 +136,10 @@ end
 ## 型システムの一端
 
 ```tyra
+import fs
+
+import string
+
 # 代数的データ型と網羅的パターンマッチ
 type Payment =
   | Card(last4: String)
@@ -145,8 +150,10 @@ fn label(payment: Payment) -> String
   match payment
   when Card(last4)
     "card: #{last4}"
+
   when Bank(bank_name)
     "bank: #{bank_name}"
+
   when Cash
     "cash"
   end
@@ -170,6 +177,7 @@ value Point
 end
 
 let p1 = Point(x: 1.0, y: 2.0)
+
 let p2 = p1.copy(x: 3.0)
 ```
 
@@ -177,7 +185,7 @@ let p2 = p1.copy(x: 3.0)
 
 **タプル型** — `let`・`match`・`for` での完全な分構束縛:
 
-```tyra
+```tyra-fragment
 fn min_max(xs: List<Int>) -> (Int, Int)
   # ... タプルを返す
 end
@@ -193,10 +201,10 @@ import sorted_map
 fn main() -> Unit
   let m: SortedMap<String, Int> = SortedMap.new()
   let m = m.insert("banana", 2)
-  let m = m.insert("apple",  1)
+  let m = m.insert("apple", 1)
   let m = m.insert("cherry", 3)
   for k, v in m
-    print("#{k}: #{v}")   # apple, banana, cherry — 昇順が保証される
+    print("#{k}: #{v}") # apple, banana, cherry — 昇順が保証される
   end
 end
 ```
@@ -208,7 +216,7 @@ import linked_map
 
 fn main() -> Unit
   let m = LinkedMap.from([("a", 1), ("b", 2), ("c", 3)])
-  print("len=#{m.len()}")   # 3
+  print("len=#{m.len()}") # 3
 end
 ```
 
@@ -270,8 +278,8 @@ tyra test --format junit       # JUnit XML を出力 (CI のテストサマリ�
 | `for k, v in m` / `for v in s` — Map/Set イテレーション | ✅ 完成 (v0.7.0+) |
 | `LinkedMap<K,V>` / `LinkedSet<T>` — 挿入順保持 永続コレクション | ✅ 完成 (v0.8.0+) |
 | `LinkedMap.from([(k,v), ...])` — タプルリストから構築 | ✅ 完成 (v0.10.0+) |
-| タプル型 `(A, B)` — let/match/for 分構束縛 (ADR-0022) | ✅ 完成 (v0.10.0+) |
-| `SortedMap<K,V>` / `SortedSet<T>` — キーソート永続コレクション (ADR-0024) | ✅ 完成 (v0.10.0+) |
+| タプル型 `(A, B)` — let/match/for 分構束縛 (spec §11.5) | ✅ 完成 (v0.10.0+) |
+| `SortedMap<K,V>` / `SortedSet<T>` — キーソート永続コレクション (spec §11.3, §11.4) | ✅ 完成 (v0.10.0+) |
 | E0314 — 非表示型の文字列補間コンパイル時診断 | ✅ 完成 (v0.10.0+) |
 | モジュール呼び出しの型検査 — E0318 (未知のモジュール関数)、E0319 (print の表示可能性ゲート) (ADR-0028) | ✅ 完成 (v0.11.0+) |
 | `Err` を返す main → stderr 報告 + exit 1; `tyra run` は終了コードを伝播 (ADR-0029) | ✅ 完成 (v0.11.0+) |

@@ -79,6 +79,19 @@ fn parse_item(ts: &mut TokenStream, report: &mut Report) -> Item {
     match ts.peek() {
         TokenKind::Fn => {
             let func = decl::parse_fn_def(ts, report, is_async, is_export);
+            // Validate: `export` is not valid on `fn main` (§6.1)
+            if is_export && func.name == "main" {
+                report.add(
+                    tyra_diagnostics::Diagnostic::error("`export` cannot be applied to `fn main`")
+                        .with_code("E0111")
+                        .with_label(tyra_diagnostics::Label::new(
+                            start_span,
+                            "`export` used here",
+                        ))
+                        .with_note("`fn main` is the program entry point (spec §6.1); it is invoked by the runtime, never imported")
+                        .with_help("remove the export modifier: fn main(...)"),
+                );
+            }
             ts.skip_newlines();
             Item::FnDef(func)
         }
@@ -674,4 +687,48 @@ print("hello")
         assert!(codes.contains(&"E0110"), "expected E0110, got: {codes:?}");
     }
 
+    #[test]
+    fn export_fn_main_emits_e0111() {
+        let source = "export fn main() -> Unit\nend\n\nfn helper() -> Int\n  0\nend\n";
+        let (ast, report) = parse_str(source);
+        assert!(
+            report
+                .diagnostics()
+                .iter()
+                .any(|d| d.code.as_deref() == Some("E0111")),
+            "expected E0111, got: {:?}",
+            report.diagnostics()
+        );
+        assert_eq!(ast.items.len(), 2);
+        assert!(matches!(&ast.items[0], Item::FnDef(f) if f.name == "main"));
+        assert!(matches!(&ast.items[1], Item::FnDef(f) if f.name == "helper"));
+    }
+
+    #[test]
+    fn plain_fn_main_does_not_emit_e0111() {
+        let source = "fn main() -> Unit\nend\n";
+        let (_ast, report) = parse_str(source);
+        assert!(
+            !report
+                .diagnostics()
+                .iter()
+                .any(|d| d.code.as_deref() == Some("E0111")),
+            "unexpected E0111, got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn export_fn_non_main_does_not_emit_e0111() {
+        let source = "export fn maine() -> Unit\nend\n";
+        let (_ast, report) = parse_str(source);
+        assert!(
+            !report
+                .diagnostics()
+                .iter()
+                .any(|d| d.code.as_deref() == Some("E0111")),
+            "unexpected E0111, got: {:?}",
+            report.diagnostics()
+        );
+    }
 }

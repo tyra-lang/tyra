@@ -174,7 +174,7 @@ end
 規則:
 
 - `fn main` はエントリポイントファイルにのみ定義できる。`import` されるモジュールファイルに `fn main` が存在した場合はコンパイルエラーとする
-- `fn main` に `export` を付けることはできない。`main` はエントリポイント専用の関数名であり、外部公開の対象ではない
+- `fn main` に `export` を付けることはできない。`main` はエントリポイント専用の関数名であり、外部公開の対象ではない (E0111)
 - `fn main` とトップレベル実行文は同一ファイルに共存できない (コンパイルエラー)
 - トップレベル実行文は暗黙の `fn main() -> Unit` として型検査されるため、`?`、`.await`、`return` は使用できない
 - `import` されるモジュールファイルにはトップレベル実行文を記述できない (§13.1)
@@ -1249,7 +1249,7 @@ v0.1 の visibility は `export` と private の二段階のみとする。`inte
 - async / await を標準機能とする
 - 共有可変状態より message passing を推奨する
 - actor は v0.1 では標準抽象ではなくライブラリ提供とする
-- リファレンス実装は M:N work-stealing scheduler を用いる
+- リファレンス実装は、固定サイズのワーカースレッドプール (サイズ = `available_parallelism`、取得不可時は 4) が単一の共有キューを消費する方式で M 個のタスクを多重化する。work stealing は将来目標である
 
 ### 14.2 async function
 
@@ -1313,11 +1313,13 @@ let result = task.await?
 
 ### 15.1 基本方針
 
-Tyra のリファレンス実装は tracing GC を採用する。
+Tyra のリファレンス実装は Boehm-Demers-Weiser (BDW) conservative mark-sweep GC を採用する (ADR-0007, `docs/design/0007-boehm-gc-reference-impl.md`)。コンパイラが生成する Tyra オブジェクトのヒープ確保は `GC_malloc` / `GC_malloc_atomic` を経由し、生成コードに明示的な `free` は存在しない。
 
-- generational
-- low-latency を重視
-- runtime pause を抑える
+**将来目標** (現行のリファレンス実装では未達成):
+
+- generational collection
+- low-latency を重視した設計
+- runtime pause の削減
 
 ### 15.2 所有権は採用しない
 
@@ -1326,10 +1328,11 @@ Tyra のリファレンス実装は tracing GC を採用する。
 
 ### 15.3 値型最適化
 
-- `value` はスタック配置可能
-- escape analysis により不要なヒープ確保を減らす
+- `value` はスタック配置可能 — リファレンス実装では、単体の `value` インスタンスは `GC_malloc` によるヒープ確保を経由せず、LLVM の SSA 集合値 (`insertvalue`/`extractvalue` チェーン) として表現される
 - `List<value T>` の内部表現は実装定義とする
 - レイアウト最適化は意味論に影響してはならない
+
+**将来目標** (現行のリファレンス実装では未実装): `List<value T>` など複合データ構造をまたぐ体系的な escape analysis による、さらなるヒープ確保の削減
 
 ---
 
@@ -2036,7 +2039,7 @@ tyra bench ai-gen [options]   # AI 生成コード品質ベンチマーク（ben
 1. 明示的 `fn main` — `fn main() -> Unit`、`fn main() -> Result<Unit, E>`、`async fn main() -> Result<Unit, E>` のいずれか
 2. トップレベル実行文 — 暗黙の `fn main() -> Unit` に正規化される (§6.1)
 
-`fn main` はエントリポイントファイルにのみ定義でき、`export` は付けられない。アプリケーションパッケージではエントリポイントをちょうど1つ要求する。ライブラリパッケージではエントリポイントは不要である。複数のエントリポイントが検出された場合はコンパイルエラーとする。
+`fn main` はエントリポイントファイルにのみ定義でき、`export` は付けられない (E0111)。アプリケーションパッケージではエントリポイントをちょうど1つ要求する。ライブラリパッケージではエントリポイントは不要である。複数のエントリポイントが検出された場合はコンパイルエラーとする。
 
 ### 19.2 コンパイルフロー
 
@@ -2166,7 +2169,6 @@ end
 - multi-line string
 - 3 個以上の制約、where 節、associated type
 - guard clause (`when pattern if condition`)
-- tuple 型
 - structured concurrency
 - モジュールレベルの初期化セマンティクス (`let`/`mut` のモジュールスコープ)
 - `string` の拡張 API — USV 文字単位 API (`chars` / `char_at` / `char_code` / `from_char_code`) は v0.11.0 で実装済み (§17.3.4, ADR-0027)。正規表現・grapheme cluster 対応は後続リリース以降

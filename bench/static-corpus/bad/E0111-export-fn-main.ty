@@ -1,0 +1,6 @@
+# E0111-export-fn-main.ty
+# expected: error[E0111]: `export` cannot be applied to `fn main`
+# Exercises: parser — `export` modifier applied to `fn main`.
+# SPEC_REF: §6.1 — fn main / §19.1 — entry point
+export fn main() -> Unit
+end

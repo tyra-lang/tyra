@@ -51,3 +51,6 @@ jobs:
 
       - name: Run launch-surface snippet gate (fmt + check + run)
         run: bash examples/launch/check.sh ./target/debug/tyra
+
+      - name: Run README doc-snippet gate (fmt + check)
+        run: bash scripts/check_doc_snippets.sh ./target/debug/tyra

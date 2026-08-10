@@ -2,10 +2,24 @@
 
 All notable changes to Tyra are documented here.
 
-Format: `## [version] - YYYY-MM-DD` with sections **Stable**, **Experimental**,
-**Known Limitations**, **Not in This Release**.
+Format: `## [X.Y.Z] — YYYY-MM-DD` (em dash) with sections **Stable**, **Experimental**,
+**Known Limitations**, **Not in This Release**. No codenames since v0.10.0.
 
 ---
+
+## [Unreleased]
+
+### Stable
+
+- **New diagnostic E0111**: `export` cannot be applied to `fn main` — the parser now rejects `export fn main` with a dedicated error (previously accepted, or caught later by other means). `main` is the program entry point (spec §6.1, §19.1) and is never importable.
+- **Spec honesty pass**: §14.1 no longer claims an M:N work-stealing scheduler — the reference implementation multiplexes tasks over a fixed-size worker pool consuming a single shared queue; work stealing is now listed as a future goal. §15.1 no longer claims a generational, low-latency tracing GC — the reference implementation is the Boehm-Demers-Weiser conservative mark-sweep collector (ADR-0007); generational/low-latency/pause-reduction goals are now listed as future goals. §15.3 no longer claims escape analysis is implemented — value types are represented as SSA aggregates (not heap-boxed) for the standalone case, but systematic escape analysis across composite structures remains a future goal.
+- **Spec §22 cleanup**: removed the stale `tuple types` deferred-item entry — tuples shipped in §11.5 (v0.10.0).
+- **`docs/rfcs/README.md`** created, describing the RFC process referenced by README.md / AGENTS.md.
+- **README snippet CI gate**: `scripts/check_doc_snippets.sh` extracts every ```tyra fenced block from README.md / README.ja.md and runs `tyra fmt --check` + `tyra check` on each as a standalone file, wired into `.github/workflows/static-corpus.yml`.
+- README.md / README.ja.md Hello World example used `export fn main`, which is invalid (see E0111 above); corrected to `fn main`. All other ```tyra fenced blocks in both READMEs now pass `tyra fmt --check` and `tyra check` standalone; illustrative fragments are now tagged ```tyra-fragment instead of ```tyra.
+- `docs/llms/error-codes-notes.yaml`: E0210–E0213 entries described stale import/export-conflict meanings; corrected to their actual meanings (top-level `return`/`?`/`.await` restrictions and the `fn main` / top-level-statement exclusivity rule, per ADR-0006).
+- README.md / README.ja.md status table no longer cites ADR-0022 / ADR-0024 (files never committed — see `docs/design/README.md`); repointed to spec §11.3–§11.5.
+- README.md's "Non-goals" section linked `spec §3 and §22` to the Japanese spec path from English prose; repointed to the English spec translation with a note that the Japanese original is authoritative.
 
 ## [0.11.0] — 2026-06-13
 

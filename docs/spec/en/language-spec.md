@@ -178,7 +178,7 @@ end
 Rules:
 
 - `fn main` may only be defined in the entry-point file. A `fn main` in an imported module file is a compile error
-- `fn main` may not have `export`. `main` is reserved for the entry point and is not intended for external visibility
+- `fn main` may not have `export`. `main` is reserved for the entry point and is not intended for external visibility (E0111)
 - `fn main` and top-level executable statements may not coexist in the same file (compile error)
 - Top-level executable statements are type-checked as the body of an implicit `fn main() -> Unit`; therefore `?`, `.await`, and `return` are not usable
 - Imported module files may not contain top-level executable statements (§13.1)
@@ -1244,7 +1244,7 @@ Visibility in v0.1 has only two levels: `export` and private. There is no interm
 - `async` / `await` are standard features
 - Message passing is preferred over shared mutable state
 - The actor model is provided as a library, not a standard abstraction in v0.1
-- The reference implementation uses an M:N work-stealing scheduler
+- The reference implementation multiplexes M tasks over a fixed-size worker thread pool (size = `available_parallelism`, fallback 4) that consumes a single shared queue. Work stealing is a future goal
 
 ### 14.2 async function
 
@@ -1308,11 +1308,13 @@ Rules:
 
 ### 15.1 Basic policy
 
-The reference implementation uses tracing GC.
+The reference implementation uses the Boehm-Demers-Weiser (BDW) conservative mark-sweep collector (ADR-0007, `docs/design/0007-boehm-gc-reference-impl.md`). Heap allocations for Tyra objects emitted by the compiler go through `GC_malloc` / `GC_malloc_atomic`; there is no explicit `free` in generated code.
 
-- Generational
-- Low-latency oriented
-- Minimizes runtime pauses
+**Future goals** (not achieved by the current reference implementation):
+
+- Generational collection
+- Low-latency-oriented design
+- Reduced runtime pauses
 
 ### 15.2 No ownership
 
@@ -1321,10 +1323,11 @@ The reference implementation uses tracing GC.
 
 ### 15.3 Value type optimization
 
-- `value` types may be stack-allocated
-- Escape analysis reduces unnecessary heap allocation
+- `value` types may be stack-allocated — in the reference implementation, a standalone `value` instance is represented as an LLVM SSA aggregate (an `insertvalue`/`extractvalue` chain) rather than going through `GC_malloc` heap allocation
 - The internal representation of `List<value T>` is implementation-defined
 - Layout optimization must not affect semantics
+
+**Future goal** (not implemented in the current reference implementation): systematic escape analysis across composite data structures (e.g. `List<value T>`) to further reduce heap allocation
 
 ---
 
@@ -2046,7 +2049,7 @@ Program execution starts from `fn main`. The entry-point file takes one of the f
 1. Explicit `fn main` — one of `fn main() -> Unit`, `fn main() -> Result<Unit, E>`, or `async fn main() -> Result<Unit, E>`
 2. Top-level executable statements — normalized to an implicit `fn main() -> Unit` (§6.1)
 
-`fn main` may only be defined in the entry-point file and may not have `export`. Application packages require exactly one entry point. Library packages do not require an entry point. A compile error occurs if multiple entry points are detected.
+`fn main` may only be defined in the entry-point file and may not have `export` (E0111). Application packages require exactly one entry point. Library packages do not require an entry point. A compile error occurs if multiple entry points are detected.
 
 ### 19.2 Compilation pipeline
 
@@ -2176,7 +2179,6 @@ The following are postponed for later specification:
 - multi-line string
 - 3 or more constraints, `where` clauses, associated types
 - guard clauses (`when pattern if condition`)
-- tuple types
 - structured concurrency
 - Module-level initialization semantics (`let`/`mut` at module scope)
 - Extended `string` API — the USV character-level API (`chars` / `char_at` / `char_code` / `from_char_code`) shipped in v0.11.0 (§17.3.4, ADR-0027). Regex and grapheme-cluster support are a later release

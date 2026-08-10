@@ -80,7 +80,7 @@ ADRs are numbered sequentially: `0001`, `0002`, etc. Numbers are never reused. I
 | [0019](0019-linked-collections.md) | Insertion-ordered collections — `LinkedMap<K,V>` and `LinkedSet<T>` (v0.8) | Accepted | 2026-06-09 |
 | [0020](0020-hm-inference.md) | Hindley-Milner type inference, rank-1 (v0.8) | Accepted | 2026-05-30 |
 | [0021](0021-windows-support.md) | Windows (x64-MSVC) support (v0.8) | Accepted | 2026-06-09 |
-| 0022–0024 | (gap — referenced by README/strategy for tuples / sorted collections but files were never committed; to be backfilled or re-pointed) | — | — |
+| 0022–0024 | (gap — referenced by docs/strategy.md and the spec for tuples / sorted collections but files were never committed; to be backfilled or re-pointed. README.md / README.ja.md were repointed to spec §11.3–§11.5 instead) | — | — |
 | [0025](0025-source-file-extension.md) | Source file extension `.tyra` → `.ty` (v0.10) | Accepted | 2026-06-10 |
 | [0026](0026-machine-readable-diagnostics.md) | Machine-readable diagnostics — `--error-format json` (v0.11) | Accepted | 2026-06-12 |
 | [0027](0027-string-char-api.md) | Character-level string API (USV) and list sorting (v0.11) | Accepted | 2026-06-12 |

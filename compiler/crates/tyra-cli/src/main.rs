@@ -3122,6 +3122,26 @@ mod tests {
 
     #[test]
     #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn export_fn_main_emits_e0111_ndjson() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bad.ty");
+        fs::write(&path, "export fn main() -> Unit\nend\n").unwrap();
+        let output = std::process::Command::new(&tyra)
+            .args(["check", "--error-format", "json", path.to_str().unwrap()])
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(1));
+        assert_ndjson_pure(&stderr);
+        assert!(stderr.contains("\"code\":\"E0111\""), "stderr: {stderr}");
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
     fn json_errors_success_emits_summary_only() {
         let Some(tyra) = find_tyra_binary() else {
             eprintln!("SKIP: tyra binary not found — run `cargo build` first");

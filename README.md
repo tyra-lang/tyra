@@ -73,9 +73,10 @@ Tyra is a general-purpose language designed from the ground up for an era where 
 
 ```tyra
 import fs
+
 import string
 
-fn word_count(path: String) -> Result<Int, fs.FsError>
+fn word_count(path: String) -> Result<Int, FsError>
   match fs.read_to_string(path)
   when Err(e)
     Err(e)
@@ -127,7 +128,7 @@ The combination, and especially the **trait/ability separation**, is original to
 ## Hello, World
 
 ```tyra
-export fn main() -> Unit
+fn main() -> Unit
   print("hello, tyra")
 end
 ```
@@ -135,6 +136,10 @@ end
 ## A taste of the type system
 
 ```tyra
+import fs
+
+import string
+
 # Algebraic data types with exhaustive pattern matching
 type Payment =
   | Card(last4: String)
@@ -145,8 +150,10 @@ fn label(payment: Payment) -> String
   match payment
   when Card(last4)
     "card: #{last4}"
+
   when Bank(bank_name)
     "bank: #{bank_name}"
+
   when Cash
     "cash"
   end
@@ -170,6 +177,7 @@ value Point
 end
 
 let p1 = Point(x: 1.0, y: 2.0)
+
 let p2 = p1.copy(x: 3.0)
 ```
 
@@ -177,7 +185,7 @@ let p2 = p1.copy(x: 3.0)
 
 **Tuple types** with full destructuring in `let`, `match`, and `for`:
 
-```tyra
+```tyra-fragment
 fn min_max(xs: List<Int>) -> (Int, Int)
   # ... returns a tuple
 end
@@ -193,10 +201,10 @@ import sorted_map
 fn main() -> Unit
   let m: SortedMap<String, Int> = SortedMap.new()
   let m = m.insert("banana", 2)
-  let m = m.insert("apple",  1)
+  let m = m.insert("apple", 1)
   let m = m.insert("cherry", 3)
   for k, v in m
-    print("#{k}: #{v}")   # apple, banana, cherry — ascending order
+    print("#{k}: #{v}") # apple, banana, cherry — ascending order
   end
 end
 ```
@@ -208,7 +216,7 @@ import linked_map
 
 fn main() -> Unit
   let m = LinkedMap.from([("a", 1), ("b", 2), ("c", 3)])
-  print("len=#{m.len()}")   # 3
+  print("len=#{m.len()}") # 3
 end
 ```
 
@@ -270,8 +278,8 @@ See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for
 | `for k, v in m` / `for v in s` — Map/Set iteration | ✅ Complete (v0.7.0+) |
 | `LinkedMap<K,V>` / `LinkedSet<T>` — insertion-order persistent collections | ✅ Complete (v0.8.0+) |
 | `LinkedMap.from([(k,v), ...])` — construct from tuple list | ✅ Complete (v0.10.0+) |
-| Tuple types `(A, B)` — let/match/for destructuring (ADR-0022) | ✅ Complete (v0.10.0+) |
-| `SortedMap<K,V>` / `SortedSet<T>` — key-sorted persistent collections (ADR-0024) | ✅ Complete (v0.10.0+) |
+| Tuple types `(A, B)` — let/match/for destructuring (spec §11.5) | ✅ Complete (v0.10.0+) |
+| `SortedMap<K,V>` / `SortedSet<T>` — key-sorted persistent collections (spec §11.3, §11.4) | ✅ Complete (v0.10.0+) |
 | E0314 — compile-time diagnostic for non-displayable string interpolation | ✅ Complete (v0.10.0+) |
 | Module-call type checking — E0318 unknown module fn, E0319 print displayable gate (ADR-0028) | ✅ Complete (v0.11.0+) |
 | `Err`-returning main → stderr report + exit 1; `tyra run` propagates exit codes (ADR-0029) | ✅ Complete (v0.11.0+) |
@@ -378,7 +386,7 @@ To keep the language small and predictable:
 - No trait objects or dynamic dispatch
 - No exceptions
 
-See [spec §3 and §22](docs/spec/ja/language-spec.md) for the full list.
+See [spec §3 and §22](docs/spec/en/language-spec.md) for the full list (English translation; the [Japanese original](docs/spec/ja/language-spec.md) is authoritative).
 
 ## Installation
 
