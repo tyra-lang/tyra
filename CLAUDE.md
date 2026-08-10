@@ -21,3 +21,19 @@ In addition to `AGENTS.md`:
 
 - Respond to the maintainer in Japanese (内容に応じて)
 - Code, comments, identifiers, commit messages remain English (per AGENTS.md)
+
+### Implementation review loop (mandatory)
+
+For every non-trivial code change, run this loop before committing:
+
+1. **Implement — Sonnet**: implementation by a Sonnet subagent (Agent tool, model: "sonnet").
+2. **Review — Codex**: the diff is reviewed by Codex (subagent_type: "codex:codex-rescue").
+3. **Verify findings — Opus**: an Opus subagent (model: "opus") judges each Codex
+   finding: CONFIRMED (must fix) / REJECTED (false positive, with reason).
+   Only CONFIRMED findings proceed.
+4. **Fix — Sonnet**: a Sonnet subagent applies fixes for CONFIRMED findings.
+5. Re-run 2–4 on the fix diff until Codex reports no findings or all findings are
+   REJECTED. Cap: 3 iterations; then escalate to the maintainer.
+
+The orchestrating session coordinates, runs tests between steps, and never
+implements the change itself. Trivial changes (typo-level doc fixes) may skip the loop.
