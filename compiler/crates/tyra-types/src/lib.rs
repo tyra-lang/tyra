@@ -5,6 +5,7 @@
 // Full generics, ability derivation, and trait resolution are deferred.
 
 mod checker;
+mod task_affine;
 mod ty;
 
 pub use checker::{TypeEnv, TypeIndex, check, infer_expr};
@@ -1718,8 +1719,7 @@ end
 
     #[test]
     fn e0314_list_interp_rejected() {
-        let report =
-            check_str("fn main() -> Unit\n  let xs = [1, 2]\n  print(\"#{xs}\")\nend\n");
+        let report = check_str("fn main() -> Unit\n  let xs = [1, 2]\n  print(\"#{xs}\")\nend\n");
         assert!(has_code(&report, "E0314"), "{:?}", report.diagnostics());
     }
 
@@ -1757,5 +1757,1060 @@ end
             "fn main() -> Unit\n  let i = 1\n  let f = 1.5\n  let b = true\n  let s = \"x\"\n  let oi: Option<Int> = Some(1)\n  let os: Option<String> = Some(\"y\")\n  print(\"#{i} #{f} #{b} #{s} #{oi} #{os}\")\nend\n",
         );
         assert!(!report.has_errors(), "{:?}", report.diagnostics());
+    }
+
+    // ========================================================================
+    // Affine task-handle tracking (ADR-0030, spec §14.5, E0321 / E0322)
+    // ========================================================================
+
+    fn has_e0321(report: &Report) -> bool {
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code.as_deref() == Some("E0321"))
+    }
+
+    fn has_e0322(report: &Report) -> bool {
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code.as_deref() == Some("E0322"))
+    }
+
+    #[test]
+    fn task_double_await_straight_line_errors() {
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  t.await
+  t.await
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0321(&report),
+            "expected E0321 for straight-line double await; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_await_in_both_if_branches_ok() {
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let c = true
+  let t = spawn work()
+  if c
+    t.await
+  else
+    t.await
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report),
+            "await in both if-branches should not report E0321; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_await_in_one_branch_then_after_merge_ok() {
+        // Documented gap (ADR-0030): the branch-merge lattice resolves a
+        // Live/Consumed mismatch to MaybeConsumed, and consuming a
+        // MaybeConsumed handle is allowed silently. A real double-await is
+        // possible here at runtime (when `c` is true), but v1 does not
+        // catch it — asserting absence pins down the known gap.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let c = true
+  let t = spawn work()
+  if c
+    t.await
+  end
+  t.await
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report),
+            "await after a one-branch-only await should not report E0321 (documented gap); got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_await_inside_while_loop_errors() {
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  mut c = true
+  let t = spawn work()
+  while c
+    t.await
+    c = false
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0321(&report),
+            "expected E0321 for a loop-body await of a handle spawned outside the loop; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_handle_passed_to_function_no_diagnostics() {
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn use_task(_ x: Task<Int>) -> Unit
+  ()
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  use_task(t)
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report) && !has_e0322(&report),
+            "a handle passed to a function should escape tracking silently; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_handle_in_plain_list_literal_no_diagnostics() {
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  let xs = [t]
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report) && !has_e0322(&report),
+            "a handle stored in a plain list literal should escape tracking silently; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_handle_returned_no_diagnostics() {
+        let source = r#"
+fn make() -> Task<Int>
+  let t = spawn work()
+  t
+end
+
+fn work() -> Int
+  1
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report) && !has_e0322(&report),
+            "a returned handle should escape tracking silently; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_handle_captured_by_lambda_no_diagnostics() {
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  let closure = fn() -> Unit
+    t.await
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report) && !has_e0322(&report),
+            "a handle referenced inside a lambda body should escape tracking silently; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_handle_alias_no_diagnostics() {
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let x = spawn work()
+  let y = x
+  y.await
+  x.await
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report) && !has_e0322(&report),
+            "aliasing a handle via `let y = x` should leave both untracked; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_handle_never_awaited_warns() {
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0322(&report),
+            "expected E0322 for a handle that is never awaited; got: {:?}",
+            report.diagnostics()
+        );
+        assert!(
+            !report.has_errors(),
+            "E0322 is a warning and must not count as an error; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_join_all_then_element_await_errors() {
+        let source = r#"
+import core.tasks
+
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let a = spawn work()
+  let b = spawn work()
+  tasks.join_all([a, b])
+  a.await
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0321(&report),
+            "expected E0321: `a` was already consumed as a join_all element; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_select_sources_awaited_individually_ok() {
+        let source = r#"
+import core.tasks
+
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let a = spawn work()
+  let b = spawn work()
+  tasks.select([a, b])
+  a.await
+  b.await
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report) && !has_e0322(&report),
+            "select does not consume its sources; individually awaiting each is clean; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_select_result_double_await_errors() {
+        let source = r#"
+import core.tasks
+
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let a = spawn work()
+  let b = spawn work()
+  let t = tasks.select([a, b])
+  t.await
+  t.await
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0321(&report),
+            "expected E0321: the select result handle `t` is awaited twice; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_join_all_result_usable_as_list() {
+        // Step 1 (checker signature) type-propagation: join_all<T>(List<Task<T>>)
+        // -> Task<List<T>>, so `.await` on the call yields List<T>.
+        let source = r#"
+import core.tasks
+
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let a = spawn work()
+  let b = spawn work()
+  let results: List<Int> = tasks.join_all([a, b]).await
+  let first = results[0]
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !report.has_errors(),
+            "join_all([a, b]).await should type as List<Int>; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_select_result_usable_as_element_type() {
+        // Step 1 (checker signature) type-propagation: select<T>(List<Task<T>>)
+        // -> Task<T>, so `.await` on the call yields T directly.
+        //
+        // `a` and `b` are only used as select sources here (never individually
+        // awaited), so E0322 fires for each per spec §14.5 — that is the
+        // intended nudge toward the leak-free pattern, not a failure of this
+        // type-propagation test; only `has_errors()` is asserted.
+        let source = r#"
+import core.tasks
+
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let a = spawn work()
+  let b = spawn work()
+  let winner: Int = tasks.select([a, b]).await
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !report.has_errors(),
+            "select([a, b]).await should type as Int; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    // ========================================================================
+    // Shadow tombstones, select-of-consumed, while-condition depth, loop-exit
+    // suppression, and/or branch, module-alias recognition (ADR-0030 fixes)
+    // ========================================================================
+
+    #[test]
+    fn task_handle_shadowed_by_reassign_no_diagnostics() {
+        // Straight-line shadow: the first `t` is awaited then replaced by a
+        // fresh spawn before its own scope ends, so it never goes Live-only
+        // (no E0322); the second `t` is awaited exactly once (no E0321).
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  t.await
+  let t = spawn work()
+  t.await
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report) && !has_e0322(&report),
+            "re-spawn after full await, then await again, should be clean; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_handle_shadowed_while_live_warns_e0322() {
+        // The first `t` is replaced by the second `let t = ...` while still
+        // Live (never awaited) — E0322 for the first handle, no E0321.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  let t = spawn work()
+  t.await
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0322(&report),
+            "shadowing a Live handle should warn E0322 for the replaced handle; got: {:?}",
+            report.diagnostics()
+        );
+        assert!(
+            !has_e0321(&report),
+            "the second handle is awaited exactly once; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_handle_shadowed_by_for_loop_binding_no_diagnostics() {
+        // An outer `t` is fully consumed, then a for-loop rebinds `t` to a
+        // plain (non-task) element — the loop body's use of `t` must not
+        // touch the outer, already-consumed handle.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  t.await
+  for t in [1, 2, 3]
+    print(t)
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report) && !has_e0322(&report),
+            "a for-loop binding shadowing a consumed outer handle should be clean; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_handle_shadowed_by_match_arm_binding_no_diagnostics() {
+        // Same shadow-tombstone guarantee for match-arm pattern bindings.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  t.await
+  let o: Option<Int> = Some(5)
+  match o
+    when Some(t)
+      print(t)
+    when None
+      ()
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report) && !has_e0322(&report),
+            "a match-arm pattern binding shadowing a consumed outer handle should be clean; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_while_condition_await_errors() {
+        // Fix C: the while condition re-evaluates every iteration, so
+        // awaiting a handle spawned outside the loop from inside the
+        // condition is the same loop-repeat-await risk as awaiting it in
+        // the body.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  while t.await > 0
+    ()
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0321(&report),
+            "expected E0321 for a while-condition await of a handle spawned outside the loop; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_loop_await_then_break_no_e0321() {
+        // Fix D (finding 5a, lenient): the loop provably runs the consume at
+        // most once per handle because a top-level `break` follows it in
+        // the same statement list.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  let xs = [1, 2, 3]
+  for x in xs
+    t.await
+    break
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report),
+            "await immediately followed by break in the same loop body should not report E0321; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_and_or_rhs_await_mutually_exclusive_guards_no_e0321() {
+        // Fix E (finding 5b): the RHS of `and`/`or` is analyzed as a branch
+        // (may not execute), so two sequential ifs each guarding a
+        // short-circuited await must not be flagged, even though both
+        // conditions reference the same handle.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let ready = true
+  let not_ready = false
+  let t = spawn work()
+  if ready and t.await > 0
+    ()
+  end
+  if not_ready and t.await > 0
+    ()
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report),
+            "and-guarded await across mutually exclusive conditions should not report E0321; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_select_of_consumed_handle_errors() {
+        // Fix B (finding 1): passing an already-awaited handle to
+        // tasks.select is UB (the runtime increments its refcount) and must
+        // be E0321.
+        let source = r#"
+import core.tasks
+
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let a = spawn work()
+  let b = spawn work()
+  let x = a.await
+  tasks.select([a, b])
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0321(&report),
+            "expected E0321: `a` was passed to tasks.select after being consumed; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_module_alias_join_all_double_consume_errors() {
+        // Fix F (finding 2): `import core.tasks as ts` must be recognized
+        // exactly like the unaliased `tasks` receiver.
+        let source = r#"
+import core.tasks as ts
+
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  ts.join_all([t])
+  t.await
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0321(&report),
+            "expected E0321: join_all via an aliased `core.tasks` import consumed `t`; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    // ========================================================================
+    // Round 2: LoopExit (Break/Return/None), dead-code-after-exit,
+    // alias-shadow-in-scope, and tombstone-warns-on-replace fixes.
+    // ========================================================================
+
+    #[test]
+    fn task_handle_shadowed_by_for_loop_binding_outer_live_warns_e0322() {
+        // Strengthened version of `task_handle_shadowed_by_for_loop_binding_
+        // no_diagnostics`: the OUTER `t` is never awaited before the for-loop
+        // rebinds `t`, so it must still be reported as never-awaited — the
+        // loop's shadow tombstone (in its own nested scope) must not make
+        // the outer, still-Live handle silently escape.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  for t in [1, 2, 3]
+    print(t)
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0322(&report),
+            "expected E0322: outer `t` is never awaited despite being shadowed by the for-loop binding; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_handle_shadowed_by_match_arm_binding_outer_live_warns_e0322() {
+        // Strengthened version of `task_handle_shadowed_by_match_arm_
+        // binding_no_diagnostics`: same guarantee for match-arm bindings.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  let o: Option<Int> = Some(5)
+  match o
+    when Some(t)
+      print(t)
+    when None
+      ()
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0322(&report),
+            "expected E0322: outer `t` is never awaited despite being shadowed by the match-arm binding; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_handle_shadowed_by_plain_let_of_non_task_warns_e0322() {
+        // Direct exercise of the tombstone() fix (finding 4): `let t = 5`
+        // shares the SAME frame as the original spawn (no nested scope is
+        // pushed for a plain `let`), so replacing a still-Live tracked
+        // handle here must warn E0322 for the handle that was just lost.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  let t = 5
+  print(t)
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0322(&report),
+            "expected E0322: `let t = 5` silently replaced a Live tracked handle; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_dead_code_after_return_no_e0321() {
+        // Finding 2: `visit_stmts` must stop after a top-level `Return` in
+        // the same statement list — the second `t.await` is unreachable
+        // dead code and must not be treated as a real repeat-consume.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn f() -> Int
+  let t = spawn work()
+  let v = t.await
+  return v
+  t.await
+end
+
+fn main() -> Unit
+  let x = f()
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report),
+            "a consume after `return` in the same statement list is dead code and must not report E0321; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_nested_loop_inner_break_does_not_suppress_outer_repeat_await_e0321() {
+        // `break` only proves a single run for a handle bound directly
+        // outside the loop being broken (handle.loop_depth + 1 ==
+        // ctx.loop_depth). Here `t` is bound outside BOTH loops
+        // (loop_depth 0) but consumed at depth 2 inside the inner loop's
+        // `break` — the inner break only unwinds one level, so the outer
+        // loop can still repeat the whole inner loop and re-run the
+        // consume. Must still report E0321.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  let xs = [1, 2, 3]
+  let ys = [1, 2]
+  for x in xs
+    for y in ys
+      t.await
+      break
+    end
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0321(&report),
+            "expected E0321: a break in the inner loop does not prove a single run for a handle bound outside both loops; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_single_loop_await_then_break_no_e0321_control() {
+        // Control for the nested-loop case above: when the handle is bound
+        // directly outside the ONE loop it is awaited and broken out of,
+        // the break does prove a single run and E0321 must not fire.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  let xs = [1, 2, 3]
+  for x in xs
+    t.await
+    break
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report),
+            "a break in the same loop the handle was bound outside of should suppress E0321; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_while_condition_then_top_level_return_still_errors_e0321() {
+        // Finding 1 (reset-on-loop-entry): a top-level `return` AFTER the
+        // while loop must not leak into the while condition's own context.
+        // The condition still re-evaluates every iteration regardless of
+        // what follows the loop in the outer statement list, so this must
+        // still be E0321 — before the fix, the old bool
+        // `loop_exit_follows` was computed once for the `while` statement
+        // (finding the trailing `return`) and then inherited unchanged
+        // into the condition's context, wrongly suppressing it.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  while t.await > 0
+    ()
+  end
+  return
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0321(&report),
+            "expected E0321: a top-level `return` after the loop must not suppress the while-condition repeat-await; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_continue_before_break_still_errors_e0321() {
+        // A `continue` reachable before the `break` on the same path
+        // defeats the break's single-run proof — the loop can iterate
+        // again via `continue`, so the consume can still repeat. Must
+        // still be E0321.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let t = spawn work()
+  let xs = [1, 2, 3]
+  for x in xs
+    t.await
+    continue
+    break
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0321(&report),
+            "expected E0321: a `continue` before the `break` defeats the single-run suppression; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_alias_shadowed_by_local_let_join_all_clean() {
+        // Finding 3: a local `let ts = ...` shadows the `import core.tasks
+        // as ts` module alias in scope. `ts.join_all([a])` here dispatches
+        // to the user's own `PoolOps::join_all` method, not the tasks
+        // builtin — it must not be classified as a tracked-consume, so the
+        // real, single `a.await` afterward stays clean.
+        let source = r#"
+import core.tasks as ts
+
+fn work() -> Int
+  1
+end
+
+data Pool
+  n: Int
+end
+
+impl PoolOps for Pool
+  fn join_all(self, _ xs: List<Task<Int>>) -> Int
+    self.n
+  end
+end
+
+fn main() -> Unit
+  let ts = Pool(n: 1)
+  let a = spawn work()
+  let r = ts.join_all([a])
+  let v = a.await
+  println(v)
+  println(r)
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report) && !has_e0322(&report),
+            "a local `let ts = ...` shadowing the tasks alias must not treat `ts.join_all` as the tasks builtin; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_alias_shadowed_by_fn_param_clean() {
+        // Finding 3 (param case): a fn parameter named `ts` shadows the
+        // module alias for the whole function body. Every fn parameter is
+        // now tombstoned at the top of `analyze_body`, so `stack` sees
+        // `ts` bound and `classify_tasks_call` bails out here too.
+        let source = r#"
+import core.tasks as ts
+
+fn work() -> Int
+  1
+end
+
+data Pool
+  n: Int
+end
+
+impl PoolOps for Pool
+  fn join_all(self, _ xs: List<Task<Int>>) -> Int
+    self.n
+  end
+end
+
+fn use_pool(_ ts: Pool, _ a: Task<Int>) -> Unit
+  let r = ts.join_all([a])
+  let v = a.await
+  println(v)
+  println(r)
+end
+
+fn main() -> Unit
+  let a = spawn work()
+  use_pool(Pool(n: 1), a)
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report) && !has_e0322(&report),
+            "a fn-parameter named `ts` shadowing the tasks alias must not treat `ts.join_all` as the tasks builtin; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    // ========================================================================
+    // Round 3: return-value continue scan (loop_exit_follows) and
+    // while-condition depth collapse when the loop body always exits.
+    // ========================================================================
+
+    #[test]
+    fn task_continue_in_return_value_defeats_suppression_e0321() {
+        // A `continue` nested in the VALUE of a `return` statement runs
+        // before the return itself — the loop can still iterate again, so
+        // `loop_exit_follows` must not treat this `return` as an
+        // unconditional exit. Before the fix, `Stmt::Return(_) =>
+        // LoopExit::Return` fired before the value was scanned, wrongly
+        // suppressing the repeat-await on `t`.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let c = true
+  let t = spawn work()
+  while c
+    t.await
+    return if c
+      continue
+    else
+      ()
+    end
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0321(&report),
+            "expected E0321: a `continue` nested in the return value defeats the return's single-run suppression; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_continue_in_match_return_value_defeats_suppression_e0321() {
+        // Same as above, but the `continue` is nested in a `match` at the
+        // root of the return value instead of an `if`.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn main() -> Unit
+  let c = true
+  let t = spawn work()
+  while c
+    t.await
+    return match c
+      when true
+        continue
+      when false
+        ()
+    end
+  end
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            has_e0321(&report),
+            "expected E0321: a `continue` nested in a match return value defeats the return's single-run suppression; got: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn task_while_cond_await_with_always_exiting_body_no_e0321() {
+        // When a while loop's body unconditionally exits (a top-level
+        // `break`/`return` with no `continue` reachable before it), the
+        // condition provably evaluates exactly once — it must be analyzed
+        // at the enclosing loop depth, not loop_depth + 1. Covers both the
+        // `break` and `return` exit forms.
+        let source = r#"
+fn work() -> Int
+  1
+end
+
+fn f_break() -> Unit
+  let t = spawn work()
+  while t.await > 0
+    break
+  end
+end
+
+fn f_return() -> Unit
+  let t = spawn work()
+  while t.await > 0
+    return
+  end
+end
+
+fn main() -> Unit
+  f_break()
+  f_return()
+end
+"#;
+        let report = check_str(source);
+        assert!(
+            !has_e0321(&report),
+            "a while condition await with a body that always breaks/returns should not report E0321; got: {:?}",
+            report.diagnostics()
+        );
     }
 }

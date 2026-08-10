@@ -11,6 +11,8 @@ Format: `## [X.Y.Z] — YYYY-MM-DD` (em dash) with sections **Stable**, **Experi
 
 ### Stable
 
+- **Affine task-handle tracking (ADR-0030, spec §14.5)**: the checker now statically tracks `let`-bound `Task` handles (from `spawn` or `tasks.select([...])`) within local, straight-line-reachable scope and rejects double-`.await` — previously an Arc double-free (undefined behavior) reachable from ordinary safe code, per the runtime contract documented at `runtime/src/lib.rs`. New diagnostics: **E0321** (error — a handle awaited more than once, consumed twice via `tasks.join_all`, or awaited inside a loop when bound outside it) and **E0322** (warning — a handle that is never awaited before its scope ends; the task still runs to completion but the handle leaks). Handles that escape local scope (stored, passed as an argument, returned, captured by a closure, aliased) are not tracked in v0.x — a documented, conservative v1 scope boundary; see ADR-0030 for the full lattice and the one documented false-negative gap (a single-branch-then-merge double-await is not caught).
+- **`tasks.join_all` / `tasks.select` checker signatures (spec §17)**: these now type as `join_all<T>(List<Task<T>>) -> Task<List<T>>` and `select<T>(List<Task<T>>) -> Task<T>`, replacing the previous silent `Ty::Error` escape hatch. A structural mismatch (non-list argument, list element not `Task<_>`, unresolved element type) still falls back silently to `Ty::Error` rather than a hard error, matching what MIR lowering already accepts.
 - **New diagnostic E0111**: `export` cannot be applied to `fn main` — the parser now rejects `export fn main` with a dedicated error (previously accepted, or caught later by other means). `main` is the program entry point (spec §6.1, §19.1) and is never importable.
 - **Spec honesty pass**: §14.1 no longer claims an M:N work-stealing scheduler — the reference implementation multiplexes tasks over a fixed-size worker pool consuming a single shared queue; work stealing is now listed as a future goal. §15.1 no longer claims a generational, low-latency tracing GC — the reference implementation is the Boehm-Demers-Weiser conservative mark-sweep collector (ADR-0007); generational/low-latency/pause-reduction goals are now listed as future goals. §15.3 no longer claims escape analysis is implemented — value types are represented as SSA aggregates (not heap-boxed) for the standalone case, but systematic escape analysis across composite structures remains a future goal.
 - **Spec §22 cleanup**: removed the stale `tuple types` deferred-item entry — tuples shipped in §11.5 (v0.10.0).
@@ -20,6 +22,10 @@ Format: `## [X.Y.Z] — YYYY-MM-DD` (em dash) with sections **Stable**, **Experi
 - `docs/llms/error-codes-notes.yaml`: E0210–E0213 entries described stale import/export-conflict meanings; corrected to their actual meanings (top-level `return`/`?`/`.await` restrictions and the `fn main` / top-level-statement exclusivity rule, per ADR-0006).
 - README.md / README.ja.md status table no longer cites ADR-0022 / ADR-0024 (files never committed — see `docs/design/README.md`); repointed to spec §11.3–§11.5.
 - README.md's "Non-goals" section linked `spec §3 and §22` to the Japanese spec path from English prose; repointed to the English spec translation with a note that the Japanese original is authoritative.
+
+### Breaking Changes
+
+- Code that double-`.await`s a locally-tracked `Task` handle, or awaits one more than once inside a loop when it was bound outside that loop, now fails to compile with E0321 — this was previously an unchecked Arc double-free (undefined behavior) at runtime. Allowed pre-v1.0 (§3): the program was never correct, and the compiler now says so instead of miscompiling silently.
 
 ## [0.11.0] — 2026-06-13
 

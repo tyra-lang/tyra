@@ -377,10 +377,16 @@ pub unsafe extern "C" fn tyra_task_spawn(thunk: ThunkFn, arg: *mut c_void) -> *c
 /// Consumes the handle (reclaims the awaiter's Arc reference).
 ///
 /// # Safety
-/// `task` must be a pointer previously returned by `tyra_task_spawn` and
-/// not yet passed to `tyra_task_await` or `tyra_task_join_all`. The Tyra
-/// compiler is responsible for ensuring each handle is awaited exactly
-/// once; double-await is undefined behavior (Arc double-free).
+/// `task` must be a pointer previously returned by `tyra_task_spawn` or
+/// `tyra_task_select`, and not yet passed to `tyra_task_await` or
+/// `tyra_task_join_all`. Double-await is undefined behavior (Arc
+/// double-free). The type checker statically rejects double-await of
+/// handles it can track (E0321, ADR-0030, `tyra-types/src/task_affine.rs`)
+/// — a `let`-bound handle awaited twice in local, straight-line-reachable
+/// scope is a compile error. Handles that escape local scope (stored,
+/// passed to a function, returned, captured by a closure, ...) are not
+/// statically checked in v0.x; for those the exactly-once contract
+/// documented here still applies and is the caller's responsibility.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_task_await(task: *const Task) -> *mut c_void {
     assert!(!task.is_null(), "tyra_task_await: null task");
@@ -399,8 +405,9 @@ pub unsafe extern "C" fn tyra_task_await(task: *const Task) -> *mut c_void {
 /// Block until all tasks in `tasks[0..n]` complete; write results in order.
 ///
 /// # Safety
-/// Each `tasks[i]` must be a valid handle from `tyra_task_spawn` not yet
-/// awaited. `results` must point to at least `n` pointer-sized slots.
+/// Each `tasks[i]` must be a valid handle previously returned by
+/// `tyra_task_spawn` or `tyra_task_select`, not yet awaited. `results` must
+/// point to at least `n` pointer-sized slots.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_task_join_all(
     tasks: *const *const Task,

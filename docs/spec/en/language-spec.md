@@ -1302,6 +1302,42 @@ Rules:
 - Task cancellation is not a language feature in v0.1
 - Cancellation is left to a future library API
 
+### 14.5 Task handle consumption
+
+A `Task<T>` handle is affine: it can be consumed at most once. The reference
+runtime (`runtime/src/lib.rs`) reclaims the handle's ownership on every
+`.await`, so awaiting the same handle twice is undefined behavior (an Arc
+double-free). The compiler statically checks this contract within local,
+straight-line scope (ADR-0030).
+
+Rules:
+
+- A handle bound by `let x = spawn ...` or `let x = tasks.select([...])` is
+  tracked.
+- Awaiting the same handle twice is a compile error (E0321). Passing it
+  as a direct list element of `tasks.join_all([...])` is treated as a
+  consume too (it mirrors what the runtime actually does), so it is subject
+  to the same E0321 rule.
+- Awaiting, inside a loop body (`while` / `for`), a handle that was bound
+  outside that loop is also E0321 — at runtime the loop body can run
+  more than once per handle.
+- A tracked handle that is never consumed before its scope ends warns
+  (E0322). The task still runs to completion, but the means to retrieve
+  its result (or to `join_all` it) is lost — the handle leaks.
+- A handle that escapes local scope — passed as a function argument, stored
+  in a list/tuple/struct, `return`ed, captured by a closure, and so on — is
+  silently untracked from that point on in v0.x: no further diagnostics are
+  produced for it. The runtime's exactly-once contract still applies to an
+  escaped handle; it is simply not statically checked.
+- `tasks.select` does **not** consume its source handles (it only clones an
+  internal `Arc`). Losing tasks are not cancelled — they run to completion
+  regardless. To avoid leaking them, each source handle passed to `select`
+  should still be awaited individually; since `select` never marks a source
+  as consumed, failing to do so reports E0322.
+
+See ADR-0030 for the full state-transition lattice, including how branch
+merges (`if`/`match`) are resolved.
+
 ---
 
 ## 15. Memory management

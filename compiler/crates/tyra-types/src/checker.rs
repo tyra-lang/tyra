@@ -417,6 +417,12 @@ pub fn check(file: &SourceFile, report: &mut Report) -> TypeIndex {
     for item in &file.items {
         check_item(item, &mut env, report);
     }
+
+    // Affine task-handle tracking (ADR-0030, spec §14.5): a standalone
+    // syntactic pass, run alongside the checks above rather than woven into
+    // infer_expr. It needs no type info from `env`.
+    crate::task_affine::check_task_affine(&file.items, report);
+
     env.type_index
 }
 
@@ -1349,7 +1355,14 @@ fn check_stmt(stmt: &Stmt, env: &mut TypeEnv, report: &mut Report) {
             env.binding_type_hint = prev_hint;
             let binding_ty = if let Some(annotation) = &s.type_annotation {
                 let expected = Ty::from_type_expr(annotation);
-                check_type_match(&expected, &value_ty, s.span, Some(annotation.span), env, report);
+                check_type_match(
+                    &expected,
+                    &value_ty,
+                    s.span,
+                    Some(annotation.span),
+                    env,
+                    report,
+                );
                 expected
             } else {
                 value_ty
@@ -1827,9 +1840,7 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
                         .as_ref()
                         .and_then(|t| peel_to_linked_map(t))
                         .and_then(|lm| match lm {
-                            Ty::Generic(_, a) if a.len() == 2 => {
-                                Some((a[0].clone(), a[1].clone()))
-                            }
+                            Ty::Generic(_, a) if a.len() == 2 => Some((a[0].clone(), a[1].clone())),
                             _ => None,
                         });
 
@@ -2766,7 +2777,10 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
             // runtime. The prelude-signature guard (`Fn([Error], Unit)`)
             // skips user-defined functions that happen to share the name.
             if let ExprKind::Ident(fn_name) = &callee.kind
-                && matches!(fn_name.as_str(), "print" | "println" | "eprint" | "eprintln")
+                && matches!(
+                    fn_name.as_str(),
+                    "print" | "println" | "eprint" | "eprintln"
+                )
                 && args.len() == 1
                 && matches!(
                     env.lookup(fn_name),
@@ -3045,59 +3059,58 @@ pub fn infer_expr(expr: &Expr, env: &mut TypeEnv, report: &mut Report) -> Ty {
 
             // For `for (a, b) in pairs`, the iter must be List<Tuple<A,B,...>>.
             // For `for k, v in map` / `for x in list`, use the normal dispatch.
-            let (expected_bindings, binding_tys): (usize, Vec<Ty>) =
-                if is_tuple_destructure {
-                    // iter must be List<Tuple<...>>
-                    match &iter_ty {
-                        Ty::Generic(name, args)
-                            if name == "List" && args.len() == 1 && args[0].is_tuple() =>
-                        {
-                            let tys = args[0].tuple_elems().unwrap().to_vec();
-                            let n = tys.len();
-                            (n, tys)
-                        }
-                        Ty::Error => (binding_names.len(), vec![Ty::Error; binding_names.len()]),
-                        _ => {
-                            report.add(
-                                Diagnostic::error(format!(
-                                    "`for ({}) in ...` requires a `List<(...)>` iterable, found `{}`",
-                                    binding_names.join(", "),
-                                    iter_ty.display_name()
-                                ))
-                                .with_code("E0313")
-                                .with_label(Label::new(f.span, "expected List<Tuple<...>>")),
-                            );
-                            (binding_names.len(), vec![Ty::Error; binding_names.len()])
-                        }
+            let (expected_bindings, binding_tys): (usize, Vec<Ty>) = if is_tuple_destructure {
+                // iter must be List<Tuple<...>>
+                match &iter_ty {
+                    Ty::Generic(name, args)
+                        if name == "List" && args.len() == 1 && args[0].is_tuple() =>
+                    {
+                        let tys = args[0].tuple_elems().unwrap().to_vec();
+                        let n = tys.len();
+                        (n, tys)
                     }
-                } else {
-                    // E0313: binding count check against iterable type.
-                    match &iter_ty {
-                        Ty::Generic(name, args) if name == "Map" && args.len() == 2 => {
-                            (2, vec![args[0].clone(), args[1].clone()])
-                        }
-                        Ty::Generic(name, args) if name == "LinkedMap" && args.len() == 2 => {
-                            (2, vec![args[0].clone(), args[1].clone()])
-                        }
-                        Ty::Generic(name, args) if name == "SortedMap" && args.len() == 2 => {
-                            (2, vec![args[0].clone(), args[1].clone()])
-                        }
-                        Ty::Generic(name, args) if name == "Set" && !args.is_empty() => {
-                            (1, vec![args[0].clone()])
-                        }
-                        Ty::Generic(name, args) if name == "LinkedSet" && !args.is_empty() => {
-                            (1, vec![args[0].clone()])
-                        }
-                        Ty::Generic(name, args) if name == "SortedSet" && !args.is_empty() => {
-                            (1, vec![args[0].clone()])
-                        }
-                        Ty::Generic(name, args) if name == "List" && !args.is_empty() => {
-                            (1, vec![args[0].clone()])
-                        }
-                        // Unknown / Error: accept any binding count, bind to Error.
-                        _ => (binding_names.len(), vec![Ty::Error; binding_names.len()]),
+                    Ty::Error => (binding_names.len(), vec![Ty::Error; binding_names.len()]),
+                    _ => {
+                        report.add(
+                            Diagnostic::error(format!(
+                                "`for ({}) in ...` requires a `List<(...)>` iterable, found `{}`",
+                                binding_names.join(", "),
+                                iter_ty.display_name()
+                            ))
+                            .with_code("E0313")
+                            .with_label(Label::new(f.span, "expected List<Tuple<...>>")),
+                        );
+                        (binding_names.len(), vec![Ty::Error; binding_names.len()])
                     }
-                };
+                }
+            } else {
+                // E0313: binding count check against iterable type.
+                match &iter_ty {
+                    Ty::Generic(name, args) if name == "Map" && args.len() == 2 => {
+                        (2, vec![args[0].clone(), args[1].clone()])
+                    }
+                    Ty::Generic(name, args) if name == "LinkedMap" && args.len() == 2 => {
+                        (2, vec![args[0].clone(), args[1].clone()])
+                    }
+                    Ty::Generic(name, args) if name == "SortedMap" && args.len() == 2 => {
+                        (2, vec![args[0].clone(), args[1].clone()])
+                    }
+                    Ty::Generic(name, args) if name == "Set" && !args.is_empty() => {
+                        (1, vec![args[0].clone()])
+                    }
+                    Ty::Generic(name, args) if name == "LinkedSet" && !args.is_empty() => {
+                        (1, vec![args[0].clone()])
+                    }
+                    Ty::Generic(name, args) if name == "SortedSet" && !args.is_empty() => {
+                        (1, vec![args[0].clone()])
+                    }
+                    Ty::Generic(name, args) if name == "List" && !args.is_empty() => {
+                        (1, vec![args[0].clone()])
+                    }
+                    // Unknown / Error: accept any binding count, bind to Error.
+                    _ => (binding_names.len(), vec![Ty::Error; binding_names.len()]),
+                }
+            };
 
             if binding_names.len() != expected_bindings
                 && !matches!(iter_ty, Ty::Error)
@@ -3317,7 +3330,11 @@ fn check_list_structural_call(
 
     // sum/max/min/sort are Int-only, sort_str String-only — strict check.
     if matches!(method, "sum" | "max" | "min" | "sort" | "sort_str") {
-        let expected_elem = if method == "sort_str" { Ty::String } else { Ty::Int };
+        let expected_elem = if method == "sort_str" {
+            Ty::String
+        } else {
+            Ty::Int
+        };
         let expected = Ty::Generic("List".into(), vec![expected_elem]);
         let a0 = infer_expr(&args[0].value, env, report);
         check_type_match(&expected, &a0, args[0].span, None, env, report);
@@ -3434,12 +3451,51 @@ fn check_builtin_module_call(
             Ty::Never
         }
         ("tasks", "join_all") | ("tasks", "select") => {
-            // Generic over T (spec §17 core.tasks); typed during MIR
-            // lowering today. Keep the pre-ADR silent typing.
-            for arg in args {
-                infer_expr(&arg.value, env, report);
+            // spec §17 core.tasks signatures:
+            //   join_all<T>(List<Task<T>>) -> Task<List<T>>
+            //   select<T>(List<Task<T>>) -> Task<T>
+            // Real typing (replaces the former Ty::Error escape hatch): on
+            // any structural mismatch (wrong arity, non-list argument, list
+            // element not Task<_>, or an unresolved inner T) fall back
+            // silently to Ty::Error exactly as before this change — codegen
+            // never sees Ty::Error (E9001 ICE guard), and MIR lowering
+            // separately enforces the list-literal restriction
+            // (tyra-mir/src/lower/call.rs), which the checker must not
+            // duplicate here.
+            //
+            // TODO: list-literal element-type inference only types the
+            // first element (pre-existing, language-wide hole, not
+            // introduced here) — a heterogeneous list like `[task, 1]` can
+            // slip past this signature check and reach MIR untyped. This
+            // signature is only as strong as that inference; tracked as a
+            // follow-up, not fixed in this change.
+            if args.len() != 1 {
+                for arg in args {
+                    infer_expr(&arg.value, env, report);
+                }
+                return Ty::Error;
             }
-            Ty::Error
+            let arg_ty_raw = infer_expr(&args[0].value, env, report);
+            let arg_ty = env.subst.apply(&arg_ty_raw);
+            let elem_ty = match &arg_ty {
+                Ty::Generic(name, targs) if name == "List" && targs.len() == 1 => match &targs[0] {
+                    Ty::Generic(tname, ttargs) if tname == "Task" && ttargs.len() == 1 => {
+                        Some(ttargs[0].clone())
+                    }
+                    _ => None,
+                },
+                _ => None,
+            };
+            match elem_ty {
+                Some(t) if !t.is_error() => {
+                    if method == "join_all" {
+                        Ty::Generic("Task".into(), vec![Ty::Generic("List".into(), vec![t])])
+                    } else {
+                        Ty::Generic("Task".into(), vec![t])
+                    }
+                }
+                _ => Ty::Error,
+            }
         }
         _ => {
             report.add(unknown_module_fn_diag(canonical, method, span));

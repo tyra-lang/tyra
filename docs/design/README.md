@@ -86,3 +86,4 @@ ADRs are numbered sequentially: `0001`, `0002`, etc. Numbers are never reused. I
 | [0027](0027-string-char-api.md) | Character-level string API (USV) and list sorting (v0.11) | Accepted | 2026-06-12 |
 | [0028](0028-checker-module-signatures.md) | Type-checking imported module function calls (v0.11) | Accepted | 2026-06-12 |
 | [0029](0029-err-main-semantics.md) | Runtime semantics of Err-returning `main` (v0.11) | Accepted | 2026-06-12 |
+| [0030](0030-affine-task-handles.md) | Affine task-handle tracking (v1, conservative) | Accepted | 2026-08-10 |
