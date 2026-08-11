@@ -1564,10 +1564,12 @@ end
 - `TypeMismatch` / `MissingKey` are never returned by the stdlib itself
   (`as_*` / `get` / `at` return `None`). They are ADT variants provided
   for callers to use as their own error types.
-- `json.Value` behaves as a GC-managed opaque handle (§8.5). In v0.1 a
-  parsed tree lives for the duration of the process (explicit
-  deallocation is not supported). See `runtime/src/stdlib_json.rs` for
-  implementation notes.
+- `json.Value` behaves as a GC-managed opaque handle (§8.5): both the
+  root and every node reached via `get`/`at` are independently
+  GC-rooted, so a parsed tree (or any live subtree of it) is reclaimed
+  once no handle referencing it remains reachable — explicit
+  deallocation is neither needed nor supported. See
+  `runtime/src/stdlib_json.rs` for implementation notes.
 
 #### 17.3.3 http
 
@@ -1632,10 +1634,10 @@ end
   bytes are truncated at the first NUL.
 - Only `GET` is exposed. `POST` / `PUT` / `DELETE`, header, and query
   manipulation are deferred to later milestones.
-- Each successful `get` leaks one internal response allocation for
-  the lifetime of the process (v0.1 opaque-handle design, matching
-  the `json` trade-off in §17.3.2). Fine for CLI / one-shot tools;
-  avoid high-frequency polling loops in long-lived processes.
+- `Response` behaves as a GC-managed opaque handle (§8.5), matching
+  `json.Value` (§17.3.2): the internal response allocation is reclaimed
+  once no handle referencing it remains reachable, so long-running
+  processes making many requests do not accumulate permanent leaks.
 
 **`http.server` semantics (v0.1):**
 

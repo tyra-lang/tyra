@@ -1,8 +1,15 @@
-//! HTTP client stdlib backing (§17.3.3 candidate, Tier 2). M11 phase 1.
+//! HTTP client stdlib backing (§17.3.3 candidate, Tier 2). M11 phase 1;
+//! GC-node rewrite (Phase 3 permanent-leak elimination).
 //!
 //! Exposes `tyra_http_get` + accessors as C ABI intrinsics for
-//! `stdlib/http/client.ty`. Responses are buffered fully into a heap
-//! struct and handed to Tyra as an opaque `i64` handle (0 = error).
+//! `stdlib/http/client.ty`. Responses are buffered fully into a
+//! GC-managed `HttpResponse` struct (allocated via `GC_malloc`, same
+//! pattern as `stdlib_json`'s node tree and `stdlib_http_server`'s
+//! `TyraRequest`/`TyraResponse`) and handed to Tyra as an opaque `i64`
+//! handle (0 = error). The struct is written once at allocation time
+//! and never mutated, so once no handle referencing it is reachable the
+//! collector reclaims it — no explicit deallocation API, no finalizers,
+//! no per-request permanent leak.
 //!
 //! Transport: the `ureq` crate with rustls TLS. ureq is a blocking
 //! client, which fits Tyra's model: HTTP calls run on worker threads
@@ -19,9 +26,12 @@
 //!
 //! v0.1 limitations:
 //! - GET only (POST / headers / body / auth defer to M11 phase 1b+).
-//! - Response is leaked via `Box::leak` (same policy as json). Each
-//!   successful request leaks one `HttpResponse` for process lifetime.
 //! - Default 30s read/connect timeout, no user control yet.
+//! - The bounded per-error thread-local `errmsg` allocation (see
+//!   `set_err` below) still uses `CString::into_raw` and is a genuine,
+//!   deliberately out-of-scope leak: bounded at "one leak per transport
+//!   error" for the reasons documented on `HTTP_ERRMSG_PTR`, distinct
+//!   from the per-response leak this rewrite removes.
 
 use std::cell::Cell;
 use std::ffi::{CStr, CString};
@@ -30,16 +40,21 @@ use std::os::raw::{c_char, c_int};
 use std::sync::OnceLock;
 use std::time::Duration;
 
+/// GC-managed response struct. Allocated via `GC_malloc` (scanned,
+/// since `body` is a pointer the collector must trace into the
+/// `alloc_gc_cstring` allocation backing it) and written once by
+/// `alloc_response`; never mutated afterwards.
+#[repr(C)]
 pub(crate) struct HttpResponse {
     status: i64,
-    body: CString,
+    body: *const c_char,
 }
 
 thread_local! {
     static HTTP_ERRNO: Cell<c_int> = const { Cell::new(0) };
     // Raw pointer to the most recent error message. Each `set_err` call
-    // Box::leak's a fresh CString and stores its pointer here. Leaked
-    // CStrings are never reclaimed, but the bound is "one leak per
+    // leaks a fresh CString via `CString::into_raw` and stores its pointer
+    // here. Leaked CStrings are never reclaimed, but the bound is "one leak per
     // transport error", which is acceptable for v0.1 CLI workloads and
     // avoids the alternatives: (a) per-read allocation (unbounded leak
     // per call, worse than per-error), (b) a RefCell whose contents can
@@ -123,7 +138,7 @@ pub unsafe extern "C" fn tyra_http_get(url: *const c_char) -> i64 {
             // 4xx/5xx — promote to Ok with the real status so Tyra callers
             // can inspect the body regardless of the HTTP failure class.
             let body = read_body_bounded(r);
-            return leak_response(code as i64, body);
+            return build_response(code as i64, body);
         }
         Err(e) => {
             let msg = format!("{e}");
@@ -140,13 +155,13 @@ pub unsafe extern "C" fn tyra_http_get(url: *const c_char) -> i64 {
     };
     let status = response.status() as i64;
     let body = read_body_bounded(response);
-    leak_response(status, body)
+    build_response(status, body)
 }
 
-/// Upper bound on a single response body we buffer into the leaked
-/// handle. Keeps the per-request leak bounded for long-running callers
-/// (see module doc). v0.1 does not expose streaming; oversized bodies
-/// are truncated at this limit and a trailing newline is not added.
+/// Upper bound on a single response body we buffer into the handle.
+/// Bounds per-call allocation size for long-running callers (see module
+/// doc). v0.1 does not expose streaming; oversized bodies are truncated
+/// at this limit and a trailing newline is not added.
 const MAX_BODY_BYTES: u64 = 10 * 1024 * 1024;
 
 fn read_body_bounded(r: ureq::Response) -> String {
@@ -159,8 +174,13 @@ fn read_body_bounded(r: ureq::Response) -> String {
     buf
 }
 
-fn leak_response(status: i64, body: String) -> i64 {
-    set_ok();
+/// Truncate `body` at the first interior NUL — Tyra `String` is
+/// C-string-backed and cannot carry embedded NULs — then hand off to
+/// `alloc_response`. Sets the thread-local errno/errmsg pair: `Ok` on a
+/// successful GC allocation, `NetworkError` (2) if `GC_malloc` itself
+/// failed, so callers never observe `errno == 0` alongside a `0`
+/// handle.
+fn build_response(status: i64, body: String) -> i64 {
     // Binary payloads containing NUL bytes cannot round-trip through Tyra's
     // C-string-based String type. v0.1 truncates at the first NUL to keep
     // the ABI simple; the status is still accurate so callers can detect
@@ -173,12 +193,43 @@ fn leak_response(status: i64, body: String) -> i64 {
             body[..pos].to_string()
         }
     };
-    let body_cs = CString::new(cleaned).unwrap_or_else(|_| CString::new("").unwrap());
-    let boxed = Box::new(HttpResponse {
-        status,
-        body: body_cs,
-    });
-    Box::leak(boxed) as *const HttpResponse as i64
+    let h = alloc_response(status, &cleaned);
+    if h == 0 {
+        set_err(2, "gc allocation failed");
+    } else {
+        set_ok();
+    }
+    h
+}
+
+/// Allocate an `HttpResponse` in GC memory with `status` and `body`,
+/// returning its address as an `i64` handle (0 on `GC_malloc` failure).
+/// Pure allocation, no thread-local error-state side effects — kept
+/// separate from `build_response` so it is unit-testable without a
+/// network round trip.
+///
+/// `pub` (re-exported from `lib.rs`) so the heap-verification integration
+/// tests in `runtime/tests/http_heap.rs` can allocate responses directly
+/// without a live network round trip.
+pub fn alloc_response(status: i64, body: &str) -> i64 {
+    let p = crate::gc::malloc(std::mem::size_of::<HttpResponse>()) as *mut HttpResponse;
+    if p.is_null() {
+        return 0;
+    }
+    // `try_` variant: a failed body allocation must surface as an overall
+    // `alloc_response` failure (0, matching the `p.is_null()` path above)
+    // rather than silently substituting an empty body — `build_response`
+    // maps a `0` return here to `NetworkError` via `tyra_http_errno`, the
+    // same path a `GC_malloc` failure on `p` itself takes.
+    let body_ptr = match crate::gc_string::try_alloc_gc_cstring(body) {
+        Some(ptr) => ptr,
+        None => return 0,
+    };
+    unsafe {
+        (*p).status = status;
+        (*p).body = body_ptr;
+    }
+    p as i64
 }
 
 unsafe fn resp_ref<'a>(h: i64) -> Option<&'a HttpResponse> {
@@ -196,9 +247,7 @@ pub unsafe extern "C" fn tyra_http_status(h: i64) -> i64 {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tyra_http_body(h: i64) -> *const c_char {
-    unsafe { resp_ref(h) }
-        .map(|r| r.body.as_ptr())
-        .unwrap_or(c"".as_ptr())
+    unsafe { resp_ref(h) }.map(|r| r.body).unwrap_or(c"".as_ptr())
 }
 
 #[unsafe(no_mangle)]
@@ -246,9 +295,12 @@ mod tests {
 
     #[test]
     fn errmsg_no_alloc_on_repeated_calls() {
-        // Regression guard: `tyra_http_errmsg` used to allocate + leak one
-        // CString per call. It now returns a borrowed pointer into the
-        // thread-local buffer. Calling it many times must be cheap.
+        // Regression guard: an earlier design allocated + leaked one
+        // CString per call. It now returns the pointer stashed in
+        // `HTTP_ERRMSG_PTR` by `set_err` — a `CString::into_raw` leak
+        // (see `set_err`'s doc comment), but leaked exactly once per
+        // transport error rather than once per `tyra_http_errmsg` call.
+        // Calling it many times must be cheap and return the same pointer.
         let url = cstr("not-a-url");
         let _ = unsafe { tyra_http_get(url.as_ptr()) };
         let p1 = tyra_http_errmsg();
@@ -256,6 +308,14 @@ mod tests {
         // Pointer is stable across calls that do not mutate the buffer.
         assert_eq!(p1, p2);
     }
+
+    // `alloc_response_roundtrips_through_accessors` and
+    // `heap_growth_bounded_after_many_responses` moved to
+    // `runtime/tests/http_heap.rs` (integration test, own process) — see
+    // that file's module doc for why: `GC_gcollect()`'s stop-the-world on
+    // Darwin aborts once other unregistered libtest threads (e.g. the
+    // `stdlib_http_server` tests' persistent server threads) have run
+    // earlier in the same process.
 
     // Live-network tests are opt-in: they rely on external services and
     // will flake in offline CI. Run with `TYRA_HTTP_LIVE=1 cargo test`.

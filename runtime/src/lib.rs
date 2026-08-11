@@ -45,7 +45,8 @@ pub use stdlib_json::{
 
 mod stdlib_http;
 pub use stdlib_http::{
-    tyra_http_body, tyra_http_errmsg, tyra_http_errno, tyra_http_get, tyra_http_status,
+    alloc_response, tyra_http_body, tyra_http_errmsg, tyra_http_errno, tyra_http_get,
+    tyra_http_status,
 };
 
 mod stdlib_http_server;
@@ -220,6 +221,7 @@ fn default_worker_count() -> usize {
 
 mod gc {
     use std::os::raw::c_void;
+    use std::ptr;
     use std::sync::Once;
 
     #[repr(C)]
@@ -240,6 +242,31 @@ mod gc {
         /// Use when the buffer contains pointer values that point to other
         /// GC-managed objects that must be kept alive.
         fn GC_malloc(size: usize) -> *mut c_void;
+        /// Documented-safe replacement for the single-value `GC_get_heap_size`:
+        /// atomically snapshots five heap counters under the collector's
+        /// internal lock so they are mutually consistent (the plain
+        /// `GC_get_heap_size` reads a single counter with no such
+        /// guarantee). `heap_size()` below only wants the first ("total
+        /// heap size, including free blocks reserved from the OS but not
+        /// yet handed out") so the other four out-params are passed null
+        /// — the API accepts null for any pointer the caller doesn't need.
+        fn GC_get_heap_usage_safe(
+            pheap_size: *mut usize,
+            pfree_bytes: *mut usize,
+            punmapped_bytes: *mut usize,
+            pbytes_since_gc: *mut usize,
+            ptotal_bytes: *mut usize,
+        );
+        /// Force a full stop-the-world mark-sweep collection cycle.
+        /// Exposed for tests that need a deterministic point to measure
+        /// heap size after dropping GC-reachable handles.
+        fn GC_gcollect();
+        /// Returns the base address of the GC-managed object containing
+        /// `p`, or null if `p` does not point into any object the
+        /// collector allocated (e.g. a plain Rust-heap or stack address).
+        /// Used by `gc_is_gc_ptr` to distinguish a real GC handle from a
+        /// stray non-GC pointer — see that function's doc comment.
+        fn GC_base(p: *mut c_void) -> *mut c_void;
     }
 
     /// Allocate a GC-managed buffer that will NOT be scanned for interior
@@ -254,6 +281,46 @@ mod gc {
     pub(crate) fn malloc(size: usize) -> *mut c_void {
         init();
         unsafe { GC_malloc(size) }
+    }
+
+    /// Current total heap size (bytes) managed by the collector. See
+    /// `stdlib_json`/`stdlib_http`'s heap-growth regression tests.
+    pub(crate) fn heap_size() -> usize {
+        init();
+        let mut heap_size: usize = 0;
+        unsafe {
+            GC_get_heap_usage_safe(
+                &mut heap_size,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+            );
+        }
+        heap_size
+    }
+
+    /// Force a full collection cycle so a subsequent `heap_size()` call
+    /// reflects reachability rather than not-yet-swept garbage.
+    pub(crate) fn collect() {
+        init();
+        unsafe { GC_gcollect() }
+    }
+
+    /// True if `handle`, reinterpreted as a pointer, falls inside an
+    /// object the Boehm collector actually allocated (`GC_base` resolves
+    /// it to a non-null base address). Used by heap-regression tests to
+    /// prove a handle is a real GC pointer rather than, say, an address
+    /// on the Rust system allocator (`Box::leak`) that the collector
+    /// cannot see or reclaim — the two are indistinguishable by value
+    /// alone, so this is the only way to make that assertion honest.
+    pub(crate) fn is_gc_ptr(handle: i64) -> bool {
+        init();
+        if handle == 0 {
+            return false;
+        }
+        let base = unsafe { GC_base(handle as *mut c_void) };
+        !base.is_null()
     }
 
     static INIT: Once = Once::new();
@@ -292,6 +359,49 @@ mod gc {
             GC_unregister_my_thread();
         }
     }
+}
+
+/// Current total heap size (bytes) managed by the Boehm collector,
+/// including free blocks reserved from the OS but not yet handed out.
+/// Thin wrapper over `gc::heap_size()`. Plain Rust API, not a C ABI
+/// intrinsic: Tyra-compiled code never calls this (no codegen site emits
+/// it). It exists so integration tests outside this crate
+/// (`runtime/tests/json_heap.rs`, `runtime/tests/http_heap.rs`) can
+/// observe heap growth by linking the `rlib` without reaching into
+/// runtime-internal modules; also a building block for a future
+/// `tyra run --gc-stats` flag driven from the Rust CLI driver, not from
+/// compiled Tyra programs, so it deliberately does not need `extern "C"`
+/// / `no_mangle`.
+pub fn tyra_gc_heap_size() -> i64 {
+    gc::heap_size() as i64
+}
+
+/// Force a full stop-the-world mark-sweep collection cycle. Thin wrapper
+/// over `gc::collect()`. Plain Rust API for the same reason as
+/// `tyra_gc_heap_size` — deterministic collection points for integration
+/// tests and a future `tyra run --gc-stats` building block, both reached
+/// via the rlib rather than the C ABI.
+pub fn tyra_gc_collect() {
+    gc::collect();
+}
+
+/// True if `handle` (an opaque `i64` produced by some other Tyra runtime
+/// allocator, e.g. `tyra_json_parse` or `alloc_response`) is a real
+/// Boehm-GC pointer — i.e. `GC_base` resolves it to a GC-managed object.
+/// Plain Rust API (rlib-only), not a C ABI intrinsic, for the same reason
+/// as `tyra_gc_heap_size` above.
+///
+/// This exists purely as a regression probe for the heap-verification
+/// integration tests: `tyra_gc_heap_size` alone cannot distinguish a
+/// handle backed by the Boehm heap from one backed by the Rust system
+/// allocator (e.g. a `Box::leak`'d pointer) — both are just `i64`s to the
+/// tests, and system-allocator growth is invisible to `GC_get_heap_usage_safe`.
+/// Asserting `gc_is_gc_ptr(handle)` closes that gap: it fails loudly if a
+/// future regression reintroduces a leak on the system allocator instead
+/// of the GC heap, which the heap-growth-bound assertion alone would not
+/// catch (growth would read as `0`, i.e. "pass").
+pub fn gc_is_gc_ptr(handle: i64) -> bool {
+    gc::is_gc_ptr(handle)
 }
 
 // ---------------------------------------------------------------------------
