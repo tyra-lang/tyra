@@ -5,31 +5,42 @@
 //! travels with it to every use site.
 
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 use inkwell::AddressSpace;
+use inkwell::OptimizationLevel;
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
-use inkwell::targets::TargetTriple;
+use inkwell::passes::PassBuilderOptions;
+use inkwell::targets::{
+    CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine, TargetTriple,
+};
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, PointerType, StructType};
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 
 use tyra_mir::{Program, SourceLoc};
 use tyra_types::Ty;
 
-fn target_triple() -> &'static str {
-    if cfg!(target_os = "macos") {
-        if cfg!(target_arch = "aarch64") {
-            "arm64-apple-macosx14.0.0"
-        } else {
-            "x86_64-apple-macosx14.0.0"
-        }
-    } else if cfg!(target_os = "linux") {
-        "x86_64-unknown-linux-gnu"
-    } else {
-        "x86_64-unknown-unknown"
-    }
+/// The triple to build IR/objects for: LLVM's own notion of "the host",
+/// queried at runtime rather than guessed per-`cfg!`.
+///
+/// This used to be a hardcoded per-OS string (one arm per `target_os`/
+/// `target_arch` combination). That was harmless on the old text-IR-then-
+/// `clang` path because `clang` re-derived and overrode the triple from its
+/// own `-target`/host defaults. It is load-bearing now: `emit_inkwell_object`
+/// builds a real `TargetMachine` straight from `module.get_triple()` (see
+/// `create_target_machine_for` below), so a stale or wrong string here
+/// produces a real, wrong object — e.g. the old `x86_64-unknown-linux-gnu`
+/// fallback made `tyra build` hard-fail on aarch64 Linux ("No available
+/// targets are compatible"), and the old `*-windows-msvc` guess was never
+/// actually reachable so ELF got fed to a COFF-only linker on Windows.
+/// `TargetMachine::get_default_triple()` asks LLVM for the triple it was
+/// itself built to target, which is exactly what `create_target_machine_for`
+/// needs to agree with.
+fn target_triple() -> TargetTriple {
+    TargetMachine::get_default_triple()
 }
 
 /// Inkwell codegen state for one module.
@@ -115,7 +126,7 @@ pub(crate) struct CodeGen<'ctx> {
 impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn new(ctx: &'ctx Context, module_name: &str) -> Self {
         let module = ctx.create_module(module_name);
-        module.set_triple(&TargetTriple::create(target_triple()));
+        module.set_triple(&target_triple());
         CodeGen {
             ctx,
             module,
@@ -684,6 +695,90 @@ pub(crate) fn emit_inkwell_coverage(program: &Program) -> (String, String) {
         .print_to_string()
         .to_string();
     (ir, covmap_text)
+}
+
+/// Build the `TargetMachine` for `module`'s already-set triple (see
+/// `CodeGen::new`, which calls `module.set_triple` from the `target_triple()`
+/// helper at the top of this file). Shared by `emit_inkwell_object` and
+/// `emit_inkwell_object_coverage` so both honor the same triple the module
+/// was actually built for, rather than recomputing it independently.
+fn create_target_machine_for(module: &Module, release: bool) -> Result<TargetMachine, String> {
+    Target::initialize_native(&InitializationConfig::default())
+        .map_err(|e| format!("failed to initialize native LLVM target: {e}"))?;
+    let triple = module.get_triple();
+    let target = Target::from_triple(&triple)
+        .map_err(|e| format!("no LLVM target for triple `{triple}`: {e}"))?;
+    // `Default` maps to `LLVMCodeGenLevelDefault` (2), matching the codegen
+    // level `clang -O2` used on the old textual-IR path. `Aggressive` would be
+    // codegen level 3 (O3 machine-code optimization) paired with the O2 IR
+    // pipeline run below — not the "-O2 parity" this replaces.
+    let opt_level = if release {
+        OptimizationLevel::Default
+    } else {
+        OptimizationLevel::None
+    };
+    target
+        .create_target_machine(
+            &triple,
+            "generic",
+            "",
+            opt_level,
+            RelocMode::PIC,
+            CodeModel::Default,
+        )
+        .ok_or_else(|| format!("failed to create target machine for triple `{triple}`"))
+}
+
+/// I7: emit a native object file directly from the in-process LLVM module via
+/// inkwell's `TargetMachine`, instead of printing textual IR for an external
+/// `clang`/`opt` process to re-parse and compile. This removes the failure
+/// mode where the compiler (linked against a newer LLVM via inkwell) emits IR
+/// syntax — e.g. `getelementptr inbounds nuw` (LLVM 19+) — that a `clang`
+/// resolved from PATH predates and cannot parse.
+pub(crate) fn emit_inkwell_object(
+    program: &Program,
+    path: &Path,
+    release: bool,
+    debug: bool,
+) -> Result<(), String> {
+    let ctx = Context::create();
+    let cg = build_module_opts(&ctx, program, None, debug);
+    let tm = create_target_machine_for(&cg.module, release)?;
+    // Keep codegen and layout in agreement (struct/alloca sizing already
+    // assumes the host's natural layout; this makes it explicit for LLVM).
+    cg.module
+        .set_data_layout(&tm.get_target_data().get_data_layout());
+    if release {
+        // Replaces the optimization `clang -O2` used to provide over the
+        // textual IR. Debug builds intentionally skip this (the old path was
+        // `-O0` there too), so DWARF locations stay 1:1 with source.
+        cg.module
+            .run_passes("default<O2>", &tm, PassBuilderOptions::create())
+            .map_err(|e| format!("LLVM optimization pipeline failed: {e}"))?;
+    }
+    tm.write_to_file(&cg.module, FileType::Object, path)
+        .map_err(|e| format!("failed to write object file `{}`: {e}", path.display()))
+}
+
+/// I7 coverage variant of `emit_inkwell_object`: builds the covmap sidecar
+/// text the same way `emit_inkwell_coverage` does (pure `crate::coverage`
+/// helpers, computed before the module is built), then emits the object.
+/// Coverage builds are always `-O0` and never carry debug info, mirroring
+/// `emit_inkwell_coverage`'s contract.
+pub(crate) fn emit_inkwell_object_coverage(
+    program: &Program,
+    path: &Path,
+) -> Result<String, String> {
+    let cov_map = crate::coverage::build_cov_map(program);
+    let covmap_text = crate::coverage::write_covmap_text(&cov_map, &program.source_files);
+    let ctx = Context::create();
+    let cg = build_module_opts(&ctx, program, Some(cov_map), false);
+    let tm = create_target_machine_for(&cg.module, false)?;
+    cg.module
+        .set_data_layout(&tm.get_target_data().get_data_layout());
+    tm.write_to_file(&cg.module, FileType::Object, path)
+        .map_err(|e| format!("failed to write object file `{}`: {e}", path.display()))?;
+    Ok(covmap_text)
 }
 
 #[cfg(test)]

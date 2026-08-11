@@ -46,6 +46,16 @@ jobs:
         # prefer-dynamic avoids requiring libPolly.a (not in the apt llvm-22 package).
         run: cargo build -p tyra-cli -p tyra-runtime --no-default-features --features tyra-codegen-llvm/llvm22-1-prefer-dynamic
 
+      - name: Driver regression tests (object-emission wiring)
+        run: cargo test -p tyra-driver --no-default-features --features tyra-codegen-llvm/llvm22-1-prefer-dynamic -- --ignored
+
+      - name: CLI end-to-end regression tests (build/run/test surface)
+        # These tests skip themselves when the binary is absent, so assert it
+        # exists here — otherwise the suite could pass without running.
+        run: |
+          test -x ./target/debug/tyra
+          cargo test -p tyra-cli --no-default-features --features tyra-codegen-llvm/llvm22-1-prefer-dynamic -- --ignored
+
       - name: Run static corpus check (tyra check + tyra test)
         run: bash bench/static-corpus/check.sh ./target/debug/tyra
 

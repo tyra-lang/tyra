@@ -155,16 +155,17 @@ pub fn compile_to_ir(source_path: &Path) -> CompileResult {
     compile_to_ir_impl(source_path, true, false).0
 }
 
-/// Like `compile_to_ir`, but generates coverage-instrumented IR and also
-/// returns the covmap text (`<binary>.tyra-covmap` content).
-fn compile_to_ir_coverage(source_path: &Path) -> (CompileResult, Option<String>) {
-    compile_to_ir_impl(source_path, false, true)
-}
-
 /// Core compilation pipeline: read source → frontend (parse → check → MIR) → codegen.
 ///
 /// `debug_info = true` emits DWARF metadata for lldb (ADR-0014 §4a).
 /// `coverage = true` uses `emit_llvm_ir_coverage` and returns the covmap text.
+///
+/// Also returns the lowered MIR `Program` on success, so binary-producing
+/// callers (`compile_to_binary_opts`, `compile_to_binary_coverage`) can emit a
+/// native object file from the *same* MIR via `tyra_codegen_llvm::emit_object*`
+/// without re-running the frontend. The `CompileResult.llvm_ir` text field is
+/// still populated exactly as before — only the object-emitting callers'
+/// linking input changes from `.ll` text to a `.o` file.
 ///
 /// The frontend pipeline (all AST passes, import resolution via `FsImportLoader`,
 /// name resolution, type checking, MIR lowering) is now in `tyra-frontend` and
@@ -173,7 +174,7 @@ fn compile_to_ir_impl(
     source_path: &Path,
     debug_info: bool,
     coverage: bool,
-) -> (CompileResult, Option<String>) {
+) -> (CompileResult, Option<String>, Option<tyra_mir::Program>) {
     let mut boot_report = Report::new();
 
     // Read source file.
@@ -194,6 +195,7 @@ fn compile_to_ir_impl(
                     sources: SourceMap::new(),
                     llvm_ir: None,
                 },
+                None,
                 None,
             );
         }
@@ -224,6 +226,7 @@ fn compile_to_ir_impl(
                 llvm_ir: None,
             },
             None,
+            None,
         );
     }
 
@@ -247,6 +250,7 @@ fn compile_to_ir_impl(
                 llvm_ir: None,
             },
             None,
+            None,
         );
     }
 
@@ -261,6 +265,7 @@ fn compile_to_ir_impl(
                 llvm_ir: Some(llvm_ir),
             },
             Some(covmap_text),
+            Some(mir),
         )
     } else if debug_info {
         let llvm_ir = tyra_codegen_llvm::emit_llvm_ir_debug(&mir);
@@ -272,6 +277,7 @@ fn compile_to_ir_impl(
                 llvm_ir: Some(llvm_ir),
             },
             None,
+            Some(mir),
         )
     } else {
         let llvm_ir = tyra_codegen_llvm::emit_llvm_ir(&mir);
@@ -283,6 +289,7 @@ fn compile_to_ir_impl(
                 llvm_ir: Some(llvm_ir),
             },
             None,
+            Some(mir),
         )
     }
 }
@@ -580,6 +587,46 @@ fn url_hash_12(url: &str) -> String {
 // Binary compilation
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Build a path for the intermediate object file `emit_object`/
+/// `emit_object_coverage` write before linking, guaranteed distinct from
+/// `output_path`.
+///
+/// This used to be `output_path.with_extension("o")`, which collides with
+/// `output_path` itself whenever the caller asks for an output that already
+/// ends in `.o` (`tyra build prog.ty -o probe.o`): the "temp" object *is*
+/// the requested output, so the post-link cleanup (`remove_file(obj_path)`)
+/// deletes the freshly linked binary while still reporting success. The same
+/// naming also silently clobbers an unrelated pre-existing `<output>.o` in
+/// the working directory (e.g. a user's own `foo.o` when building `-o foo`).
+///
+/// The pid + a per-process counter make the name unique across concurrent
+/// `tyra` invocations and repeated calls within one process (driver tests
+/// compile many programs in one test binary), and staying under
+/// `output_path`'s own directory/stem keeps the intermediate on the same
+/// filesystem as the final link target (avoiding a cross-device rename/copy,
+/// unlike routing through `TMPDIR`).
+fn intermediate_object_path(output_path: &Path) -> Result<std::path::PathBuf, String> {
+    // `with_extension` is a no-op when the path has no file name (`/`, `.`,
+    // `..`, ``, `dir/..`), which would make the intermediate object *be* the
+    // requested output — the collision this helper exists to prevent. Such an
+    // output path cannot name a binary anyway, so reject it as a diagnostic
+    // rather than letting the invariant assert below fire on user input.
+    if output_path.file_name().is_none() {
+        return Err(format!(
+            "invalid output path `{}`: expected a path naming a file",
+            output_path.display()
+        ));
+    }
+    let bin_id = BINARY_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let path = output_path.with_extension(format!("tyra-{}-{bin_id}.o", std::process::id()));
+    assert_ne!(
+        path.as_path(),
+        output_path,
+        "intermediate object path must never equal the requested output path"
+    );
+    Ok(path)
+}
+
 /// Compile a Tyra source file to a native binary (debug, `-O0`).
 pub fn compile_to_binary(source_path: &Path, output_path: &Path) -> CompileResult {
     compile_to_binary_opts(source_path, output_path, false, false)
@@ -607,25 +654,45 @@ fn compile_to_binary_opts(
     static_link: bool,
 ) -> CompileResult {
     // Debug builds emit DWARF for lldb; release builds skip debug info (ADR-0014 §4a).
-    let result = if release {
-        compile_to_ir_impl(source_path, false, false).0
+    let (result, _covmap, mir) = if release {
+        compile_to_ir_impl(source_path, false, false)
     } else {
-        compile_to_ir(source_path) // includes DWARF
+        compile_to_ir_impl(source_path, true, false) // includes DWARF
     };
     if !result.success {
         return result;
     }
+    let mir =
+        mir.expect("compile_to_ir_impl returned success without a MIR program — this is a bug");
 
-    let llvm_ir = result.llvm_ir.as_ref().unwrap();
-
-    // Write LLVM IR to temp file
-    let ir_path = output_path.with_extension("ll");
-    if let Err(e) = std::fs::write(&ir_path, llvm_ir) {
+    // Emit a native object file directly from the in-process LLVM module via
+    // inkwell's TargetMachine — no textual-IR round trip through an external
+    // `clang`/`opt` process. `clang` is invoked below only as a *linker* over
+    // this object, so it can never choke on IR syntax newer than its own LLVM
+    // version (the compiler links against LLVM via inkwell and can emit e.g.
+    // `getelementptr inbounds nuw`, LLVM 19+).
+    let obj_path = match intermediate_object_path(output_path) {
+        Ok(path) => path,
+        Err(e) => {
+            let mut report = result.report;
+            report.add(tyra_diagnostics::Diagnostic::error(e).with_code("E0001"));
+            return CompileResult {
+                success: false,
+                report,
+                sources: result.sources,
+                llvm_ir: result.llvm_ir,
+            };
+        }
+    };
+    if let Err(e) = tyra_codegen_llvm::emit_object(&mir, &obj_path, release, !release) {
+        // Emission may have written a partial object before failing; never
+        // leave it behind.
+        let _ = std::fs::remove_file(&obj_path);
         let mut report = result.report;
         report.add(
             tyra_diagnostics::Diagnostic::error(format!(
-                "cannot write IR file `{}`: {e}",
-                ir_path.display()
+                "cannot emit object file `{}`: {e}",
+                obj_path.display()
             ))
             .with_code("E0001"),
         );
@@ -640,34 +707,31 @@ fn compile_to_binary_opts(
     // Route to platform-specific linker invocation.
     #[cfg(target_os = "windows")]
     {
-        build_link_cmd_windows(result, &ir_path, output_path, release, static_link)
+        build_link_cmd_windows(result, &obj_path, output_path, static_link)
     }
     #[cfg(not(target_os = "windows"))]
     {
-        build_link_cmd_unix(result, &ir_path, output_path, release, static_link)
+        build_link_cmd_unix(result, &obj_path, output_path, static_link)
     }
 }
 
-/// Unix (Linux/macOS) linker path: compile IR via clang and link libgc + runtime staticlib.
+/// Unix (Linux/macOS) linker path: link the pre-compiled object with libgc +
+/// the runtime staticlib. `clang` is invoked purely as a linker here — the
+/// object was already optimized (release) and carries its own DWARF (debug)
+/// via `tyra_codegen_llvm::emit_object`, so no `-O*`/`-gdwarf-4` codegen flags
+/// apply to a `.o` input (clang would ignore or misapply them).
 #[cfg(not(target_os = "windows"))]
 fn build_link_cmd_unix(
     result: CompileResult,
-    ir_path: &Path,
+    obj_path: &Path,
     output_path: &Path,
-    release: bool,
     static_link: bool,
 ) -> CompileResult {
-    let opt_flag = if release { "-O2" } else { "-O0" };
     let mut clang_args: Vec<String> = vec![
-        ir_path.to_str().unwrap().into(),
+        obj_path.to_str().unwrap().into(),
         "-o".into(),
         output_path.to_str().unwrap().into(),
-        opt_flag.into(),
     ];
-    // Preserve DWARF metadata from the IR in debug builds (ADR-0014 §4a).
-    if !release {
-        clang_args.push("-gdwarf-4".into());
-    }
     // libgc: probe common install prefixes.
     for prefix in ["/opt/homebrew/opt/bdw-gc", "/usr/local/opt/bdw-gc"] {
         let lib_dir = format!("{prefix}/lib");
@@ -690,7 +754,7 @@ fn build_link_cmd_unix(
                 ))
                 .with_code("E0502"),
             );
-            let _ = std::fs::remove_file(ir_path);
+            let _ = std::fs::remove_file(obj_path);
             return CompileResult {
                 success: false,
                 report,
@@ -717,8 +781,8 @@ fn build_link_cmd_unix(
 
     let clang_result = Command::new("clang").args(&clang_args).output();
 
-    // Clean up IR file
-    let _ = std::fs::remove_file(ir_path);
+    // Clean up the temp object file
+    let _ = std::fs::remove_file(obj_path);
 
     match clang_result {
         Ok(output) => {
@@ -771,62 +835,16 @@ fn build_link_cmd_unix(
 #[cfg(target_os = "windows")]
 fn build_link_cmd_windows(
     result: CompileResult,
-    ir_path: &Path,
+    obj_path: &Path,
     output_path: &Path,
-    release: bool,
     _static_link: bool,
 ) -> CompileResult {
-    // Step 1: LLVM IR -> native object file via llc.
-    let obj_path = output_path.with_extension("obj");
-    let opt_level = if release { "-O2" } else { "-O0" };
-    let llc_status = Command::new("llc.exe")
-        .args([
-            opt_level,
-            "-filetype=obj",
-            "-mtriple=x86_64-pc-windows-msvc",
-            ir_path.to_str().unwrap(),
-            "-o",
-            obj_path.to_str().unwrap(),
-        ])
-        .status();
+    // The object file is already emitted (optimized if `release`, DWARF if
+    // debug) by `tyra_codegen_llvm::emit_object` before this function is
+    // called — no `llc.exe` IR-to-object step is needed anymore. `lld-link.exe`
+    // is invoked purely as a linker below.
 
-    let _ = std::fs::remove_file(ir_path);
-
-    let llc_ok = match llc_status {
-        Ok(s) => s.success(),
-        Err(e) => {
-            let mut report = result.report;
-            report.add(
-                tyra_diagnostics::Diagnostic::error(format!(
-                    "cannot run llc.exe: {e}. Is LLVM installed and on PATH?"
-                ))
-                .with_code("E0500"),
-            );
-            return CompileResult {
-                success: false,
-                report,
-                sources: result.sources,
-                llvm_ir: result.llvm_ir,
-            };
-        }
-    };
-    if !llc_ok {
-        let mut report = result.report;
-        report.add(
-            tyra_diagnostics::Diagnostic::error(
-                "llc.exe failed to compile LLVM IR to object file.".to_string(),
-            )
-            .with_code("E0500"),
-        );
-        return CompileResult {
-            success: false,
-            report,
-            sources: result.sources,
-            llvm_ir: result.llvm_ir,
-        };
-    }
-
-    // Step 2: Resolve vcpkg install root.
+    // Step 1: Resolve vcpkg install root.
     let vcpkg_dir: Option<std::path::PathBuf> = std::env::var("VCPKG_ROOT")
         .ok()
         .map(|root| {
@@ -848,12 +866,12 @@ fn build_link_cmd_windows(
                 .map(std::path::PathBuf::from)
         });
 
-    // Step 3: Locate tyra_runtime.lib next to the running compiler.
+    // Step 2: Locate tyra_runtime.lib next to the running compiler.
     let runtime_lib_path = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(|d| d.join("tyra_runtime.lib")));
 
-    // Step 4: Build lld-link.exe argument list.
+    // Step 3: Build lld-link.exe argument list.
     let exe_path = output_path.with_extension("exe");
     let mut link_args: Vec<String> = vec![
         obj_path.to_str().unwrap().into(),
@@ -891,7 +909,7 @@ fn build_link_cmd_windows(
                 ))
                 .with_code("E0502"),
             );
-            let _ = std::fs::remove_file(&obj_path);
+            let _ = std::fs::remove_file(obj_path);
             return CompileResult {
                 success: false,
                 report,
@@ -902,7 +920,7 @@ fn build_link_cmd_windows(
     }
 
     let link_result = Command::new("lld-link.exe").args(&link_args).output();
-    let _ = std::fs::remove_file(&obj_path);
+    let _ = std::fs::remove_file(obj_path);
 
     match link_result {
         Ok(output) if !output.status.success() => {
@@ -943,7 +961,7 @@ fn build_link_cmd_windows(
         Ok(_) => {} // success — fall through to DLL copy
     }
 
-    // Step 5: Copy gc.dll to the output directory.
+    // Step 4: Copy gc.dll to the output directory.
     if let Some(ref vdir) = vcpkg_dir {
         let gc_dll_src = vdir.join("bin").join("gc.dll");
         if let Some(out_dir) = exe_path.parent() {
@@ -970,14 +988,58 @@ fn build_link_cmd_windows(
 
 /// Compile a Tyra source file to a binary with coverage instrumentation.
 pub fn compile_to_binary_coverage(source_path: &Path, output_path: &Path) -> CompileResult {
-    let (result, covmap_opt) = compile_to_ir_coverage(source_path);
+    let (result, _covmap_opt, mir) = compile_to_ir_impl(source_path, false, true);
     if !result.success {
         return result;
     }
+    let mir = mir.expect(
+        "compile_to_ir_impl returned success (coverage) without a MIR program — this is a bug",
+    );
 
-    let covmap_text = covmap_opt.unwrap_or_default();
+    // Emit the object directly (see `compile_to_binary_opts` for why: `clang`
+    // is a linker only, never a parser of textual IR whose syntax may be
+    // newer than the PATH `clang`'s own LLVM version). `emit_object_coverage`
+    // builds the covmap from the same MIR the object is compiled from, so the
+    // sidecar always describes exactly what got linked.
+    let obj_path = match intermediate_object_path(output_path) {
+        Ok(path) => path,
+        Err(e) => {
+            let mut report = result.report;
+            report.add(tyra_diagnostics::Diagnostic::error(e).with_code("E0001"));
+            return CompileResult {
+                success: false,
+                report,
+                sources: result.sources,
+                llvm_ir: None,
+            };
+        }
+    };
+    let covmap_text = match tyra_codegen_llvm::emit_object_coverage(&mir, &obj_path) {
+        Ok(text) => text,
+        Err(e) => {
+            // Emission may have written a partial object before failing;
+            // never leave it behind.
+            let _ = std::fs::remove_file(&obj_path);
+            let mut report = result.report;
+            report.add(
+                tyra_diagnostics::Diagnostic::error(format!(
+                    "cannot emit object file `{}`: {e}",
+                    obj_path.display()
+                ))
+                .with_code("E0001"),
+            );
+            return CompileResult {
+                success: false,
+                report,
+                sources: result.sources,
+                llvm_ir: None,
+            };
+        }
+    };
+
     let covmap_path = output_path.with_extension("tyra-covmap");
     if let Err(e) = std::fs::write(&covmap_path, &covmap_text) {
+        let _ = std::fs::remove_file(&obj_path);
         let mut report = result.report;
         report.add(
             tyra_diagnostics::Diagnostic::error(format!(
@@ -994,31 +1056,12 @@ pub fn compile_to_binary_coverage(source_path: &Path, output_path: &Path) -> Com
         };
     }
 
-    let llvm_ir = result.llvm_ir.as_ref().unwrap();
-    let ir_path = output_path.with_extension("ll");
-    if let Err(e) = std::fs::write(&ir_path, llvm_ir) {
-        let mut report = result.report;
-        report.add(
-            tyra_diagnostics::Diagnostic::error(format!(
-                "cannot write IR `{}`: {e}",
-                ir_path.display()
-            ))
-            .with_code("E0001"),
-        );
-        return CompileResult {
-            success: false,
-            report,
-            sources: result.sources,
-            llvm_ir: None,
-        };
-    }
-
-    // Build clang args (debug, not static — coverage binaries are always -O0).
+    // Link only (coverage binaries are always -O0, already baked into the
+    // object by `emit_object_coverage`; no `-O*` flag applies to a `.o` input).
     let mut clang_args: Vec<String> = vec![
-        ir_path.to_str().unwrap().into(),
+        obj_path.to_str().unwrap().into(),
         "-o".into(),
         output_path.to_str().unwrap().into(),
-        "-O0".into(),
     ];
     for prefix in ["/opt/homebrew/opt/bdw-gc", "/usr/local/opt/bdw-gc"] {
         let lib_dir = format!("{prefix}/lib");
@@ -1032,7 +1075,7 @@ pub fn compile_to_binary_coverage(source_path: &Path, output_path: &Path) -> Com
             clang_args.push(p.to_string_lossy().into_owned());
         }
         None => {
-            let _ = std::fs::remove_file(&ir_path);
+            let _ = std::fs::remove_file(&obj_path);
             let mut report = result.report;
             report.add(
                 tyra_diagnostics::Diagnostic::error(format!(
@@ -1057,7 +1100,7 @@ pub fn compile_to_binary_coverage(source_path: &Path, output_path: &Path) -> Com
     }
 
     let clang_result = Command::new("clang").args(&clang_args).output();
-    let _ = std::fs::remove_file(&ir_path);
+    let _ = std::fs::remove_file(&obj_path);
 
     match clang_result {
         Ok(out) if out.status.success() => result,
@@ -1392,6 +1435,31 @@ mod tests {
     }
 
     #[test]
+    fn intermediate_object_path_rejects_paths_without_a_file_name() {
+        for bad in ["/", ".", "..", "", "examples/.."] {
+            let result = intermediate_object_path(Path::new(bad));
+            assert!(
+                result.is_err(),
+                "expected an error for output path `{bad}`, got: {result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn intermediate_object_path_accepts_paths_with_a_file_name() {
+        for good in ["foo", "foo.o", "dir/foo"] {
+            let output = Path::new(good);
+            let path =
+                intermediate_object_path(output).expect("expected Ok for a path with a file name");
+            assert_ne!(
+                path.as_path(),
+                output,
+                "intermediate path must differ from the output path"
+            );
+        }
+    }
+
+    #[test]
     fn check_in_memory_clean_program() {
         let CheckResult { report, .. } = check_in_memory(
             "ok.ty".into(),
@@ -1715,5 +1783,127 @@ mod tests {
             .filter_map(|d| d.code.as_deref())
             .collect();
         assert!(codes.contains(&"E0309"), "expected E0309, got: {codes:?}");
+    }
+
+    // --- Regression: object emission must not depend on the PATH `clang`'s
+    // --- LLVM version (root cause: textual IR containing LLVM-19+ syntax like
+    // --- `getelementptr ... nuw`, parsed by a `clang` that may predate it).
+
+    /// Locate the `tyra` binary built alongside this test binary
+    /// (`target/{debug,release}/tyra`, i.e. one directory up from
+    /// `target/{debug,release}/deps/<this test binary>`). Mirrors the
+    /// `find_tyra_binary` helper in `tyra-cli`'s own subprocess tests
+    /// (main.rs). Calling through the real CLI binary (rather than the
+    /// driver functions in-process) matters here for two reasons: (1) the
+    /// runtime staticlib search in `find_runtime_staticlib` is relative to
+    /// `current_exe()`, which only lands next to `libtyra_runtime.a` for the
+    /// real binary, not a `cargo test` binary under `target/*/deps/`; and (2)
+    /// spawning a child process lets us override `PATH` for just that child,
+    /// instead of mutating the whole (parallel-test-sharing) process env.
+    fn find_tyra_binary() -> Option<std::path::PathBuf> {
+        let exe = std::env::current_exe().ok()?;
+        let profile_dir = exe.parent()?.parent()?;
+        let tyra = profile_dir.join("tyra");
+        if tyra.exists() { Some(tyra) } else { None }
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-driver -- --ignored"]
+    fn field_access_compiles_with_a_clang_that_rejects_ll_files() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+
+        // Resolve the real clang so the shim can still delegate to it once it
+        // has confirmed no `.ll` file was ever handed to it.
+        let which_out = std::process::Command::new("which")
+            .arg("clang")
+            .output()
+            .expect("failed to run `which clang`");
+        assert!(
+            which_out.status.success(),
+            "clang must be on PATH to run this test"
+        );
+        let real_clang = String::from_utf8_lossy(&which_out.stdout)
+            .trim()
+            .to_string();
+
+        // A `clang` shim that simulates a stock/older clang unable to parse
+        // LLVM-19+ IR syntax: it rejects any `.ll` argument outright, exactly
+        // as a real old clang would on `getelementptr inbounds nuw`. Any
+        // other invocation (i.e. linking a `.o`) is forwarded to real clang.
+        let shim_dir =
+            std::env::temp_dir().join(format!("tyra_nuw_clang_shim_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&shim_dir);
+        std::fs::create_dir_all(&shim_dir).unwrap();
+        let shim_path = shim_dir.join("clang");
+        std::fs::write(
+            &shim_path,
+            format!(
+                "#!/bin/sh\nfor arg in \"$@\"; do\n  case \"$arg\" in\n    *.ll)\n      echo \"error: expected type\" >&2\n      exit 1\n      ;;\n  esac\ndone\nexec \"{real_clang}\" \"$@\"\n"
+            ),
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&shim_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&shim_path, perms).unwrap();
+        }
+
+        let src_dir = std::env::temp_dir().join(format!("tyra_nuw_src_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&src_dir);
+        std::fs::create_dir_all(&src_dir).unwrap();
+        let src_path = src_dir.join("point.ty");
+        std::fs::write(
+            &src_path,
+            "data Point\n  x: Int\n  y: Int\nend\n\n\
+             fn main() -> Unit\n  let p = Point(x: 1, y: 2)\n  println(\"#{p.x}\")\nend\n",
+        )
+        .unwrap();
+        let out_path = src_dir.join("point_bin");
+
+        let old_path = std::env::var("PATH").unwrap_or_default();
+        let new_path = format!("{}:{old_path}", shim_dir.display());
+
+        let build_output = std::process::Command::new(&tyra)
+            .args([
+                "build",
+                src_path.to_str().unwrap(),
+                "-o",
+                out_path.to_str().unwrap(),
+            ])
+            .env("PATH", &new_path)
+            .output()
+            .expect("failed to invoke tyra binary");
+
+        assert!(
+            build_output.status.success(),
+            "expected compilation to succeed with a clang shim that rejects `.ll` \
+             files (i.e. the driver must hand clang an object file, never textual \
+             IR):\nstdout={}\nstderr={}",
+            String::from_utf8_lossy(&build_output.stdout),
+            String::from_utf8_lossy(&build_output.stderr)
+        );
+
+        let run_output = std::process::Command::new(&out_path)
+            .output()
+            .expect("failed to run compiled binary");
+        assert!(
+            run_output.status.success(),
+            "compiled binary exited with failure: {:?}",
+            run_output
+        );
+        let stdout = String::from_utf8_lossy(&run_output.stdout);
+        assert_eq!(
+            stdout.trim(),
+            "1",
+            "expected `p.x` field access to print 1, got: {stdout:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&shim_dir);
+        let _ = std::fs::remove_dir_all(&src_dir);
     }
 }

@@ -3225,6 +3225,53 @@ mod tests {
 
     #[test]
     #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
+    fn build_to_output_path_without_file_name_is_a_clean_e0001_not_an_ice() {
+        let Some(tyra) = find_tyra_binary() else {
+            eprintln!("SKIP: tyra binary not found — run `cargo build` first");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hello.ty");
+        fs::write(&path, "fn main() -> Unit\n  print(\"hi\")\nend\n").unwrap();
+
+        // Text mode: exits 1 with an E0001 diagnostic on stderr, not a panic.
+        let output = std::process::Command::new(&tyra)
+            .args(["build", path.to_str().unwrap(), "-o", "/"])
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "invalid output path must be a clean user error, not a panic (101):\nstderr={stderr}"
+        );
+        assert!(stderr.contains("E0001"), "stderr: {stderr}");
+
+        // JSON mode: same case must render as a normal NDJSON diagnostic
+        // record, never an `internal` (ICE) record.
+        let output = std::process::Command::new(&tyra)
+            .args([
+                "build",
+                path.to_str().unwrap(),
+                "-o",
+                "/",
+                "--error-format",
+                "json",
+            ])
+            .output()
+            .expect("failed to invoke tyra binary");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(1));
+        assert_ndjson_pure(&stderr);
+        assert!(
+            !stderr.contains("\"kind\":\"internal\""),
+            "invalid output path must not be classified as an internal compiler error: {stderr}"
+        );
+        assert!(stderr.contains("\"code\":\"E0001\""), "stderr: {stderr}");
+    }
+
+    #[test]
+    #[ignore = "requires pre-built tyra binary — run with: cargo build && cargo test -p tyra-cli -- --ignored"]
     fn json_errors_internal_panic_is_ndjson() {
         let Some(tyra) = find_tyra_binary() else {
             eprintln!("SKIP: tyra binary not found — run `cargo build` first");

@@ -17,7 +17,9 @@ mod inkwell_map_builtins;
 mod inkwell_string_builtins;
 mod type_scan;
 
-pub use codegen::{emit_llvm_ir, emit_llvm_ir_coverage, emit_llvm_ir_debug};
+pub use codegen::{
+    emit_llvm_ir, emit_llvm_ir_coverage, emit_llvm_ir_debug, emit_object, emit_object_coverage,
+};
 pub use coverage::{CovMap, format_report, merge_covraw, parse_covmap, write_covmap_text};
 
 use tyra_diagnostics::Diagnostic;
