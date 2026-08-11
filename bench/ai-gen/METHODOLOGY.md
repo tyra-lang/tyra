@@ -84,8 +84,8 @@ disambiguate result filenames when multiple runs of the same
 | Prompt phrasing favours some languages | Prompts are kept at the algorithmic level; no library or idiom hints. Open to review in `prompts/*.yaml`. |
 | Model non-determinism | Record raw generated code alongside pass/fail; aggregate over ≥3 seeds for publication. |
 | Gleam project model mismatch | Runner wraps code in a template project. Results may underestimate Gleam's true capability; noted in every summary. |
-| Compiler version differences | Compiler version recorded in runner metadata per result JSON. |
-| Tyra compiler version not pinned | Use `git checkout <tag>` + `cargo build --release` to reproduce; version embedded in result JSON via `tyra --version`. |
+| Compiler version differences | **Not recorded per result.** A result is tied to its compiler by the run label (e.g. `results-run56` = v0.11.0), not by anything inside the file. The `model` field records the *generator* CLI's version, not the compiler's. Embedding the compiler version in every result is an obvious improvement and is not done yet. |
+| Tyra compiler version not pinned | Use `git checkout <tag>` + `cargo build --release` to reproduce a labelled run. |
 | Codex model not pinnable | Noted in results and in this document. |
 | Marker coverage too loose | Markers cover the core observable output. False positives are possible but unlikely at 100-prompt scale. |
 
