@@ -244,13 +244,13 @@ tyra test --format junit       # JUnit XML を出力 (CI のテストサマリ�
 
 完全なガイドは [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) を参照してください。
 
-## v0.11.0 の新機能
+## v0.12.0 の新機能
 
-> **AI self-correction** — import したモジュール呼び出しを完全に型検査 (新診断 E0318/E0319。`String + string.from_byte(x)` が codegen でクラッシュしなくなりました)、`Err` を返す main は stderr 報告 + exit 1 (ADR-0029)、`tyra check/build --error-format json` がエージェントループ向け NDJSON 診断を出力 (ADR-0026)、USV 文字 API + `list.sort`/`sort_str` (ADR-0027)、`to_upper`/`to_lower` は `to_ascii_upper`/`to_ascii_lower` にリネーム (破壊的変更)。修正後のマルチシードスイープ結果: **tyra+spec 88.7% mean** (3 seeds × 100 プロンプト、v0.11.0)。本番利用前に [既知の制限](#既知の制限) をご確認ください。全履歴は [CHANGELOG.md](CHANGELOG.md) を参照。
+> **正確性と安全性** — `export fn main` をコンパイル時に拒否するようになりました (E0111、仕様 §6.1)。task handle の二重 `.await` は実行時未定義動作ではなくコンパイルエラーになります (E0321、ADR-0030)。未 await の handle には警告が出ます (E0322)。`json.parse` / `http.client.get` は呼び出しごとに全体をリークしなくなりました (GC 管理ノード木が旧 `Box::leak` を置き換え)。仕様の scheduler・GC 記述をリファレンス実装に一致させました。本番利用前に [既知の制限](#既知の制限) をご確認ください。全履歴は [CHANGELOG.md](CHANGELOG.md) を参照。
 
 ## 開発状況
 
-**v0.11.0 で安定** — サポート済み・テスト済み:
+**v0.12.0 で安定** — サポート済み・テスト済み:
 
 | コンポーネント | 備考 |
 | --- | --- |
@@ -439,7 +439,7 @@ Tyra は2系統のバージョンを持ちます:
 
 ```console
 $ tyra --version
-tyra 0.11.0
+tyra 0.12.0
 implementing language spec 0.11
 ```
 

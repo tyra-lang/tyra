@@ -365,7 +365,7 @@ Never silently make a design choice that the spec doesn't endorse. The point of 
 
   ```console
   $ tyra --version
-  tyra 0.11.0
+  tyra 0.12.0
   implementing language spec 0.11
   ```
 

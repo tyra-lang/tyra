@@ -17,7 +17,7 @@ This installs `tyra` to `~/.local/bin` and the runtime library + stdlib to `~/.l
 curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh -s -- --prefix /usr/local
 
 # Install a specific version
-curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh -s -- --version v0.11.0
+curl -fsSL https://raw.githubusercontent.com/tyra-lang/tyra/main/scripts/install.sh | sh -s -- --version v0.12.0
 ```
 
 After installation, add `~/.local/bin` to your `PATH` if not already present:
@@ -89,7 +89,7 @@ tyra --version
 You should see output like:
 
 ```
-tyra 0.11.0
+tyra 0.12.0
 implementing language spec 0.11
 ```
 

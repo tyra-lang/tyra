@@ -7,7 +7,7 @@ Format: `## [X.Y.Z] — YYYY-MM-DD` (em dash) with sections **Stable**, **Experi
 
 ---
 
-## [Unreleased]
+## [0.12.0] — 2026-08-11
 
 ### Stable
 

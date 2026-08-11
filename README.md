@@ -244,13 +244,13 @@ tyra test --format junit       # emit JUnit XML (for CI test summaries)
 
 See [docs/getting-started/08-testing.md](docs/getting-started/08-testing.md) for the full guide.
 
-## What's new in v0.11.0
+## What's new in v0.12.0
 
-> **AI self-correction** — imported module calls are fully type-checked (new E0318/E0319; `String + string.from_byte(x)` no longer crashes codegen), `Err`-returning main reports to stderr and exits 1 (ADR-0029), `tyra check/build --error-format json` emits NDJSON diagnostics for agent loops (ADR-0026), USV character API + `list.sort`/`sort_str` (ADR-0027), and `to_upper`/`to_lower` are renamed `to_ascii_upper`/`to_ascii_lower` (breaking). Multi-seed sweep after these fixes: **tyra+spec 88.7% mean** (3 seeds × 100 prompts, v0.11.0). [See known limitations](#known-limitations) before using in production. Full history: [CHANGELOG.md](CHANGELOG.md).
+> **Correctness & safety** — `export fn main` is now rejected at compile time (E0111, spec §6.1); double-`.await`ing a `Task` handle is now a compile error (E0321, ADR-0030) instead of runtime undefined behavior, and a handle that's never awaited now warns (E0322); `json.parse` / `http.client.get` no longer leak their entire allocation on every call (GC-managed node trees replace the old `Box::leak`); the spec's scheduler and GC descriptions now match the reference implementation. [See known limitations](#known-limitations) before using in production. Full history: [CHANGELOG.md](CHANGELOG.md).
 
 ## Status
 
-**Stable in v0.11.0** — supported and tested:
+**Stable in v0.12.0** — supported and tested:
 
 | Component | Notes |
 | --- | --- |
@@ -442,7 +442,7 @@ The compiler always declares which spec version it implements:
 
 ```console
 $ tyra --version
-tyra 0.11.0
+tyra 0.12.0
 implementing language spec 0.11
 ```
 
